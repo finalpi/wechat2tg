@@ -1,6 +1,12 @@
 # 微信消息转发到 Telegram
 
-这个项目是基于 [wechaty](https://github.com/wechaty/wechaty) 实现的微信消息转发到 Telegram 的功能。
+这个项目是基于 [wechaty](https://github.com/wechaty/wechaty) 实现的微信消息转发到 Telegram 的项目。
+目前已经实现的功能:
+1. 将微信@你的群消息转发至telegram机器人
+2. 将微信私聊的图片,语音,文字,视频消息转发到telegram机器人
+
+后续打算实现的功能:
+1. 在telegram机器人中给指定的人发送消息
 
 ## 使用说明
 
