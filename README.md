@@ -26,6 +26,10 @@
 
 4. 扫描二维码登录微信账号。
 
+### docker中使用
+```shell
+docker run -itd --env BOT_TOKEN="" --env HOST="" --env PORT="" --env USERNAME="" --env PASSWORD="" --env PROTOCOL="socks5" finalpi/wechat2tg:latest
+```
 
 ## 声明
 
