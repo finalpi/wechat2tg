@@ -63,6 +63,8 @@ let loginQrCode = ''
 let cache = await loadConfig()
 // 初始化时间
 const startDate = new Date()
+// 发送者数组
+const sender = []
 
 // 登录过期检测
 let expireDetection
@@ -88,7 +90,8 @@ expireFunction1()
 
 // 已登录指令数组
 const commands = [
-  { command: 'login', description: '获取微信登陆二维码' }
+  { command: 'login', description: '获取微信登陆二维码' },
+  { command: 'reply', description: '回复消息' }
 ]
 
 telegramBot.setMyCommands(commands)
@@ -105,7 +108,7 @@ wechatBot
     loginQrCode = qrcode
   })
   .on('login', user => {
-    if (cache.chatId != '') {
+    if (cache.chatId != '' && wechatBot.logonoff()) {
       telegramBot.sendMessage(cache.chatId, '登陆成功!')
     }
     expireFunction2()
@@ -115,12 +118,41 @@ wechatBot
     const talkerContact = message.talker()
     let msgStr = talkerContact.name() + '___(' + await talkerContact.alias() + '):\n'
     const fromRoom = message.room()
-    if (fromRoom != null) {
-      msgStr = talkerContact.name() + '___(' + await fromRoom.topic() + '):\n'
-    }
     // 群聊未提及消息不转发,以及自己发送的消息不转发
     if (message.self() || (fromRoom != null && !await message.mentionSelf()) || message.date() < startDate) {
       return
+    }
+    if (fromRoom != null) {
+      msgStr = talkerContact.name() + '___(' + await fromRoom.topic() + '):\n'
+      // 保存发送者
+      const element = {
+        name: await fromRoom.topic(),
+        type: 0,
+        id: fromRoom.id,
+        talker: fromRoom
+      }
+      const index = sender.findIndex(e => e.id === element.id)
+      if (index !== -1) {
+        sender.splice(index, 1)
+        sender.unshift(element)
+      } else {
+        sender.unshift(element)
+      }
+    } else {
+      // 保存发送者
+      const element = {
+        name: talkerContact.name(),
+        type: 1,
+        id: talkerContact.id,
+        talker: talkerContact
+      }
+      const index = sender.findIndex(e => e.id === element.id)
+      if (index !== -1) {
+        sender.splice(index, 1)
+        sender.unshift(element)
+      } else {
+        sender.unshift(element)
+      }
     }
     if (message.type() === wechatBot.Message.Type.Text) {
       // 文字消息处理
@@ -159,10 +191,27 @@ wechatBot
           console.log('已成功删除文件')
         })
       })
+    } else if (message.type() === wechatBot.Message.Type.Attachment) {
+      // 附件处理
+      const fileBox = await message.toFileBox()
+      const fileName = fileBox.name
+      telegramBot.sendMessage(cache.chatId, msgStr + '[文件]' + fileName)
     }
   })
 
 wechatBot.start()
+
+let errorFlag = false
+
+wechatBot.on('error', async (e) => {
+  telegramBot.sendMessage(cache.chatId, '遇到未知错误程序终止:' + e)
+  if (!errorFlag) {
+    errorFlag = true
+    wechatBot.start().then(() => {
+      errorFlag = false
+    })
+  }
+})
 
 // 监听 'login' 指令
 telegramBot.onText(/\/login/, (msg) => {
@@ -172,7 +221,74 @@ telegramBot.onText(/\/login/, (msg) => {
   saveConfig('chatId', chatId).then(async () => {
     cache = await loadConfig()
   })
-  QRCode.toFile(msg.chat.id + 'qrCode.png', loginQrCode, (err, data) => {
+  QRCode.toFile(msg.chat.id + 'qrCode.png', loginQrCode, () => {
     telegramBot.sendPhoto(chatId, fs.createReadStream(msg.chat.id + 'qrCode.png'), { caption: '扫描二维码登陆' })
   })
+})
+
+// 监听 'reply' 指令
+telegramBot.onText(/\/reply/, (msg) => {
+  const chatId = msg.chat.id
+  if (sender.length === 0) {
+    telegramBot.sendMessage(chatId, '目前没有可回复的成员')
+    return
+  }
+  const keyboard = []
+  sender.slice(0, 5).forEach(item => {
+    const iItem = []
+    iItem.push({ text: item.name.substring(0, 20), callback_data: item.type + ':' + item.name.substring(0, 20) })
+    keyboard.push(iItem)
+  })
+
+  const options = {
+    reply_markup: {
+      inline_keyboard: keyboard
+    }
+  }
+
+  telegramBot.sendMessage(chatId, '请选择回复成员', options)
+})
+
+/**
+ * 点击事件接受
+ */
+let replyOpen = false
+let talker
+telegramBot.on('callback_query', async (callbackQuery) => {
+  const data = callbackQuery.data
+  const dataArr = data.split(':')
+  if (dataArr[0] === '0') {
+    const index = sender.findIndex(e => e.name.includes(dataArr[1]))
+    if (index !== -1) {
+      const item = sender[index]
+      talker = wechatBot.Room.load(item.id)
+    }
+  } else {
+    const index = sender.findIndex(e => e.name.includes(dataArr[1]))
+    if (index !== -1) {
+      const item = sender[index]
+      talker = item.talker
+    }
+  }
+  replyOpen = true
+  telegramBot.sendMessage(cache.chatId, '请输入要回复的消息')
+})
+
+/**
+ * 回复消息
+ */
+telegramBot.on('message', async (msg) => {
+  if (!replyOpen) {
+    return
+  }
+  if (msg.photo) {
+    // photo was received
+    console.log('photo')
+  }
+
+  // check if the message is text
+  if (msg.text) {
+    // text was received
+    await talker.say(msg.text)
+  }
 })
