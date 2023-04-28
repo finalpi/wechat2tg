@@ -5,6 +5,7 @@ import fs from 'fs'
 import { loadConfig, saveConfig } from './cache/CacheUtil.js'
 import dotenv from 'dotenv'
 import { SocksProxyAgent } from 'socks-proxy-agent'
+import { FileBox } from 'file-box'
 
 dotenv.config()
 
@@ -35,7 +36,7 @@ const agent = new SocksProxyAgent(info)
 
 let telegramBot
 // 创建 Bot 实例，并传入代理配置
-if (HOST != null && HOST != '' && PORT != null && PORT != '' & PROTOCOL != null && PROTOCOL == 'socks5') {
+if (HOST !== null && HOST !== '' && PORT !== null && PORT !== '' & PROTOCOL != null && PROTOCOL === 'socks5') {
   telegramBot = new TelegramBot(BOT_TOKEN, {
     polling: true,
     request: {
@@ -43,7 +44,7 @@ if (HOST != null && HOST != '' && PORT != null && PORT != '' & PROTOCOL != null 
       retryAfter: 5000
     }
   })
-} else if (HOST != null && HOST != '' && PORT != null && PORT != '' & PROTOCOL != null && (PROTOCOL == 'http' || PROTOCOL == 'https')) {
+} else if (HOST != null && HOST !== '' && PORT != null && PORT !== '' & PROTOCOL != null && (PROTOCOL === 'http' || PROTOCOL === 'https')) {
   telegramBot = new TelegramBot(BOT_TOKEN, {
     polling: true,
     request: {
@@ -108,7 +109,7 @@ wechatBot
     loginQrCode = qrcode
   })
   .on('login', user => {
-    if (cache.chatId != '' && wechatBot.logonoff()) {
+    if (cache.chatId !== '' && wechatBot.logonoff()) {
       telegramBot.sendMessage(cache.chatId, '登陆成功!')
     }
     expireFunction2()
@@ -282,13 +283,32 @@ telegramBot.on('message', async (msg) => {
     return
   }
   if (msg.photo) {
-    // photo was received
-    console.log('photo')
+    const fileId = msg.photo[msg.photo.length - 1].file_id
+    telegramBot.downloadFile(fileId, './').then(async (filePath) => {
+      const fileBox = FileBox.fromFile(filePath)
+      await talker.say(fileBox)
+      fs.unlink(filePath, (err) => {
+        if (err) throw err
+        console.log('已成功删除文件')
+      })
+    })
   }
 
-  // check if the message is text
+  if (msg.sticker) {
+    const fileId = msg.sticker.file_id
+    telegramBot.downloadFile(fileId, './').then(async (filePath) => {
+      const fileBox = FileBox.fromFile(filePath)
+      await talker.say(fileBox)
+      fs.unlink(filePath, (err) => {
+        if (err) throw err
+        console.log('已成功删除文件')
+      })
+    })
+  }
+
   if (msg.text) {
-    // text was received
     await talker.say(msg.text)
   }
+  replyOpen = false
+  telegramBot.sendMessage(cache.chatId, '回复成功')
 })
