@@ -120,7 +120,7 @@ wechatBot
     let msgStr = talkerContact.name() + '___(' + await talkerContact.alias() + '):\n'
     const fromRoom = message.room()
     // 群聊未提及消息不转发,以及自己发送的消息不转发
-    if (message.self() || (fromRoom != null && !await message.mentionSelf()) || message.date() < startDate) {
+    if (message.self() || (fromRoom != null && !await message.mentionSelf()) || message.date() < startDate || talkerContact.type() === 2) {
       return
     }
     if (fromRoom != null) {
@@ -205,12 +205,9 @@ wechatBot.start()
 let errorFlag = false
 
 wechatBot.on('error', async (e) => {
-  telegramBot.sendMessage(cache.chatId, '遇到未知错误程序终止:' + e)
   if (!errorFlag) {
     errorFlag = true
-    wechatBot.start().then(() => {
-      errorFlag = false
-    })
+    telegramBot.sendMessage(cache.chatId, '遇到未知错误程序终止:' + e)
   }
 })
 
