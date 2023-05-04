@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+  wechat2tg:
+    image: finalpi/wechat2tg:latest
+    container_name: wx2tg
+    environment:
+      - BOT_TOKEN='6072042341:AAFhsiuzt0NNysKQas3K-hZkoRphc9jtyNA'
+      - HOST='10.19.10.169'
+      - PORT='7890'
+      # 代理种类
+      - PROTOCOL='socks5'
+      # 用户名密码可选
+      # - USERBNANE=
+      # - PASSWORD=
+    restart: unless-stopped
