@@ -13,8 +13,9 @@ export const wechatBot = WechatyBuilder.build({
    *  - wechaty-puppet-service (token required, see: <https://wechaty.js.org/docs/puppet-services>)
    *  - etc. see: <https://github.com/wechaty/wechaty-puppet/wiki/Directory>
    */
-  puppet: 'wechaty-puppet-wechat',
+  puppet: 'wechaty-puppet-wechat4u',
   puppetOptions: {
-    uos: true // 开启uos协议
+    uos: true, // 开启uos协议
+    interval: 3000
   }
 })
