@@ -31,6 +31,10 @@
 docker run -itd --env BOT_TOKEN="" --env HOST="" --env PORT="" --env USERNAME="" --env PASSWORD="" --env PROTOCOL="socks5" finalpi/wechat2tg:latest
 ```
 
+  docker-compose
+```shell
+docker-compose up -d
+```
 ## 声明
 
 本项目仅用于技术研究和学习，不得用于非法用途。
