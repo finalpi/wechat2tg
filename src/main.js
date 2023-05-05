@@ -117,14 +117,14 @@ wechatBot
   .on('message', async message => {
     // 获取发送者
     const talkerContact = message.talker()
-    let msgStr = talkerContact.name() + '___(' + await talkerContact.alias() + '):\n'
+    let msgStr = talkerContact.name() + ':'
     const fromRoom = message.room()
     // 群聊未提及消息不转发,以及自己发送的消息不转发
     if (message.self() || (fromRoom != null && !await message.mentionSelf()) || message.date() < startDate || talkerContact.type() === 2) {
       return
     }
     if (fromRoom != null) {
-      msgStr = talkerContact.name() + '___(' + await fromRoom.topic() + '):\n'
+      msgStr = talkerContact.name() + '(' + await fromRoom.topic() + '):\n'
       // 保存发送者
       const element = {
         name: await fromRoom.topic(),
