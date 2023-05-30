@@ -117,7 +117,7 @@ wechatBot
   .on('message', async message => {
     // 获取发送者
     const talkerContact = message.talker()
-    let msgStr = talkerContact.name() + ':'
+    let msgStr = talkerContact.name() + ':\n'
     const fromRoom = message.room()
     // 群聊未提及消息不转发,以及自己发送的消息不转发
     if (message.self() || (fromRoom != null && !await message.mentionSelf()) || message.date() < startDate || talkerContact.type() === 2) {
