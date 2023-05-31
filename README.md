@@ -12,6 +12,8 @@
 
 ## 使用说明
 
+### Node.js v16以上的版本中使用
+
 1. 安装依赖：
 
    ```shell
@@ -33,7 +35,7 @@
 docker run -itd --env BOT_TOKEN="" --env HOST="" --env PORT="" --env USERNAME="" --env PASSWORD="" --env PROTOCOL="socks5" finalpi/wechat2tg:latest
 ```
 
-  docker-compose
+### docker-compose
 ```shell
 docker-compose up -d
 ```
