@@ -99,7 +99,6 @@ expireFunction1()
 
 // 已登录指令数组
 const commands = [
-  { command: 'info', description: '获取当前信息' },
   { command: 'login', description: '获取微信登陆二维码' },
   { command: 'reply', description: '回复消息' },
   { command: 'autoreply', description: '自动回复开关' }
