@@ -101,7 +101,7 @@ expireFunction1()
 const commands = [
   { command: 'login', description: '获取微信登陆二维码' },
   { command: 'reply', description: '回复消息' },
-  { command: 'autoreply', description: '自动回复开关' }
+  { command: 'auto', description: '自动回复开关' }
 ]
 
 telegramBot.setMyCommands(commands)
@@ -259,7 +259,7 @@ telegramBot.onText(/\/reply/, (msg) => {
 })
 
 // 监听 'autoReply' 指令
-telegramBot.onText(/\/autoreply/, (msg) => {
+telegramBot.onText(/\/auto/, (msg) => {
   const chatId = msg.chat.id
 
   if (autoReply) {
