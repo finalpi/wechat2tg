@@ -66,12 +66,20 @@ let cache = await loadConfig()
 const startDate = new Date()
 // 发送者数组
 const sender = []
+// 自动回复开关
+let autoReply = cache.autoReply
+if (autoReply === undefined) {
+  autoReply = false
+  saveConfig('autoReply', autoReply)
+}
+// 自动回复联系人
+let autoTalker
 
 // 登录过期检测
 let expireDetection
 function expireFunction1 () {
   expireDetection = setInterval(() => {
-    if (!wechatBot.logonoff()) {
+    if (!wechatBot.isLoggedIn) {
       telegramBot.sendMessage(cache.chatId, '程序加载成功,请登陆!')
       clearInterval(expireDetection)
     }
@@ -80,7 +88,7 @@ function expireFunction1 () {
 
 function expireFunction2 () {
   expireDetection = setInterval(() => {
-    if (!wechatBot.logonoff()) {
+    if (!wechatBot.isLoggedIn) {
       telegramBot.sendMessage(cache.chatId, '登录已过期,请重新登录!')
       clearInterval(expireDetection)
     }
@@ -92,7 +100,8 @@ expireFunction1()
 // 已登录指令数组
 const commands = [
   { command: 'login', description: '获取微信登陆二维码' },
-  { command: 'reply', description: '回复消息' }
+  { command: 'reply', description: '回复消息' },
+  { command: 'auto', description: '自动回复开关' }
 ]
 
 telegramBot.setMyCommands(commands)
@@ -109,7 +118,7 @@ wechatBot
     loginQrCode = qrcode
   })
   .on('login', user => {
-    if (cache.chatId !== '' && wechatBot.logonoff()) {
+    if (cache.chatId !== '' && wechatBot.isLoggedIn) {
       telegramBot.sendMessage(cache.chatId, '登陆成功!')
     }
     expireFunction2()
@@ -139,6 +148,7 @@ wechatBot
       } else {
         sender.unshift(element)
       }
+      autoTalker = element.talker
     } else {
       // 保存发送者
       const element = {
@@ -154,6 +164,7 @@ wechatBot
       } else {
         sender.unshift(element)
       }
+      autoTalker = element.talker
     }
     if (message.type() === wechatBot.Message.Type.Text) {
       // 文字消息处理
@@ -247,6 +258,20 @@ telegramBot.onText(/\/reply/, (msg) => {
   telegramBot.sendMessage(chatId, '请选择回复成员', options)
 })
 
+// 监听 'autoReply' 指令
+telegramBot.onText(/\/auto/, (msg) => {
+  const chatId = msg.chat.id
+
+  if (autoReply) {
+    autoReply = false
+    telegramBot.sendMessage(chatId, '关闭自动回复')
+    replyOpen = false
+  } else {
+    autoReply = true
+    telegramBot.sendMessage(chatId, '开启自动回复')
+  }
+})
+
 /**
  * 点击事件接受
  */
@@ -260,12 +285,20 @@ telegramBot.on('callback_query', async (callbackQuery) => {
     if (index !== -1) {
       const item = sender[index]
       talker = wechatBot.Room.load(item.id)
+      if (autoReply) {
+        autoTalker = wechatBot.Room.load(item.id)
+        telegramBot.sendMessage(cache.chatId, '当前回复用户:' + autoTalker.name())
+      }
     }
   } else {
     const index = sender.findIndex(e => e.name.includes(dataArr[1]))
     if (index !== -1) {
       const item = sender[index]
       talker = item.talker
+      if (autoReply) {
+        autoTalker = item.talker
+        telegramBot.sendMessage(cache.chatId, '当前回复用户:' + autoTalker.name())
+      }
     }
   }
   replyOpen = true
@@ -276,7 +309,16 @@ telegramBot.on('callback_query', async (callbackQuery) => {
  * 回复消息
  */
 telegramBot.on('message', async (msg) => {
-  if (!replyOpen) {
+  if (msg.text.indexOf('/') !== -1) {
+    return
+  }
+  if (!replyOpen && !autoReply) {
+    return
+  }
+  if (autoReply) {
+    talker = autoTalker
+  }
+  if (talker === undefined) {
     return
   }
   if (msg.photo) {
