@@ -77,10 +77,15 @@ let autoTalker
 
 // 登录过期检测
 let expireDetection
+
+// 首次检测flag
+let startFlag = true
+
 function expireFunction1 () {
   expireDetection = setInterval(() => {
-    if (!wechatBot.isLoggedIn) {
+    if (!wechatBot.isLoggedIn && startFlag) {
       telegramBot.sendMessage(cache.chatId, '程序加载成功,请登陆!')
+      startFlag = false
       clearInterval(expireDetection)
     }
   }, 10000)
