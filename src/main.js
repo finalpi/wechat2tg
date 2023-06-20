@@ -314,7 +314,7 @@ telegramBot.on('callback_query', async (callbackQuery) => {
  * 回复消息
  */
 telegramBot.on('message', async (msg) => {
-  if (msg.text.indexOf('/') !== -1) {
+  if (msg.text && msg.text.indexOf('/') !== -1) {
     return
   }
   if (!replyOpen && !autoReply) {
