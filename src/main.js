@@ -275,6 +275,7 @@ telegramBot.onText(/\/auto/, (msg) => {
     autoReply = true
     telegramBot.sendMessage(chatId, '开启自动回复')
   }
+  saveConfig('autoReply', autoReply)
 })
 
 /**
