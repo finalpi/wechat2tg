@@ -81,6 +81,12 @@ let expireDetection
 // 首次检测flag
 let startFlag = true
 
+// 群消息搜索开关
+let groupSwitch = false
+
+// 群组列表
+let addGroupList = []
+
 function expireFunction1 () {
   expireDetection = setInterval(() => {
     if (!wechatBot.isLoggedIn && startFlag) {
@@ -106,7 +112,8 @@ expireFunction1()
 const commands = [
   { command: 'login', description: '获取微信登陆二维码' },
   { command: 'reply', description: '回复消息' },
-  { command: 'auto', description: '自动回复开关' }
+  { command: 'auto', description: '自动回复开关' },
+  { command: 'group', description: '设置群消息白名单' }
 ]
 
 telegramBot.setMyCommands(commands)
@@ -134,7 +141,7 @@ wechatBot
     let msgStr = talkerContact.name() + ':\n'
     const fromRoom = message.room()
     // 群聊未提及消息不转发,以及自己发送的消息不转发
-    if (message.self() || (fromRoom != null && !await message.mentionSelf()) || message.date() < startDate || talkerContact.type() === 2) {
+    if ((fromRoom != null && cache.whiteList !== undefined && cache.whiteList.includes(await fromRoom.topic)) || message.self() || (fromRoom != null && !await message.mentionSelf()) || message.date() < startDate || talkerContact.type() === 2) {
       return
     }
     if (fromRoom != null) {
@@ -285,6 +292,21 @@ let replyOpen = false
 let talker
 telegramBot.on('callback_query', async (callbackQuery) => {
   const data = callbackQuery.data
+  if (data.includes('#101@')) {
+    const dataList = data.split('#101@')
+    const topic = await addGroupList[dataList[1]].topic()
+    if (cache.whiteList === undefined) {
+      saveConfig('whiteList', topic)
+    } else {
+      if (cache.whiteList.includes(topic)) {
+        return
+      }
+      saveConfig('whiteList', cache.whiteList + ',' + topic)
+    }
+    cache = await loadConfig()
+    telegramBot.sendMessage(cache.chatId, '成功添加群:' + topic + '到白名单')
+    return
+  }
   const dataArr = data.split(':')
   if (dataArr[0] === '0') {
     const index = sender.findIndex(e => e.name.includes(dataArr[1]))
@@ -316,6 +338,30 @@ telegramBot.on('callback_query', async (callbackQuery) => {
  */
 telegramBot.on('message', async (msg) => {
   if (msg.text && msg.text.indexOf('/') !== -1) {
+    return
+  }
+  if (groupSwitch) {
+    groupSwitch = false
+    const roomList = await wechatBot.Room.findAll({ topic: msg.text })
+    if (roomList.length === 0) {
+      telegramBot.sendMessage(cache.chatId, '未找到群组')
+      return
+    }
+    const keyboard = []
+    for (let i = 0; i < roomList.length; i++) {
+      const title = await roomList[i].topic()
+      const iItem = []
+      iItem.push({ text: title.substring(0, 20), callback_data: '#101@' + i })
+      keyboard.push(iItem)
+    }
+
+    const options = {
+      reply_markup: {
+        inline_keyboard: keyboard
+      }
+    }
+    addGroupList = roomList
+    telegramBot.sendMessage(cache.chatId, '请选择群组', options)
     return
   }
   if (!replyOpen && !autoReply) {
@@ -356,4 +402,11 @@ telegramBot.on('message', async (msg) => {
   }
   replyOpen = false
   telegramBot.sendMessage(cache.chatId, '回复成功')
+})
+
+// 监听 '群消息白名单' 指令
+telegramBot.onText(/\/group/, (msg) => {
+  const chatId = msg.chat.id
+  groupSwitch = true
+  telegramBot.sendMessage(chatId, '请输入需要加入白名单的群名称')
 })
