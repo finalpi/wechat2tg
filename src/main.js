@@ -293,6 +293,7 @@ let talker
 telegramBot.on('callback_query', async (callbackQuery) => {
   const data = callbackQuery.data
   if (data.includes('#101@')) {
+    cache = await loadConfig()
     const dataList = data.split('#101@')
     const topic = await addGroupList[dataList[1]].topic()
     if (cache.whiteList === undefined) {

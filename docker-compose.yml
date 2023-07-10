@@ -5,11 +5,11 @@ services:
     image: finalpi/wechat2tg:latest
     container_name: wx2tg
     environment:
-      - BOT_TOKEN=''
-      - HOST=''
-      - PORT=''
+      - BOT_TOKEN=
+      - HOST=
+      - PORT=
       # 代理种类
-      - PROTOCOL='socks5'
+      - PROTOCOL=socks5
       # 用户名密码可选
       # - USERNAME=
       # - PASSWORD=
