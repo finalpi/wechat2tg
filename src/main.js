@@ -141,7 +141,7 @@ wechatBot
     let msgStr = talkerContact.name() + ':\n'
     const fromRoom = message.room()
     // 群聊未提及消息不转发,以及自己发送的消息不转发
-    if ((fromRoom != null && cache.whiteList !== undefined && cache.whiteList.includes(await fromRoom.topic)) || message.self() || (fromRoom != null && !await message.mentionSelf()) || message.date() < startDate || talkerContact.type() === 2) {
+    if (message.self() || (fromRoom != null && !await message.mentionSelf() && (fromRoom != null && cache.whiteList !== undefined && !cache.whiteList.includes(await fromRoom.topic()))) || message.date() < startDate || talkerContact.type() === 2) {
       return
     }
     if (fromRoom != null) {
@@ -297,10 +297,7 @@ telegramBot.on('callback_query', async (callbackQuery) => {
     const topic = await addGroupList[dataList[1]].topic()
     if (cache.whiteList === undefined) {
       saveConfig('whiteList', topic)
-    } else {
-      if (cache.whiteList.includes(topic)) {
-        return
-      }
+    } else if (!cache.whiteList.includes(topic)) {
       saveConfig('whiteList', cache.whiteList + ',' + topic)
     }
     cache = await loadConfig()
