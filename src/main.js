@@ -113,7 +113,8 @@ const commands = [
   { command: 'login', description: '获取微信登陆二维码' },
   { command: 'reply', description: '回复消息' },
   { command: 'auto', description: '自动回复开关' },
-  { command: 'group', description: '设置群消息白名单' }
+  { command: 'group', description: '设置群消息白名单' },
+  { command: 'cgroup', description: '取消群消息白名单' }
 ]
 
 telegramBot.setMyCommands(commands)
@@ -303,32 +304,41 @@ telegramBot.on('callback_query', async (callbackQuery) => {
     }
     cache = await loadConfig()
     telegramBot.sendMessage(cache.chatId, '成功添加群:' + topic + '到白名单')
-    return
-  }
-  const dataArr = data.split(':')
-  if (dataArr[0] === '0') {
-    const index = sender.findIndex(e => e.name.includes(dataArr[1]))
-    if (index !== -1) {
-      const item = sender[index]
-      talker = wechatBot.Room.load(item.id)
-      if (autoReply) {
-        autoTalker = wechatBot.Room.load(item.id)
-        telegramBot.sendMessage(cache.chatId, '当前回复用户:' + autoTalker.name())
-      }
-    }
+  } else if (data.includes('#102@')) {
+    cache = await loadConfig()
+    const dataList = data.split('#102@')
+    const whiteList = cache.whiteList.split(',')
+    whiteList.splice(dataList[1] ,1)
+    const listStr = whiteList.join(',')
+    saveConfig('whiteList', listStr)
+    cache = await loadConfig()
+    telegramBot.sendMessage(cache.chatId, '操作成功')
   } else {
-    const index = sender.findIndex(e => e.name.includes(dataArr[1]))
-    if (index !== -1) {
-      const item = sender[index]
-      talker = item.talker
-      if (autoReply) {
-        autoTalker = item.talker
-        telegramBot.sendMessage(cache.chatId, '当前回复用户:' + autoTalker.name())
+    const dataArr = data.split(':')
+    if (dataArr[0] === '0') {
+      const index = sender.findIndex(e => e.name.includes(dataArr[1]))
+      if (index !== -1) {
+        const item = sender[index]
+        talker = wechatBot.Room.load(item.id)
+        if (autoReply) {
+          autoTalker = wechatBot.Room.load(item.id)
+          telegramBot.sendMessage(cache.chatId, '当前回复用户:' + autoTalker.name())
+        }
+      }
+    } else {
+      const index = sender.findIndex(e => e.name.includes(dataArr[1]))
+      if (index !== -1) {
+        const item = sender[index]
+        talker = item.talker
+        if (autoReply) {
+          autoTalker = item.talker
+          telegramBot.sendMessage(cache.chatId, '当前回复用户:' + autoTalker.name())
+        }
       }
     }
+    replyOpen = true
+    telegramBot.sendMessage(cache.chatId, '请输入要回复的消息')
   }
-  replyOpen = true
-  telegramBot.sendMessage(cache.chatId, '请输入要回复的消息')
 })
 
 /**
@@ -407,4 +417,23 @@ telegramBot.onText(/\/group/, (msg) => {
   const chatId = msg.chat.id
   groupSwitch = true
   telegramBot.sendMessage(chatId, '请输入需要加入白名单的群名称')
+})
+
+// 监听 '取消群消息白名单' 指令
+telegramBot.onText(/\/cgroup/, (msg) => {
+  const chatId = msg.chat.id
+  const whiteList = cache.whiteList.split(',')
+  const keyboard = []
+  for (let i = 0; i < whiteList.length; i++) {
+    const iItem = []
+    iItem.push({ text: whiteList.length, callback_data: '#102@' + i })
+    keyboard.push(iItem)
+  }
+
+  const options = {
+    reply_markup: {
+      inline_keyboard: keyboard
+    }
+  }
+  telegramBot.sendMessage(chatId, '请选择需要取消白名单的群名称', options)
 })
