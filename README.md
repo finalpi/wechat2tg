@@ -1,47 +1,50 @@
-# 微信消息转发到 Telegram
+# WeChat Message Forwarding to Telegram
 
-这个项目是基于 [wechaty](https://github.com/wechaty/wechaty) 实现的微信消息转发到 Telegram 机器人的项目,使用UOS协议的puppet实现,因此可以绕过微信web版某些账号无法登陆的问题。  
+English | [中文](README_zh.md)
+
+This project is a WeChat message forwarding to Telegram bot based on [wechaty](https://github.com/wechaty/wechaty). It uses the UOS protocol puppet, which allows bypassing the issue of certain WeChat web accounts unable to log in.
 ![](https://s1.imagehub.cc/images/2023/06/30/imagea3d9cbc1eb0fa6c7.png)
-目前已经实现的功能:
-1. 将微信@你的群消息转发至telegram机器人
-2. 将微信私聊的图片,语音,文字,视频消息转发到telegram机器人
 
-后续打算实现的功能:
-1. 在telegram机器人中给指定的人发送消息
-2. 设置群白名单以接受该群的所有消息
+Currently implemented features:
+1. Forwarding group messages that @ you in WeChat to the Telegram bot.
+2. Forwarding WeChat private chat messages (images, voice, text, videos) to the Telegram bot.
 
-## 使用说明
+Planned features for future implementation:
+1. Sending messages to specified individuals on the Telegram bot.
 
-### Node.js v16以上的版本中使用
+## Instructions
 
-1. 安装依赖：
+### Usage in Node.js versions 16 and above
+
+1. Install dependencies:
 
    ```shell
    npm install
    ```
 
-2. 在 `.env` 文件中配置 Telegram bot 的 token和代理信息。
+2. Configure the Telegram bot token and proxy information in the `.env` file.
 
-3. 运行程序：
+3. Run the program:
 
    ```shell
    npm start
    ```
 
-4. 扫描二维码登录微信账号。
+4. Scan the QR code to log in to your WeChat account.
 
-### docker中使用
+### Usage in Docker
 ```shell
 docker run -itd --env BOT_TOKEN="" --env HOST="" --env PORT="" --env USERNAME="" --env PASSWORD="" --env PROTOCOL="socks5" finalpi/wechat2tg:latest
 ```
 
-### docker-compose
+### Usage with docker-compose
 ```shell
 docker-compose up -d
 ```
-## 声明
 
-本项目仅用于技术研究和学习，不得用于非法用途。
+## Disclaimer
+
+This project is for technical research and learning purposes only. It must not be used for illegal activities.
 
 ## License
 
