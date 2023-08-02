@@ -49,3 +49,7 @@ docker-compose up -d
 GitHub (https://github.com/wechaty/wechaty)
 GitHub - wechaty/wechaty: Conversational RPA SDK for Chatbot Makers
 Conversational RPA SDK for Chatbot Makers. Contribute to wechaty/wechaty development by creating an account on GitHub.
+
+## Thanks
+感谢Jetbrains对本项目的支持
+[![Jetbrains](https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.png)](https://www.jetbrains.com)
