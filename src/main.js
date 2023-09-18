@@ -433,7 +433,7 @@ telegramBot.onText(/\/cgroup/, (msg) => {
   const keyboard = []
   for (let i = 0; i < whiteList.length; i++) {
     const iItem = []
-    iItem.push({ text: whiteList.length, callback_data: '#102@' + i })
+    iItem.push({ text: whiteList[i], callback_data: '#102@' + i })
     keyboard.push(iItem)
   }
 
