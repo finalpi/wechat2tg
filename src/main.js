@@ -54,9 +54,16 @@ if (HOST !== null && HOST !== '' && PORT !== null && PORT !== '' & PROTOCOL != n
   })
 } else {
   telegramBot = new TelegramBot(BOT_TOKEN, {
-    polling: true
+    polling: true,
+    request: {
+      retryAfter: 5000
+    }
   })
 }
+
+telegramBot.on('polling_error', (error) => {
+  console.log(new Date().toLocaleString(),error.code);  // => 'EFATAL'
+});
 
 // 登陆二维码链接
 let loginQrCode = ''
