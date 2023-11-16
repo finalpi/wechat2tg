@@ -4,6 +4,8 @@ services:
   wechat2tg:
     image: finalpi/wechat2tg:latest
     container_name: wx2tg
+    volumes:
+      - ./config:/app/config
     environment:
       - BOT_TOKEN=
       - HOST=
