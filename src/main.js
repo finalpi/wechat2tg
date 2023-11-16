@@ -188,7 +188,9 @@ wechatBot
     }
     if (message.type() === wechatBot.Message.Type.Text) {
       // 文字消息处理
-      telegramBot.sendMessage(cache.chatId, msgStr + message.text())
+      //处理换行符和表情
+      let text = message.text().replace(/<br\/>/g, "\n").replace(/<img[^>]*text="\[([^\]]+)\]_web"[^>]*>/g, '($1)');
+      telegramBot.sendMessage(cache.chatId, msgStr + text)
     } else if (message.type() === wechatBot.Message.Type.Image) {
       // 图片消息处理
       const image = message.toImage()
