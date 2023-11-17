@@ -148,8 +148,10 @@ wechatBot
     const talkerContact = message.talker()
     let msgStr = talkerContact.name() + ':\n'
     const fromRoom = message.room()
+    //刷新缓存
+    cache = await loadConfig()
     // 群聊未提及消息不转发,以及自己发送的消息不转发
-    if (message.self() || (fromRoom != null && !await message.mentionSelf() && (fromRoom != null && cache.whiteList !== undefined && !cache.whiteList.includes(await fromRoom.topic()))) || message.date() < startDate || talkerContact.type() === 2) {
+    if (message.self() || (fromRoom != null && !await message.mentionSelf() && (fromRoom != null && cache.whiteList !== undefined && await fromRoom.topic() !== '' &&!cache.whiteList.includes(await fromRoom.topic()))) || message.date() < startDate || talkerContact.type() === 2) {
       return
     }
     if (fromRoom != null) {
@@ -305,11 +307,19 @@ telegramBot.on('callback_query', async (callbackQuery) => {
   if (data.includes('#101@')) {
     cache = await loadConfig()
     const dataList = data.split('#101@')
+    if (addGroupList === undefined){
+      return
+    }
     const topic = await addGroupList[dataList[1]].topic()
     if (cache.whiteList === undefined) {
       saveConfig('whiteList', topic)
     } else if (!cache.whiteList.includes(topic)) {
-      saveConfig('whiteList', cache.whiteList + ',' + topic)
+      const whiteList = cache.whiteList.split(',')
+      whiteList.push(topic)
+      if (whiteList.length > 0 && whiteList[0] === ''){
+        whiteList.shift()
+      }
+      saveConfig('whiteList', whiteList.join(','))
     }
     cache = await loadConfig()
     telegramBot.sendMessage(cache.chatId, '成功添加群:' + topic + '到白名单')
@@ -354,6 +364,7 @@ telegramBot.on('callback_query', async (callbackQuery) => {
  * 回复消息
  */
 telegramBot.on('message', async (msg) => {
+  cache = await loadConfig()
   if (msg.text && msg.text.indexOf('/') !== -1) {
     return
   }
@@ -429,10 +440,18 @@ telegramBot.onText(/\/group/, (msg) => {
 })
 
 // 监听 '取消群消息白名单' 指令
-telegramBot.onText(/\/cgroup/, (msg) => {
+telegramBot.onText(/\/cgroup/, async (msg) => {
+  cache = await loadConfig()
   const chatId = msg.chat.id
   const whiteList = cache.whiteList.split(',')
+  if (whiteList.length > 0 && whiteList[0] === ''){
+    whiteList.shift()
+  }
   const keyboard = []
+  if (whiteList.length === 0){
+    telegramBot.sendMessage(chatId, '白名单为空')
+    return
+  }
   for (let i = 0; i < whiteList.length; i++) {
     const iItem = []
     iItem.push({ text: whiteList[i], callback_data: '#102@' + i })
