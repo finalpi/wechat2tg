@@ -190,8 +190,12 @@ wechatBot
     }
     if (message.type() === wechatBot.Message.Type.Text) {
       // 文字消息处理
-      //处理换行符和表情
-      let text = message.text().replace(/<br\/>/g, "\n").replace(/<img[^>]*text="\[([^\]]+)\]_web"[^>]*>/g, '($1)');
+      //处理换行符和表情以及好友消息
+      if (message.text().includes('Friend recommendation message')){
+        telegramBot.sendMessage(cache.chatId, msgStr + '收到一条好友申请')
+        return
+      }
+      let text = message.text().replace(/<br\/>/g, "\n").replace(/<img[^>]*text="\[([^\]]+)\]_web"[^>]*>/g, '[$1]').replace(/<img[^>]*>/g, '');
       telegramBot.sendMessage(cache.chatId, msgStr + text)
     } else if (message.type() === wechatBot.Message.Type.Image) {
       // 图片消息处理
