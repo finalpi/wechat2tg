@@ -52,10 +52,6 @@ This project is only for technical research and learning purposes, and must not 
 
 [MIT](LICENSE)
 
-GitHub (https://github.com/wechaty/wechaty)
-GitHub - wechaty/wechaty: Conversational RPA SDK for Chatbot Makers
-Conversational RPA SDK for Chatbot Makers. Contribute to wechaty/wechaty development by creating an account on GitHub.
-
 ## Thanks
 Thanks to JetBrains for their support of this project.
 [![Jetbrains](https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.png)](https://www.jetbrains.com)
