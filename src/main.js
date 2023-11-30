@@ -410,6 +410,9 @@ telegramBot.on('message', async (msg) => {
     telegramBot.downloadFile(fileId, './').then(async (filePath) => {
       const fileBox = FileBox.fromFile(filePath)
       await talker.say(fileBox)
+      if (msg.caption != undefined){
+        await talker.say(msg.caption)
+      }
       fs.unlink(filePath, (err) => {
         if (err) throw err
         console.log('已成功删除文件')
