@@ -37,6 +37,23 @@ docker run -itd --env BOT_TOKEN="" --env HOST="" --env PORT="" --env USERNAME=""
 ```shell
 docker-compose up -d
 ```
+
+## 配置项说明
+
+`BOT_TOKEN`(必填):telegram bot的token,通过[BotFather](https://t.me/BotFather)创建
+
+### 使用代理
+
+使用代理转发telegram bot的请求,留空则不使用代理:
+```
+# 协议socks5,http,https
+PROTOCOL=socks5
+HOST=
+PORT=
+USERNAME=
+PASSWORD=
+```
+
 ## 声明
 
 本项目仅用于技术研究和学习，不得用于非法用途。

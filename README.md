@@ -44,6 +44,22 @@ docker run -itd --env BOT_TOKEN="" --env HOST="" --env PORT="" --env USERNAME=""
 docker-compose up -d
 ```
 
+## Configuration
+
+`BOT_TOKEN`(required): Telegram bot's token, created through [BotFather](https://t.me/BotFather)
+
+### Using a Proxy
+
+Use a proxy to forward Telegram bot requests leave it blank if not using a proxy:
+```
+# Protocol can be socks5, http, or https
+PROTOCOL=socks5
+HOST=
+PORT=
+USERNAME=
+PASSWORD=
+```
+
 ## Disclaimer
 
 This project is only for technical research and learning purposes, and must not be used for illegal activities.
