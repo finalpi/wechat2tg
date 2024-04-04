@@ -35,7 +35,15 @@ export const loadConfig = function () {
                 const jsonObject = JSON.parse(data);
                 resolve(jsonObject);
             } catch (error) {
-                reject(`解析 JSON 文件失败: ${error}`);
+                const jsonObject = JSON.parse(data.replace(/\}(?=[^\}]*\})/g, ''));
+                fs.writeFile(jsonFileName, JSON.stringify(jsonObject), 'utf8', err => {
+                    if (err) {
+                        reject(`保存 JSON 文件失败: ${err}`);
+                    } else {
+                        resolve();
+                    }
+                });
+                resolve(jsonObject);
             }
         });
     });
