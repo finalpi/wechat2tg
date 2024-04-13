@@ -6,6 +6,7 @@ import { loadConfig, saveConfig } from './cache/CacheUtil.js'
 import dotenv from 'dotenv'
 import { SocksProxyAgent } from 'socks-proxy-agent'
 import { FileBox } from 'file-box'
+import {Lock} from "./util/Lock.js";
 
 dotenv.config()
 
@@ -94,6 +95,8 @@ let groupSwitch = false
 // 群组列表
 let addGroupList = []
 
+const lock = new Lock()
+
 function expireFunction1 () {
   expireDetection = setInterval(() => {
     if (!wechatBot.isLoggedIn && startFlag) {
@@ -151,7 +154,7 @@ wechatBot
     //刷新缓存
     cache = await loadConfig()
     // 群聊未提及消息不转发,以及自己发送的消息不转发
-    if (message.self() || (fromRoom != null && !await message.mentionSelf() && (fromRoom != null && cache.whiteList !== undefined && await fromRoom.topic() !== '' &&!cache.whiteList.includes(await fromRoom.topic()))) || message.date() < startDate || talkerContact.type() === 2) {
+    if (message.self() || (fromRoom != null && !await message.mentionSelf() && (fromRoom != null && cache.whiteList !== undefined && await fromRoom.topic() !== '' &&!cache.whiteList.includes(await fromRoom.topic()))) || (fromRoom !== null && cache.whiteList === undefined && !await message.mentionSelf()) || message.date() < startDate || talkerContact.type() === 2) {
       return
     }
     if (fromRoom != null) {
@@ -235,7 +238,13 @@ wechatBot
       // 附件处理
       const fileBox = await message.toFileBox()
       const fileName = fileBox.name
-      telegramBot.sendMessage(cache.chatId, msgStr + '[文件]' + fileName)
+      await fileBox.toFile(fileName, true)
+      telegramBot.sendDocument(cache.chatId, fileName, { caption: msgStr }).then(() => {
+        fs.unlink(fileName, (err) => {
+          if (err) throw err
+          console.log('已成功删除文件')
+        })
+      })
     }
   })
 
@@ -405,38 +414,55 @@ telegramBot.on('message', async (msg) => {
   if (talker === undefined) {
     return
   }
-  if (msg.photo) {
-    const fileId = msg.photo[msg.photo.length - 1].file_id
-    telegramBot.downloadFile(fileId, './').then(async (filePath) => {
-      const fileBox = FileBox.fromFile(filePath)
-      await talker.say(fileBox)
-      if (msg.caption != undefined){
-        await talker.say(msg.caption)
-      }
-      fs.unlink(filePath, (err) => {
-        if (err) throw err
-        console.log('已成功删除文件')
+  try {
+    await lock.acquire()
+    if (msg.photo) {
+      const fileId = msg.photo[msg.photo.length - 1].file_id
+      telegramBot.downloadFile(fileId, './').then(async (filePath) => {
+        const fileBox = FileBox.fromFile(filePath)
+        await talker.say(fileBox)
+        if (msg.caption !== undefined) {
+          await talker.say(msg.caption)
+        }
+        fs.unlink(filePath, (err) => {
+          if (err) throw err
+          console.log('已成功删除文件')
+        })
       })
-    })
-  }
+    }
 
-  if (msg.sticker) {
-    const fileId = msg.sticker.file_id
-    telegramBot.downloadFile(fileId, './').then(async (filePath) => {
-      const fileBox = FileBox.fromFile(filePath)
-      await talker.say(fileBox)
-      fs.unlink(filePath, (err) => {
-        if (err) throw err
-        console.log('已成功删除文件')
+    if (msg.sticker) {
+      const fileId = msg.sticker.file_id
+      telegramBot.downloadFile(fileId, './').then(async (filePath) => {
+        const fileBox = FileBox.fromFile(filePath)
+        await talker.say(fileBox)
+        fs.unlink(filePath, (err) => {
+          if (err) throw err
+          console.log('已成功删除文件')
+        })
       })
-    })
-  }
+    }
 
-  if (msg.text) {
-    await talker.say(msg.text)
+    if (msg.text) {
+      await talker.say(msg.text)
+    }
+
+    if (msg.document) {
+      const fileId = msg.document.file_id
+      telegramBot.downloadFile(fileId, './').then(async (filePath) => {
+        const fileBox = FileBox.fromFile(filePath)
+        await talker.say(fileBox)
+        fs.unlink(filePath, (err) => {
+          if (err) throw err
+          console.log('已成功删除文件')
+        })
+      })
+    }
+    replyOpen = false
+    telegramBot.sendMessage(cache.chatId, '回复成功')
+  } finally {
+    lock.release()
   }
-  replyOpen = false
-  telegramBot.sendMessage(cache.chatId, '回复成功')
 })
 
 // 监听 '群消息白名单' 指令
