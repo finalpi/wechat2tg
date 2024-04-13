@@ -149,16 +149,22 @@ wechatBot
   .on('message', async message => {
     // 获取发送者
     const talkerContact = message.talker()
-    let msgStr = talkerContact.name() + ':\n'
+    const alias = await talkerContact.alias()
+    let msgStr = ''
+    if (alias === null) {
+      msgStr = talkerContact.name() + ':\n'
+    } else {
+      msgStr = alias + '(' + talkerContact.name() + ')' + ':\n'
+    }
     const fromRoom = message.room()
-    //刷新缓存
+    // 刷新缓存
     cache = await loadConfig()
     // 群聊未提及消息不转发,以及自己发送的消息不转发
-    if (message.self() || (fromRoom != null && !await message.mentionSelf() && (fromRoom != null && cache.whiteList !== undefined && await fromRoom.topic() !== '' &&!cache.whiteList.includes(await fromRoom.topic()))) || (fromRoom !== null && cache.whiteList === undefined && !await message.mentionSelf()) || message.date() < startDate || talkerContact.type() === 2) {
+    if (message.self() || (!!fromRoom && !await message.mentionSelf() && (!!fromRoom && cache.whiteList !== undefined && await fromRoom.topic() !== '' &&!cache.whiteList.includes(await fromRoom.topic()))) || (!!fromRoom && cache.whiteList === undefined && !await message.mentionSelf()) || message.date() < startDate || talkerContact.type() === 2) {
       return
     }
     if (fromRoom != null) {
-      msgStr = talkerContact.name() + '(' + await fromRoom.topic() + '):\n'
+      msgStr = alias === null ? talkerContact.name() : alias + '(' + await fromRoom.topic() + '):\n'
       // 保存发送者
       const element = {
         name: await fromRoom.topic(),
