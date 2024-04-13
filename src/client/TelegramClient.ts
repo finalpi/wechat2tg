@@ -1,6 +1,6 @@
 import { Telegraf } from 'telegraf';
 import { WeChatClient } from "./WechatClient";
-import { config } from '../config';
+import { config } from "../config";
 import fs from 'fs';
 import { SimpleMessage, SimpleMessageSender } from "../models/Message"
 
