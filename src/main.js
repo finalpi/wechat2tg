@@ -151,7 +151,7 @@ wechatBot
     const talkerContact = message.talker()
     const alias = await talkerContact.alias()
     let msgStr = ''
-    if (alias === null) {
+    if (!!!alias) {
       msgStr = talkerContact.name() + ':\n'
     } else {
       msgStr = alias + '(' + talkerContact.name() + ')' + ':\n'
@@ -164,7 +164,7 @@ wechatBot
       return
     }
     if (fromRoom != null) {
-      msgStr = alias === null ? talkerContact.name() : alias + '(' + await fromRoom.topic() + '):\n'
+      msgStr = !!!alias ? talkerContact.name() + '(' + await fromRoom.topic() + '):\n' : alias + '(' + await fromRoom.topic() + '):\n'
       // 保存发送者
       const element = {
         name: await fromRoom.topic(),
