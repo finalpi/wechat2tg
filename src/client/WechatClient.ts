@@ -53,12 +53,12 @@ export class WeChatClient {
         }
     }
 
-    private message(message: MessageInterface) {
+    private async message(message: MessageInterface) {
 
         const talker = message.talker();
         // attachment handle
         if (message.type() === PUPPET.types.Message.Attachment) {
-            const path = `save-files/${talker.id}`
+            const path = `save-files/${talker.handle()}`
             if (!fs.existsSync(path)) {
                 fs.mkdirSync(path, { recursive: true });
             }
@@ -79,8 +79,9 @@ export class WeChatClient {
             talker && messageTxt.includes('ding')) {
             message.say('dong')
         }
+        const showSender = await talker.alias() || talker.name()
         if (messageTxt) {
-            this._tgClient.sendMessage({ sender: talker.name(), body: messageTxt })
+            this._tgClient.sendMessage({ sender: showSender, body: messageTxt })
         }
 
     }

@@ -8,13 +8,11 @@ export class TelegramClient {
 
     private _weChatClient: WeChatClient;
     private _bot: Telegraf;
-    private lang: string;
     private _chatId: number | string;
     private loginCommandExecuted = false;
 
     constructor () {
         this._weChatClient = new WeChatClient(this);
-        this.lang = 'zh'
         this._chatId = 0
         this._bot = new Telegraf(config.BOT_TOKEN)
     }
