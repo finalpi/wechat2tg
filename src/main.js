@@ -154,7 +154,7 @@ wechatBot
     if (!!!alias) {
       msgStr = talkerContact.name() + ':\n'
     } else {
-      msgStr = alias + '(' + talkerContact.name() + ')' + ':\n'
+      msgStr = alias + '[' + talkerContact.name() + ']' + ':\n'
     }
     const fromRoom = message.room()
     // 刷新缓存
@@ -164,7 +164,7 @@ wechatBot
       return
     }
     if (fromRoom != null) {
-      msgStr = !!!alias ? talkerContact.name() + '(' + await fromRoom.topic() + '):\n' : alias + '(' + await fromRoom.topic() + '):\n'
+      msgStr = !!!alias ? talkerContact.name() + '(' + await fromRoom.topic() + '):\n' : alias + '[' + talkerContact.name() + ']' + '(' + await fromRoom.topic() + '):\n'
       // 保存发送者
       const element = {
         name: await fromRoom.topic(),
