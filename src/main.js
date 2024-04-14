@@ -265,14 +265,16 @@ wechatBot
           inline_keyboard: keyboard
         }
       }
+      const id = new Date().getTime()
       const friendshipData = {
         friendship: friendship,
-        msgId: ''
+        msgId: '',
+        id: id
       }
       switch (friendship.type()) {
         case wechatBot.Friendship.Type.Receive:
           friendList.push(friendshipData)
-          iItem.push({ text: '同意', callback_data: '#103@' + (friendList.length - 1) })
+          iItem.push({ text: '同意', callback_data: '#103@' + id })
           keyboard.push(iItem)
           telegramBot.sendMessage(cache.chatId, friendship.contact().name() + '请求添加您为好友:\n' + friendship.hello(), options)
             .then((sentMessage) => {
@@ -392,11 +394,10 @@ telegramBot.on('callback_query', async (callbackQuery) => {
     } else if (data.includes('#103@')) {
       cache = await loadConfig()
       const dataList = data.split('#103@')
-      if (friendList.length > 0 && friendList.length > dataList[1]) {
-        const friend = friendList[dataList[1]]
+      const friend = friendList.find(item => item.id == dataList[1])
+      if (friend) {
         await telegramBot.deleteMessage(cache.chatId, friend.msgId)
         await friend.friendship.accept()
-        friendList.splice(dataList[1], 1)
         telegramBot.sendMessage(cache.chatId, '添加好友成功')
       } else {
         telegramBot.sendMessage(cache.chatId, '请求已过期')
