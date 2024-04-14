@@ -5,7 +5,8 @@
   "main": "app.ts",
   "esModuleInterop": true,
   "scripts": {
-    "kit-dev": "ts-node src/app.ts"
+    "kit-dev": "ts-node src/app.ts",
+    "bot-test": "ts-node test/tgKeyboardTest.ts"
   },
   "keywords": [],
   "author": "",
