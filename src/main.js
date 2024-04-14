@@ -6,7 +6,7 @@ import { loadConfig, saveConfig } from './cache/CacheUtil.js'
 import dotenv from 'dotenv'
 import { SocksProxyAgent } from 'socks-proxy-agent'
 import { FileBox } from 'file-box'
-import {Lock} from "./util/Lock.js";
+import { Lock } from './util/Lock.js'
 
 dotenv.config()
 
@@ -63,8 +63,8 @@ if (HOST !== null && HOST !== '' && PORT !== null && PORT !== '' & PROTOCOL != n
 }
 
 telegramBot.on('polling_error', (error) => {
-  console.log(new Date().toLocaleString(),error.code);  // => 'EFATAL'
-});
+  console.log(new Date().toLocaleString(), error.code)
+})
 
 // 登陆二维码链接
 let loginQrCode = ''
@@ -96,6 +96,9 @@ let groupSwitch = false
 let addGroupList = []
 
 const lock = new Lock()
+
+// 好友申请列表
+const friendList = []
 
 function expireFunction1 () {
   expireDetection = setInterval(() => {
@@ -199,9 +202,8 @@ wechatBot
     }
     if (message.type() === wechatBot.Message.Type.Text) {
       // 文字消息处理
-      //处理换行符和表情以及好友消息
-      if (message.text().includes('Friend recommendation message')){
-        telegramBot.sendMessage(cache.chatId, msgStr + '收到一条好友申请')
+      // 处理换行符和表情以及好友消息
+      if (message.text().includes('Friend recommendation message')) {
         return
       }
       let text = message.text().replace(/<br\/>/g, "\n").replace(/<img[^>]*text="\[([^\]]+)\]_web"[^>]*>/g, '[$1]').replace(/<img[^>]*>/g, '');
@@ -253,6 +255,40 @@ wechatBot
       })
     }
   })
+  .on('friendship', async friendship => {
+    try {
+      cache = await loadConfig()
+      const keyboard = []
+      const iItem = []
+      const options = {
+        reply_markup: {
+          inline_keyboard: keyboard
+        }
+      }
+      const friendshipData = {
+        friendship: friendship,
+        msgId: ''
+      }
+      switch (friendship.type()) {
+        case wechatBot.Friendship.Type.Receive:
+          friendList.push(friendshipData)
+          iItem.push({ text: '同意', callback_data: '#103@' + (friendList.length - 1) })
+          keyboard.push(iItem)
+          telegramBot.sendMessage(cache.chatId, friendship.contact().name() + '请求添加您为好友:\n' + friendship.hello(), options)
+            .then((sentMessage) => {
+              const messageId = sentMessage.message_id
+              friendList[friendList.length - 1].msgId = messageId
+            })
+          break
+        // 2. Friend Ship Confirmed
+        case wechatBot.Friendship.Type.Confirm:
+          console.log(`friend ship confirmed`)
+          break
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  })
 
 wechatBot.start()
 
@@ -262,6 +298,7 @@ wechatBot.on('error', async (e) => {
   if (!errorFlag) {
     errorFlag = true
     telegramBot.sendMessage(cache.chatId, '遇到未知错误程序终止:' + e)
+    console.error(e)
   }
 })
 
@@ -322,60 +359,77 @@ telegramBot.onText(/\/auto/, (msg) => {
 let replyOpen = false
 let talker
 telegramBot.on('callback_query', async (callbackQuery) => {
-  const data = callbackQuery.data
-  if (data.includes('#101@')) {
-    cache = await loadConfig()
-    const dataList = data.split('#101@')
-    if (addGroupList === undefined){
-      return
-    }
-    const topic = await addGroupList[dataList[1]].topic()
-    if (cache.whiteList === undefined) {
-      saveConfig('whiteList', topic)
-    } else if (!cache.whiteList.includes(topic)) {
-      const whiteList = cache.whiteList.split(',')
-      whiteList.push(topic)
-      if (whiteList.length > 0 && whiteList[0] === ''){
-        whiteList.shift()
+  try {
+    const data = callbackQuery.data
+    if (data.includes('#101@')) {
+      cache = await loadConfig()
+      const dataList = data.split('#101@')
+      if (addGroupList === undefined) {
+        return
       }
-      saveConfig('whiteList', whiteList.join(','))
-    }
-    cache = await loadConfig()
-    telegramBot.sendMessage(cache.chatId, '成功添加群:' + topic + '到白名单')
-  } else if (data.includes('#102@')) {
-    cache = await loadConfig()
-    const dataList = data.split('#102@')
-    const whiteList = cache.whiteList.split(',')
-    whiteList.splice(dataList[1] ,1)
-    const listStr = whiteList.join(',')
-    saveConfig('whiteList', listStr)
-    cache = await loadConfig()
-    telegramBot.sendMessage(cache.chatId, '操作成功')
-  } else {
-    const dataArr = data.split(':')
-    if (dataArr[0] === '0') {
-      const index = sender.findIndex(e => e.name.includes(dataArr[1]))
-      if (index !== -1) {
-        const item = sender[index]
-        talker = wechatBot.Room.load(item.id)
-        if (autoReply) {
-          autoTalker = wechatBot.Room.load(item.id)
-          telegramBot.sendMessage(cache.chatId, '当前回复用户:' + autoTalker.name())
+      const topic = await addGroupList[dataList[1]].topic()
+      if (cache.whiteList === undefined) {
+        saveConfig('whiteList', topic)
+      } else if (!cache.whiteList.includes(topic)) {
+        const whiteList = cache.whiteList.split(',')
+        whiteList.push(topic)
+        if (whiteList.length > 0 && whiteList[0] === ''){
+          whiteList.shift()
         }
+        saveConfig('whiteList', whiteList.join(','))
+      }
+      cache = await loadConfig()
+      telegramBot.sendMessage(cache.chatId, '成功添加群:' + topic + '到白名单')
+    } else if (data.includes('#102@')) {
+      cache = await loadConfig()
+      const dataList = data.split('#102@')
+      const whiteList = cache.whiteList.split(',')
+      whiteList.splice(dataList[1], 1)
+      const listStr = whiteList.join(',')
+      saveConfig('whiteList', listStr)
+      cache = await loadConfig()
+      telegramBot.sendMessage(cache.chatId, '操作成功')
+    } else if (data.includes('#103@')) {
+      cache = await loadConfig()
+      const dataList = data.split('#103@')
+      if (friendList.length > 0 && friendList.length > dataList[1]) {
+        const friend = friendList[dataList[1]]
+        await telegramBot.deleteMessage(cache.chatId, friend.msgId)
+        await friend.friendship.accept()
+        friendList.splice(dataList[1], 1)
+        telegramBot.sendMessage(cache.chatId, '添加好友成功')
+      } else {
+        telegramBot.sendMessage(cache.chatId, '请求已过期')
       }
     } else {
-      const index = sender.findIndex(e => e.name.includes(dataArr[1]))
-      if (index !== -1) {
-        const item = sender[index]
-        talker = item.talker
-        if (autoReply) {
-          autoTalker = item.talker
-          telegramBot.sendMessage(cache.chatId, '当前回复用户:' + autoTalker.name())
+      const dataArr = data.split(':')
+      if (dataArr[0] === '0') {
+        const index = sender.findIndex(e => e.name.includes(dataArr[1]))
+        if (index !== -1) {
+          const item = sender[index]
+          talker = wechatBot.Room.load(item.id)
+          if (autoReply) {
+            autoTalker = wechatBot.Room.load(item.id)
+            telegramBot.sendMessage(cache.chatId, '当前回复用户:' + autoTalker.name())
+          }
+        }
+      } else {
+        const index = sender.findIndex(e => e.name.includes(dataArr[1]))
+        if (index !== -1) {
+          const item = sender[index]
+          talker = item.talker
+          if (autoReply) {
+            autoTalker = item.talker
+            telegramBot.sendMessage(cache.chatId, '当前回复用户:' + autoTalker.name())
+          }
         }
       }
+      replyOpen = true
+      telegramBot.sendMessage(cache.chatId, '请输入要回复的消息')
     }
-    replyOpen = true
-    telegramBot.sendMessage(cache.chatId, '请输入要回复的消息')
+  } catch (e) {
+    telegramBot.sendMessage(cache.chatId, '操作失败')
+    console.error(e)
   }
 })
 
