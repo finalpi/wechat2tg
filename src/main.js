@@ -210,8 +210,7 @@ wechatBot
       telegramBot.sendMessage(cache.chatId, msgStr + text)
     } else if (message.type() === wechatBot.Message.Type.Image) {
       // 图片消息处理
-      const image = message.toImage()
-      const fileBox = await image.artwork()
+      const fileBox = await message.toFileBox()
       const fileName = fileBox.name
       await fileBox.toFile(fileName, true)
       telegramBot.sendPhoto(cache.chatId, fileName, { caption: msgStr }).then(() => {
