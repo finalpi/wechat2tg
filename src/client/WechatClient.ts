@@ -24,7 +24,7 @@ export class WeChatClient {
             [2, []],
             [3, []]
         ]);
-        // 手动绑定方法的上下文
+
         this.scan = this.scan.bind(this);
         this.message = this.message.bind(this);
     }
@@ -47,10 +47,32 @@ export class WeChatClient {
 
     public async init() {
         if (this._client === null) return;
-        this._client.on('login', () => this.login())
+        await this._client.on('login', () => this.login())
             .on('scan', this.scan)
             .on('message', this.message)
-            .start().then(() => console.log('wechat client start....'))
+            .on('logout', this.logout)
+            .on('stop', this.stop)
+            .on('friendship', this.friendship)
+            .on('error', this.error)
+            .start();
+    }
+
+    private error(error: Error) {
+        console.error('error:', error)
+    }
+
+    private friendship() {
+        //
+    }
+
+    public async stop() {
+        await this._client.stop();
+        this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '微信客户端已停止!')
+    }
+
+    public async logout() {
+        await this._client.logout();
+        this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登出成功!')
     }
 
     private login() {
@@ -79,52 +101,75 @@ export class WeChatClient {
 
     private async message(message: MessageInterface) {
 
+        // console.info('message:', message)
         const talker = message.talker();
         // attachment handle
-        if (message.type() === PUPPET.types.Message.Attachment) {
-            const path = `save-files/${talker.id}`
-            if (!fs.existsSync(path)) {
-                fs.mkdirSync(path, {recursive: true});
+        const messageType = message.type();
+
+        switch (messageType) {
+            case PUPPET.types.Message.Unknown:
+                console.log('unknown message')
+                break;
+            case PUPPET.types.Message.Text: {
+
+                const messageTxt = message.text()
+
+                // just test  when send ding repaly dong
+                // if (messageType === PUPPET.types.Message.Text &&
+                //     talker && messageTxt.includes('ding')) {
+                //     message.say('dong')
+                //     console.log(this._client.Contact)
+                // }
+
+                const roomTopic = await message.room()?.topic() || '';
+                const showSender = (await talker.alias() || talker.name());
+
+                // console.log('showSender is :', showSender, 'talker id is :', talker.id, 'message type is', messageType)
+
+                if (messageTxt) {
+                    this._tgClient.sendMessage({sender: showSender, body: messageTxt, room: roomTopic,id: message.id})
+                }
             }
-            message.toFileBox().then(fBox => {
-                const saveFile = `${path}/${fBox.name}`
-                fBox.toFile(saveFile, true)
-                fBox.toBuffer().then(buff => {
-                    const tgClient = this._tgClient
-                    tgClient.bot.telegram.sendDocument(
-                        tgClient.chatId, {source: buff, filename: fBox.name})
+                break;
+            case PUPPET.types.Message.Contact:
+                console.log('contact message')
+                break;
+            case PUPPET.types.Message.Attachment:
+            case PUPPET.types.Message.Image:
+            case  PUPPET.types.Message.Audio:
+            case  PUPPET.types.Message.Video: {
+
+                const path = `save-files/${talker.id}`
+
+                if (!fs.existsSync(path)) {
+                    fs.mkdirSync(path, {recursive: true});
+                }
+                message.toFileBox().then(fBox => {
+                    const saveFile = `${path}/${fBox.name}`
+                    fBox.toFile(saveFile, true)
+                    fBox.toBuffer().then(buff => {
+                        const tgClient = this._tgClient
+                        tgClient.bot.telegram.sendDocument(
+                            tgClient.chatId, {source: buff, filename: fBox.name})
+                    })
                 })
-            })
-
+            }
+                break;
+            case PUPPET.types.Message.Emoticon:
+                break;
+            default:
+                break;
         }
-        let messageTxt = message.text()
-
-        // just test  when send ding repaly dong
-        if (message.type() === PUPPET.types.Message.Text &&
-            talker && messageTxt.includes('ding')) {
-            message.say('dong')
-            console.log(this._client.Contact)
-        }
-        const showSender = await talker.alias() || talker.name()
-
-        // 每个第一次发消息的用户缓存头像
-        // const handle = talker.handle()
-
-        console.log('showSender is :', showSender, 'talker id is :', talker.id, 'message type is', message.type())
 
 
-        const avatarPath = `avatar/${talker.id}`
-        if (!fs.existsSync(avatarPath)) {
-            fs.mkdirSync(avatarPath, {recursive: true});
-        }
-        talker.avatar().then(fb => fb.toFile(avatarPath + '/avatar.jpg', true))
 
 
-        if (messageTxt) {
-            messageTxt = message.type() === PUPPET.types.Message.Text
-                ? messageTxt : `收到${message.type()}类型的消息`;
-            this._tgClient.sendMessage({sender: showSender, body: messageTxt})
-        }
+        // 发现好像不需要缓存头像而且每次重新登陆返回的id不同
+        // const avatarPath = `avatar/${talker.id}`
+        // if (!fs.existsSync(avatarPath)) {
+        //     fs.mkdirSync(avatarPath, {recursive: true});
+        // }
+        // talker.avatar().then(fb => fb.toFile(avatarPath + '/avatar.jpg', true))
 
     }
 }
