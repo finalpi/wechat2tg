@@ -1,6 +1,7 @@
 node_modules
-./.idea
-./save-files/*
+.idea
+save-files/*
 wechat_bot.memory-card.json
-./avatar/*
+avatar/*
 .env
+dist

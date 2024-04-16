@@ -94,7 +94,11 @@ export class WeChatClient {
     }
 
     private login() {
-        this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登陆成功!')
+        if (this._client.isLoggedIn) {
+            this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登陆成功!')
+        } else {
+            this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登陆失败!')
+        }
     }
 
     // scan qrcode login
@@ -125,7 +129,7 @@ export class WeChatClient {
         const messageType = message.type();
 
         const roomTopic = await message.room()?.topic() || '';
-        const showSender = (await talker.alias() + ' (' +talker.name() || talker.name());
+        const showSender = (await talker.alias() + ' (' + talker.name() || talker.name());
 
         switch (messageType) {
             case PUPPET.types.Message.Unknown:

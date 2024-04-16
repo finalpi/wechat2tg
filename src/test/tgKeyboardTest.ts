@@ -1,5 +1,5 @@
 import {Markup, Telegraf} from "telegraf";
-import {config} from "../src/config";
+import {config} from "../config";
 
 const bot = new Telegraf(config.BOT_TOKEN)
 

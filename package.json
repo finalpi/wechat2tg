@@ -6,7 +6,9 @@
   "esModuleInterop": true,
   "scripts": {
     "kit-dev": "ts-node src/app.ts",
-    "bot-test": "ts-node test/tgKeyboardTest.ts"
+    "bot-test": "ts-node src/test/tgKeyboardTest.ts",
+    "build": "tsc",
+    "start": "tsc && node dist/app.js"
   },
   "keywords": [],
   "author": "",
