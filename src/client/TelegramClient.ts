@@ -3,6 +3,8 @@ import {WeChatClient} from "./WechatClient";
 import {config} from "../config";
 import {BotHelpText, SimpleMessage, SimpleMessageSender} from "../models/Message"
 import {ContactImpl, ContactInterface} from 'wechaty/impls';
+import { SocksProxyAgent } from 'socks-proxy-agent'
+import { HttpsProxyAgent} from "https-proxy-agent";
 import * as tg from "telegraf/src/core/types/typegram";
 // import {ContactInterface} from "wechaty/dist/esm/src/mods/impls";
 import {message} from "telegraf/filters";
@@ -28,7 +30,30 @@ export class TelegramClient {
     constructor() {
         this._weChatClient = new WeChatClient(this);
         this._chatId = 0
-        this._bot = new Telegraf(config.BOT_TOKEN)
+        if (config.PROTOCOL === 'socks5' && config.HOST !== '' && config.PORT !== ''){
+            const info = {
+                hostname: config.HOST,
+                port: config.PORT,
+                username: config.USERNAME,
+                password: config.PASSWORD
+            }
+
+            const socksAgent = new SocksProxyAgent(info)
+            this._bot = new Telegraf(config.BOT_TOKEN,{
+                telegram: {
+                    agent: socksAgent
+                }
+            })
+        } else if ((config.PROTOCOL === 'http' || config.PROTOCOL === 'https' ) && config.HOST !== '' && config.PORT !== ''){
+            const httpAgent = new HttpsProxyAgent(`${config.PROTOCOL}://${config.USERNAME}:${config.PASSWORD}@${config.HOST}:${config.PORT}`)
+            this._bot = new Telegraf(config.BOT_TOKEN,{
+                telegram: {
+                    agent: httpAgent
+                }
+            })
+        } else {
+            this._bot = new Telegraf(config.BOT_TOKEN)
+        }
         // this._messageMap
     }
 
@@ -353,10 +378,6 @@ export class TelegramClient {
             })
         }
 
-        ctx.reply('请选择联系人:', {
-            ...Markup.inlineKeyboard(buttons),
-            allow_sending_without_reply: true
-        })
 
     }
 
