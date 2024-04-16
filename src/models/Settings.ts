@@ -39,7 +39,7 @@ export class VariableContainer {
     }
 
     // 将内容写入文件
-    writeToFile(filePath: string): void {
+    writeToFile(filePath: string = `${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`): void {
         try {
             const data = JSON.stringify(this.variables, null, 2);
             fs.writeFileSync(filePath, data, 'utf8');

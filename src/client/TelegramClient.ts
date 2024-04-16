@@ -3,8 +3,8 @@ import {WeChatClient} from "./WechatClient";
 import {config} from "../config";
 import {BotHelpText, SimpleMessage, SimpleMessageSender} from "../models/Message"
 import {ContactImpl, ContactInterface} from 'wechaty/impls';
-import { SocksProxyAgent } from 'socks-proxy-agent'
-import { HttpsProxyAgent} from "https-proxy-agent";
+import {SocksProxyAgent} from 'socks-proxy-agent'
+import {HttpsProxyAgent} from "https-proxy-agent";
 import * as tg from "telegraf/src/core/types/typegram";
 // import {ContactInterface} from "wechaty/dist/esm/src/mods/impls";
 import {message} from "telegraf/filters";
@@ -39,7 +39,7 @@ export class TelegramClient {
         this._chatId = 0;
         this._ownerId = 0;
         this._chatId = 0
-        if (config.PROTOCOL === 'socks5' && config.HOST !== '' && config.PORT !== ''){
+        if (config.PROTOCOL === 'socks5' && config.HOST !== '' && config.PORT !== '') {
             const info = {
                 hostname: config.HOST,
                 port: config.PORT,
@@ -48,14 +48,14 @@ export class TelegramClient {
             }
 
             const socksAgent = new SocksProxyAgent(info)
-            this._bot = new Telegraf(config.BOT_TOKEN,{
+            this._bot = new Telegraf(config.BOT_TOKEN, {
                 telegram: {
                     agent: socksAgent
                 }
             })
-        } else if ((config.PROTOCOL === 'http' || config.PROTOCOL === 'https' ) && config.HOST !== '' && config.PORT !== ''){
+        } else if ((config.PROTOCOL === 'http' || config.PROTOCOL === 'https') && config.HOST !== '' && config.PORT !== '') {
             const httpAgent = new HttpsProxyAgent(`${config.PROTOCOL}://${config.USERNAME}:${config.PASSWORD}@${config.HOST}:${config.PORT}`)
-            this._bot = new Telegraf(config.BOT_TOKEN,{
+            this._bot = new Telegraf(config.BOT_TOKEN, {
                 telegram: {
                     agent: httpAgent
                 }
@@ -123,21 +123,56 @@ export class TelegramClient {
         bot.settings(ctx => {
 
             ctx.reply('settings', Markup.inlineKeyboard([
-                Markup.button.callback('通知模式', VariableType.SETTING_NOTION_MODE),
-                Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST,
-                    this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) !== 'white'),
-                Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST,
-                    this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) !== 'white'),
-                Markup.button.callback('反馈发送成功', VariableType.SETTING_REPLY_SUCCESS),
+                [Markup.button.callback('通知模式(点击切换)', VariableType.SETTING_NOTION_MODE),],
+                [Markup.button.callback('反馈发送成功(点击切换)', VariableType.SETTING_REPLY_SUCCESS),],
+                [Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST,
+                    !(this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === 'white')),
+                    Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST,
+                        !(this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === 'black')),
+                ]
             ]))
         });
 
+        // 通知模式
+        bot.action(VariableType.SETTING_NOTION_MODE, ctx => {
+            // 黑名单
+            if (this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === 'black') {
+                this.forwardSetting.setVariable(VariableType.SETTING_NOTION_MODE, 'white')
+            } else {
+                this.forwardSetting.setVariable(VariableType.SETTING_NOTION_MODE, 'black')
+            }
+            // 点击后修改上面按钮
+            ctx.editMessageReplyMarkup({
+                inline_keyboard: [
+                    [
+                        Markup.button.callback('通知模式(点击切换)', VariableType.SETTING_NOTION_MODE),
+                    ],
+                    [
+                        Markup.button.callback('反馈发送成功(点击切换)', VariableType.SETTING_REPLY_SUCCESS),
+                    ],
+                    [
+                        Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST,
+                            !(this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === 'white')),
+                        Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST,
+                            !(this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === 'black')),
+                    ]
+                ],
+            });
+            // 点击后持久化
+            this.forwardSetting.writeToFile()
+        })
+
+        // 修改回复设置
         bot.action(VariableType.SETTING_REPLY_SUCCESS, ctx => {
             const b = !this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS);
             const answerText = b ? '开启' : '关闭';
             this.forwardSetting.setVariable(VariableType.SETTING_REPLY_SUCCESS, b)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
             return ctx.answerCbQuery(answerText)
         });
+
+        // 白名单设置
 
         bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
 
