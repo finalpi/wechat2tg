@@ -9,6 +9,8 @@ import * as tg from "telegraf/src/core/types/typegram";
 // import {ContactInterface} from "wechaty/dist/esm/src/mods/impls";
 import {message} from "telegraf/filters";
 import {FileBox} from 'file-box'
+import * as fs from "node:fs";
+import {StorageSettings, VariableContainer, VariableType} from "../models/Settings";
 
 export class TelegramClient {
 
@@ -16,12 +18,16 @@ export class TelegramClient {
     private _weChatClient: WeChatClient;
     private readonly _bot: Telegraf;
     private _chatId: number | string;
+    private _ownerId: number;
     private loginCommandExecuted = false;
     private allContactCommandExecuted = false;
     private static PAGE_SIZE = 18;
     private static LINES = 2;
     // setting 是否反馈发送文本消息成功
-    private settingReplySendSuccess = false;
+    // 保存有互动的 contact
+    // private messageContacts;
+
+    private forwardSetting: VariableContainer = new VariableContainer();
 
     // key this message id value weChat message id
     private _messageMap = new Map<number, string>();
@@ -29,6 +35,9 @@ export class TelegramClient {
 
     constructor() {
         this._weChatClient = new WeChatClient(this);
+        this._bot = new Telegraf(config.BOT_TOKEN)
+        this._chatId = 0;
+        this._ownerId = 0;
         this._chatId = 0
         if (config.PROTOCOL === 'socks5' && config.HOST !== '' && config.PORT !== ''){
             const info = {
@@ -86,6 +95,13 @@ export class TelegramClient {
     public init() {
         const bot = this._bot;
 
+        // 加载转发配置
+        this.loadForwardSettings();
+
+        // Enable graceful stop
+        process.once('SIGINT', () => bot.stop('SIGINT'))
+        process.once('SIGTERM', () => bot.stop('SIGTERM'))
+
         bot.telegram.setMyCommands([
             {command: 'help', description: '使用说明'},
             {command: 'start', description: '开始'},
@@ -98,26 +114,28 @@ export class TelegramClient {
             // {command: 'quit', description: '退出程序!! 会停止程序,需要手动重启(未实现)'},
         ]);
 
-
         bot.start(async ctx => {
             ctx.reply(
-                '请输入/login 登陆'
-            ,Markup.removeKeyboard())
-            this._chatId = ctx.message.chat.id
+                '请输入 /login 登陆 或者 /help 查看帮助; 请注意执行/login 后你就是该机器的所有人'
+                , Markup.removeKeyboard())
         })
 
         bot.settings(ctx => {
+
             ctx.reply('settings', Markup.inlineKeyboard([
-                Markup.button.callback('通知模式', 'Setting_NOTIONS_MODE'),
-                Markup.button.callback('白名单', 'Setting_White_List', true),
-                Markup.button.callback('黑名单', 'Setting_Black_List'),
-                Markup.button.callback('反馈发送成功', 'Setting_Reply_Send_Success'),
+                Markup.button.callback('通知模式', VariableType.SETTING_NOTION_MODE),
+                Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST,
+                    this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) !== 'white'),
+                Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST,
+                    this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) !== 'white'),
+                Markup.button.callback('反馈发送成功', VariableType.SETTING_REPLY_SUCCESS),
             ]))
         });
 
-        bot.action('Setting_Reply_Send_Success', ctx => {
-            const answerText = !this.settingReplySendSuccess ? '开启' : '关闭';
-            this.settingReplySendSuccess = !this.settingReplySendSuccess;
+        bot.action(VariableType.SETTING_REPLY_SUCCESS, ctx => {
+            const b = !this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS);
+            const answerText = b ? '开启' : '关闭';
+            this.forwardSetting.setVariable(VariableType.SETTING_REPLY_SUCCESS, b)
             return ctx.answerCbQuery(answerText)
         });
 
@@ -125,13 +143,14 @@ export class TelegramClient {
 
         bot.command('login', async ctx => {
 
-            this._chatId = ctx.message.chat.id
+            // 第一次输入的人当成bot的所有者
+            this.loadOwnerChat(ctx);
+
             // 检查标志变量，如果已经执行过则不再执行
             if (this.loginCommandExecuted) {
                 await ctx.reply('已登陆');
                 return;
             }
-
 
             await this._weChatClient.init();
 
@@ -246,7 +265,7 @@ export class TelegramClient {
             if (currentSelectContact) {
                 currentSelectContact.say(text)
                     .then(() => {
-                        if (this.settingReplySendSuccess) {
+                        if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
                             ctx.deleteMessage();
                             ctx.replyWithHTML(`发送成功 <blockquote>${text}</blockquote>`)
                         }
@@ -325,12 +344,11 @@ export class TelegramClient {
 
     public sendMessage(message: SimpleMessage) {
         return this.bot.telegram.sendMessage(this._chatId, SimpleMessageSender.send(message), {
-            parse_mode: 'Markdown'
+            parse_mode: 'HTML'
         }).then(res => {
             this.messageMap.set(res.message_id, message.id);
         });
     }
-
 
     private async pageContacts(ctx: NarrowedContext<Context<tg.Update>, tg.Update>, source: ContactInterface[] | undefined, pageNumber: number, currentSearchWord: string) {
 
@@ -378,6 +396,10 @@ export class TelegramClient {
             })
         }
 
+        ctx.reply('请选择联系人:', {
+            ...Markup.inlineKeyboard(buttons),
+            // allow_sending_without_reply: true
+        })
 
     }
 
@@ -489,6 +511,59 @@ export class TelegramClient {
             return res || new Map<number, ContactInterface[]>();
 
         }
+    }
+
+
+    private loadOwnerChat(ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
+        try {
+
+            const ownerFile = `${StorageSettings.STORAGE_FOLDER}/${StorageSettings.OWNER_FILE_NAME}`
+            // 检查存储文件夹是否存在，不存在则创建
+            if (!fs.existsSync(StorageSettings.STORAGE_FOLDER)) {
+                fs.mkdirSync(ownerFile);
+            }
+
+            // 检查所有者文件是否存在
+            if (fs.existsSync(ownerFile)) {
+                // 读取文件并设置所有者和聊天 ID
+                const ownerData = fs.readFileSync(ownerFile, 'utf8');
+                const {owner_id, chat_id} = JSON.parse(ownerData);
+                this._ownerId = owner_id ? owner_id : ctx.from?.id;
+                this._chatId = chat_id ? chat_id : ctx.chat?.id;
+            } else {
+                // 创建并写入新的所有者文件
+                const ownerData = {
+                    owner_id: ctx.from?.id,
+                    chat_id: ctx.message?.chat.id
+                };
+                fs.writeFileSync(ownerFile, JSON.stringify(ownerData, null, 2));
+                this._ownerId = typeof ownerData.owner_id === 'number' ? ownerData.owner_id : 0
+                this._chatId = typeof ownerData.chat_id === 'number' ? ownerData.chat_id : 0;
+            }
+
+        } catch (error) {
+            console.error('Error loading owner data:', error);
+        }
+    }
+
+
+    private loadForwardSettings() {
+        // 没有就创建
+        try {
+            const settingFile = `${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}}}`
+            if (!fs.existsSync(StorageSettings.STORAGE_FOLDER)) {
+                fs.mkdirSync(settingFile);
+            }
+            if (fs.existsSync(settingFile)) {
+                const variableContainer = new VariableContainer();
+                variableContainer.parseFromFile(settingFile);
+                this.forwardSetting = variableContainer;
+            }
+        } catch (error) {
+            console.error('Error loading owner data:', error);
+
+        }
+
     }
 
 

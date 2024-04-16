@@ -3,3 +3,4 @@ node_modules
 ./save-files/*
 wechat_bot.memory-card.json
 ./avatar/*
+.env
