@@ -4,12 +4,12 @@ import * as fs from "node:fs";
 export class VariableContainer {
 
     private variables: {
-        [VariableType.SETTING_NOTION_MODE]: string,
+        [VariableType.SETTING_NOTION_MODE]: NotionMode,
         [VariableType.SETTING_WHITE_LIST]: Contact [],
         [VariableType.SETTING_BLACK_LIST]: Contact [],
         [VariableType.SETTING_REPLY_SUCCESS]: boolean
     } = {
-        [VariableType.SETTING_NOTION_MODE]: 'black',
+        [VariableType.SETTING_NOTION_MODE]: NotionMode.BLACK,
         [VariableType.SETTING_WHITE_LIST]: [],
         [VariableType.SETTING_BLACK_LIST]: [],
         [VariableType.SETTING_REPLY_SUCCESS]: false
@@ -39,7 +39,7 @@ export class VariableContainer {
     }
 
     // 将内容写入文件
-    writeToFile(filePath: string = `${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`): void {
+    writeToFile(filePath = `${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`): void {
         try {
             const data = JSON.stringify(this.variables, null, 2);
             fs.writeFileSync(filePath, data, 'utf8');
@@ -61,9 +61,14 @@ export enum VariableType {
     SETTING_REPLY_SUCCESS = 'Setting_Reply_Success',
 }
 
+export enum NotionMode {
+    BLACK = 'black',
+    WHITE = 'white',
+}
+
 // 定义一个类型映射，用来描述每个键对应的值类型
 type VariableMap = {
-    [VariableType.SETTING_NOTION_MODE]: string,
+    [VariableType.SETTING_NOTION_MODE]: NotionMode,
     [VariableType.SETTING_WHITE_LIST]: Contact [],
     [VariableType.SETTING_BLACK_LIST]: Contact [],
     [VariableType.SETTING_REPLY_SUCCESS]: boolean

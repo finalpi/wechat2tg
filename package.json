@@ -13,6 +13,8 @@
   "license": "ISC",
   "dependencies": {
     "dotenv": "^16.0.3",
+    "ffmpeg-static": "^5.2.0",
+    "fluent-ffmpeg": "^2.1.2",
     "https-proxy-agent": "^7.0.4",
     "qrcode": "^1.5.1",
     "socks-proxy-agent": "^7.0.0",

@@ -10,7 +10,8 @@ import * as tg from "telegraf/src/core/types/typegram";
 import {message} from "telegraf/filters";
 import {FileBox} from 'file-box'
 import * as fs from "node:fs";
-import {StorageSettings, VariableContainer, VariableType} from "../models/Settings";
+import {NotionMode, StorageSettings, VariableContainer, VariableType} from "../models/Settings";
+import {ConverterHelper} from "../utils/FfmpegUtils";
 
 export class TelegramClient {
 
@@ -133,13 +134,19 @@ export class TelegramClient {
             ]))
         });
 
+        // 好友请求处理
+        bot.action('friendship-',ctx => {
+            console.log('接受到 好友请求', ctx.match)
+            this._weChatClient.client.Friendship.load(ctx.match[1])
+        })
+
         // 通知模式
         bot.action(VariableType.SETTING_NOTION_MODE, ctx => {
             // 黑名单
-            if (this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === 'black') {
-                this.forwardSetting.setVariable(VariableType.SETTING_NOTION_MODE, 'white')
+            if (this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK) {
+                this.forwardSetting.setVariable(VariableType.SETTING_NOTION_MODE, NotionMode.WHITE)
             } else {
-                this.forwardSetting.setVariable(VariableType.SETTING_NOTION_MODE, 'black')
+                this.forwardSetting.setVariable(VariableType.SETTING_NOTION_MODE, NotionMode.BLACK)
             }
             // 点击后修改上面按钮
             ctx.editMessageReplyMarkup({
@@ -263,7 +270,8 @@ export class TelegramClient {
         bot.action(/^[1-9a-z]+/, async (ctx) => {
             // ctx.update.callback_query.message
             await ctx.reply('请输入消息内容')
-            currentSelectContact = await this._weChatClient.client.Contact.find({id: '@' + ctx.match.input})
+            const id = ctx.match.input !== 'filehelper' ? '@' + ctx.match.input : 'filehelper';
+            currentSelectContact = await this._weChatClient.client.Contact.find({id: id})
             // console.log(ctx.match.input
             const reply = await currentSelectContact?.alias() || currentSelectContact?.name()
             ctx.replyWithHTML(`当前回复用户: <b>${reply}</b>`).then(res => {
@@ -274,16 +282,28 @@ export class TelegramClient {
             })
         })
 
-        bot.on(message('text'), ctx => {
+        bot.on(message('text'), async ctx => {
             const text = ctx.message.text; // 获取消息内容
 
             const replyMessageId = ctx.update.message['reply_to_message']?.message_id;
             // 如果是回复的消息 优先回复该发送的消息
             if (replyMessageId) {
                 // try get weChat cache message id
-                // todo: 这里可以递归找到最原始的消息 不确定是否有必要
+                // todo: 可以去找到最原始的消息 非必要
                 const weChatMessageId = this._messageMap.get(replyMessageId)
                 if (weChatMessageId) {
+                    // 添加或者移除名单
+
+                    // 回复消息是添加或者移除名单的命令
+                    if (text === '&add' || text === '&rm') {
+                        const replyWechatMessage = await this.weChatClient.client.Message.find({id: weChatMessageId})
+                        // 根据当前模式添加到黑白名单
+                        if (this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK) {
+                            // let toContact = replyWechatMessage.room()
+                        }
+                        return;
+                    }
+
                     this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
                         message?.say(ctx.message.text).then(() => {
                             //
@@ -346,6 +366,26 @@ export class TelegramClient {
 
 
             }
+        })
+
+        bot.on(message('sticker'), ctx => {
+            const fileId = ctx.message.sticker.file_id
+            ctx.telegram.getFileLink(fileId).then(fileLink => {
+                const uniqueId = ctx.message.sticker.file_unique_id
+                const saveFile = `save-files/${uniqueId}`; // 不用后缀
+
+                FileBox.fromUrl(fileLink.toString()).toFile(saveFile).then(() => {
+                    const gifFile = `save-files/${uniqueId}.gif`;
+                    new ConverterHelper().webmToGif(saveFile, gifFile).then(() => {
+                        const fileBox = FileBox.fromFile(gifFile);
+                        currentSelectContact?.say(fileBox).then(() => {
+                            fs.rmSync(gifFile);
+                            fs.rmSync(saveFile);
+                        }).catch(() => ctx.reply('发送失败'));
+                    }).catch(() => ctx.reply('发送失败'))
+                })
+
+            })
         })
 
         // bot.use(async (ctx: Context, next) => {

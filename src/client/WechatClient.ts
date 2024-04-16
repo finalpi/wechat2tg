@@ -1,9 +1,10 @@
 import * as QRCode from 'qrcode';
 import {ScanStatus, WechatyBuilder} from "wechaty";
 import * as PUPPET from 'wechaty-puppet';
-import {ContactInterface, MessageInterface, WechatyInterface} from 'wechaty/impls';
+import {ContactInterface, FriendshipImpl, FriendshipInterface, MessageInterface, WechatyInterface} from 'wechaty/impls';
 import {TelegramClient} from './TelegramClient';
-import * as fs from 'fs';
+
+// import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
 
 
 export class WeChatClient {
@@ -61,8 +62,25 @@ export class WeChatClient {
         console.error('error:', error)
     }
 
-    private friendship() {
-        //
+    private friendship(friendship: FriendshipInterface) {
+        if (friendship.type() === FriendshipImpl.Type.Receive) {
+            const contact = friendship.contact()
+            const hello = friendship.hello()
+            const friendshipId = friendship.id;
+            this._tgClient.bot.telegram.sendMessage(
+                this._tgClient.chatId, `收到好友请求: ${contact.name()} \n 验证消息: ${hello}`,
+                {
+                    reply_markup: {
+                        inline_keyboard:
+                            [
+                                [
+                                    {text: '接受', callback_data: `friendship-accept-${friendshipId}`},
+                                    {text: '拒绝', callback_data: `friendship-reject-${friendshipId}`},
+                                ]
+                            ]
+                    }
+                })
+        }
     }
 
     public async stop() {
@@ -106,6 +124,9 @@ export class WeChatClient {
         // attachment handle
         const messageType = message.type();
 
+        const roomTopic = await message.room()?.topic() || '';
+        const showSender = (await talker.alias() + ' (' +talker.name() || talker.name());
+
         switch (messageType) {
             case PUPPET.types.Message.Unknown:
                 console.log('unknown message')
@@ -121,47 +142,60 @@ export class WeChatClient {
                 //     console.log(this._client.Contact)
                 // }
 
-                const roomTopic = await message.room()?.topic() || '';
-                const showSender = (await talker.alias() || talker.name());
-
                 // console.log('showSender is :', showSender, 'talker id is :', talker.id, 'message type is', messageType)
 
                 if (messageTxt) {
-                    this._tgClient.sendMessage({sender: showSender, body: messageTxt, room: roomTopic,id: message.id})
+                    this._tgClient.sendMessage({sender: showSender, body: messageTxt, room: roomTopic, id: message.id})
                 }
             }
                 break;
             case PUPPET.types.Message.Contact:
                 console.log('contact message')
                 break;
-            case PUPPET.types.Message.Attachment:
-            case PUPPET.types.Message.Image:
+            case PUPPET.types.Message.Attachment: // 下面的基本是文件类型处理 没有展示发送人 没保存消息id和tg的映射
+            case PUPPET.types.Message.Image:      // 所以不支持回复
             case  PUPPET.types.Message.Audio:
             case  PUPPET.types.Message.Video: {
 
-                const path = `save-files/${talker.id}`
+                // const path = `save-files/${talker.id}`
+                //
+                // if (!fs.existsSync(path)) {
+                //     fs.mkdirSync(path, {recursive: true});
+                // }
 
-                if (!fs.existsSync(path)) {
-                    fs.mkdirSync(path, {recursive: true});
-                }
                 message.toFileBox().then(fBox => {
-                    const saveFile = `${path}/${fBox.name}`
-                    fBox.toFile(saveFile, true)
+                    // 这里可以保存一份在本地 但是没有映射关系没法知道是谁的
+                    // const saveFile = `${path}/${fBox.name}`
+                    // fBox.toFile(saveFile, true)
+
+
                     fBox.toBuffer().then(buff => {
+
+                        // 语音文件 .sil直接重命名为mp3 可以直接播放
+                        let fileName = fBox.name;
+                        if (fileName.endsWith('.sil')) {
+                            fileName = fileName.replace('.sil', '.mp3')
+                        }
+
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendDocument(
-                            tgClient.chatId, {source: buff, filename: fBox.name})
+                            tgClient.chatId, {source: buff, filename: fileName})
                     })
                 })
             }
                 break;
             case PUPPET.types.Message.Emoticon:
+                console.log('emoticon message')
+                this._tgClient.sendMessage({
+                    sender: showSender,
+                    body: '收到一条 Emoticon 类型的消息',
+                    room: roomTopic,
+                    id: message.id
+                })
                 break;
             default:
                 break;
         }
-
-
 
 
         // 发现好像不需要缓存头像而且每次重新登陆返回的id不同
