@@ -1,13 +1,37 @@
 import * as QRCode from 'qrcode';
 import {ScanStatus, WechatyBuilder} from "wechaty";
 import * as PUPPET from 'wechaty-puppet';
-import {ContactInterface, FriendshipImpl, FriendshipInterface, MessageInterface, WechatyInterface} from 'wechaty/impls';
+import {
+    ContactInterface,
+    FriendshipImpl,
+    FriendshipInterface,
+    MessageInterface,
+    RoomInterface,
+    WechatyInterface
+} from 'wechaty/impls';
 import {TelegramClient} from './TelegramClient';
+import {EmojiConverter} from "../utils/EmojiUtils";
 
 // import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
 
 
 export class WeChatClient {
+    get selectedRoom(): RoomInterface[] {
+        return this._selectedRoom;
+    }
+
+    set selectedRoom(value: RoomInterface[]) {
+        this._selectedRoom = value;
+    }
+
+    get selectedContact(): ContactInterface[] {
+        return this._selectedContact;
+    }
+
+    set selectedContact(value: ContactInterface[]) {
+        this._selectedContact = value;
+    }
+
     private readonly _tgClient: TelegramClient;
 
     constructor(private readonly tgClient: TelegramClient) {
@@ -28,6 +52,11 @@ export class WeChatClient {
 
         this.scan = this.scan.bind(this);
         this.message = this.message.bind(this);
+        this.start = this.start.bind(this);
+        this.friendship = this.friendship.bind(this);
+        this.init = this.init.bind(this);
+        this.logout = this.logout.bind(this);
+        this.login = this.login.bind(this);
     }
 
     private readonly _client: WechatyInterface;
@@ -38,6 +67,11 @@ export class WeChatClient {
 
     private _contactMap: Map<number, ContactInterface[]> | undefined;
 
+    private _selectedContact: ContactInterface [] = [];
+    private _selectedRoom: RoomInterface [] = [];
+
+    private _started = false;
+
     public get contactMap(): Map<number, ContactInterface[]> | undefined {
         return this._contactMap;
     }
@@ -46,16 +80,30 @@ export class WeChatClient {
         this._contactMap = contactMap;
     }
 
-    public async init() {
+    public async start() {
+        this.init();
         if (this._client === null) return;
-        await this._client.on('login', () => this.login())
+        // if(this._client.ready().then())
+        if (!this._started) {
+            await this._client.start().then(() => {
+                this._started = true;
+                console.log('Wechat client start!')
+            })
+        } else {
+            console.log('Wechat client already started!')
+            return new Error('Wechat client already started!')
+        }
+    }
+
+    private init() {
+        if (this._client === null) return;
+        this._client.on('login', this.login)
             .on('scan', this.scan)
             .on('message', this.message)
-            .on('logout', this.logout)
-            .on('stop', this.stop)
+            .on('logout', () => console.log('on logout...'))
+            .on('stop', () => console.log('on stop...'))
             .on('friendship', this.friendship)
-            .on('error', this.error)
-            .start();
+            .on('error', this.error);
     }
 
     private error(error: Error) {
@@ -84,13 +132,28 @@ export class WeChatClient {
     }
 
     public async stop() {
-        await this._client.stop();
-        this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '微信客户端已停止!')
+        await this._client.stop().then(() => this._started = false);
+        // console.log('stop ... ')
+    }
+
+    public restart() {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        this._client.restart().then(() => {
+            console.log('restart ... ')
+        })
+    }
+
+    public reset() {
+        this._client.reset().then(() => {
+            console.log('reset ... ')
+        })
     }
 
     public async logout() {
-        await this._client.logout();
-        this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登出成功!')
+        this._client.logout();
+        // this._client.reset().then()
+        console.log('logout ... ')
     }
 
     private login() {
@@ -111,10 +174,12 @@ export class WeChatClient {
 
             // console.log(this._bot)
             const tgBot = this._tgClient.bot
-            tgBot.telegram.sendMessage(this._tgClient.chatId, '请扫码登陆')
+            // tgBot.telegram.sendMessage(this._tgClient.chatId, '请扫码登陆')
             // console.log('chat id is : {}', this._tgClient.chatId)
-            QRCode.toBuffer(qrcode).then(buff =>
-                tgBot.telegram.sendPhoto(this._tgClient.chatId, {source: buff}))
+            // if (!this._started) {
+                QRCode.toBuffer(qrcode).then(buff =>
+                    tgBot.telegram.sendPhoto(this._tgClient.chatId, {source: buff}, {caption: '请扫码登陆:'}))
+            // }
 
         } else {
             console.info('StarterBot', 'onScan: %s(%s)', ScanStatus[status], status)
@@ -129,7 +194,9 @@ export class WeChatClient {
         const messageType = message.type();
 
         const roomTopic = await message.room()?.topic() || '';
-        const showSender = (await talker.alias() + ' (' + talker.name() || talker.name());
+
+        const alias = await talker.alias();
+        const showSender = alias ? `[${alias}] ${talker.name()}` : talker.name();
 
         switch (messageType) {
             case PUPPET.types.Message.Unknown:
@@ -146,10 +213,18 @@ export class WeChatClient {
                 //     console.log(this._client.Contact)
                 // }
 
-                // console.log('showSender is :', showSender, 'talker id is :', talker.id, 'message type is', messageType)
 
                 if (messageTxt) {
-                    this._tgClient.sendMessage({sender: showSender, body: messageTxt, room: roomTopic, id: message.id})
+                    // console.log('showSender is :', showSender, 'talker id is :', talker.id, 'message text is ', messageTxt,)
+                    // 表情转换
+                    const emojiConverter = new EmojiConverter();
+                    const convertedText = emojiConverter.convert(messageTxt);
+                    this._tgClient.sendMessage({
+                        sender: showSender,
+                        body: convertedText,
+                        room: roomTopic,
+                        id: message.id
+                    })
                 }
             }
                 break;

@@ -2,7 +2,7 @@ import {Context, Markup, NarrowedContext, Telegraf} from 'telegraf';
 import {WeChatClient} from "./WechatClient";
 import {config} from "../config";
 import {BotHelpText, SimpleMessage, SimpleMessageSender} from "../models/Message"
-import {ContactImpl, ContactInterface} from 'wechaty/impls';
+import {ContactImpl, ContactInterface, RoomInterface} from 'wechaty/impls';
 import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from "https-proxy-agent";
 import * as tg from "telegraf/src/core/types/typegram";
@@ -12,8 +12,16 @@ import {FileBox} from 'file-box'
 import * as fs from "node:fs";
 import {NotionMode, StorageSettings, VariableContainer, VariableType} from "../models/Settings";
 import {ConverterHelper} from "../utils/FfmpegUtils";
+import {SelectedEntity} from "../models/TgCache";
 
 export class TelegramClient {
+    get selectedMember(): SelectedEntity[] {
+        return this._selectedMember;
+    }
+
+    set selectedMember(value: SelectedEntity[]) {
+        this._selectedMember = value;
+    }
 
 
     private _weChatClient: WeChatClient;
@@ -24,9 +32,8 @@ export class TelegramClient {
     private allContactCommandExecuted = false;
     private static PAGE_SIZE = 18;
     private static LINES = 2;
-    // setting 是否反馈发送文本消息成功
-    // 保存有互动的 contact
-    // private messageContacts;
+    private _selectedMember: SelectedEntity [] = [];
+    private _flagPinMessageType = '';
 
     private forwardSetting: VariableContainer = new VariableContainer();
 
@@ -65,6 +72,8 @@ export class TelegramClient {
             this._bot = new Telegraf(config.BOT_TOKEN)
         }
         // this._messageMap
+        this.onWeChatLogout = this.onWeChatLogout.bind(this);
+        this.onWeChatStop = this.onWeChatStop.bind(this);
     }
 
     public get messageMap(): Map<number, string> {
@@ -100,24 +109,29 @@ export class TelegramClient {
         this.loadForwardSettings();
 
         // Enable graceful stop
-        process.once('SIGINT', () => bot.stop('SIGINT'))
-        process.once('SIGTERM', () => bot.stop('SIGTERM'))
+        // process.once('SIGINT', () => bot.stop('SIGINT'))
+        // process.once('SIGTERM', () => bot.stop('SIGTERM'))
 
         bot.telegram.setMyCommands([
             {command: 'help', description: '使用说明'},
             {command: 'start', description: '开始'},
             {command: 'login', description: '扫码登陆'},
-            {command: 'logout', description: '退出登陆(未实现)'},
-            {command: 'stop', description: '停止微信客户端'},
-            {command: 'check', description: '检查微信存活'},
-            {command: 'say', description: '加用户名或昵称搜索'},
+            {command: 'user', description: '加用户名或昵称搜索(第一次缓存的)'},
+            {command: 'room', description: '加群名搜索'},
+            {command: 'user2', description: '接口获取(未实现)'},
             {command: 'settings', description: '行为设置'},
+            {command: 'check', description: '检查微信存活'},
+            {command: 'reset', description: '清空缓存重新登陆'},
+            {command: 'stop', description: '停止微信客户端 需要重新登陆'},
+            // {command: 'logout', description: '退出登陆'},
+            // {command: 'stop', description: '停止微信客户端'},
             // {command: 'quit', description: '退出程序!! 会停止程序,需要手动重启(未实现)'},
         ]);
 
         bot.start(async ctx => {
             ctx.reply(
-                '请输入 /login 登陆 或者 /help 查看帮助; 请注意执行/login 后你就是该机器的所有人'
+                '请输入 /login 登陆 或者 /help 查看帮助;\n ' +
+                '请注意执行/login 后你就是该机器的所有人'
                 , Markup.removeKeyboard())
         })
 
@@ -135,7 +149,7 @@ export class TelegramClient {
         });
 
         // 好友请求处理
-        bot.action('friendship-',ctx => {
+        bot.action('friendship-', ctx => {
             console.log('接受到 好友请求', ctx.match)
             this._weChatClient.client.Friendship.load(ctx.match[1])
         })
@@ -183,52 +197,116 @@ export class TelegramClient {
 
         bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
 
+        bot.command('reset', (ctx) => {
+            this._weChatClient.reset()
+            ctx.reply('重置成功')
+        })
+
+
+        // bot.command('restart', (ctx) => {
+        //     this._weChatClient.logout()
+        //     ctx.reply('重启中...')
+        // })
+
         bot.command('login', async ctx => {
 
-            // 第一次输入的人当成bot的所有者
-            this.loadOwnerChat(ctx);
+            this._weChatClient.start().then(() => {
 
-            // 检查标志变量，如果已经执行过则不再执行
-            if (this.loginCommandExecuted) {
-                await ctx.reply('已登陆');
-                return;
-            }
+                // if (!this._weChatClient.client.isLoggedIn) {
+                //     ctx.reply('请扫码登陆');
+                // }
 
-            await this._weChatClient.init();
+                // 第一次输入的人当成bot的所有者
+                this.loadOwnerChat(ctx);
 
-            // 标记为已执行
-            this.loginCommandExecuted = true;
+                // 标记为已执行
+                this.loginCommandExecuted = true;
+            }).catch(() => {
+                ctx.reply('已经登陆或登陆失败请检查状态');
+            });
+
 
         });
 
-        bot.command('logout', () => this._weChatClient.logout())
+        // bot.command('logout', this.onWeChatLogout)
 
-        bot.command('stop', async ctx => {
-            await this._weChatClient.stop();
-        })
+        bot.command('stop', this.onWeChatStop)
 
         bot.command('check', ctx => {
             if (this._weChatClient.client.isLoggedIn) {
-                ctx.reply('微信客户端存活')
+                ctx.reply('微信在线')
             } else {
-                ctx.reply('微信客户端未存活')
+                ctx.reply('微信不在线')
             }
+        })
+        // 选择群聊
+        const currentSelectRoomMap = new Map<string, RoomInterface>();
+        let searchRooms: RoomInterface [] = [];
+        let selectRoom : RoomInterface | undefined;
+
+        bot.command('room', async ctx => {
+            console.log('room')
+            const topic = ctx.message.text.split(' ')[1];
+            const query = topic ? {topic: topic} : {};
+            this._weChatClient.client.Room.findAll(query).then(async rooms => {
+                const count = 0;
+                searchRooms = rooms;
+                this.generateRoomButtons(searchRooms, currentSelectRoomMap, count).then(buttons => {
+                    if (buttons.length === 0) {
+                        ctx.reply('没有找到群聊')
+                    } else {
+                        ctx.reply('请选择群聊:', {
+                            ...Markup.inlineKeyboard(buttons)
+                        })
+                    }
+                })
+            })
+        })
+
+        bot.action(/room-index-\d+/, async (ctx) => {
+            // console.log(ctx.match.input)
+            const room = currentSelectRoomMap.get(ctx.match.input)
+            selectRoom = room;
+
+            ctx.reply(`当前群聊: ${await room?.topic()}`).then((message) => {
+                // 先取消所有置顶
+                ctx.unpinAllChatMessages()
+                // 方便知道当前回复的用户
+                ctx.pinChatMessage(message.message_id);
+                // 设置当前是在群聊
+                this._flagPinMessageType = 'room';
+            })
+        })
+
+        bot.action(/room-next-\d+/, async (ctx) => {
+            const nextPage = parseInt(ctx.match.input.slice(10));
+            this.generateRoomButtons(searchRooms, currentSelectRoomMap, nextPage).then(buttons => {
+                ctx.editMessageReplyMarkup({
+                    inline_keyboard: buttons
+                })
+            })
         })
 
         let contactMap = this._weChatClient.contactMap;
 
         let currentSearchWord = '';
 
-        bot.command('say', async ctx => {
+        bot.command('user', async ctx => {
+
             // wait all contact loaded
             if (!this._weChatClient.client.isLoggedIn) {
                 ctx.reply('请先登陆并获取用户列表');
                 return;
             }
 
+            if (!this.loginCommandExecuted) {
+                await ctx.reply('请等待,正在登陆...');
+                return;
+            }
+
             // 没有执行完成
             if (!this.allContactCommandExecuted) {
-                await ctx.reply('正在加载用户列表, 请等待用户列表加载完成');
+                await ctx.reply('正在加载用户列表, 请等待5秒...');
                 contactMap = await this.getAllContact()
                 setTimeout(() => {
                     if (this.allContactCommandExecuted) {
@@ -241,7 +319,7 @@ export class TelegramClient {
                         // Send message with inline keyboard
                         ctx.reply('请选择类型：', inlineKeyboard);
                     }
-                }, 3000)
+                }, 5000)
                 return;
             }
 
@@ -265,10 +343,15 @@ export class TelegramClient {
 
         })
 
+        bot.command('user2', async ctx => {
+            console.log('user2')
+        })
+
         let currentSelectContact: ContactInterface | undefined;
 
-        bot.action(/^[1-9a-z]+/, async (ctx) => {
+        bot.action(/^[0-9a-z]+/, async (ctx) => {
             // ctx.update.callback_query.message
+            console.log('点击了用户', ctx.match.input)
             await ctx.reply('请输入消息内容')
             const id = ctx.match.input !== 'filehelper' ? '@' + ctx.match.input : 'filehelper';
             currentSelectContact = await this._weChatClient.client.Contact.find({id: id})
@@ -279,9 +362,12 @@ export class TelegramClient {
                 ctx.unpinAllChatMessages()
                 // 方便知道当前回复的用户
                 ctx.pinChatMessage(res.message_id);
+                // 设置当前回复的是用户
+                this._flagPinMessageType = 'user';
             })
         })
 
+        // 发送消息 回复等...
         bot.on(message('text'), async ctx => {
             const text = ctx.message.text; // 获取消息内容
 
@@ -309,15 +395,15 @@ export class TelegramClient {
                             //
                         }).catch(() => {
                             ctx.deleteMessage();
-                            ctx.replyWithHTML(`发送失败 <blockquote>${text}</blockquote`)
+                            ctx.replyWithHTML(`发送失败 <blockquote>${text}</blockquote>`)
                         });
                     });
                 }
                 return;
             }
 
-            // 当前有回复的'个人用户'
-            if (currentSelectContact) {
+            // 当前有回复的'个人用户' 并且是选择了用户的情况下
+            if (this._flagPinMessageType === 'user' && currentSelectContact) {
                 currentSelectContact.say(text)
                     .then(() => {
                         if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
@@ -328,10 +414,30 @@ export class TelegramClient {
                     })
                     .catch(() => {
                         ctx.deleteMessage();
-                        ctx.replyWithHTML(`发送失败 <blockquote>${text}</blockquote`)
+                        ctx.replyWithHTML(`发送失败 <blockquote>${text}</blockquote>`)
                     })
                 // ctx.answerCbQuery('发送成功')
+                return;
             }
+
+            // 当前有回复的'群' 并且是选择了群的情况下
+            if (this._flagPinMessageType === 'room' && selectRoom) {
+                selectRoom.say(text)
+                    .then(() => {
+                        if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                            ctx.deleteMessage();
+                            ctx.replyWithHTML(`发送成功 <blockquote>${text}</blockquote>`)
+                        }
+                        // ctx.replyWithHTML(`发送成功 <blockquote>${text}</blockquote>`)
+                    })
+                    .catch(() => {
+                        ctx.deleteMessage();
+                        ctx.replyWithHTML(`发送失败 <blockquote>${text}</blockquote>`)
+                    })
+                // ctx.answerCbQuery('发送成功')
+                return;
+            }
+
             return;
         })
 
@@ -388,9 +494,6 @@ export class TelegramClient {
             })
         })
 
-        // bot.use(async (ctx: Context, next) => {
-        //     ctx.message.
-        // })
 
         const unknownPage = 0;
         const individualPage = 0;
@@ -407,7 +510,6 @@ export class TelegramClient {
         bot.action('CORPORATION',
             ctx => this.pageContacts(ctx, contactMap?.get(ContactImpl.Type.Corporation), corporationPage, currentSearchWord));
 
-        // action page next or perv
 
         bot.launch();
 
@@ -418,6 +520,7 @@ export class TelegramClient {
     }
 
     public sendMessage(message: SimpleMessage) {
+        console.log('发送文本消息', message)
         return this.bot.telegram.sendMessage(this._chatId, SimpleMessageSender.send(message), {
             parse_mode: 'HTML'
         }).then(res => {
@@ -528,12 +631,12 @@ export class TelegramClient {
             const row = []
             for (let j = i; j < i + lines && j < slice.length; j++) {
                 const alias = await slice[j].alias();
-                row.push(Markup.button.callback(alias ? alias : slice[j].name(), slice[j].id.replace(/@/, '')))
+                row.push(Markup.button.callback(alias ? `[${alias}] ${slice[j].name()}` : slice[j].name(), slice[j].id.replace(/@/, '')))
             }
             buttons.push(row);
         }
         // console.warn('buttons', buttons)
-        if (start == 0) {
+        if (start == 0 && buttons.length != 0) {
             buttons.push([nextButton])
         } else if (end < source.length) {
             buttons.push([pervButton, nextButton])
@@ -556,8 +659,8 @@ export class TelegramClient {
 
             const contactList = await weChatClient.Contact.findAll();
 
-            // 不知道是什么很多空的
-            const filter = contactList.filter(it => it.name());
+            // 不知道是什么很多空的 过滤掉没名字和不是朋友的
+            const filter = contactList.filter(it => it.name() && it.friend());
 
             filter.forEach(it => {
                 const type = it.type();
@@ -642,4 +745,51 @@ export class TelegramClient {
     }
 
 
+    public onWeChatLogout(ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
+
+        this._weChatClient.logout().then(() => {
+            ctx.reply('登出成功').then(() => this.loginCommandExecuted = false);
+        }).catch(() => ctx.reply('登出失败'))
+    }
+
+    public onWeChatStop(ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
+        this._weChatClient.stop().then(() => {
+            ctx.reply('停止成功').then(() => this.loginCommandExecuted = false);
+        }).catch(() => ctx.reply('停止失败'))
+    }
+
+    private async generateRoomButtons(rooms: RoomInterface[], currentSelectRoomMap: Map<string, RoomInterface>, page: number) {
+        const size = 18;
+        const lineSize = 2;
+        const buttons: tg.InlineKeyboardButton[][] = [];
+        const currentIndex = size * page;
+        const nextIndex = size * (page + 1);
+        const slice = rooms.slice(currentIndex, nextIndex);
+
+        for (let i = 0; i < slice.length; i += lineSize) {
+            const row = [];
+            for (let j = i; j < i + lineSize && j < slice.length; j++) {
+                const keyboard = {
+                    text: await rooms[j]?.topic(),
+                    data: 'room-index-' + j
+                }
+                currentSelectRoomMap.set(keyboard.data, rooms[j]);
+                row.push(Markup.button.callback(keyboard.text, keyboard.data))
+            }
+            buttons.push(row);
+        }
+
+        const nextButton = Markup.button.callback('下一页', 'room-next-' + (page + 1));
+        const prevButton = Markup.button.callback('上一页', 'room-next-' + (page - 1));
+
+        if (page === 0 && buttons.length !== 0) {
+            buttons.push([nextButton]);
+        } else if (nextIndex < rooms.length) {
+            buttons.push([prevButton, nextButton]);
+        } else {
+            buttons.push([prevButton]);
+        }
+
+        return buttons;
+    }
 }
