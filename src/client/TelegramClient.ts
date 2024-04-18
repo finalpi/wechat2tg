@@ -10,10 +10,10 @@ import * as tg from "telegraf/src/core/types/typegram";
 import {message} from "telegraf/filters";
 import {FileBox} from 'file-box'
 import * as fs from "node:fs";
-import * as path from "node:path";
-import {NotionMode, StorageSettings, VariableContainer, VariableType} from "../models/Settings";
+import {NotionListType, NotionMode, StorageSettings, VariableContainer, VariableType} from "../models/Settings";
 import {ConverterHelper} from "../utils/FfmpegUtils";
-import {SelectedEntity} from "../models/TgCache";
+import {MemberCacheType, SelectedEntity} from "../models/TgCache";
+import {UniqueIdGenerator} from "../utils/IdUtils";
 
 export class TelegramClient {
     get selectedMember(): SelectedEntity[] {
@@ -35,6 +35,7 @@ export class TelegramClient {
     private static LINES = 2;
     private _selectedMember: SelectedEntity [] = [];
     private _flagPinMessageType = '';
+    private calcShowMemberListExecuted = false;
 
     private forwardSetting: VariableContainer = new VariableContainer();
 
@@ -129,6 +130,9 @@ export class TelegramClient {
             // {command: 'quit', description: '退出程序!! 会停止程序,需要手动重启(未实现)'},
         ]);
 
+        bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
+
+
         bot.start(async ctx => {
             ctx.reply(
                 '请输入 /login 登陆,或者输入 /help 查看帮助;\n' +
@@ -138,12 +142,21 @@ export class TelegramClient {
 
         // 重启时判断是否有主人,如果存在主人则自动登录微信
         const variables = this.forwardSetting.getAllVariables()
-        if (variables.chat_id && variables.chat_id !== ''){
+        if (variables.chat_id && variables.chat_id !== '') {
             this._chatId = variables.chat_id
             this._weChatClient.start().then(() => {
-                console.log("启动微信bot")
+
+                // 标记为已执行
+                this.loginCommandExecuted = true;
+
+                // 登陆后就缓存所有的联系人和房间
+                this.setAllMemberCache().then(() => {
+                    this.calcShowMemberList()
+                });
+
+                console.log("自动启动微信bot")
             }).catch(() => {
-                console.error("启动失败");
+                console.error("自动启动失败");
             });
         }
 
@@ -152,9 +165,9 @@ export class TelegramClient {
             ctx.reply('settings', Markup.inlineKeyboard([
                 [Markup.button.callback('通知模式(点击切换)', VariableType.SETTING_NOTION_MODE),],
                 [Markup.button.callback('反馈发送成功(点击切换)', VariableType.SETTING_REPLY_SUCCESS),],
-                [Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST,
+                [Markup.button.callback('白名单(未实现)', VariableType.SETTING_WHITE_LIST,
                     !(this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === 'white')),
-                    Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST,
+                    Markup.button.callback('黑名单(未实现)', VariableType.SETTING_BLACK_LIST,
                         !(this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === 'black')),
                 ]
             ]))
@@ -206,8 +219,31 @@ export class TelegramClient {
         });
 
         // 白名单设置
+        bot.action(VariableType.SETTING_WHITE_LIST, ctx => {
+            // 当前白名单
+            const listTypes = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST);
+            let page = 0;
+            this.generateNotionListButtons(listTypes, page, VariableType.SETTING_WHITE_LIST + '-').then(buttons => {
+                ctx.reply('白名单列表点击移除', Markup.inlineKeyboard(buttons))
+            })
+        });
 
-        bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
+        // 黑名单设置
+        bot.action(VariableType.SETTING_BLACK_LIST, ctx => {
+            const listTypes = this.forwardSetting.getVariable(VariableType.SETTING_BLACK_LIST);
+            let page = 0;
+            this.generateNotionListButtons(listTypes, page, VariableType.SETTING_BLACK_LIST + '-').then(buttons => {
+                ctx.reply('黑名单列表点击移除', Markup.inlineKeyboard(buttons))
+            })
+        });
+
+        // 黑白名单添加
+        bot.action(/listAdd-/, ctx => {
+            ctx.reply('输入完整群名或者用户名, 备注').then(res => {
+                ctx.reply('请选择',)
+            })
+        })
+
 
         bot.command('reset', (ctx) => {
             this._weChatClient.reset()
@@ -233,6 +269,12 @@ export class TelegramClient {
 
                 // 标记为已执行
                 this.loginCommandExecuted = true;
+
+                // 登陆后就缓存所有的联系人和房间
+                this.setAllMemberCache().then(() => {
+                    this.calcShowMemberList()
+                });
+
             }).catch(() => {
                 ctx.reply('已经登陆或登陆失败请检查状态');
             });
@@ -254,10 +296,13 @@ export class TelegramClient {
         // 选择群聊
         const currentSelectRoomMap = new Map<string, RoomInterface>();
         let searchRooms: RoomInterface [] = [];
-        let selectRoom : RoomInterface | undefined;
+        let selectRoom: RoomInterface | undefined;
 
         bot.command('room', async ctx => {
-            console.log('room')
+            if (!this.allContactCommandExecuted) {
+                await ctx.reply('请等待用户列表加载完成...');
+                return
+            }
             const topic = ctx.message.text.split(' ')[1];
             const query = topic ? {topic: topic} : {};
             this._weChatClient.client.Room.findAll(query).then(async rooms => {
@@ -319,7 +364,7 @@ export class TelegramClient {
             // 没有执行完成
             if (!this.allContactCommandExecuted) {
                 await ctx.reply('正在加载用户列表, 请等待5秒...');
-                contactMap = await this.getAllContact()
+                contactMap = await this.setAllMemberCache()
                 setTimeout(() => {
                     if (this.allContactCommandExecuted) {
                         const inlineKeyboard = Markup.inlineKeyboard([
@@ -506,7 +551,6 @@ export class TelegramClient {
             })
         })
 
-
         const unknownPage = 0;
         const individualPage = 0;
         const officialPage = 0;
@@ -532,7 +576,7 @@ export class TelegramClient {
     }
 
     public sendMessage(message: SimpleMessage) {
-        console.log('发送文本消息', message)
+        // console.log('发送文本消息', message)
         return this.bot.telegram.sendMessage(this._chatId, SimpleMessageSender.send(message), {
             parse_mode: 'HTML'
         }).then(res => {
@@ -658,7 +702,7 @@ export class TelegramClient {
         return buttons;
     }
 
-    public async getAllContact(): Promise<Map<number, ContactInterface[]> | undefined> {
+    public async setAllMemberCache(): Promise<Map<number, ContactInterface[]> | undefined> {
         const weChatClient = this._weChatClient.client
         if (weChatClient && weChatClient.isLoggedIn) {
 
@@ -692,7 +736,10 @@ export class TelegramClient {
                 }
             });
 
+            // 缓存到客户端的实例
             this._weChatClient.contactMap = res;
+            // 一起获取群放到缓存
+            this._weChatClient.roomList = await weChatClient.Room.findAll()
             // console.log('通讯录', res);
             // fs.writeFileSync('contact.json', JSON.stringify(Object.fromEntries(res)));
             // set flag
@@ -740,6 +787,7 @@ export class TelegramClient {
     private loadForwardSettings() {
         // 没有就创建
         try {
+            const settingFile = `${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`
             if (!fs.existsSync(StorageSettings.STORAGE_FOLDER)) {
                 fs.mkdirSync(StorageSettings.STORAGE_FOLDER);
             }
@@ -768,8 +816,8 @@ export class TelegramClient {
     }
 
     private async generateRoomButtons(rooms: RoomInterface[], currentSelectRoomMap: Map<string, RoomInterface>, page: number) {
-        const size = 18;
-        const lineSize = 2;
+        const size = TelegramClient.PAGE_SIZE
+        const lineSize = TelegramClient.LINES
         const buttons: tg.InlineKeyboardButton[][] = [];
         const currentIndex = size * page;
         const nextIndex = size * (page + 1);
@@ -800,5 +848,66 @@ export class TelegramClient {
         }
 
         return buttons;
+    }
+
+    private async generateNotionListButtons(list: NotionListType[], page: number, keyPrefix: string) {
+        const size = TelegramClient.PAGE_SIZE
+        const lineSize = TelegramClient.LINES
+        const buttons: tg.InlineKeyboardButton[][] = [];
+        const currentIndex = size * page;
+        const nextIndex = size * (page + 1);
+        const slice = list.slice(currentIndex, nextIndex);
+
+        for (let i = 0; i < slice.length; i += lineSize) {
+            const row = [];
+            for (let j = i; j < i + lineSize && j < slice.length; j++) {
+                row.push(Markup.button.callback(slice[j].name, keyPrefix + slice[j].shot_id))
+            }
+            buttons.push(row);
+        }
+
+        const addList = Markup.button.callback('点我添加', 'listAdd-' + keyPrefix);
+
+        const nextButton = Markup.button.callback('获取更多', keyPrefix + (page + 1));
+
+        buttons.push([addList])
+
+        if (page === 0 && buttons.length !== 0 && nextIndex >= list.length) {
+            buttons.push([nextButton]);
+        }
+
+        return buttons;
+    }
+
+    private async calcShowMemberList(): Promise<void> {
+
+        if (!this.calcShowMemberListExecuted) {
+            // 从微信实例中获取缓存的联系人 转换成一样的数组
+            const contactMap = this._weChatClient.contactMap;
+            const roomList = this._weChatClient.roomList;
+            let res: MemberCacheType [] = [];
+
+            let idGenerator = UniqueIdGenerator.getInstance();
+
+            contactMap?.forEach(it => {
+                it.forEach(contact => {
+                    res.push({
+                        id: contact.id,
+                        show_name: contact.payload?.alias ? `[${contact.payload.alias}] ${contact.name()}` : contact.name(),
+                        shot_id: idGenerator.generateId('user'),
+                    })
+                })
+            })
+            for (const it of roomList) {
+                res.push({
+                    id: it.id,
+                    show_name: await it.topic(),
+                    shot_id: idGenerator.generateId('room'),
+                });
+            }
+
+            this.calcShowMemberListExecuted = true;
+            this._weChatClient.memberCache = res;
+        }
     }
 }

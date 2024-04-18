@@ -5,8 +5,8 @@ export class VariableContainer {
 
     private variables: {
         [VariableType.SETTING_NOTION_MODE]: NotionMode,
-        [VariableType.SETTING_WHITE_LIST]: Contact [],
-        [VariableType.SETTING_BLACK_LIST]: Contact [],
+        [VariableType.SETTING_WHITE_LIST]: NotionListType [],
+        [VariableType.SETTING_BLACK_LIST]: NotionListType [],
         [VariableType.SETTING_REPLY_SUCCESS]: boolean,
         [VariableType.SETTING_CHAT_ID]: string
     } = {
@@ -77,8 +77,8 @@ export enum NotionMode {
 // 定义一个类型映射，用来描述每个键对应的值类型
 type VariableMap = {
     [VariableType.SETTING_NOTION_MODE]: NotionMode,
-    [VariableType.SETTING_WHITE_LIST]: Contact [],
-    [VariableType.SETTING_BLACK_LIST]: Contact [],
+    [VariableType.SETTING_WHITE_LIST]: NotionListType [],
+    [VariableType.SETTING_BLACK_LIST]: NotionListType [],
     [VariableType.SETTING_REPLY_SUCCESS]: boolean,
     [VariableType.SETTING_CHAT_ID]: string
 };
@@ -91,4 +91,11 @@ export enum StorageSettings {
     STORAGE_FOLDER = 'storage',
     OWNER_FILE_NAME = 'telegram-owner.json',
     SETTING_FILE_NAME = 'wechat-forward.json',
+}
+
+export type NotionListType = {
+    id: string,
+    name: string,
+    shot_id: string,
+    type: string,
 }

@@ -23,7 +23,7 @@ export class SimpleMessageSender implements MessageSender {
         } else {
             const title = simpleMessage.room === ''
                 ? `<b>${simpleMessage.sender}: </b> \n` :
-                `👥${simpleMessage.room}         <b>${simpleMessage.sender}: </b> \n`;
+                `<b>👥 ${simpleMessage.room} ---- ${simpleMessage.sender}: </b> \n`;
             return `${title}${simpleMessage.body}`;
         }
     }

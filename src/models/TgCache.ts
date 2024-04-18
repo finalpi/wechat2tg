@@ -28,3 +28,9 @@ export class SelectedEntity {
     private _showName: string = '';
 }
 
+export type MemberCacheType = {
+    id: string;
+    show_name: string;
+    shot_id: string;
+}
+

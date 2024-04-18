@@ -11,12 +11,29 @@ import {
 } from 'wechaty/impls';
 import {TelegramClient} from './TelegramClient';
 import {EmojiConverter} from "../utils/EmojiUtils";
-import {Markup} from "telegraf";
+import * as console from "node:console";
+import {MemberCacheType} from "../models/TgCache";
 
 // import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
 
 
 export class WeChatClient {
+    get memberCache(): MemberCacheType[] {
+        return this._memberCache;
+    }
+
+    set memberCache(value: MemberCacheType[]) {
+        this._memberCache = value;
+    }
+
+    get roomList(): RoomInterface[] {
+        return this._roomList;
+    }
+
+    set roomList(value: RoomInterface[]) {
+        this._roomList = value;
+    }
+
     get selectedRoom(): RoomInterface[] {
         return this._selectedRoom;
     }
@@ -67,9 +84,11 @@ export class WeChatClient {
     }
 
     private _contactMap: Map<number, ContactInterface[]> | undefined;
+    private _roomList: RoomInterface[] = [];
 
     private _selectedContact: ContactInterface [] = [];
     private _selectedRoom: RoomInterface [] = [];
+    private _memberCache: MemberCacheType[] = [];
 
     private _started = false;
 
@@ -178,8 +197,8 @@ export class WeChatClient {
             // tgBot.telegram.sendMessage(this._tgClient.chatId, '请扫码登陆')
             // console.log('chat id is : {}', this._tgClient.chatId)
             // if (!this._started) {
-                QRCode.toBuffer(qrcode).then(buff =>
-                    tgBot.telegram.sendPhoto(this._tgClient.chatId, {source: buff}, {caption: '请扫码登陆:'}))
+            QRCode.toBuffer(qrcode).then(buff =>
+                tgBot.telegram.sendPhoto(this._tgClient.chatId, {source: buff}, {caption: '请扫码登陆:'}))
             // }
 
         } else {
