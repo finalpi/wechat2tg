@@ -11,6 +11,7 @@ import {
 } from 'wechaty/impls';
 import {TelegramClient} from './TelegramClient';
 import {EmojiConverter} from "../utils/EmojiUtils";
+import {Markup} from "telegraf";
 
 // import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
 
@@ -158,9 +159,9 @@ export class WeChatClient {
 
     private login() {
         if (this._client.isLoggedIn) {
-            this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登陆成功!')
+            this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登录成功!')
         } else {
-            this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登陆失败!')
+            this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登录失败!')
         }
     }
 

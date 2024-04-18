@@ -141,24 +141,7 @@ export class TelegramClient {
         if (variables.chat_id && variables.chat_id !== ''){
             this._chatId = variables.chat_id
             this._weChatClient.start().then(() => {
-                // 判断微信的在线状态
-                if (this._weChatClient.client.isLoggedIn) {
-                    // 在线
-                    bot.telegram.sendMessage(this._chatId,"登录成功").then(() => {
-                        console.log('Message sent successfully');
-                    }).catch((error) => {
-                        console.error('Error sending message:', error);
-                    });
-                } else {
-                    bot.telegram.sendMessage(
-                        this._chatId
-                        ,"请输入 /login 登陆,或者输入 /help 查看帮助;"
-                        ,Markup.removeKeyboard()).then(() => {
-                        console.log('Message sent successfully');
-                    }).catch((error) => {
-                        console.error('Error sending message:', error);
-                    });
-                }
+                console.log("启动微信bot")
             }).catch(() => {
                 console.error("启动失败");
             });
@@ -757,15 +740,12 @@ export class TelegramClient {
     private loadForwardSettings() {
         // 没有就创建
         try {
-            const settingFile = `${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`
             if (!fs.existsSync(StorageSettings.STORAGE_FOLDER)) {
                 fs.mkdirSync(StorageSettings.STORAGE_FOLDER);
             }
-            if (fs.existsSync(settingFile)) {
-                const variableContainer = new VariableContainer();
-                variableContainer.parseFromFile();
-                this.forwardSetting = variableContainer;
-            }
+            const variableContainer = new VariableContainer();
+            variableContainer.parseFromFile();
+            this.forwardSetting = variableContainer;
         } catch (error) {
             console.error('Error loading owner data:', error);
 

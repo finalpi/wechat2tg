@@ -35,10 +35,8 @@ export class VariableContainer {
             if (!fs.existsSync(StorageSettings.STORAGE_FOLDER)) {
                 fs.mkdirSync(StorageSettings.STORAGE_FOLDER);
             }
-            const wechatData = fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`, 'utf8');
-            const tgData = fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.OWNER_FILE_NAME}`, 'utf8');
-            const wechatParsedData = JSON.parse(wechatData);
-            const tgParsedData = JSON.parse(tgData);
+            const wechatParsedData = fs.existsSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`)?JSON.parse(fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`, 'utf8')):{};
+            const tgParsedData = JSON.parse(fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.OWNER_FILE_NAME}`, 'utf8'));
 
             this.variables = {...wechatParsedData, ...tgParsedData};
         } catch (error) {
