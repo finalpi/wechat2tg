@@ -222,7 +222,7 @@ export class TelegramClient {
         bot.action(VariableType.SETTING_WHITE_LIST, ctx => {
             // 当前白名单
             const listTypes = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST);
-            let page = 0;
+            const page = 0;
             this.generateNotionListButtons(listTypes, page, VariableType.SETTING_WHITE_LIST + '-').then(buttons => {
                 ctx.reply('白名单列表点击移除', Markup.inlineKeyboard(buttons))
             })
@@ -231,7 +231,7 @@ export class TelegramClient {
         // 黑名单设置
         bot.action(VariableType.SETTING_BLACK_LIST, ctx => {
             const listTypes = this.forwardSetting.getVariable(VariableType.SETTING_BLACK_LIST);
-            let page = 0;
+            const page = 0;
             this.generateNotionListButtons(listTypes, page, VariableType.SETTING_BLACK_LIST + '-').then(buttons => {
                 ctx.reply('黑名单列表点击移除', Markup.inlineKeyboard(buttons))
             })
@@ -885,9 +885,9 @@ export class TelegramClient {
             // 从微信实例中获取缓存的联系人 转换成一样的数组
             const contactMap = this._weChatClient.contactMap;
             const roomList = this._weChatClient.roomList;
-            let res: MemberCacheType [] = [];
+            const res: MemberCacheType [] = [];
 
-            let idGenerator = UniqueIdGenerator.getInstance();
+            const idGenerator = UniqueIdGenerator.getInstance();
 
             contactMap?.forEach(it => {
                 it.forEach(contact => {

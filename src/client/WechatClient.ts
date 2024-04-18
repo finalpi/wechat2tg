@@ -13,6 +13,7 @@ import {TelegramClient} from './TelegramClient';
 import {EmojiConverter} from "../utils/EmojiUtils";
 import * as console from "node:console";
 import {MemberCacheType} from "../models/TgCache";
+import {SimpleMessage} from "../models/Message";
 
 // import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
 
@@ -220,21 +221,30 @@ export class WeChatClient {
 
         const alias = await talker.alias();
         const showSender = alias ? `[${alias}] ${talker.name()}` : talker.name();
+
+        const sendMessageBody: SimpleMessage = {
+            sender: showSender,
+            body: '收到一条 未知消息类型',
+            room: roomTopic,
+            id: message.id
+        }
+
         switch (messageType) {
             case PUPPET.types.Message.Unknown:
-                console.log('unknown message')
+                console.log(talker.name(), ': 发送了unknown message...')
+
+                if (message.text() === '收到红包，请在手机上查看') {
+                    sendMessageBody.body = '收到红包，请在手机上查看'
+                    this._tgClient.sendMessage(sendMessageBody)
+                }
+                if (message.text() === 'webwxvoipnotifymsg') {
+                    sendMessageBody.body = '收到视频或语音通话,请在手机上处理'
+                    this._tgClient.sendMessage(sendMessageBody)
+                }
                 break;
             case PUPPET.types.Message.Text: {
 
                 const messageTxt = message.text()
-
-                // just test  when send ding repaly dong
-                // if (messageType === PUPPET.types.Message.Text &&
-                //     talker && messageTxt.includes('ding')) {
-                //     message.say('dong')
-                //     console.log(this._client.Contact)
-                // }
-
 
                 if (messageTxt) {
                     // console.log('showSender is :', showSender, 'talker id is :', talker.id, 'message text is ', messageTxt,)
@@ -255,8 +265,8 @@ export class WeChatClient {
                 break;
             case PUPPET.types.Message.Attachment: // 下面的基本是文件类型处理 没有展示发送人 没保存消息id和tg的映射
             case PUPPET.types.Message.Image:      // 所以不支持回复
-            case  PUPPET.types.Message.Audio:
-            case  PUPPET.types.Message.Video: {
+            case PUPPET.types.Message.Audio:
+            case PUPPET.types.Message.Video: {
 
                 // const path = `save-files/${talker.id}`
                 //
@@ -285,14 +295,25 @@ export class WeChatClient {
                 })
             }
                 break;
-            case PUPPET.types.Message.Emoticon:
-                console.log('emoticon message')
-                this._tgClient.sendMessage({
-                    sender: showSender,
-                    body: '收到一条 Emoticon 类型的消息',
-                    room: roomTopic,
-                    id: message.id
-                })
+            case PUPPET.types.Message.Emoticon: // 处理表情消息的逻辑
+            case PUPPET.types.Message.Location: // 处理位置消息的逻辑
+            case PUPPET.types.Message.MiniProgram: // 处理小程序消息的逻辑
+            case PUPPET.types.Message.RedEnvelope: // 处理红包消息的逻辑 12
+            case PUPPET.types.Message.Url: // 处理链接消息的逻辑
+            case PUPPET.types.Message.Post: // 处理帖子消息的逻辑
+                sendMessageBody.body = `收到一条 暂不支持的消息类型: ${messageType}`
+                this._tgClient.sendMessage(sendMessageBody)
+                break;
+            case PUPPET.types.Message.Transfer: // 处理转账消息的逻辑 11
+                sendMessageBody.body = '收到一条转账消息'
+                this._tgClient.sendMessage(sendMessageBody)
+                break;
+            case PUPPET.types.Message.Recalled: // 处理撤回消息的逻辑
+                sendMessageBody.body = '收到一条撤回消息'
+                this._tgClient.sendMessage(sendMessageBody)
+                break;
+            case PUPPET.types.Message.GroupNote:
+                // 处理群公告消息的逻辑
                 break;
             default:
                 break;
