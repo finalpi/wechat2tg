@@ -10,6 +10,7 @@ import * as tg from "telegraf/src/core/types/typegram";
 import {message} from "telegraf/filters";
 import {FileBox} from 'file-box'
 import * as fs from "node:fs";
+import * as path from "node:path";
 import {NotionMode, StorageSettings, VariableContainer, VariableType} from "../models/Settings";
 import {ConverterHelper} from "../utils/FfmpegUtils";
 import {SelectedEntity} from "../models/TgCache";
@@ -130,10 +131,38 @@ export class TelegramClient {
 
         bot.start(async ctx => {
             ctx.reply(
-                '请输入 /login 登陆 或者 /help 查看帮助;\n ' +
-                '请注意执行/login 后你就是该机器的所有人'
+                '请输入 /login 登陆,或者输入 /help 查看帮助;\n' +
+                '请注意执行/login 后你就是该机器的所有者'
                 , Markup.removeKeyboard())
         })
+
+        // 重启时判断是否有主人,如果存在主人则自动登录微信
+        const variables = this.forwardSetting.getAllVariables()
+        if (variables.chat_id && variables.chat_id !== ''){
+            this._chatId = variables.chat_id
+            this._weChatClient.start().then(() => {
+                // 判断微信的在线状态
+                if (this._weChatClient.client.isLoggedIn) {
+                    // 在线
+                    bot.telegram.sendMessage(this._chatId,"登录成功").then(() => {
+                        console.log('Message sent successfully');
+                    }).catch((error) => {
+                        console.error('Error sending message:', error);
+                    });
+                } else {
+                    bot.telegram.sendMessage(
+                        this._chatId
+                        ,"请输入 /login 登陆,或者输入 /help 查看帮助;"
+                        ,Markup.removeKeyboard()).then(() => {
+                        console.log('Message sent successfully');
+                    }).catch((error) => {
+                        console.error('Error sending message:', error);
+                    });
+                }
+            }).catch(() => {
+                console.error("启动失败");
+            });
+        }
 
         bot.settings(ctx => {
 
@@ -728,13 +757,13 @@ export class TelegramClient {
     private loadForwardSettings() {
         // 没有就创建
         try {
-            const settingFile = `${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}}}`
+            const settingFile = `${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`
             if (!fs.existsSync(StorageSettings.STORAGE_FOLDER)) {
-                fs.mkdirSync(settingFile);
+                fs.mkdirSync(StorageSettings.STORAGE_FOLDER);
             }
             if (fs.existsSync(settingFile)) {
                 const variableContainer = new VariableContainer();
-                variableContainer.parseFromFile(settingFile);
+                variableContainer.parseFromFile();
                 this.forwardSetting = variableContainer;
             }
         } catch (error) {

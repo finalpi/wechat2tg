@@ -7,12 +7,14 @@ export class VariableContainer {
         [VariableType.SETTING_NOTION_MODE]: NotionMode,
         [VariableType.SETTING_WHITE_LIST]: Contact [],
         [VariableType.SETTING_BLACK_LIST]: Contact [],
-        [VariableType.SETTING_REPLY_SUCCESS]: boolean
+        [VariableType.SETTING_REPLY_SUCCESS]: boolean,
+        [VariableType.SETTING_CHAT_ID]: string
     } = {
         [VariableType.SETTING_NOTION_MODE]: NotionMode.BLACK,
         [VariableType.SETTING_WHITE_LIST]: [],
         [VariableType.SETTING_BLACK_LIST]: [],
-        [VariableType.SETTING_REPLY_SUCCESS]: false
+        [VariableType.SETTING_REPLY_SUCCESS]: false,
+        [VariableType.SETTING_CHAT_ID]: ''
     };
 
     setVariable<T extends VariableType>(key: T, value: VariableMap[T]) {
@@ -28,11 +30,17 @@ export class VariableContainer {
     }
 
     // 解析文件为属性
-    parseFromFile(filePath: string): void {
+    parseFromFile(): void {
         try {
-            const data = fs.readFileSync(filePath, 'utf8');
-            const parsedData = JSON.parse(data);
-            this.variables = parsedData;
+            if (!fs.existsSync(StorageSettings.STORAGE_FOLDER)) {
+                fs.mkdirSync(StorageSettings.STORAGE_FOLDER);
+            }
+            const wechatData = fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`, 'utf8');
+            const tgData = fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.OWNER_FILE_NAME}`, 'utf8');
+            const wechatParsedData = JSON.parse(wechatData);
+            const tgParsedData = JSON.parse(tgData);
+
+            this.variables = {...wechatParsedData, ...tgParsedData};
         } catch (error) {
             console.error('Error parsing file:', error);
         }
@@ -59,6 +67,8 @@ export enum VariableType {
     SETTING_BLACK_LIST = 'Setting_Black_List',
     // 是否反馈发送成功
     SETTING_REPLY_SUCCESS = 'Setting_Reply_Success',
+    // tg的chatID
+    SETTING_CHAT_ID = 'chat_id',
 }
 
 export enum NotionMode {
@@ -71,7 +81,8 @@ type VariableMap = {
     [VariableType.SETTING_NOTION_MODE]: NotionMode,
     [VariableType.SETTING_WHITE_LIST]: Contact [],
     [VariableType.SETTING_BLACK_LIST]: Contact [],
-    [VariableType.SETTING_REPLY_SUCCESS]: boolean
+    [VariableType.SETTING_REPLY_SUCCESS]: boolean,
+    [VariableType.SETTING_CHAT_ID]: string
 };
 
 export class GroupListSave {

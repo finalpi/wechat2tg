@@ -187,7 +187,10 @@ export class WeChatClient {
     }
 
     private async message(message: MessageInterface) {
-
+        // 过滤掉自己所发送的消息
+        if (message.self()) {
+            return
+        }
         // console.info('message:', message)
         const talker = message.talker();
         // attachment handle
@@ -197,7 +200,6 @@ export class WeChatClient {
 
         const alias = await talker.alias();
         const showSender = alias ? `[${alias}] ${talker.name()}` : talker.name();
-
         switch (messageType) {
             case PUPPET.types.Message.Unknown:
                 console.log('unknown message')
