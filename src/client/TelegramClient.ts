@@ -13,6 +13,7 @@ import * as fs from "node:fs";
 import {NotionListType, NotionMode, StorageSettings, VariableContainer, VariableType} from "../models/Settings";
 import {ConverterHelper} from "../utils/FfmpegUtils";
 import {MemberCacheType, SelectedEntity} from "../models/TgCache";
+import {TalkerEntity} from "../models/TalkerCache";
 import {UniqueIdGenerator} from "../utils/IdUtils";
 import {MessageInterface} from "wechaty/dist/esm/src/mods/impls";
 
@@ -25,6 +26,9 @@ export class TelegramClient {
         this._selectedMember = value;
     }
 
+    get recentUsers(): TalkerEntity[] {
+        return this._recentUsers;
+    }
 
     private _weChatClient: WeChatClient;
     private readonly _bot: Telegraf;
@@ -37,14 +41,15 @@ export class TelegramClient {
     private _selectedMember: SelectedEntity [] = [];
     private _flagPinMessageType = '';
     private calcShowMemberListExecuted = false;
-    private selectRoom: RoomInterface | undefined;
+    private selectRoom: ContactInterface | RoomInterface | undefined;
+    private _recentUsers: TalkerEntity [] = [];
 
     private forwardSetting: VariableContainer = new VariableContainer();
 
     // key this message id value weChat message id
     private _messageMap = new Map<number, string>();
     // 当前回复用户
-    private _currentSelectContact : ContactInterface | undefined;
+    private _currentSelectContact : ContactInterface | RoomInterface | undefined;
     // 置顶消息
     private pinnedMessageId : number | undefined
 
@@ -104,18 +109,18 @@ export class TelegramClient {
         return this._chatId;
     }
 
-    public get currentSelectContact(): ContactInterface | undefined {
+    public get currentSelectContact(): ContactInterface | RoomInterface | undefined {
         return this._currentSelectContact;
     }
 
     public async setCurrentSelectContact(value:MessageInterface | undefined) {
         if (value){
-            this._currentSelectContact = value.talker();
             const room = value.room()
             if (room) {
                 this.setPin('room',await room.topic())
                 this.selectRoom = room
             }else {
+                this._currentSelectContact = value.talker();
                 const talker = value.talker()
                 const alias = await talker.alias()
                 if (alias){
@@ -156,7 +161,7 @@ export class TelegramClient {
             {command: 'login', description: '扫码登陆'},
             {command: 'user', description: '加用户名或昵称搜索(第一次缓存的)'},
             {command: 'room', description: '加群名搜索'},
-            {command: 'user2', description: '接口获取(未实现)'},
+            {command: 'user2', description: '最近联系人'},
             {command: 'settings', description: '行为设置'},
             {command: 'check', description: '检查微信存活'},
             {command: 'reset', description: '清空缓存重新登陆'},
@@ -450,8 +455,31 @@ export class TelegramClient {
         })
 
         bot.command('user2', async ctx => {
-            console.log('user2')
+            if (this.recentUsers.length == 0){
+                ctx.reply('最近联系人为空')
+                return
+            }
+
+            const buttons: tg.InlineKeyboardButton[][] = []
+            this.recentUsers.forEach(item => {
+                buttons.push([Markup.button.callback(item.name, item.id)])
+            })
+            const inlineKeyboard = Markup.inlineKeyboard(buttons);
+            ctx.reply('请选择要回复的联系人：', inlineKeyboard);
         })
+
+        bot.action(/.*recent.*/, (ctx) => {
+            const data = this.recentUsers.find(item=>item.id === ctx.match.input)
+            if (data){
+                if (data.type === 0){
+                    this.selectRoom = data.talker;
+                }else {
+                    this._currentSelectContact = data.talker;
+                }
+                this.setPin(data.type === 0?'room':'user',data.name)
+            }
+            ctx.deleteMessage()
+        });
 
         bot.action(/^[0-9a-z]+/, async (ctx) => {
             // ctx.update.callback_query.message
@@ -551,17 +579,30 @@ export class TelegramClient {
 
             // console.log('发送文件....')
 
-            if (ctx.message.document && this._currentSelectContact) {
+            if (ctx.message.document) {
                 const fileId = ctx.message.document.file_id;
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
                     const fileBox = FileBox.fromUrl(fileLink.toString());
-                    this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                    if (this._flagPinMessageType && this._flagPinMessageType === 'user'){
+                        this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                        const text = ctx.message.caption
+                        if(text) {
+                            this._currentSelectContact?.say(text)
+                        }
+                    } else {
+                        this.selectRoom?.say(fileBox)
+                        const text = ctx.message.caption
+                        if(text) {
+                            this.selectRoom?.say(text)
+                        }
+                    }
+                    ctx.reply("发送成功!")
                 })
             }
         });
 
         bot.on(message('photo'), async ctx => {
-            if (ctx.message.photo && this._currentSelectContact) {
+            if (ctx.message.photo) {
                 // Get the file_id of the largest size photo
                 const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
                 // const fileId = ctx.message.photo[ctx.message.photo.length - 1];
@@ -572,10 +613,21 @@ export class TelegramClient {
                     const fileBox = FileBox.fromUrl(fileLink.toString());
 
                     // Send the FileBox to the contact
-                    this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                    if (this._flagPinMessageType && this._flagPinMessageType === 'user'){
+                        this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                        const text = ctx.message.caption
+                        if(text) {
+                            this._currentSelectContact?.say(text)
+                        }
+                    } else {
+                        this.selectRoom?.say(fileBox)
+                        const text = ctx.message.caption
+                        if(text) {
+                            this.selectRoom?.say(text)
+                        }
+                    }
+                    ctx.reply("发送成功!")
                 })
-
-
             }
         })
 
@@ -856,6 +908,8 @@ export class TelegramClient {
         // 如果有置顶消息
         if (chatInfo.pinned_message) {
             this.pinnedMessageId = chatInfo.pinned_message.message_id;
+            // 刚启动无回复用户
+            this._bot.telegram.editMessageText(this._chatId,this.pinnedMessageId,undefined,'当前无回复用户')
         }
     }
 
@@ -865,12 +919,14 @@ export class TelegramClient {
         if (type === 'user'){
             str = `当前回复用户: ${name}`
         }else {
-            str = `当前回复群组👥: ${name}`
+            str = `当前回复群组:👥 ${name}`
         }
         this._flagPinMessageType = type;
         if(this.pinnedMessageId) {
             // 修改pin的内容
-            this._bot.telegram.editMessageText(this._chatId,this.pinnedMessageId,undefined,str)
+            this._bot.telegram.editMessageText(this._chatId,this.pinnedMessageId,undefined,str).catch(e=>{
+                // 名字相同不用管
+            })
         }else{
             // 发送消息并且pin
             this._bot.telegram.sendMessage(this._chatId,str).then(msg=>{

@@ -14,6 +14,8 @@ import {EmojiConverter} from "../utils/EmojiUtils";
 import * as console from "node:console";
 import {MemberCacheType} from "../models/TgCache";
 import {SimpleMessage} from "../models/Message";
+import {TalkerEntity} from "../models/TalkerCache";
+import {UniqueIdGenerator} from "../utils/IdUtils"
 
 // import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
 
@@ -216,16 +218,49 @@ export class WeChatClient {
         if (this._tgClient.setting){
             this._tgClient.setCurrentSelectContact(message);
         }
-        // console.info('message:', message)
+        // 添加用户至最近联系人
+        const roomEntity = await message.room()
         const talker = message.talker();
+        const roomTopic = await roomEntity?.topic() || '';
+
+        const recentUsers = this._tgClient.recentUsers
+        // 如果不存在该联系人
+        const recentUser = recentUsers.find(item=> (roomEntity && roomEntity.id) === item.talker?.id || (!roomEntity && talker.id === item.talker?.id))
+        if (!recentUser){
+            // 如果最近联系人数量大于5,则移除掉多余的联系人
+            if (recentUsers.length >= 5){
+                recentUsers.pop()
+            }
+            const idInstance = UniqueIdGenerator.getInstance();
+            if (roomEntity) {
+                // 房间
+                recentUsers.unshift(new TalkerEntity(roomTopic,0,idInstance.generateId("recent"),roomEntity))
+            }else {
+                // 个人
+                recentUsers.unshift(new TalkerEntity(talker.name(),1,idInstance.generateId("recent"),talker))
+            }
+        }else {
+            // 找到元素在数组中的索引
+            let index = recentUsers.indexOf(recentUser);
+
+            // 如果元素存在于数组中
+            if (index !== -1) {
+                // 将元素从原索引位置删除
+                recentUsers.splice(index, 1);
+                // 将元素放在数组最前面
+                recentUsers.unshift(recentUser);
+            }
+        }
+
+
+        // console.info('message:', message)
         // attachment handle
         const messageType = message.type();
 
-        const roomTopic = await message.room()?.topic() || '';
 
         const alias = await talker.alias();
-        const showSender = alias ? `[${alias}] ${talker.name()}` : talker.name();
-
+        const showSender: string = alias ? `[${alias}] ${talker.name()}` : talker.name();
+        const identityStr = roomEntity? '👥' + await roomEntity.topic() + '----' + showSender + ':':showSender + ':'
         const sendMessageBody: SimpleMessage = {
             sender: showSender,
             body: '收到一条 未知消息类型',
@@ -267,38 +302,60 @@ export class WeChatClient {
             case PUPPET.types.Message.Contact:
                 console.log('contact message')
                 break;
-            case PUPPET.types.Message.Attachment: // 下面的基本是文件类型处理 没有展示发送人 没保存消息id和tg的映射
-            case PUPPET.types.Message.Image:      // 所以不支持回复
-            case PUPPET.types.Message.Audio:
-            case PUPPET.types.Message.Video: {
-
-                // const path = `save-files/${talker.id}`
-                //
-                // if (!fs.existsSync(path)) {
-                //     fs.mkdirSync(path, {recursive: true});
-                // }
-
+            case PUPPET.types.Message.Attachment: {
                 message.toFileBox().then(fBox => {
                     // 这里可以保存一份在本地 但是没有映射关系没法知道是谁的
-                    // const saveFile = `${path}/${fBox.name}`
-                    // fBox.toFile(saveFile, true)
-
-
                     fBox.toBuffer().then(buff => {
 
                         // 语音文件 .sil直接重命名为mp3 可以直接播放
                         let fileName = fBox.name;
-                        if (fileName.endsWith('.sil')) {
-                            fileName = fileName.replace('.sil', '.mp3')
-                        }
 
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendDocument(
-                            tgClient.chatId, {source: buff, filename: fileName})
+                            tgClient.chatId, {source: buff, filename: fileName},{caption: identityStr})
                     })
                 })
-            }
                 break;
+            }
+            case PUPPET.types.Message.Image: {
+                message.toFileBox().then(fBox => {
+                    // 这里可以保存一份在本地 但是没有映射关系没法知道是谁的
+                    fBox.toBuffer().then(buff => {
+                        let fileName = fBox.name;
+
+                        const tgClient = this._tgClient
+                        tgClient.bot.telegram.sendPhoto(
+                            tgClient.chatId, {source: buff, filename: fileName},{caption: identityStr})
+                    })
+                })
+                break;
+            }
+            case PUPPET.types.Message.Audio: {
+                message.toFileBox().then(fBox => {
+                    // 这里可以保存一份在本地 但是没有映射关系没法知道是谁的
+                    fBox.toBuffer().then(buff => {
+                        let fileName = fBox.name;
+
+                        const tgClient = this._tgClient
+                        tgClient.bot.telegram.sendVoice(
+                            tgClient.chatId, {source: buff, filename: fileName},{caption: identityStr})
+                    })
+                })
+                break;
+            }
+            case PUPPET.types.Message.Video: {
+                message.toFileBox().then(fBox => {
+                    // 这里可以保存一份在本地 但是没有映射关系没法知道是谁的
+                    fBox.toBuffer().then(buff => {
+                        let fileName = fBox.name;
+
+                        const tgClient = this._tgClient
+                        tgClient.bot.telegram.sendVideo(
+                            tgClient.chatId, {source: buff, filename: fileName},{caption: identityStr})
+                    })
+                })
+                break;
+            }
             case PUPPET.types.Message.Emoticon: // 处理表情消息的逻辑
             case PUPPET.types.Message.Location: // 处理位置消息的逻辑
             case PUPPET.types.Message.MiniProgram: // 处理小程序消息的逻辑
