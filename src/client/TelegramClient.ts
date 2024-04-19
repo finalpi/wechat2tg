@@ -635,16 +635,28 @@ export class TelegramClient {
             const fileId = ctx.message.sticker.file_id
             ctx.telegram.getFileLink(fileId).then(fileLink => {
                 const uniqueId = ctx.message.sticker.file_unique_id
+                // 判断文件夹是否存在
+                if (!fs.existsSync("save-files")) {
+                    fs.mkdirSync("save-files");
+                }
                 const saveFile = `save-files/${uniqueId}`; // 不用后缀
 
                 FileBox.fromUrl(fileLink.toString()).toFile(saveFile).then(() => {
                     const gifFile = `save-files/${uniqueId}.gif`;
                     new ConverterHelper().webmToGif(saveFile, gifFile).then(() => {
                         const fileBox = FileBox.fromFile(gifFile);
-                        this._currentSelectContact?.say(fileBox).then(() => {
-                            fs.rmSync(gifFile);
-                            fs.rmSync(saveFile);
-                        }).catch(() => ctx.reply('发送失败'));
+                        if (this._flagPinMessageType && this._flagPinMessageType === 'user'){
+                            this._currentSelectContact?.say(fileBox).then(() => {
+                                fs.rmSync(gifFile);
+                                fs.rmSync(saveFile);
+                            }).catch(() => ctx.reply('发送失败'));
+                        } else {
+                            this.selectRoom?.say(fileBox).then(() => {
+                                fs.rmSync(gifFile);
+                                fs.rmSync(saveFile);
+                            }).catch(() => ctx.reply('发送失败'));
+                        }
+                        ctx.reply("发送成功!")
                     }).catch(() => ctx.reply('发送失败'))
                 })
 
