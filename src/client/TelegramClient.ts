@@ -159,10 +159,10 @@ export class TelegramClient {
             {command: 'help', description: '使用说明'},
             {command: 'start', description: '开始'},
             {command: 'login', description: '扫码登陆'},
-            {command: 'user', description: '加用户名或昵称搜索(第一次缓存的)'},
-            {command: 'room', description: '加群名搜索'},
-            {command: 'user2', description: '最近联系人'},
-            {command: 'settings', description: '行为设置'},
+            {command: 'user', description: '用户列表'},
+            {command: 'room', description: '群组列表'},
+            {command: 'recent', description: '最近联系人'},
+            {command: 'settings', description: '程序设置'},
             {command: 'check', description: '检查微信存活'},
             {command: 'reset', description: '清空缓存重新登陆'},
             {command: 'stop', description: '停止微信客户端 需要重新登陆'},
@@ -176,7 +176,7 @@ export class TelegramClient {
 
         bot.start(async ctx => {
             ctx.reply(
-                '请输入 /login 登陆,或者输入 /help 查看帮助;\n' +
+                '请输入 /login 登陆,或者输入 /help 查看帮助\n' +
                 '请注意执行/login 后你就是该机器的所有者'
                 , Markup.removeKeyboard())
         })
@@ -422,10 +422,10 @@ export class TelegramClient {
                 setTimeout(() => {
                     if (this.allContactCommandExecuted) {
                         const inlineKeyboard = Markup.inlineKeyboard([
-                            Markup.button.callback('未知', 'UNKNOWN'),
+                            // Markup.button.callback('未知', 'UNKNOWN'),
                             Markup.button.callback('个人', 'INDIVIDUAL'),
-                            Markup.button.callback('公众号', 'OFFICIAL'),
-                            Markup.button.callback('公司', 'CORPORATION')
+                            Markup.button.callback('公众号', 'OFFICIAL')
+                            // Markup.button.callback('公司', 'CORPORATION')
                         ]);
                         // Send message with inline keyboard
                         ctx.reply('请选择类型：', inlineKeyboard);
@@ -454,7 +454,7 @@ export class TelegramClient {
 
         })
 
-        bot.command('user2', async ctx => {
+        bot.command('recent', async ctx => {
             if (this.recentUsers.length == 0){
                 ctx.reply('最近联系人为空')
                 return
