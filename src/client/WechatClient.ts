@@ -212,6 +212,10 @@ export class WeChatClient {
         if (message.self()) {
             return
         }
+        // 自动设置回复人
+        if (this._tgClient.setting){
+            this._tgClient.setCurrentSelectContact(message);
+        }
         // console.info('message:', message)
         const talker = message.talker();
         // attachment handle

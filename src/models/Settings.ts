@@ -8,12 +8,14 @@ export class VariableContainer {
         [VariableType.SETTING_WHITE_LIST]: NotionListType [],
         [VariableType.SETTING_BLACK_LIST]: NotionListType [],
         [VariableType.SETTING_REPLY_SUCCESS]: boolean,
+        [VariableType.SETTING_AUTO_SWITCH]: boolean,
         [VariableType.SETTING_CHAT_ID]: string
     } = {
         [VariableType.SETTING_NOTION_MODE]: NotionMode.BLACK,
         [VariableType.SETTING_WHITE_LIST]: [],
         [VariableType.SETTING_BLACK_LIST]: [],
         [VariableType.SETTING_REPLY_SUCCESS]: false,
+        [VariableType.SETTING_AUTO_SWITCH]: true,
         [VariableType.SETTING_CHAT_ID]: ''
     };
 
@@ -47,8 +49,14 @@ export class VariableContainer {
     // 将内容写入文件
     writeToFile(filePath = `${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`): void {
         try {
-            const data = JSON.stringify(this.variables, null, 2);
-            fs.writeFileSync(filePath, data, 'utf8');
+            const data = {
+                [VariableType.SETTING_NOTION_MODE]: this.variables[VariableType.SETTING_NOTION_MODE]?this.variables[VariableType.SETTING_NOTION_MODE]:NotionMode.BLACK,
+                [VariableType.SETTING_WHITE_LIST]: this.variables[VariableType.SETTING_WHITE_LIST]?this.variables[VariableType.SETTING_WHITE_LIST]:[],
+                [VariableType.SETTING_BLACK_LIST]: this.variables[VariableType.SETTING_BLACK_LIST]?this.variables[VariableType.SETTING_BLACK_LIST]:[],
+                [VariableType.SETTING_REPLY_SUCCESS]: this.variables[VariableType.SETTING_REPLY_SUCCESS]?this.variables[VariableType.SETTING_REPLY_SUCCESS]:false,
+                [VariableType.SETTING_AUTO_SWITCH]: this.variables[VariableType.SETTING_AUTO_SWITCH]?this.variables[VariableType.SETTING_AUTO_SWITCH]:true,
+            };
+            fs.writeFileSync(filePath, JSON.stringify(data), 'utf8');
             console.log('File written successfully.');
         } catch (error) {
             console.error('Error writing to file:', error);
@@ -65,6 +73,8 @@ export enum VariableType {
     SETTING_BLACK_LIST = 'Setting_Black_List',
     // 是否反馈发送成功
     SETTING_REPLY_SUCCESS = 'Setting_Reply_Success',
+    // 自动切换回复用户
+    SETTING_AUTO_SWITCH = 'Setting_Auto_Switch',
     // tg的chatID
     SETTING_CHAT_ID = 'chat_id',
 }
@@ -80,6 +90,7 @@ type VariableMap = {
     [VariableType.SETTING_WHITE_LIST]: NotionListType [],
     [VariableType.SETTING_BLACK_LIST]: NotionListType [],
     [VariableType.SETTING_REPLY_SUCCESS]: boolean,
+    [VariableType.SETTING_AUTO_SWITCH]: boolean,
     [VariableType.SETTING_CHAT_ID]: string
 };
 
