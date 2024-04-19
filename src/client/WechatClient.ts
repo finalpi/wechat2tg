@@ -214,14 +214,15 @@ export class WeChatClient {
         if (message.self()) {
             return
         }
-        // 自动设置回复人
-        if (this._tgClient.setting){
-            this._tgClient.setCurrentSelectContact(message);
-        }
         // 添加用户至最近联系人
         const roomEntity = await message.room()
         const talker = message.talker();
         const roomTopic = await roomEntity?.topic() || '';
+        // 自动设置回复人
+        const type = talker.type()
+        if (this._tgClient.setting && type === PUPPET.types.Contact.Individual){
+            this._tgClient.setCurrentSelectContact(message);
+        }
 
         const recentUsers = this._tgClient.recentUsers
         // 如果不存在该联系人
