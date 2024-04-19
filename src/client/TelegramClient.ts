@@ -921,7 +921,9 @@ export class TelegramClient {
         if (chatInfo.pinned_message) {
             this.pinnedMessageId = chatInfo.pinned_message.message_id;
             // 刚启动无回复用户
-            this._bot.telegram.editMessageText(this._chatId,this.pinnedMessageId,undefined,'当前无回复用户')
+            this._bot.telegram.editMessageText(this._chatId,this.pinnedMessageId,undefined,'当前无回复用户').catch(e=>{
+                // 无需处理
+            })
         }
     }
 
