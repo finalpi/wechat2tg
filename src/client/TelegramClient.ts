@@ -162,7 +162,7 @@ export class TelegramClient {
 
         bot.settings(ctx => {
 
-            ctx.reply('settings', Markup.inlineKeyboard([
+            ctx.reply('设置:', Markup.inlineKeyboard([
                 [Markup.button.callback('通知模式(点击切换)', VariableType.SETTING_NOTION_MODE),],
                 [Markup.button.callback('反馈发送成功(点击切换)', VariableType.SETTING_REPLY_SUCCESS),],
                 [Markup.button.callback('白名单(未实现)', VariableType.SETTING_WHITE_LIST,
