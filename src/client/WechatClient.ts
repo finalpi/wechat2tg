@@ -245,7 +245,7 @@ export class WeChatClient {
         }
         // 自动设置回复人
         const type = talker.type()
-        if (this._tgClient.setting && type === PUPPET.types.Contact.Individual){
+        if (this._tgClient.setting && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_SWITCH) && type === PUPPET.types.Contact.Individual){
             this._tgClient.setCurrentSelectContact(message);
         }
 
