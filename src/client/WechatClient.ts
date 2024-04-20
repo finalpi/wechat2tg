@@ -93,6 +93,7 @@ export class WeChatClient {
     private _selectedContact: ContactInterface [] = [];
     private _selectedRoom: RoomInterface [] = [];
     private _memberCache: MemberCacheType[] = [];
+    private scanMsgId: number | undefined = undefined
 
     private _started = false;
 
@@ -183,6 +184,10 @@ export class WeChatClient {
     private login() {
         if (this._client.isLoggedIn) {
             this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登录成功!')
+            if (this.scanMsgId){
+                this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId,this.scanMsgId)
+                this.scanMsgId = undefined
+            }
         } else {
             this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登录失败!')
         }
@@ -202,7 +207,12 @@ export class WeChatClient {
             // console.log('chat id is : {}', this._tgClient.chatId)
             // if (!this._started) {
             QRCode.toBuffer(qrcode).then(buff =>
-                tgBot.telegram.sendPhoto(this._tgClient.chatId, {source: buff}, {caption: '请扫码登陆:'}))
+                tgBot.telegram.sendPhoto(this._tgClient.chatId, {source: buff}, {caption: '请扫码登陆:'})).then(msg=> {
+                    if (this.scanMsgId) {
+                        tgBot.telegram.deleteMessage(this._tgClient.chatId,this.scanMsgId)
+                    }
+                    this.scanMsgId = msg.message_id
+            })
             // }
 
         } else {
@@ -257,7 +267,7 @@ export class WeChatClient {
             }
         }else {
             // 找到元素在数组中的索引
-            let index = recentUsers.indexOf(recentUser);
+            const index = recentUsers.indexOf(recentUser);
 
             // 如果元素存在于数组中
             if (index !== -1) {
@@ -324,7 +334,7 @@ export class WeChatClient {
                     fBox.toBuffer().then(buff => {
 
                         // 语音文件 .sil直接重命名为mp3 可以直接播放
-                        let fileName = fBox.name;
+                        const fileName = fBox.name;
 
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendDocument(
@@ -337,7 +347,7 @@ export class WeChatClient {
                 message.toFileBox().then(fBox => {
                     // 这里可以保存一份在本地 但是没有映射关系没法知道是谁的
                     fBox.toBuffer().then(buff => {
-                        let fileName = fBox.name;
+                        const fileName = fBox.name;
 
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendPhoto(
@@ -350,7 +360,7 @@ export class WeChatClient {
                 message.toFileBox().then(fBox => {
                     // 这里可以保存一份在本地 但是没有映射关系没法知道是谁的
                     fBox.toBuffer().then(buff => {
-                        let fileName = fBox.name;
+                        const fileName = fBox.name;
 
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendVoice(
@@ -363,7 +373,7 @@ export class WeChatClient {
                 message.toFileBox().then(fBox => {
                     // 这里可以保存一份在本地 但是没有映射关系没法知道是谁的
                     fBox.toBuffer().then(buff => {
-                        let fileName = fBox.name;
+                        const fileName = fBox.name;
 
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendVideo(
@@ -378,7 +388,7 @@ export class WeChatClient {
             case PUPPET.types.Message.RedEnvelope: // 处理红包消息的逻辑 12
             case PUPPET.types.Message.Url: // 处理链接消息的逻辑
             case PUPPET.types.Message.Post: // 处理帖子消息的逻辑
-                sendMessageBody.body = `收到一条 暂不支持的消息类型: ${messageType}`
+                sendMessageBody.body = `收到一条暂不支持的消息类型: ${messageType}`
                 this._tgClient.sendMessage(sendMessageBody)
                 break;
             case PUPPET.types.Message.Transfer: // 处理转账消息的逻辑 11
@@ -386,7 +396,7 @@ export class WeChatClient {
                 this._tgClient.sendMessage(sendMessageBody)
                 break;
             case PUPPET.types.Message.Recalled: // 处理撤回消息的逻辑
-                sendMessageBody.body = '收到一条撤回消息'
+                sendMessageBody.body = '撤回了一条消息'
                 this._tgClient.sendMessage(sendMessageBody)
                 break;
             case PUPPET.types.Message.GroupNote:

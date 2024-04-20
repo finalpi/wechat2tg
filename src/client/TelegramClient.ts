@@ -43,6 +43,7 @@ export class TelegramClient {
     private calcShowMemberListExecuted = false;
     private selectRoom: ContactInterface | RoomInterface | undefined;
     private _recentUsers: TalkerEntity [] = [];
+    private wechatStartFlag = false;
 
     private forwardSetting: VariableContainer = new VariableContainer();
 
@@ -187,20 +188,23 @@ export class TelegramClient {
             this._chatId = variables.chat_id
             // 找到置顶消息
             this.findPinMessage();
-            this._weChatClient.start().then(() => {
+            if (!this.wechatStartFlag){
+                this.wechatStartFlag = true
+                this._weChatClient.start().then(() => {
 
-                // 标记为已执行
-                this.loginCommandExecuted = true;
+                    // 标记为已执行
+                    this.loginCommandExecuted = true;
 
-                // 登陆后就缓存所有的联系人和房间
-                this.setAllMemberCache().then(() => {
-                    this.calcShowMemberList()
+                    // 登陆后就缓存所有的联系人和房间
+                    this.setAllMemberCache().then(() => {
+                        this.calcShowMemberList()
+                    });
+
+                    console.log("自动启动微信bot")
+                }).catch(() => {
+                    console.error("自动启动失败");
                 });
-
-                console.log("自动启动微信bot")
-            }).catch(() => {
-                console.error("自动启动失败");
-            });
+            }
         }
 
         bot.settings(ctx => {
@@ -208,7 +212,7 @@ export class TelegramClient {
             ctx.reply('程序设置:', Markup.inlineKeyboard([
                 [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)})`, VariableType.SETTING_NOTION_MODE),],
                 [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)?'开启':'关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
-                [Markup.button.callback(`开启自动切换(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
+                [Markup.button.callback(`自动切换联系人(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
                 [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE?Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST):Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST)]
             ]))
         });
@@ -232,7 +236,7 @@ export class TelegramClient {
                 inline_keyboard: [
                     [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)})`, VariableType.SETTING_NOTION_MODE),],
                     [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)?'开启':'关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
-                    [Markup.button.callback(`开启自动切换(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
+                    [Markup.button.callback(`自动切换联系人(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
                     [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE?Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST):Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST)]
                 ],
             });
@@ -252,7 +256,7 @@ export class TelegramClient {
                 inline_keyboard: [
                     [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)})`, VariableType.SETTING_NOTION_MODE),],
                     [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)?'开启':'关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
-                    [Markup.button.callback(`开启自动切换(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
+                    [Markup.button.callback(`自动切换联系人(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
                     [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE?Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST):Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST)]
                 ],
             });
@@ -271,7 +275,7 @@ export class TelegramClient {
                 inline_keyboard: [
                     [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)})`, VariableType.SETTING_NOTION_MODE),],
                     [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)?'开启':'关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
-                    [Markup.button.callback(`开启自动切换(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
+                    [Markup.button.callback(`自动切换联系人(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
                     [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE?Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST):Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST)]
                 ],
             });
@@ -318,28 +322,29 @@ export class TelegramClient {
         // })
 
         bot.command('login', async ctx => {
+            if (!this.wechatStartFlag){
+                this.wechatStartFlag = true
+                this._weChatClient.start().then(() => {
 
-            this._weChatClient.start().then(() => {
+                    // if (!this._weChatClient.client.isLoggedIn) {
+                    //     ctx.reply('请扫码登陆');
+                    // }
 
-                // if (!this._weChatClient.client.isLoggedIn) {
-                //     ctx.reply('请扫码登陆');
-                // }
+                    // 第一次输入的人当成bot的所有者
+                    this.loadOwnerChat(ctx);
 
-                // 第一次输入的人当成bot的所有者
-                this.loadOwnerChat(ctx);
+                    // 标记为已执行
+                    this.loginCommandExecuted = true;
 
-                // 标记为已执行
-                this.loginCommandExecuted = true;
+                    // 登陆后就缓存所有的联系人和房间
+                    this.setAllMemberCache().then(() => {
+                        this.calcShowMemberList()
+                    });
 
-                // 登陆后就缓存所有的联系人和房间
-                this.setAllMemberCache().then(() => {
-                    this.calcShowMemberList()
+                }).catch(() => {
+                    ctx.reply('已经登陆或登陆失败请检查状态');
                 });
-
-            }).catch(() => {
-                ctx.reply('已经登陆或登陆失败请检查状态');
-            });
-
+            }
 
         });
 
@@ -605,16 +610,18 @@ export class TelegramClient {
                         this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
                         const text = ctx.message.caption
                         if(text) {
-                            this._currentSelectContact?.say(text)
+                            this._currentSelectContact?.say(text).catch(() => ctx.reply('发送失败'));
                         }
                     } else {
-                        this.selectRoom?.say(fileBox)
+                        this.selectRoom?.say(fileBox).catch(() => ctx.reply('发送失败'));
                         const text = ctx.message.caption
                         if(text) {
-                            this.selectRoom?.say(text)
+                            this.selectRoom?.say(text).catch(() => ctx.reply('发送失败'));
                         }
                     }
-                    ctx.reply("发送成功!")
+                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                        ctx.reply("发送成功!")
+                    }
                 })
             }
         });
@@ -641,10 +648,12 @@ export class TelegramClient {
                         this.selectRoom?.say(fileBox)
                         const text = ctx.message.caption
                         if(text) {
-                            this.selectRoom?.say(text)
+                            this.selectRoom?.say(text).catch(() => ctx.reply('发送失败'));
                         }
                     }
-                    ctx.reply("发送成功!")
+                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                        ctx.reply("发送成功!")
+                    }
                 })
             }
         })
@@ -939,7 +948,7 @@ export class TelegramClient {
         if (chatInfo.pinned_message) {
             this.pinnedMessageId = chatInfo.pinned_message.message_id;
             // 刚启动无回复用户
-            this._bot.telegram.editMessageText(this._chatId,this.pinnedMessageId,undefined,`当前模式:${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)}\n当前无回复用户`).catch(e=>{
+            this._bot.telegram.editMessageText(this._chatId,this.pinnedMessageId,undefined,`当前无回复用户`).catch(e=>{
                 // 无需处理
             })
         }
@@ -977,6 +986,7 @@ export class TelegramClient {
     }
 
     public onWeChatStop(ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
+        this.wechatStartFlag = false
         this._weChatClient.stop().then(() => {
             ctx.reply('停止成功').then(() => this.loginCommandExecuted = false);
         }).catch(() => ctx.reply('停止失败'))
