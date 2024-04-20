@@ -360,11 +360,16 @@ export class WeChatClient {
                 message.toFileBox().then(fBox => {
                     // 这里可以保存一份在本地 但是没有映射关系没法知道是谁的
                     fBox.toBuffer().then(buff => {
-                        const fileName = fBox.name;
-
+                        let fileName = fBox.name;
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendVoice(
-                            tgClient.chatId, {source: buff, filename: fileName},{caption: identityStr})
+                            tgClient.chatId, {source: buff, filename: fileName},{caption: identityStr}).catch(res=>{
+                            if (fileName.endsWith('.sil')) {
+                                fileName = fileName.replace('.sil', '.mp3')
+                            }
+                                // 如果用户不接收语音则发送文件
+                            tgClient.bot.telegram.sendDocument(tgClient.chatId, {source: buff, filename: fileName},{caption: identityStr})
+                        })
                     })
                 })
                 break;
