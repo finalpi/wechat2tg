@@ -163,7 +163,7 @@ export class TelegramClient {
             {command: 'room', description: '群组列表'},
             {command: 'recent', description: '最近联系人'},
             {command: 'settings', description: '程序设置'},
-            {command: 'check', description: '检查微信存活'},
+            {command: 'check', description: '微信登录状态'},
             {command: 'reset', description: '清空缓存重新登陆'},
             {command: 'stop', description: '停止微信客户端 需要重新登陆'},
             // {command: 'logout', description: '退出登陆'},
@@ -205,15 +205,11 @@ export class TelegramClient {
 
         bot.settings(ctx => {
 
-            ctx.reply('设置:', Markup.inlineKeyboard([
-                [Markup.button.callback('黑名单白名单模式切换', VariableType.SETTING_NOTION_MODE),],
-                [Markup.button.callback('反馈发送成功(点击切换)', VariableType.SETTING_REPLY_SUCCESS),],
-                [Markup.button.callback('开启自动切换(点击切换)', VariableType.SETTING_AUTO_SWITCH),],
-                [Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST,
-                    !(this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === 'white')),
-                    Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST,
-                        !(this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === 'black')),
-                ]
+            ctx.reply('程序设置:', Markup.inlineKeyboard([
+                [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)})`, VariableType.SETTING_NOTION_MODE),],
+                [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)?'开启':'关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
+                [Markup.button.callback(`开启自动切换(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
+                [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE?Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST):Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST)]
             ]))
         });
 
@@ -234,18 +230,10 @@ export class TelegramClient {
             // 点击后修改上面按钮
             ctx.editMessageReplyMarkup({
                 inline_keyboard: [
-                    [
-                        Markup.button.callback('通知模式(点击切换)', VariableType.SETTING_NOTION_MODE),
-                    ],
-                    [
-                        Markup.button.callback('反馈发送成功(点击切换)', VariableType.SETTING_REPLY_SUCCESS),
-                    ],
-                    [
-                        Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST,
-                            !(this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === 'white')),
-                        Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST,
-                            !(this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === 'black')),
-                    ]
+                    [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)})`, VariableType.SETTING_NOTION_MODE),],
+                    [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)?'开启':'关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
+                    [Markup.button.callback(`开启自动切换(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
+                    [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE?Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST):Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST)]
                 ],
             });
             // 点击后持久化
@@ -259,6 +247,15 @@ export class TelegramClient {
             this.forwardSetting.setVariable(VariableType.SETTING_REPLY_SUCCESS, b)
             // 修改后持成文件
             this.forwardSetting.writeToFile()
+            // 点击后修改上面按钮
+            ctx.editMessageReplyMarkup({
+                inline_keyboard: [
+                    [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)})`, VariableType.SETTING_NOTION_MODE),],
+                    [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)?'开启':'关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
+                    [Markup.button.callback(`开启自动切换(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
+                    [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE?Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST):Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST)]
+                ],
+            });
             return ctx.answerCbQuery(answerText)
         });
 
@@ -269,6 +266,15 @@ export class TelegramClient {
             this.forwardSetting.setVariable(VariableType.SETTING_AUTO_SWITCH, b)
             // 修改后持成文件
             this.forwardSetting.writeToFile()
+            // 点击后修改上面按钮
+            ctx.editMessageReplyMarkup({
+                inline_keyboard: [
+                    [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)})`, VariableType.SETTING_NOTION_MODE),],
+                    [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)?'开启':'关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
+                    [Markup.button.callback(`开启自动切换(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
+                    [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE?Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST):Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST)]
+                ],
+            });
             return ctx.answerCbQuery(answerText)
         });
 

@@ -54,7 +54,7 @@ export class VariableContainer {
                 [VariableType.SETTING_WHITE_LIST]: this.variables[VariableType.SETTING_WHITE_LIST]?this.variables[VariableType.SETTING_WHITE_LIST]:[],
                 [VariableType.SETTING_BLACK_LIST]: this.variables[VariableType.SETTING_BLACK_LIST]?this.variables[VariableType.SETTING_BLACK_LIST]:[],
                 [VariableType.SETTING_REPLY_SUCCESS]: this.variables[VariableType.SETTING_REPLY_SUCCESS]?this.variables[VariableType.SETTING_REPLY_SUCCESS]:false,
-                [VariableType.SETTING_AUTO_SWITCH]: this.variables[VariableType.SETTING_AUTO_SWITCH]?this.variables[VariableType.SETTING_AUTO_SWITCH]:true,
+                [VariableType.SETTING_AUTO_SWITCH]: this.variables[VariableType.SETTING_AUTO_SWITCH]?this.variables[VariableType.SETTING_AUTO_SWITCH]:false,
             };
             fs.writeFileSync(filePath, JSON.stringify(data), 'utf8');
             console.log('File written successfully.');
