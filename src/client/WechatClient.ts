@@ -16,6 +16,7 @@ import {MemberCacheType} from "../models/TgCache";
 import {SimpleMessage} from "../models/Message";
 import {TalkerEntity} from "../models/TalkerCache";
 import {UniqueIdGenerator} from "../utils/IdUtils"
+import {NotionMode, VariableType} from "../models/Settings";
 
 // import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
 
@@ -218,6 +219,20 @@ export class WeChatClient {
         const roomEntity = await message.room()
         const talker = message.talker();
         const roomTopic = await roomEntity?.topic() || '';
+        // 黑白名单过滤
+        if (roomEntity){
+            const blackFind = this._tgClient.setting.getVariable(VariableType.SETTING_BLACK_LIST).find(item=>item.name === roomTopic);
+            const whiteFind = this._tgClient.setting.getVariable(VariableType.SETTING_WHITE_LIST).find(item=>item.name === roomTopic);
+            if (this._tgClient.setting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK){
+                if (blackFind){
+                    return
+                }
+            }else {
+                if (!whiteFind && !await message.mentionSelf()){
+                    return
+                }
+            }
+        }
         // 自动设置回复人
         const type = talker.type()
         if (this._tgClient.setting && type === PUPPET.types.Contact.Individual){

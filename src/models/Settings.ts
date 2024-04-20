@@ -107,6 +107,6 @@ export enum StorageSettings {
 export type NotionListType = {
     id: string,
     name: string,
-    shot_id: string,
-    type: string,
+    // shot_id: string,
+    // type: string,
 }

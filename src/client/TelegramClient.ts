@@ -206,12 +206,12 @@ export class TelegramClient {
         bot.settings(ctx => {
 
             ctx.reply('设置:', Markup.inlineKeyboard([
-                [Markup.button.callback('通知模式(点击切换)', VariableType.SETTING_NOTION_MODE),],
+                [Markup.button.callback('黑名单白名单模式切换', VariableType.SETTING_NOTION_MODE),],
                 [Markup.button.callback('反馈发送成功(点击切换)', VariableType.SETTING_REPLY_SUCCESS),],
                 [Markup.button.callback('开启自动切换(点击切换)', VariableType.SETTING_AUTO_SWITCH),],
-                [Markup.button.callback('白名单(未实现)', VariableType.SETTING_WHITE_LIST,
+                [Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST,
                     !(this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === 'white')),
-                    Markup.button.callback('黑名单(未实现)', VariableType.SETTING_BLACK_LIST,
+                    Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST,
                         !(this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === 'black')),
                 ]
             ]))
@@ -291,10 +291,11 @@ export class TelegramClient {
             })
         });
 
+        let listAdd = false;
         // 黑白名单添加
         bot.action(/listAdd-/, ctx => {
-            ctx.reply('输入完整群名或者用户名, 备注').then(res => {
-                ctx.reply('请选择',)
+            ctx.reply('输入完整群名').then(res => {
+                listAdd = true
             })
         })
 
@@ -503,7 +504,18 @@ export class TelegramClient {
         // 发送消息 回复等...
         bot.on(message('text'), async ctx => {
             const text = ctx.message.text; // 获取消息内容
-
+            if (listAdd){
+                // 黑白名单添加
+                listAdd = false
+                const roomList = await this._weChatClient.client.Room.findAll({topic: text})
+                if (roomList.length === 0) {
+                    ctx.reply('未找到该群组,请检查群名称是否正确')
+                }else {
+                    this.addToWhiteOrBlackList(text)
+                    ctx.reply('添加成功')
+                }
+                return
+            }
             const replyMessageId = ctx.update.message['reply_to_message']?.message_id;
             // 如果是回复的消息 优先回复该发送的消息
             if (replyMessageId) {
@@ -921,7 +933,7 @@ export class TelegramClient {
         if (chatInfo.pinned_message) {
             this.pinnedMessageId = chatInfo.pinned_message.message_id;
             // 刚启动无回复用户
-            this._bot.telegram.editMessageText(this._chatId,this.pinnedMessageId,undefined,'当前无回复用户').catch(e=>{
+            this._bot.telegram.editMessageText(this._chatId,this.pinnedMessageId,undefined,`当前模式:${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)}\n当前无回复用户`).catch(e=>{
                 // 无需处理
             })
         }
@@ -1010,7 +1022,7 @@ export class TelegramClient {
         for (let i = 0; i < slice.length; i += lineSize) {
             const row = [];
             for (let j = i; j < i + lineSize && j < slice.length; j++) {
-                row.push(Markup.button.callback(slice[j].name, keyPrefix + slice[j].shot_id))
+                row.push(Markup.button.callback(slice[j].name, keyPrefix + slice[j].id))
             }
             buttons.push(row);
         }
@@ -1058,5 +1070,32 @@ export class TelegramClient {
             this.calcShowMemberListExecuted = true;
             this._weChatClient.memberCache = res;
         }
+    }
+
+    private addToWhiteOrBlackList(text: string) {
+        if (this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK) {
+            const blackList = this.forwardSetting.getVariable(VariableType.SETTING_BLACK_LIST);
+            const find = blackList.find(item=>item.name === text);
+            // 计算id
+            let id = 1
+            if (blackList.length > 0){
+                id = parseInt(blackList[blackList.length-1].id) + 1
+            }
+            if (!find){
+                blackList.push({id: id + '', name: text})
+            }
+        }else {
+            const whiteList = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST);
+            const find = whiteList.find(item=>item.name === text);
+            // 计算id
+            let id = 1
+            if (whiteList.length > 0){
+                id = parseInt(whiteList[whiteList.length-1].id) + 1
+            }
+            if (!find){
+                whiteList.push({id: id + '', name: text})
+            }
+        }
+        this.forwardSetting.writeToFile()
     }
 }
