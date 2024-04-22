@@ -1,18 +1,18 @@
-export class Page{
-    private total:number;
-    private page:number;
-    private pageSize:number;
-    private list:any[];
+export class Page<T> {
+    private readonly total: number;
+    private page: number;
+    private readonly pageSize: number;
+    private list: T [];
 
 
-    constructor(list: any[], page: number = 1, pageSize: number = 5) {
+    constructor(list: T [], page = 1, pageSize = 5) {
         this.list = list;
         this.page = page;
         this.pageSize = pageSize;
         this.total = list.length;
     }
 
-    public getList(page: number): any[] {
+    public getList(page: number): T [] {
         // 更新当前页码
         this.page = page;
 
