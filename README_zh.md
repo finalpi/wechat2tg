@@ -2,6 +2,12 @@
 
 这个项目是基于 [wechaty](https://github.com/wechaty/wechaty) 实现的微信消息转发到 Telegram 机器人的项目,使用[puppet-wechat4u](https://github.com/wechaty/puppet-wechat4u)协议UOS实现,因此可以绕过微信web版某些账号无法登陆的问题。
 
+# 主要功能
+
+1. 微信单聊消息,群组消息,公众号消息转发到telegram
+2. telegram向指定的用户回复消息
+3. 支持群组黑名单白名单模式
+
 # 注意事项
 
 1. 本项目仅用于技术研究和学习，不得用于非法用途。
@@ -12,7 +18,6 @@
 - [ ] 好友请求接受
 - [ ] 发送位置
 - [ ] 接受位置消息
-- [ ] 群组,个人,公众号图标
 
 ## 安装
 

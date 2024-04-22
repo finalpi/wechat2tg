@@ -4,17 +4,16 @@ English | [中文](README_zh.md)
 
 This project is based on [wechaty](https://github.com/wechaty/wechaty) and implements a WeChat message forwarding to Telegram bot using the [puppet-wechat4u](https://github.com/wechaty/puppet-wechat4u) protocol UOS. Thus, it can circumvent the issue where some accounts are unable to log in to the WeChat web version.
 
+# Main Features
+
+1. Forward WeChat individual messages, group messages, and official account messages to Telegram.
+2. Reply to messages on Telegram to specified users.
+3. Support group blacklist and whitelist modes.
+
 ## Notice
 
 1. This project is intended only for technical research and learning and must not be used for illegal purposes.
 2. Please submit any issues you encounter to the issue tracker.
-
-## TODO LIST
-
-- [ ] Accept friend requests
-- [ ] Send location
-- [ ] Receive location messages
-- [ ] Group, individual, official account icons
 
 ## Installation
 
