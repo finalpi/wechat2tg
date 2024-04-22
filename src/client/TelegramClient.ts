@@ -434,7 +434,7 @@ export class TelegramClient {
                     if (buttons.length === 0) {
                         ctx.reply('没有找到群聊')
                     } else {
-                        ctx.reply('请选择群聊:', {
+                        ctx.reply('请选择群聊(点击回复):', {
                             ...Markup.inlineKeyboard(buttons)
                         })
                     }
@@ -512,10 +512,10 @@ export class TelegramClient {
 
             // Create inline keyboard
             const inlineKeyboard = Markup.inlineKeyboard([
-                Markup.button.callback('未知', 'UNKNOWN'),
+                // Markup.button.callback('未知', 'UNKNOWN'),
                 Markup.button.callback('个人', 'INDIVIDUAL'),
                 Markup.button.callback('公众号', 'OFFICIAL'),
-                Markup.button.callback('公司', 'CORPORATION')
+                // Markup.button.callback('公司', 'CORPORATION')
             ]);
 
             // Send message with inline keyboard
@@ -850,7 +850,7 @@ export class TelegramClient {
             })
         }
 
-        ctx.reply('请选择联系人:', {
+        ctx.reply('请选择联系人(点击回复):', {
             ...Markup.inlineKeyboard(buttons),
         })
 
@@ -1203,8 +1203,8 @@ export class TelegramClient {
                 [Markup.button.callback(`自动切换联系人(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH) ? '开启' : '关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
                 [Markup.button.callback(`接受公众号消息(${this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) ? '开启' : '关闭'})`, VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT),],
                 [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE ?
-                    Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST) :
-                    Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST)]
+                    Markup.button.callback('白名单群组', VariableType.SETTING_WHITE_LIST) :
+                    Markup.button.callback('黑名单群组', VariableType.SETTING_BLACK_LIST)]
             ],
         }
     }
