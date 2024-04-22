@@ -185,6 +185,10 @@ export class WeChatClient {
     private login() {
         if (this._client.isLoggedIn) {
             this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登录成功!')
+            // 登陆后就缓存所有的联系人和房间
+            this._tgClient.setAllMemberCache().then(() => {
+                this._tgClient.calcShowMemberList()
+            });
             if (this.scanMsgId) {
                 this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId, this.scanMsgId)
                 this.scanMsgId = undefined

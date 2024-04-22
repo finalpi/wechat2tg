@@ -197,10 +197,6 @@ export class TelegramClient {
                     // 标记为已执行
                     this.loginCommandExecuted = true;
 
-                    // 登陆后就缓存所有的联系人和房间
-                    this.setAllMemberCache().then(() => {
-                        this.calcShowMemberList()
-                    });
 
                     console.log("自动启动微信bot")
                 }).catch(() => {
@@ -296,7 +292,7 @@ export class TelegramClient {
             const buttons = []
             const pageList = page.getList(pageNum)
             for (const pageListElement of pageList) {
-                buttons.push([Markup.button.callback(pageListElement.name, `whiteListRemove-${pageListElement.id}`)])
+                buttons.push([Markup.button.callback(`🚻${pageListElement.name}`, `whiteListRemove-${pageListElement.id}`)])
             }
             buttons.push([Markup.button.callback('上一页', `whiteList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `whiteList-${pageNum + 1}`, !page.hasNext())])
             ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
@@ -338,7 +334,7 @@ export class TelegramClient {
             const buttons = []
             const pageList = page.getList(pageNum)
             for (const pageListElement of pageList) {
-                buttons.push([Markup.button.callback(pageListElement.name, `blackListRemove-${pageListElement.id}`)])
+                buttons.push([Markup.button.callback(`🚻${pageListElement.name}`, `blackListRemove-${pageListElement.id}`)])
             }
             buttons.push([Markup.button.callback('上一页', `blackList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `blackList-${pageNum + 1}`, !page.hasNext())])
             ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
@@ -394,11 +390,6 @@ export class TelegramClient {
                     // 标记为已执行
                     this.loginCommandExecuted = true;
 
-                    // 登陆后就缓存所有的联系人和房间
-                    this.setAllMemberCache().then(() => {
-                        this.calcShowMemberList()
-                    });
-
                 }).catch(() => {
                     ctx.reply('已经登陆或登陆失败请检查状态');
                 });
@@ -411,7 +402,7 @@ export class TelegramClient {
         bot.command('stop', this.onWeChatStop)
 
         bot.command('check', ctx => {
-            if (this._weChatClient.client.isLoggedIn) {
+            if (this.wechatStartFlag && this._weChatClient.client.isLoggedIn) {
                 ctx.reply('微信在线')
             } else {
                 ctx.reply('微信不在线')
@@ -788,7 +779,9 @@ export class TelegramClient {
             } else {
                 this.selectRoom?.say(fileBox).catch(() => ctx.reply('发送失败'));
             }
-            ctx.reply("发送成功!")
+            if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                ctx.reply("发送成功!")
+            }
         }).catch(() => ctx.reply('发送失败'))
     }
 
@@ -1034,6 +1027,12 @@ export class TelegramClient {
             this._bot.telegram.editMessageText(this._chatId, this.pinnedMessageId, undefined, `当前无回复用户`).catch(e => {
                 // 无需处理
             })
+        }else {
+            // 发送消息并且pin
+            this._bot.telegram.sendMessage(this._chatId, `当前无回复用户`).then(msg => {
+                this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
+                this.pinnedMessageId = msg.message_id
+            })
         }
     }
 
@@ -1041,9 +1040,9 @@ export class TelegramClient {
         // 判断是否是群组
         let str = ''
         if (type === 'user') {
-            str = `当前回复用户: ${name}`
+            str = `当前回复用户:👨‍🎓 ${name}`
         } else {
-            str = `当前回复群组:👥 ${name}`
+            str = `当前回复群组:🚻 ${name}`
         }
         this._flagPinMessageType = type;
         if (this.pinnedMessageId) {
@@ -1087,7 +1086,7 @@ export class TelegramClient {
             const row = [];
             for (let j = i; j < i + lineSize && j < slice.length; j++) {
                 const keyboard = {
-                    text: await rooms[j]?.topic(),
+                    text: '🚻' + await rooms[j]?.topic(),
                     data: 'room-index-' + j
                 }
                 currentSelectRoomMap.set(keyboard.data, rooms[j]);
@@ -1141,7 +1140,7 @@ export class TelegramClient {
         return buttons;
     }
 
-    private async calcShowMemberList(): Promise<void> {
+    public async calcShowMemberList(): Promise<void> {
 
         if (!this.calcShowMemberListExecuted) {
             // 从微信实例中获取缓存的联系人 转换成一样的数组

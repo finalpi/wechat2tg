@@ -22,8 +22,8 @@ export class SimpleMessageSender implements MessageSender {
             return simpleMessage;
         } else {
             const title = simpleMessage.room === ''
-                ? `<b>${simpleMessage.sender} : </b> \n` :
-                `<i>${simpleMessage.room}</i> ---- <b>${simpleMessage.sender} : </b> \n`;
+                ? `<b>👨‍🎓${simpleMessage.sender} : </b> \n` :
+                `<i>🚻${simpleMessage.room}</i> ---- <b>👨‍🎓${simpleMessage.sender} : </b> \n`;
             return `${title}${this.escapeHTML(typeof simpleMessage.body === "string" ? simpleMessage.body :'')}`;
         }
     }
