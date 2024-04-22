@@ -9,18 +9,12 @@
 
 ## TODO LIST
 
-- [] 好友请求接受
-- [] 发送位置
-- [] 接受位置消息
-- [] 公众号消息接收开关
-- [] 群组,个人,公众号图标
+- [ ] 好友请求接受
+- [ ] 发送位置
+- [ ] 接受位置消息
+- [ ] 群组,个人,公众号图标
 
-## 已知问题
-
-1. 登陆之后大概两天掉线,需要重新扫码登陆
-
-
-## 使用说明
+## 安装
 
 ### Node.js v16以上的版本中使用
 
@@ -49,6 +43,31 @@ docker run -itd --env BOT_TOKEN="" --env PROXY_HOST="" --env PROXY_PORT="" --env
 ```shell
 docker-compose up -d
 ```
+## BOT命令说明
+
+`/login`:获取登录二维码
+
+`/user`:获取用户列表,点击可回复
+
+`/room`:获取群组列表,点击可回复
+
+`/recent`:获取最近发过消息的用户或者群组,点击可回复
+
+`/setting`:程序设置:
+
+消息模式切换: 
+
+切换黑名单模式或者白名单模式
+
+白名单模式:只接受在白名单列表的群组消息
+
+黑名单模式:不接受在黑名单列表的群组消息
+
+反馈发送成功:是否反馈消息的发送状态
+
+自动切换联系人:如果有用户或群组回复,则会自动切换回复到该用户或者群组
+
+接受公众号消息:是否接受公众号消息
 
 ## 配置项说明
 
@@ -72,5 +91,7 @@ PROXY_PASSWORD=
 [MIT](LICENSE)
 
 ## Thanks
+
 感谢Jetbrains对本项目的支持
+
 [![Jetbrains](https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.png)](https://www.jetbrains.com)
