@@ -153,6 +153,7 @@ export class TelegramClient {
 
         // 初始化配置
         this.forwardSetting.writeToFile()
+        this.loadForwardSettings();
 
         // Enable graceful stop
         // process.once('SIGINT', () => bot.stop('SIGINT'))
