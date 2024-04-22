@@ -16,6 +16,7 @@ import {MemberCacheType, SelectedEntity} from "../models/TgCache";
 import {TalkerEntity} from "../models/TalkerCache";
 import {UniqueIdGenerator} from "../utils/IdUtils";
 import {MessageInterface} from "wechaty/dist/esm/src/mods/impls";
+import {Page} from "../models/Page";
 
 export class TelegramClient {
     get selectedMember(): SelectedEntity[] {
@@ -285,23 +286,89 @@ export class TelegramClient {
         // 白名单设置
         bot.action(VariableType.SETTING_WHITE_LIST, ctx => {
             // 当前白名单
-            const listTypes = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST);
-            const page = 0;
-            this.generateNotionListButtons(listTypes, page, VariableType.SETTING_WHITE_LIST + '-').then(buttons => {
-                ctx.reply('白名单列表点击移除', Markup.inlineKeyboard(buttons))
-            })
+            ctx.reply('白名单管理:', Markup.inlineKeyboard([
+                [Markup.button.callback(`添加白名单`, 'listAdd-')],
+                [Markup.button.callback(`白名单列表`, 'whiteList-1')]
+            ]))
         });
+
+        // 白名单列表
+        bot.action(/whiteList-(\d+)/, ctx => {
+            const pageNum = parseInt(ctx.match[1]);
+            // 获取黑名单或者白名单的列表
+            const list = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST)
+            if (!list || list.length === 0){
+                ctx.reply("白名单列表为空")
+                return
+            }
+            const page = new Page(list,pageNum,5)
+            const buttons = []
+            const pageList = page.getList(pageNum)
+            for (let pageListElement of pageList) {
+                buttons.push([Markup.button.callback(pageListElement.name, `whiteListRemove-${pageListElement.id}`)])
+            }
+            buttons.push([Markup.button.callback('上一页', `whiteList-${pageNum-1}`,!page.hasLast()),Markup.button.callback('下一页', `whiteList-${pageNum+1}`,!page.hasNext())])
+            ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
+        })
+
+        // 白名单移除
+        bot.action(/whiteListRemove-(\d+)/, ctx => {
+            const id = parseInt(ctx.match[1]);
+            // 获取黑名单或者白名单的列表
+            const list = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST)
+            this.forwardSetting.setVariable(VariableType.SETTING_WHITE_LIST,list.filter(item=>{
+                return item.id !== id + ''
+            }))
+            this.forwardSetting.writeToFile()
+            ctx.deleteMessage().then(res=>{
+                ctx.reply("移除成功")
+            })
+        })
 
         // 黑名单设置
         bot.action(VariableType.SETTING_BLACK_LIST, ctx => {
-            const listTypes = this.forwardSetting.getVariable(VariableType.SETTING_BLACK_LIST);
-            const page = 0;
-            this.generateNotionListButtons(listTypes, page, VariableType.SETTING_BLACK_LIST + '-').then(buttons => {
-                ctx.reply('黑名单列表点击移除', Markup.inlineKeyboard(buttons))
-            })
+            // 当前黑名单
+            ctx.reply('黑名单管理:', Markup.inlineKeyboard([
+                [Markup.button.callback(`添加黑名单`, 'listAdd-')],
+                [Markup.button.callback(`黑名单列表`, 'blackList-1')]
+            ]))
         });
 
+        // 黑名单列表
+        bot.action(/blackList-(\d+)/, ctx => {
+            const pageNum = parseInt(ctx.match[1]);
+            // 获取黑名单或者白名单的列表
+            const list = this.forwardSetting.getVariable(VariableType.SETTING_BLACK_LIST)
+            if (!list || list.length === 0){
+                ctx.reply("黑名单列表为空")
+                return
+            }
+            const page = new Page(list,pageNum,5)
+            const buttons = []
+            const pageList = page.getList(pageNum)
+            for (let pageListElement of pageList) {
+                buttons.push([Markup.button.callback(pageListElement.name, `blackListRemove-${pageListElement.id}`)])
+            }
+            buttons.push([Markup.button.callback('上一页', `blackList-${pageNum-1}`,!page.hasLast()),Markup.button.callback('下一页', `blackList-${pageNum+1}`,!page.hasNext())])
+            ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
+        })
+
+        // 黑名单移除
+        bot.action(/blackListRemove-(\d+)/, ctx => {
+            const id = parseInt(ctx.match[1]);
+            // 获取黑名单或者白名单的列表
+            const list = this.forwardSetting.getVariable(VariableType.SETTING_BLACK_LIST)
+            this.forwardSetting.setVariable(VariableType.SETTING_BLACK_LIST,list.filter(item=>{
+                return item.id !== id + ''
+            }))
+            this.forwardSetting.writeToFile()
+            ctx.deleteMessage().then(res=>{
+                ctx.reply("移除成功")
+            })
+        })
+
         let listAdd = false;
+
         // 黑白名单添加
         bot.action(/listAdd-/, ctx => {
             ctx.reply('输入完整群名').then(res => {
@@ -1045,7 +1112,7 @@ export class TelegramClient {
 
         const addList = Markup.button.callback('点我添加', 'listAdd-' + keyPrefix);
 
-        const nextButton = Markup.button.callback('获取更多', keyPrefix + (page + 1));
+        const nextButton = Markup.button.callback('获取列表', keyPrefix + (page + 1));
 
         buttons.push([addList])
 
