@@ -41,7 +41,28 @@ docker run -itd --env BOT_TOKEN="" --env PROXY_HOST="" --env PROXY_PORT="" --env
 ```
 
 ### Using in docker-compose
+create file `docker-compose.yml`:
+```yaml
+version: '3'
 
+services:
+  wechat2tg:
+    image: finalpi/wechat2tg:latest
+    container_name: wx2tg
+    volumes:
+      - ./config:/app/storage
+    environment:
+      - BOT_TOKEN=
+      # - PROXY_HOST=
+      # - PROXY_PORT=
+      # 代理类型:socks5,http,https
+      # - PROXY_PROTOCOL=socks5
+      # 用户名密码可选
+      # - PROXY_USERNAME=
+      # - PROXY_PASSWORD=
+    restart: unless-stopped
+
+```
 ```shell
 docker-compose up -d
 ```
