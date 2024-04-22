@@ -47,7 +47,7 @@ export class BotHelpText{
     static help = `
                             **欢迎使用本Bot**
                             
-本Bot基于Wechaty和wechat4u项目开发，需要注意可能会受到微信方面的警告或封号。
+本Bot基于Wechaty和wechat4u项目开发。
 
 1\\. 使用 /start 或 /login 命令来启动微信客户端实例，使用 /login 命令进行扫码登录。
 2\\. 使用 /user 命令可以返回所有联系人列表，或者指定某个联系人或昵称搜索。
@@ -56,6 +56,5 @@ export class BotHelpText{
 5\\. 在返回列表后，选择联系人后，当前发送的消息默认都会发送给所选择的联系人。
 6\\. 回复本Bot转发的群聊消息能直接转发到对应的群聊（暂时不支持回复回复的消息）。
 7\\. 本项目的目的仅是实现微信消息转发到Telegram的功能。
-8\\. 目前仍处于Demo状态，可能会有不稳定性，请谨慎使用。
 `;
 }

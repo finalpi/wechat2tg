@@ -8,11 +8,11 @@ services:
       - ./config:/app/config
     environment:
       - BOT_TOKEN=
-      - HOST=
-      - PORT=
-      # 代理种类
-      - PROTOCOL=socks5
+      # - PROXY_HOST=
+      # - PROXY_PORT=
+      # 代理类型:socks5,http,https
+      # - PROXY_PROTOCOL=socks5
       # 用户名密码可选
-      # - USERNAME=
-      # - PASSWORD=
+      # - PROXY_USERNAME=
+      # - PROXY_PASSWORD=
     restart: unless-stopped

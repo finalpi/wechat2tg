@@ -1,22 +1,15 @@
-# 微信消息转发到 Telegram
+# wechat2tg
 
-这个项目是基于 [wechaty](https://github.com/wechaty/wechaty) 实现的微信消息转发到 Telegram 机器人的项目,使用[puppet-wechat4u](https://github.com/wechaty/puppet-wechat4u)协议UOS实现,因此可以绕过微信web版某些账号无法登陆的问题。  
-![](https://s1.imagehub.cc/images/2023/06/30/imagea3d9cbc1eb0fa6c7.png)
+这个项目是基于 [wechaty](https://github.com/wechaty/wechaty) 实现的微信消息转发到 Telegram 机器人的项目,使用[puppet-wechat4u](https://github.com/wechaty/puppet-wechat4u)协议UOS实现,因此可以绕过微信web版某些账号无法登陆的问题。
 
 # 注意事项
 
 1. 本项目仅用于技术研究和学习，不得用于非法用途。
-2. 使用web协议的微信实现可能会被封号,请谨慎使用。
-3. 本项目还在开发中,并不稳定,可能会有很多问题,欢迎提交issue。
-
-## 本分支说明
-
-ts重写的简单转发机器人,增加部分功能,并且修复了一些问题.
+2. 欢迎将您遇到的问题提交到issue。
 
 ## TODO LIST
 
 - [] 好友请求接受
-- [] 黑白名单移除和分页
 - [] 发送位置
 - [] 接受位置消息
 - [] 公众号消息接收开关
@@ -49,10 +42,10 @@ ts重写的简单转发机器人,增加部分功能,并且修复了一些问题.
 
 ### docker中使用
 ```shell
-docker run -itd --env BOT_TOKEN="" --env HOST="" --env PORT="" --env USERNAME="" --env PASSWORD="" --env PROTOCOL="socks5" finalpi/wechat2tg:latest
+docker run -itd --env BOT_TOKEN="" --env PROXY_HOST="" --env PROXY_PORT="" --env PROXY_USERNAME="" --env PROXY_PASSWORD="" --env PROXY_PROTOCOL="socks5" finalpi/wechat2tg:latest
 ```
 
-### docker-compose
+### docker-compose中使用
 ```shell
 docker-compose up -d
 ```
@@ -65,17 +58,14 @@ docker-compose up -d
 
 使用代理转发telegram bot的请求,留空则不使用代理:
 ```
+# 代理配置(可选)
 # 协议socks5,http,https
-PROTOCOL=socks5
-HOST=
-PORT=
-USERNAME=
-PASSWORD=
+PROXY_PROTOCOL=socks5
+PROXY_HOST=
+PROXY_PORT=
+PROXY_USERNAME=
+PROXY_PASSWORD=
 ```
-
-## 声明
-
-本项目仅用于技术研究和学习，不得用于非法用途。
 
 ## License
 
