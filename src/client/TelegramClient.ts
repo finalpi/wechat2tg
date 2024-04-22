@@ -17,6 +17,7 @@ import {TalkerEntity} from "../models/TalkerCache";
 import {UniqueIdGenerator} from "../utils/IdUtils";
 import {MessageInterface} from "wechaty/dist/esm/src/mods/impls";
 import {Page} from "../models/Page";
+import {FileUtils} from "../utils/FileUtils";
 
 export class TelegramClient {
     get selectedMember(): SelectedEntity[] {
@@ -51,9 +52,9 @@ export class TelegramClient {
     // key this message id value weChat message id
     private _messageMap = new Map<number, string>();
     // 当前回复用户
-    private _currentSelectContact : ContactInterface | RoomInterface | undefined;
+    private _currentSelectContact: ContactInterface | RoomInterface | undefined;
     // 置顶消息
-    private pinnedMessageId : number | undefined
+    private pinnedMessageId: number | undefined
 
 
     constructor() {
@@ -115,20 +116,20 @@ export class TelegramClient {
         return this._currentSelectContact;
     }
 
-    public async setCurrentSelectContact(value:MessageInterface | undefined) {
-        if (value){
+    public async setCurrentSelectContact(value: MessageInterface | undefined) {
+        if (value) {
             const room = value.room()
             if (room) {
-                this.setPin('room',await room.topic())
+                this.setPin('room', await room.topic())
                 this.selectRoom = room
-            }else {
+            } else {
                 this._currentSelectContact = value.talker();
                 const talker = value.talker()
                 const alias = await talker.alias()
-                if (alias){
-                    this.setPin('user',alias)
-                }else {
-                    this.setPin('user',talker.name())
+                if (alias) {
+                    this.setPin('user', alias)
+                } else {
+                    this.setPin('user', talker.name())
                 }
             }
         }
@@ -175,7 +176,6 @@ export class TelegramClient {
 
         bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
 
-
         bot.start(async ctx => {
             ctx.reply(
                 '请输入 /login 登陆,或者输入 /help 查看帮助\n' +
@@ -189,7 +189,7 @@ export class TelegramClient {
             this._chatId = variables.chat_id
             // 找到置顶消息
             this.findPinMessage();
-            if (!this.wechatStartFlag){
+            if (!this.wechatStartFlag) {
                 this.wechatStartFlag = true
                 this._weChatClient.start().then(() => {
 
@@ -210,12 +210,9 @@ export class TelegramClient {
 
         bot.settings(ctx => {
 
-            ctx.reply('程序设置:', Markup.inlineKeyboard([
-                [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)})`, VariableType.SETTING_NOTION_MODE),],
-                [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)?'开启':'关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
-                [Markup.button.callback(`自动切换联系人(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
-                [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE?Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST):Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST)]
-            ]))
+            ctx.reply('程序设置:', {
+                reply_markup: this.getSettingButton()
+            })
         });
 
         // 好友请求处理
@@ -233,14 +230,8 @@ export class TelegramClient {
                 this.forwardSetting.setVariable(VariableType.SETTING_NOTION_MODE, NotionMode.BLACK)
             }
             // 点击后修改上面按钮
-            ctx.editMessageReplyMarkup({
-                inline_keyboard: [
-                    [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)})`, VariableType.SETTING_NOTION_MODE),],
-                    [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)?'开启':'关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
-                    [Markup.button.callback(`自动切换联系人(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
-                    [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE?Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST):Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST)]
-                ],
-            });
+            ctx.editMessageReplyMarkup(this.getSettingButton());
+
             // 点击后持久化
             this.forwardSetting.writeToFile()
         })
@@ -253,14 +244,8 @@ export class TelegramClient {
             // 修改后持成文件
             this.forwardSetting.writeToFile()
             // 点击后修改上面按钮
-            ctx.editMessageReplyMarkup({
-                inline_keyboard: [
-                    [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)})`, VariableType.SETTING_NOTION_MODE),],
-                    [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)?'开启':'关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
-                    [Markup.button.callback(`自动切换联系人(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
-                    [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE?Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST):Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST)]
-                ],
-            });
+            ctx.editMessageReplyMarkup(this.getSettingButton());
+
             return ctx.answerCbQuery(answerText)
         });
 
@@ -272,16 +257,21 @@ export class TelegramClient {
             // 修改后持成文件
             this.forwardSetting.writeToFile()
             // 点击后修改上面按钮
-            ctx.editMessageReplyMarkup({
-                inline_keyboard: [
-                    [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)})`, VariableType.SETTING_NOTION_MODE),],
-                    [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)?'开启':'关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
-                    [Markup.button.callback(`自动切换联系人(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)?'开启':'关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
-                    [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE?Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST):Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST)]
-                ],
-            });
+            ctx.editMessageReplyMarkup(this.getSettingButton());
             return ctx.answerCbQuery(answerText)
         });
+
+        // 接受公众号消息
+        bot.action(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT, ctx => {
+            const b = !this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT);
+            const answerText = b ? '开启' : '关闭';
+            this.forwardSetting.setVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT, b)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
+            // 点击后修改上面按钮
+            ctx.editMessageReplyMarkup(this.getSettingButton());
+            return ctx.answerCbQuery(answerText)
+        })
 
         // 白名单设置
         bot.action(VariableType.SETTING_WHITE_LIST, ctx => {
@@ -389,7 +379,7 @@ export class TelegramClient {
         // })
 
         bot.command('login', async ctx => {
-            if (!this.wechatStartFlag){
+            if (!this.wechatStartFlag) {
                 this.wechatStartFlag = true
                 this._weChatClient.start().then(() => {
 
@@ -465,7 +455,7 @@ export class TelegramClient {
             //     // 设置当前是在群聊
             //     this._flagPinMessageType = 'room';
             // })
-            this.setPin('room',await room?.topic())
+            this.setPin('room', await room?.topic())
         })
 
         bot.action(/room-next-\d+/, async (ctx) => {
@@ -534,7 +524,7 @@ export class TelegramClient {
         })
 
         bot.command('recent', async ctx => {
-            if (this.recentUsers.length == 0){
+            if (this.recentUsers.length == 0) {
                 ctx.reply('最近联系人为空')
                 return
             }
@@ -548,14 +538,14 @@ export class TelegramClient {
         })
 
         bot.action(/.*recent.*/, (ctx) => {
-            const data = this.recentUsers.find(item=>item.id === ctx.match.input)
-            if (data){
-                if (data.type === 0){
+            const data = this.recentUsers.find(item => item.id === ctx.match.input)
+            if (data) {
+                if (data.type === 0) {
                     this.selectRoom = data.talker;
-                }else {
+                } else {
                     this._currentSelectContact = data.talker;
                 }
-                this.setPin(data.type === 0?'room':'user',data.name)
+                this.setPin(data.type === 0 ? 'room' : 'user', data.name)
             }
             ctx.deleteMessage()
         });
@@ -576,19 +566,19 @@ export class TelegramClient {
             //     // 设置当前回复的是用户
             //     this._flagPinMessageType = 'user';
             // })
-            this.setPin('user',reply?reply:'')
+            this.setPin('user', reply ? reply : '')
         })
 
         // 发送消息 回复等...
         bot.on(message('text'), async ctx => {
             const text = ctx.message.text; // 获取消息内容
-            if (listAdd){
+            if (listAdd) {
                 // 黑白名单添加
                 listAdd = false
                 const roomList = await this._weChatClient.client.Room.findAll({topic: text})
                 if (roomList.length === 0) {
                     ctx.reply('未找到该群组,请检查群名称是否正确')
-                }else {
+                } else {
                     this.addToWhiteOrBlackList(text)
                     ctx.reply('添加成功')
                 }
@@ -673,16 +663,16 @@ export class TelegramClient {
                 const fileId = ctx.message.document.file_id;
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
                     const fileBox = FileBox.fromUrl(fileLink.toString());
-                    if (this._flagPinMessageType && this._flagPinMessageType === 'user'){
+                    if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
                         this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
                         const text = ctx.message.caption
-                        if(text) {
+                        if (text) {
                             this._currentSelectContact?.say(text).catch(() => ctx.reply('发送失败'));
                         }
                     } else {
                         this.selectRoom?.say(fileBox).catch(() => ctx.reply('发送失败'));
                         const text = ctx.message.caption
-                        if(text) {
+                        if (text) {
                             this.selectRoom?.say(text).catch(() => ctx.reply('发送失败'));
                         }
                     }
@@ -705,16 +695,16 @@ export class TelegramClient {
                     const fileBox = FileBox.fromUrl(fileLink.toString());
 
                     // Send the FileBox to the contact
-                    if (this._flagPinMessageType && this._flagPinMessageType === 'user'){
+                    if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
                         this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
                         const text = ctx.message.caption
-                        if(text) {
+                        if (text) {
                             this._currentSelectContact?.say(text)
                         }
                     } else {
                         this.selectRoom?.say(fileBox)
                         const text = ctx.message.caption
-                        if(text) {
+                        if (text) {
                             this.selectRoom?.say(text).catch(() => ctx.reply('发送失败'));
                         }
                     }
@@ -734,26 +724,34 @@ export class TelegramClient {
                     fs.mkdirSync("save-files");
                 }
                 const saveFile = `save-files/${uniqueId}`; // 不用后缀
+                const gifFile = `save-files/${uniqueId}.gif`;
 
-                FileBox.fromUrl(fileLink.toString()).toFile(saveFile).then(() => {
-                    const gifFile = `save-files/${uniqueId}.gif`;
-                    new ConverterHelper().webmToGif(saveFile, gifFile).then(() => {
+                // 保存后不删除下次发送使用
+
+                // 文件存在
+                if (fs.existsSync(saveFile)) {
+                    if (fs.existsSync(gifFile)) {
                         const fileBox = FileBox.fromFile(gifFile);
-                        if (this._flagPinMessageType && this._flagPinMessageType === 'user'){
-                            this._currentSelectContact?.say(fileBox).then(() => {
-                                fs.rmSync(gifFile);
-                                fs.rmSync(saveFile);
-                            }).catch(() => ctx.reply('发送失败'));
+                        if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
+                            this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
                         } else {
-                            this.selectRoom?.say(fileBox).then(() => {
-                                fs.rmSync(gifFile);
-                                fs.rmSync(saveFile);
-                            }).catch(() => ctx.reply('发送失败'));
+                            this.selectRoom?.say(fileBox).catch(() => ctx.reply('发送失败'));
                         }
-                        ctx.reply("发送成功!")
-                    }).catch(() => ctx.reply('发送失败'))
-                })
-
+                    } else { // 文件不存在转换
+                        this.sendGif(saveFile, gifFile, ctx);
+                    }
+                } else {
+                    // 尝试使用代理下载tg文件
+                    if (config.HOST !== '') {
+                        FileUtils.downloadWithProxy(fileLink.toString(), saveFile).then(() => {
+                            this.sendGif(saveFile, gifFile, ctx);
+                        }).catch(() => ctx.reply('发送失败, 原始文件保存失败'))
+                    } else {
+                        FileBox.fromUrl(fileLink.toString()).toFile(saveFile).then(() => {
+                            this.sendGif(saveFile, gifFile, ctx);
+                        }).catch(() => ctx.reply('发送失败, 原始文件保存失败'))
+                    }
+                }
             })
         })
 
@@ -773,8 +771,24 @@ export class TelegramClient {
             ctx => this.pageContacts(ctx, contactMap?.get(ContactImpl.Type.Corporation), corporationPage, currentSearchWord));
 
 
-        bot.launch();
+        bot.launch().then(() => {
+            console.log('Telegram Bot started')
+        }).catch((err) => {
+            console.error('Telegram Bot start failed', err)
+        });
 
+    }
+
+    private async sendGif(saveFile: string, gifFile: string, ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
+        new ConverterHelper().webmToGif(saveFile, gifFile).then(() => {
+            const fileBox = FileBox.fromFile(gifFile);
+            if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
+                this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
+            } else {
+                this.selectRoom?.say(fileBox).catch(() => ctx.reply('发送失败'));
+            }
+            ctx.reply("发送成功!")
+        }).catch(() => ctx.reply('发送失败'))
     }
 
     public onMessage() {
@@ -838,7 +852,6 @@ export class TelegramClient {
 
         ctx.reply('请选择联系人:', {
             ...Markup.inlineKeyboard(buttons),
-            // allow_sending_without_reply: true
         })
 
     }
@@ -1015,29 +1028,29 @@ export class TelegramClient {
         if (chatInfo.pinned_message) {
             this.pinnedMessageId = chatInfo.pinned_message.message_id;
             // 刚启动无回复用户
-            this._bot.telegram.editMessageText(this._chatId,this.pinnedMessageId,undefined,`当前无回复用户`).catch(e=>{
+            this._bot.telegram.editMessageText(this._chatId, this.pinnedMessageId, undefined, `当前无回复用户`).catch(e => {
                 // 无需处理
             })
         }
     }
 
-    private setPin(type: string,name: string|undefined){
+    private setPin(type: string, name: string | undefined) {
         // 判断是否是群组
         let str = ''
-        if (type === 'user'){
+        if (type === 'user') {
             str = `当前回复用户: ${name}`
-        }else {
+        } else {
             str = `当前回复群组:👥 ${name}`
         }
         this._flagPinMessageType = type;
-        if(this.pinnedMessageId) {
+        if (this.pinnedMessageId) {
             // 修改pin的内容
-            this._bot.telegram.editMessageText(this._chatId,this.pinnedMessageId,undefined,str).catch(e=>{
+            this._bot.telegram.editMessageText(this._chatId, this.pinnedMessageId, undefined, str).catch(e => {
                 // 名字相同不用管
             })
-        }else{
+        } else {
             // 发送消息并且pin
-            this._bot.telegram.sendMessage(this._chatId,str).then(msg=>{
+            this._bot.telegram.sendMessage(this._chatId, str).then(msg => {
                 this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
                 this.pinnedMessageId = msg.message_id
             })
@@ -1158,27 +1171,41 @@ export class TelegramClient {
     private addToWhiteOrBlackList(text: string) {
         if (this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK) {
             const blackList = this.forwardSetting.getVariable(VariableType.SETTING_BLACK_LIST);
-            const find = blackList.find(item=>item.name === text);
+            const find = blackList.find(item => item.name === text);
             // 计算id
             let id = 1
-            if (blackList.length > 0){
-                id = parseInt(blackList[blackList.length-1].id) + 1
+            if (blackList.length > 0) {
+                id = parseInt(blackList[blackList.length - 1].id) + 1
             }
-            if (!find){
+            if (!find) {
                 blackList.push({id: id + '', name: text})
             }
-        }else {
+        } else {
             const whiteList = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST);
-            const find = whiteList.find(item=>item.name === text);
+            const find = whiteList.find(item => item.name === text);
             // 计算id
             let id = 1
-            if (whiteList.length > 0){
-                id = parseInt(whiteList[whiteList.length-1].id) + 1
+            if (whiteList.length > 0) {
+                id = parseInt(whiteList[whiteList.length - 1].id) + 1
             }
-            if (!find){
+            if (!find) {
                 whiteList.push({id: id + '', name: text})
             }
         }
         this.forwardSetting.writeToFile()
+    }
+
+    private getSettingButton() {
+        return {
+            inline_keyboard: [
+                [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)})`, VariableType.SETTING_NOTION_MODE),],
+                [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS) ? '开启' : '关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
+                [Markup.button.callback(`自动切换联系人(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH) ? '开启' : '关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
+                [Markup.button.callback(`接受公众号消息(${this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) ? '开启' : '关闭'})`, VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT),],
+                [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE ?
+                    Markup.button.callback('白名单', VariableType.SETTING_WHITE_LIST) :
+                    Markup.button.callback('黑名单', VariableType.SETTING_BLACK_LIST)]
+            ],
+        }
     }
 }

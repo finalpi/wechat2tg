@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y ca-certificates fonts-liberation libaso
                                          libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 \
                                          libxrender1 libxss1 libxtst6 lsb-release wget xdg-utils
 RUN mkdir -p /app/storage
+RUN mkdir -p /app/save-files
 
 WORKDIR /app
 COPY package*.json ./

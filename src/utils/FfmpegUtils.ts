@@ -20,9 +20,11 @@ export class ConverterHelper {
                 .format('gif')
                 .saveToFile(outputFile)
                 .on('end', () => {
+                    console.log('file has been converted successfully')
                     resolve();
                 })
                 .on('error', (error: Error) => {
+                    console.error('an error happened: ' + error.message);
                     reject(error);
                 });
         });
