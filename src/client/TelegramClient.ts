@@ -264,7 +264,7 @@ export class TelegramClient {
         // 接受公众号消息
         bot.action(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT, ctx => {
             const b = !this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT);
-            const answerText = b ? '开启' : '关闭';
+            const answerText = b ? '关闭' : '开启';
             this.forwardSetting.setVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT, b)
             // 修改后持成文件
             this.forwardSetting.writeToFile()
@@ -287,17 +287,17 @@ export class TelegramClient {
             const pageNum = parseInt(ctx.match[1]);
             // 获取黑名单或者白名单的列表
             const list = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST)
-            if (!list || list.length === 0){
+            if (!list || list.length === 0) {
                 ctx.reply("白名单列表为空")
                 return
             }
-            const page = new Page(list,pageNum,5)
+            const page = new Page(list, pageNum, 5)
             const buttons = []
             const pageList = page.getList(pageNum)
-            for (let pageListElement of pageList) {
+            for (const pageListElement of pageList) {
                 buttons.push([Markup.button.callback(pageListElement.name, `whiteListRemove-${pageListElement.id}`)])
             }
-            buttons.push([Markup.button.callback('上一页', `whiteList-${pageNum-1}`,!page.hasLast()),Markup.button.callback('下一页', `whiteList-${pageNum+1}`,!page.hasNext())])
+            buttons.push([Markup.button.callback('上一页', `whiteList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `whiteList-${pageNum + 1}`, !page.hasNext())])
             ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
         })
 
@@ -306,11 +306,11 @@ export class TelegramClient {
             const id = parseInt(ctx.match[1]);
             // 获取黑名单或者白名单的列表
             const list = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST)
-            this.forwardSetting.setVariable(VariableType.SETTING_WHITE_LIST,list.filter(item=>{
+            this.forwardSetting.setVariable(VariableType.SETTING_WHITE_LIST, list.filter(item => {
                 return item.id !== id + ''
             }))
             this.forwardSetting.writeToFile()
-            ctx.deleteMessage().then(res=>{
+            ctx.deleteMessage().then(res => {
                 ctx.reply("移除成功")
             })
         })
@@ -329,17 +329,17 @@ export class TelegramClient {
             const pageNum = parseInt(ctx.match[1]);
             // 获取黑名单或者白名单的列表
             const list = this.forwardSetting.getVariable(VariableType.SETTING_BLACK_LIST)
-            if (!list || list.length === 0){
+            if (!list || list.length === 0) {
                 ctx.reply("黑名单列表为空")
                 return
             }
-            const page = new Page(list,pageNum,5)
+            const page = new Page(list, pageNum, 5)
             const buttons = []
             const pageList = page.getList(pageNum)
-            for (let pageListElement of pageList) {
+            for (const pageListElement of pageList) {
                 buttons.push([Markup.button.callback(pageListElement.name, `blackListRemove-${pageListElement.id}`)])
             }
-            buttons.push([Markup.button.callback('上一页', `blackList-${pageNum-1}`,!page.hasLast()),Markup.button.callback('下一页', `blackList-${pageNum+1}`,!page.hasNext())])
+            buttons.push([Markup.button.callback('上一页', `blackList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `blackList-${pageNum + 1}`, !page.hasNext())])
             ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
         })
 
@@ -348,11 +348,11 @@ export class TelegramClient {
             const id = parseInt(ctx.match[1]);
             // 获取黑名单或者白名单的列表
             const list = this.forwardSetting.getVariable(VariableType.SETTING_BLACK_LIST)
-            this.forwardSetting.setVariable(VariableType.SETTING_BLACK_LIST,list.filter(item=>{
+            this.forwardSetting.setVariable(VariableType.SETTING_BLACK_LIST, list.filter(item => {
                 return item.id !== id + ''
             }))
             this.forwardSetting.writeToFile()
-            ctx.deleteMessage().then(res=>{
+            ctx.deleteMessage().then(res => {
                 ctx.reply("移除成功")
             })
         })
@@ -911,12 +911,14 @@ export class TelegramClient {
             buttons.push(row);
         }
         // console.warn('buttons', buttons)
-        if (start == 0 && buttons.length != 0) {
+        if (buttons.length != 0) {
+        if (start == 0) {
             buttons.push([nextButton])
         } else if (end < source.length) {
             buttons.push([pervButton, nextButton])
         } else {
             buttons.push([pervButton])
+        }
         }
         return buttons;
     }
@@ -1096,12 +1098,14 @@ export class TelegramClient {
         const nextButton = Markup.button.callback('下一页', 'room-next-' + (page + 1));
         const prevButton = Markup.button.callback('上一页', 'room-next-' + (page - 1));
 
-        if (page === 0 && buttons.length !== 0) {
-            buttons.push([nextButton]);
-        } else if (nextIndex < rooms.length) {
-            buttons.push([prevButton, nextButton]);
-        } else {
-            buttons.push([prevButton]);
+        if (buttons.length !== 0) {
+            if (page === 0) {
+                buttons.push([nextButton]);
+            } else if (nextIndex < rooms.length) {
+                buttons.push([prevButton, nextButton]);
+            } else {
+                buttons.push([prevButton]);
+            }
         }
 
         return buttons;
@@ -1201,7 +1205,7 @@ export class TelegramClient {
                 [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE)})`, VariableType.SETTING_NOTION_MODE),],
                 [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS) ? '开启' : '关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
                 [Markup.button.callback(`自动切换联系人(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH) ? '开启' : '关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
-                [Markup.button.callback(`接受公众号消息(${this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) ? '开启' : '关闭'})`, VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT),],
+                [Markup.button.callback(`接受公众号消息(${this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) ? '关闭' : '开启'})`, VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT),],
                 [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE ?
                     Markup.button.callback('白名单群组', VariableType.SETTING_WHITE_LIST) :
                     Markup.button.callback('黑名单群组', VariableType.SETTING_BLACK_LIST)]

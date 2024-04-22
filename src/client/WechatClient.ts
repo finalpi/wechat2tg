@@ -17,6 +17,7 @@ import {SimpleMessage} from "../models/Message";
 import {TalkerEntity} from "../models/TalkerCache";
 import {UniqueIdGenerator} from "../utils/IdUtils"
 import {NotionMode, VariableType} from "../models/Settings";
+import {FmtString} from "telegraf/format";
 
 // import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
 
@@ -291,7 +292,11 @@ export class WeChatClient {
 
         const alias = await talker.alias();
         const showSender: string = alias ? `[${alias}] ${talker.name()}` : talker.name();
-        const identityStr = roomEntity ? '👥' + await roomEntity.topic() + '----' + showSender + ':' : showSender + ':'
+
+        const topic = await roomEntity?.topic();
+        // todo: 优化
+        // const mediaCaption=
+        const identityStr = roomEntity ? `${topic} --- ${showSender} : ` : `${showSender} : `;
         const sendMessageBody: SimpleMessage = {
             sender: showSender,
             body: '收到一条 未知消息类型',
@@ -343,7 +348,9 @@ export class WeChatClient {
 
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendDocument(
-                            tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
+                            tgClient.chatId, {source: buff, filename: fileName}, {
+                                caption: identityStr
+                            })
                     })
                 })
                 break;
