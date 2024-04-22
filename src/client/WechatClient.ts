@@ -184,8 +184,8 @@ export class WeChatClient {
     private login() {
         if (this._client.isLoggedIn) {
             this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登录成功!')
-            if (this.scanMsgId){
-                this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId,this.scanMsgId)
+            if (this.scanMsgId) {
+                this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId, this.scanMsgId)
                 this.scanMsgId = undefined
             }
         } else {
@@ -207,11 +207,11 @@ export class WeChatClient {
             // console.log('chat id is : {}', this._tgClient.chatId)
             // if (!this._started) {
             QRCode.toBuffer(qrcode).then(buff =>
-                tgBot.telegram.sendPhoto(this._tgClient.chatId, {source: buff}, {caption: '请扫码登陆:'})).then(msg=> {
-                    if (this.scanMsgId) {
-                        tgBot.telegram.deleteMessage(this._tgClient.chatId,this.scanMsgId)
-                    }
-                    this.scanMsgId = msg.message_id
+                tgBot.telegram.sendPhoto(this._tgClient.chatId, {source: buff}, {caption: '请扫码登陆:'})).then(msg => {
+                if (this.scanMsgId) {
+                    tgBot.telegram.deleteMessage(this._tgClient.chatId, this.scanMsgId)
+                }
+                this.scanMsgId = msg.message_id
             })
             // }
 
@@ -225,47 +225,52 @@ export class WeChatClient {
         if (message.self()) {
             return
         }
+        // 过滤公众号消息
+        if (this._tgClient.setting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) &&
+            message.from()?.type() === PUPPET.types.Contact.Official) {
+            return
+        }
         // 添加用户至最近联系人
-        const roomEntity = await message.room()
+        const [roomEntity] = await Promise.all([message.room()])
         const talker = message.talker();
         const roomTopic = await roomEntity?.topic() || '';
         // 黑白名单过滤
-        if (roomEntity){
-            const blackFind = this._tgClient.setting.getVariable(VariableType.SETTING_BLACK_LIST).find(item=>item.name === roomTopic);
-            const whiteFind = this._tgClient.setting.getVariable(VariableType.SETTING_WHITE_LIST).find(item=>item.name === roomTopic);
-            if (this._tgClient.setting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK){
-                if (blackFind){
+        if (roomEntity) {
+            const blackFind = this._tgClient.setting.getVariable(VariableType.SETTING_BLACK_LIST).find(item => item.name === roomTopic);
+            const whiteFind = this._tgClient.setting.getVariable(VariableType.SETTING_WHITE_LIST).find(item => item.name === roomTopic);
+            if (this._tgClient.setting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK) {
+                if (blackFind) {
                     return
                 }
-            }else {
-                if (!whiteFind && !await message.mentionSelf()){
+            } else {
+                if (!whiteFind && !await message.mentionSelf()) {
                     return
                 }
             }
         }
         // 自动设置回复人
         const type = talker.type()
-        if (this._tgClient.setting && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_SWITCH) && type === PUPPET.types.Contact.Individual){
+        if (this._tgClient.setting && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_SWITCH) && type === PUPPET.types.Contact.Individual) {
             this._tgClient.setCurrentSelectContact(message);
         }
 
         const recentUsers = this._tgClient.recentUsers
         // 如果不存在该联系人
-        const recentUser = recentUsers.find(item=> (roomEntity && roomEntity.id) === item.talker?.id || (!roomEntity && talker.id === item.talker?.id))
-        if (!recentUser){
+        const recentUser = recentUsers.find(item => (roomEntity && roomEntity.id) === item.talker?.id || (!roomEntity && talker.id === item.talker?.id))
+        if (!recentUser) {
             // 如果最近联系人数量大于5,则移除掉多余的联系人
-            if (recentUsers.length >= 5){
+            if (recentUsers.length >= 5) {
                 recentUsers.pop()
             }
             const idInstance = UniqueIdGenerator.getInstance();
             if (roomEntity) {
                 // 房间
-                recentUsers.unshift(new TalkerEntity(roomTopic,0,idInstance.generateId("recent"),roomEntity))
-            }else {
+                recentUsers.unshift(new TalkerEntity(roomTopic, 0, idInstance.generateId("recent"), roomEntity))
+            } else {
                 // 个人
-                recentUsers.unshift(new TalkerEntity(talker.name(),1,idInstance.generateId("recent"),talker))
+                recentUsers.unshift(new TalkerEntity(talker.name(), 1, idInstance.generateId("recent"), talker))
             }
-        }else {
+        } else {
             // 找到元素在数组中的索引
             const index = recentUsers.indexOf(recentUser);
 
@@ -286,7 +291,7 @@ export class WeChatClient {
 
         const alias = await talker.alias();
         const showSender: string = alias ? `[${alias}] ${talker.name()}` : talker.name();
-        const identityStr = roomEntity? '👥' + await roomEntity.topic() + '----' + showSender + ':':showSender + ':'
+        const identityStr = roomEntity ? '👥' + await roomEntity.topic() + '----' + showSender + ':' : showSender + ':'
         const sendMessageBody: SimpleMessage = {
             sender: showSender,
             body: '收到一条 未知消息类型',
@@ -338,7 +343,7 @@ export class WeChatClient {
 
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendDocument(
-                            tgClient.chatId, {source: buff, filename: fileName},{caption: identityStr})
+                            tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
                     })
                 })
                 break;
@@ -351,7 +356,7 @@ export class WeChatClient {
 
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendPhoto(
-                            tgClient.chatId, {source: buff, filename: fileName},{caption: identityStr})
+                            tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
                     })
                 })
                 break;
@@ -363,12 +368,15 @@ export class WeChatClient {
                         let fileName = fBox.name;
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendVoice(
-                            tgClient.chatId, {source: buff, filename: fileName},{caption: identityStr}).catch(res=>{
+                            tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).catch(res => {
                             if (fileName.endsWith('.sil')) {
                                 fileName = fileName.replace('.sil', '.mp3')
                             }
-                                // 如果用户不接收语音则发送文件
-                            tgClient.bot.telegram.sendDocument(tgClient.chatId, {source: buff, filename: fileName},{caption: identityStr})
+                            // 如果用户不接收语音则发送文件
+                            tgClient.bot.telegram.sendDocument(tgClient.chatId, {
+                                source: buff,
+                                filename: fileName
+                            }, {caption: identityStr})
                         })
                     })
                 })
@@ -382,7 +390,7 @@ export class WeChatClient {
 
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendVideo(
-                            tgClient.chatId, {source: buff, filename: fileName},{caption: identityStr})
+                            tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
                     })
                 })
                 break;

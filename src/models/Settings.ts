@@ -9,14 +9,16 @@ export class VariableContainer {
         [VariableType.SETTING_BLACK_LIST]: NotionListType [],
         [VariableType.SETTING_REPLY_SUCCESS]: boolean,
         [VariableType.SETTING_AUTO_SWITCH]: boolean,
-        [VariableType.SETTING_CHAT_ID]: string
+        [VariableType.SETTING_CHAT_ID]: string,
+        [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: boolean,
     } = {
         [VariableType.SETTING_NOTION_MODE]: NotionMode.BLACK,
         [VariableType.SETTING_WHITE_LIST]: [],
         [VariableType.SETTING_BLACK_LIST]: [],
         [VariableType.SETTING_REPLY_SUCCESS]: false,
         [VariableType.SETTING_AUTO_SWITCH]: true,
-        [VariableType.SETTING_CHAT_ID]: ''
+        [VariableType.SETTING_CHAT_ID]: '',
+        [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: false,
     };
 
     setVariable<T extends VariableType>(key: T, value: VariableMap[T]) {
@@ -77,6 +79,8 @@ export enum VariableType {
     SETTING_AUTO_SWITCH = 'Setting_Auto_Switch',
     // tg的chatID
     SETTING_CHAT_ID = 'chat_id',
+    // 接受公众号消息
+    SETTING_ACCEPT_OFFICIAL_ACCOUNT = 'Setting_Accept_Official_Account',
 }
 
 export enum NotionMode {
@@ -91,7 +95,8 @@ type VariableMap = {
     [VariableType.SETTING_BLACK_LIST]: NotionListType [],
     [VariableType.SETTING_REPLY_SUCCESS]: boolean,
     [VariableType.SETTING_AUTO_SWITCH]: boolean,
-    [VariableType.SETTING_CHAT_ID]: string
+    [VariableType.SETTING_CHAT_ID]: string,
+    [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: boolean,
 };
 
 export class GroupListSave {
