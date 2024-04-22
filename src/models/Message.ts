@@ -24,8 +24,16 @@ export class SimpleMessageSender implements MessageSender {
             const title = simpleMessage.room === ''
                 ? `<b>${simpleMessage.sender}: </b> \n` :
                 `<b>👥 ${simpleMessage.room} ---- ${simpleMessage.sender}: </b> \n`;
-            return `${title}${simpleMessage.body}`;
+            return `${title}${this.escapeHTML(typeof simpleMessage.body === "string" ? simpleMessage.body :'')}`;
         }
+    }
+
+    private escapeHTML(str:string) {
+        return str.replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     static send(simpleMessage: SimpleMessage) {
