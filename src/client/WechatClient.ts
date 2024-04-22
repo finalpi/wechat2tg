@@ -59,7 +59,7 @@ export class WeChatClient {
 
     constructor(private readonly tgClient: TelegramClient) {
         this._client = WechatyBuilder.build({
-            name: 'wechat_bot',
+            name: './storage/wechat_bot',
             puppet: 'wechaty-puppet-wechat4u',
             puppetOptions: {
                 uos: true
@@ -407,6 +407,13 @@ export class WeChatClient {
                 break;
             }
             case PUPPET.types.Message.Emoticon: // 处理表情消息的逻辑
+                this._tgClient.sendMessage({
+                    sender: showSender,
+                    body: "[动画表情]",
+                    room: roomTopic,
+                    id: message.id
+                })
+                break;
             case PUPPET.types.Message.Location: // 处理位置消息的逻辑
             case PUPPET.types.Message.MiniProgram: // 处理小程序消息的逻辑
             case PUPPET.types.Message.RedEnvelope: // 处理红包消息的逻辑 12
