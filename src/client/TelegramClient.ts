@@ -753,14 +753,14 @@ export class TelegramClient {
         const corporationPage = 0;
         // const contactMap = this._weChatClient.contactMap;
 
-        bot.action('UNKNOWN',
-            ctx => this.pageContacts(ctx, contactMap?.get(0), unknownPage, currentSearchWord));
+        // bot.action('UNKNOWN',
+        //     ctx => this.pageContacts(ctx, contactMap?.get(0), unknownPage, currentSearchWord));
         bot.action('INDIVIDUAL',
-            ctx => this.pageContacts(ctx, contactMap?.get(ContactImpl.Type.Individual), individualPage, currentSearchWord));
+            ctx => this.pageContacts(ctx, this._weChatClient.contactMap?.get(ContactImpl.Type.Individual), individualPage, currentSearchWord));
         bot.action('OFFICIAL',
-            ctx => this.pageContacts(ctx, contactMap?.get(ContactImpl.Type.Official), officialPage, currentSearchWord));
-        bot.action('CORPORATION',
-            ctx => this.pageContacts(ctx, contactMap?.get(ContactImpl.Type.Corporation), corporationPage, currentSearchWord));
+            ctx => this.pageContacts(ctx, this._weChatClient.contactMap?.get(ContactImpl.Type.Official), officialPage, currentSearchWord));
+        // bot.action('CORPORATION',
+        //     ctx => this.pageContacts(ctx, contactMap?.get(ContactImpl.Type.Corporation), corporationPage, currentSearchWord));
 
 
         bot.launch().then(() => {
@@ -927,9 +927,7 @@ export class TelegramClient {
                 [ContactImpl.Type.Official, []],
                 [ContactImpl.Type.Corporation, []]
             ]);
-
             const contactList = await weChatClient.Contact.findAll();
-
             // 不知道是什么很多空的 过滤掉没名字和不是朋友的
             const filter = contactList.filter(it => it.name() && it.friend());
 
