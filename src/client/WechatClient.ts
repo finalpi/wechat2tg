@@ -422,8 +422,8 @@ export class WeChatClient {
             case PUPPET.types.Message.RedEnvelope: // 处理红包消息的逻辑 12
             case PUPPET.types.Message.Url: // 处理链接消息的逻辑
             case PUPPET.types.Message.Post: // 处理帖子消息的逻辑
-                sendMessageBody.body = `收到一条暂不支持的消息类型: ${messageType}`
-                this._tgClient.sendMessage(sendMessageBody)
+                // sendMessageBody.body = `收到一条暂不支持的消息类型: ${messageType}`
+                // this._tgClient.sendMessage(sendMessageBody)
                 break;
             case PUPPET.types.Message.Transfer: // 处理转账消息的逻辑 11
                 sendMessageBody.body = '收到一条转账消息'
