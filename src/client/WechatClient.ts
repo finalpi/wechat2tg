@@ -238,7 +238,7 @@ export class WeChatClient {
         // 添加用户至最近联系人
         const [roomEntity] = await Promise.all([message.room()])
         const talker = message.talker();
-        if (!talker.isReady()){
+        while (!talker.isReady()){
             await talker.sync()
         }
         const roomTopic = await roomEntity?.topic() || '';
