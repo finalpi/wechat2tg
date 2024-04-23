@@ -646,6 +646,56 @@ export class TelegramClient {
             return;
         })
 
+        bot.on(message('audio'),ctx => {
+            if (ctx.message.audio) {
+                const fileId = ctx.message.audio.file_id;
+                ctx.telegram.getFileLink(fileId).then(fileLink => {
+                    const fileBox = FileBox.fromUrl(fileLink.toString(),ctx.message.audio.file_name);
+                    if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
+                        this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                        const text = ctx.message.caption
+                        if (text) {
+                            this._currentSelectContact?.say(text).catch(() => ctx.reply('发送失败'));
+                        }
+                    } else {
+                        this.selectRoom?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                        const text = ctx.message.caption
+                        if (text) {
+                            this.selectRoom?.say(text).catch(() => ctx.reply('发送失败'));
+                        }
+                    }
+                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                        ctx.reply("发送成功!")
+                    }
+                })
+            }
+        })
+
+        bot.on(message('video'),ctx => {
+            if (ctx.message.video) {
+                const fileId = ctx.message.video.file_id;
+                ctx.telegram.getFileLink(fileId).then(fileLink => {
+                    const fileBox = FileBox.fromUrl(fileLink.toString(),ctx.message.video.file_name);
+                    if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
+                        this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                        const text = ctx.message.caption
+                        if (text) {
+                            this._currentSelectContact?.say(text).catch(() => ctx.reply('发送失败'));
+                        }
+                    } else {
+                        this.selectRoom?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                        const text = ctx.message.caption
+                        if (text) {
+                            this.selectRoom?.say(text).catch(() => ctx.reply('发送失败'));
+                        }
+                    }
+                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                        ctx.reply("发送成功!")
+                    }
+                })
+            }
+        })
+
         bot.on(message('document'), ctx => {
             // 转发文件 没有压缩的图片也是文件
 
@@ -654,7 +704,7 @@ export class TelegramClient {
             if (ctx.message.document) {
                 const fileId = ctx.message.document.file_id;
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
-                    const fileBox = FileBox.fromUrl(fileLink.toString());
+                    const fileBox = FileBox.fromUrl(fileLink.toString(),ctx.message.document.file_name);
                     if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
                         this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
                         const text = ctx.message.caption
