@@ -83,12 +83,12 @@ export class WeChatClient {
             }
         })
         this._tgClient = tgClient;
-        // this._contactMap = new Map<number, Set<ContactInterface>>([
-        //     [0, new Set<ContactInterface>()],
-        //     [1, []],
-        //     [2, []],
-        //     [3, []]
-        // ]);
+        this._contactMap = new Map<number, Set<ContactInterface>>([
+            [0, new Set<ContactInterface>()],
+            [1, new Set<ContactInterface>()],
+            [2, new Set<ContactInterface>()],
+            [3, new Set<ContactInterface>()]
+        ]);
 
         this.scan = this.scan.bind(this);
         this.message = this.message.bind(this);
