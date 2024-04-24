@@ -2,7 +2,6 @@ import {Context, Markup, NarrowedContext, Telegraf} from 'telegraf';
 import {WeChatClient} from "./WechatClient";
 import {config} from "../config";
 import {BotHelpText, SimpleMessage, SimpleMessageSender} from "../models/Message"
-import {ContactImpl, ContactInterface, RoomInterface} from 'wechaty/impls';
 import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from "https-proxy-agent";
 import * as tg from "telegraf/src/core/types/typegram";
@@ -15,9 +14,9 @@ import {ConverterHelper} from "../utils/FfmpegUtils";
 import {MemberCacheType, SelectedEntity} from "../models/TgCache";
 import {TalkerEntity} from "../models/TalkerCache";
 import {UniqueIdGenerator} from "../utils/IdUtils";
-import {MessageInterface} from "wechaty/dist/esm/src/mods/impls";
 import {Page} from "../models/Page";
 import {FileUtils} from "../utils/FileUtils";
+import {ContactImpl, ContactInterface, MessageInterface, RoomInterface} from "wechaty/impls";
 
 export class TelegramClient {
     get selectedMember(): SelectedEntity[] {
@@ -422,10 +421,14 @@ export class TelegramClient {
         let searchRooms: RoomInterface [] = [];
 
         bot.command('room', async ctx => {
-            if (!this.allContactCommandExecuted) {
-                await ctx.reply('请等待用户列表加载完成...');
-                return
+            // if (!this.allContactCommandExecuted) {
+            //     await ctx.reply('请等待用户列表加载完成...');
+            //     return
+            // }
+            if (!this._weChatClient.cacheMemberDone) {
+                ctx.reply('正在加载联系人列表,现在返回的数据可能不完整')
             }
+
             const topic = ctx.message.text.split(' ')[1];
             const query = topic ? {topic: topic} : {};
             this._weChatClient.client.Room.findAll(query).then(async rooms => {
@@ -470,7 +473,7 @@ export class TelegramClient {
             ctx.answerCbQuery()
         })
 
-        let contactMap = this._weChatClient.contactMap;
+        // let contactMap = this._weChatClient.contactMap;
 
         let currentSearchWord = '';
 
@@ -487,24 +490,28 @@ export class TelegramClient {
                 return;
             }
 
-            // 没有执行完成
-            if (!this.allContactCommandExecuted) {
-                await ctx.reply('正在加载用户列表, 请等待5秒...');
-                contactMap = await this.setAllMemberCache()
-                setTimeout(() => {
-                    if (this.allContactCommandExecuted) {
-                        const inlineKeyboard = Markup.inlineKeyboard([
-                            // Markup.button.callback('未知', 'UNKNOWN'),
-                            Markup.button.callback('个人', 'INDIVIDUAL'),
-                            Markup.button.callback('公众号', 'OFFICIAL')
-                            // Markup.button.callback('公司', 'CORPORATION')
-                        ]);
-                        // Send message with inline keyboard
-                        ctx.reply('请选择类型：', inlineKeyboard);
-                    }
-                }, 5000)
-                return;
+            if (!this._weChatClient.cacheMemberDone) {
+                ctx.reply('正在加载联系人列表,现在返回的数据可能不完整')
             }
+
+            // 没有执行完成
+            // if (!this.allContactCommandExecuted) {
+            //     await ctx.reply('正在加载用户列表, 请等待5秒...');
+            //     contactMap = await this.setAllMemberCache()
+            //     setTimeout(() => {
+            //         if (this.allContactCommandExecuted) {
+            //             const inlineKeyboard = Markup.inlineKeyboard([
+            //                 // Markup.button.callback('未知', 'UNKNOWN'),
+            //                 Markup.button.callback('个人', 'INDIVIDUAL'),
+            //                 Markup.button.callback('公众号', 'OFFICIAL')
+            //                 // Markup.button.callback('公司', 'CORPORATION')
+            //             ]);
+            //             // Send message with inline keyboard
+            //             ctx.reply('请选择类型：', inlineKeyboard);
+            //         }
+            //     }, 5000)
+            //     return;
+            // }
 
             if (ctx.message.text) {
                 currentSearchWord = ctx.message.text.split(' ')[1];
@@ -871,16 +878,21 @@ export class TelegramClient {
         return this.bot.telegram.sendMessage(this._chatId, SimpleMessageSender.send(message), {
             parse_mode: 'HTML'
         }).then(res => {
-            this.messageMap.set(res.message_id, message.id);
+            if (message.id) {
+                this.messageMap.set(res.message_id, message.id);
+            }
         });
     }
 
     private async pageContacts(ctx: NarrowedContext<Context<tg.Update>, tg.Update>, source: ContactInterface[] | undefined, pageNumber: number, currentSearchWord: string) {
 
-        if (!this.allContactCommandExecuted) {
-            await ctx.sendMessage('请等待用户列表加载完成...');
-            return
-        }
+        // if (!this.allContactCommandExecuted) {
+        //     await ctx.sendMessage('请等待用户列表加载完成...');
+        //     return
+        // }
+        // if (!this._weChatClient.cacheMemberDone) {
+        //     ctx.reply('正在加载联系人列表,现在返回的数据可能不完整')
+        // }
 
         if (!source) {
             await ctx.reply('没有联系人');
@@ -985,63 +997,68 @@ export class TelegramClient {
             buttons.push(row);
         }
         // console.warn('buttons', buttons)
-        if (buttons.length != 0) {
-        if (start == 0) {
-            buttons.push([nextButton])
-        } else if (end < source.length) {
-            buttons.push([pervButton, nextButton])
-        } else {
-            buttons.push([pervButton])
+
+        if (buttons.length > 0) {
+            if (page > 0 && end < source.length) {
+                buttons.push([pervButton, nextButton]);
+            } else {
+                if (page > 0) {
+                    buttons.push([pervButton]);
+                }
+                if (end < source.length) {
+                    buttons.push([nextButton]);
+                }
+            }
         }
-        }
+
         return buttons;
     }
 
-    public async setAllMemberCache(): Promise<Map<number, ContactInterface[]> | undefined> {
-        const weChatClient = this._weChatClient.client
-        if (weChatClient && weChatClient.isLoggedIn) {
-
-            const res = new Map<number, ContactInterface[]>([
-                [ContactImpl.Type.Unknown, []],
-                [ContactImpl.Type.Individual, []],
-                [ContactImpl.Type.Official, []],
-                [ContactImpl.Type.Corporation, []]
-            ]);
-            const contactList = await weChatClient.Contact.findAll();
-            // 不知道是什么很多空的 过滤掉没名字和不是朋友的
-            const filter = contactList.filter(it => it.name() && it.friend());
-
-            filter.forEach(it => {
-                const type = it.type();
-                switch (type) {
-                    case ContactImpl.Type.Unknown:
-                        res.get(ContactImpl.Type.Unknown)?.push(it);
-                        break;
-                    case ContactImpl.Type.Individual:
-                        res.get(ContactImpl.Type.Individual)?.push(it);
-                        break;
-                    case ContactImpl.Type.Official:
-                        res.get(ContactImpl.Type.Official)?.push(it);
-                        break;
-                    case ContactImpl.Type.Corporation:
-                        res.get(ContactImpl.Type.Corporation)?.push(it);
-                        break;
-                }
-            });
-
-            // 缓存到客户端的实例
-            this._weChatClient.contactMap = res;
-            // 一起获取群放到缓存
-            this._weChatClient.roomList = await weChatClient.Room.findAll()
-            // console.log('通讯录', res);
-            // fs.writeFileSync('contact.json', JSON.stringify(Object.fromEntries(res)));
-            // set flag
-            this.allContactCommandExecuted = true;
-
-            return res || new Map<number, ContactInterface[]>();
-
-        }
-    }
+    // public async setAllMemberCache(): Promise<Map<number, ContactInterface[]> | undefined> {
+    //     const weChatClient = this._weChatClient.client
+    //     if (weChatClient && weChatClient.isLoggedIn) {
+    //
+    //         const res = new Map<number, ContactInterface[]>([
+    //             [ContactImpl.Type.Unknown, []],
+    //             [ContactImpl.Type.Individual, []],
+    //             [ContactImpl.Type.Official, []],
+    //             [ContactImpl.Type.Corporation, []]
+    //         ]);
+    //         const contactList = await weChatClient.Contact.findAll();
+    //         // 不知道是什么很多空的 过滤掉没名字和不是朋友的
+    //         const filter = contactList.filter(it => it.name() && it.friend());
+    //
+    //         filter.forEach(it => {
+    //             const type = it.type();
+    //             switch (type) {
+    //                 case ContactImpl.Type.Unknown:
+    //                     res.get(ContactImpl.Type.Unknown)?.push(it);
+    //                     break;
+    //                 case ContactImpl.Type.Individual:
+    //                     res.get(ContactImpl.Type.Individual)?.push(it);
+    //                     break;
+    //                 case ContactImpl.Type.Official:
+    //                     res.get(ContactImpl.Type.Official)?.push(it);
+    //                     break;
+    //                 case ContactImpl.Type.Corporation:
+    //                     res.get(ContactImpl.Type.Corporation)?.push(it);
+    //                     break;
+    //             }
+    //         });
+    //
+    //         // 缓存到客户端的实例
+    //         this._weChatClient.contactMap = res;
+    //         // 一起获取群放到缓存
+    //         this._weChatClient.roomList = await weChatClient.Room.findAll()
+    //         // console.log('通讯录', res);
+    //         // fs.writeFileSync('contact.json', JSON.stringify(Object.fromEntries(res)));
+    //         // set flag
+    //         this.allContactCommandExecuted = true;
+    //
+    //         return res || new Map<number, ContactInterface[]>();
+    //
+    //     }
+    // }
 
 
     private loadOwnerChat(ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
@@ -1176,13 +1193,16 @@ export class TelegramClient {
         const nextButton = Markup.button.callback('下一页', 'room-next-' + (page + 1));
         const prevButton = Markup.button.callback('上一页', 'room-next-' + (page - 1));
 
-        if (buttons.length !== 0) {
-            if (page === 0) {
-                buttons.push([nextButton]);
-            } else if (nextIndex < rooms.length) {
+        if (buttons.length > 0) {
+            if (page > 0 && nextIndex < rooms.length) {
                 buttons.push([prevButton, nextButton]);
             } else {
-                buttons.push([prevButton]);
+                if (page > 0) {
+                    buttons.push([prevButton]);
+                }
+                if (page < rooms.length) {
+                    buttons.push([nextButton]);
+                }
             }
         }
 

@@ -2,12 +2,13 @@ import * as QRCode from 'qrcode';
 import {ScanStatus, WechatyBuilder} from "wechaty";
 import * as PUPPET from 'wechaty-puppet';
 import {
+    ContactImpl,
     ContactInterface,
     FriendshipImpl,
     FriendshipInterface,
     MessageInterface,
     RoomInterface,
-    WechatyInterface
+    WechatyInterface,
 } from 'wechaty/impls';
 import {TelegramClient} from './TelegramClient';
 import {EmojiConverter} from "../utils/EmojiUtils";
@@ -17,12 +18,20 @@ import {SimpleMessage} from "../models/Message";
 import {TalkerEntity} from "../models/TalkerCache";
 import {UniqueIdGenerator} from "../utils/IdUtils"
 import {NotionMode, VariableType} from "../models/Settings";
-import {FmtString} from "telegraf/format";
+// import {FmtString} from "telegraf/format";
 
 // import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
 
 
 export class WeChatClient {
+    get cacheMemberDone(): boolean {
+        return this._cacheMemberDone;
+    }
+
+    set cacheMemberDone(value: boolean) {
+        this._cacheMemberDone = value;
+    }
+
     get memberCache(): MemberCacheType[] {
         return this._memberCache;
     }
@@ -80,6 +89,7 @@ export class WeChatClient {
         this.init = this.init.bind(this);
         this.logout = this.logout.bind(this);
         this.login = this.login.bind(this);
+        this.onReady = this.onReady.bind(this)
     }
 
     private readonly _client: WechatyInterface;
@@ -97,6 +107,7 @@ export class WeChatClient {
     private scanMsgId: number | undefined = undefined
 
     private _started = false;
+    private _cacheMemberDone = false;
 
     public get contactMap(): Map<number, ContactInterface[]> | undefined {
         return this._contactMap;
@@ -129,6 +140,7 @@ export class WeChatClient {
             .on('logout', () => console.log('on logout...'))
             .on('stop', () => console.log('on stop...'))
             .on('friendship', this.friendship)
+            .on('ready', this.onReady)
             .on('error', this.error);
     }
 
@@ -155,6 +167,15 @@ export class WeChatClient {
                     }
                 })
         }
+    }
+
+    private onReady() {
+        console.log('Wechat client ready!')
+        this.cacheMember().then(() => {
+            this.cacheMemberDone = true
+            this._tgClient.sendMessage({body: '联系人加载完成'})
+            console.log('cache member done!')
+        })
     }
 
     public async stop() {
@@ -184,15 +205,25 @@ export class WeChatClient {
 
     private login() {
         if (this._client.isLoggedIn) {
-            this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登录成功!')
-            // 登陆后就缓存所有的联系人和房间
-            this._tgClient.setAllMemberCache().then(() => {
-                this._tgClient.calcShowMemberList()
-            });
-            if (this.scanMsgId) {
-                this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId, this.scanMsgId)
-                this.scanMsgId = undefined
-            }
+            this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登录成功!').then(() => {
+                // this._client.Contact.findAll()
+                // this._client.Room.findAll()
+                // this._client.Room.find({id: ''})
+                // 重新登陆就要等待加载
+                this.cacheMemberDone = false
+
+                this._tgClient.sendMessage({
+                    body: '正在加载联系人...'
+                })
+            })
+            // // 登陆后就缓存所有的联系人和房间
+            // this._tgClient.setAllMemberCache().then(() => {
+            //     this._tgClient.calcShowMemberList()
+            // });
+            // if (this.scanMsgId) {
+            //     this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId, this.scanMsgId)
+            //     this.scanMsgId = undefined
+            // }
         } else {
             this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登录失败!')
         }
@@ -238,7 +269,7 @@ export class WeChatClient {
         // 添加用户至最近联系人
         const [roomEntity] = await Promise.all([message.room()])
         const talker = message.talker();
-        while (!talker.isReady()){
+        while (!talker.isReady()) {
             await talker.sync()
         }
         const roomTopic = await roomEntity?.topic() || '';
@@ -449,6 +480,40 @@ export class WeChatClient {
         //     fs.mkdirSync(avatarPath, {recursive: true});
         // }
         // talker.avatar().then(fb => fb.toFile(avatarPath + '/avatar.jpg', true))
+
+    }
+
+    private async cacheMember() {
+
+        const contactList = await this._client.Contact.findAll();
+        // 不知道是什么很多空的 过滤掉没名字和不是朋友的
+        const filter = contactList.filter(it => it.name() && it.friend());
+
+        filter.forEach(it => {
+            const type = it.type();
+            switch (type) {
+                case ContactImpl.Type.Unknown:
+                    this.contactMap?.get(ContactImpl.Type.Unknown)?.push(it);
+                    break;
+                case ContactImpl.Type.Individual:
+                    this.contactMap?.get(ContactImpl.Type.Individual)?.push(it);
+                    break;
+                case ContactImpl.Type.Official:
+                    this.contactMap?.get(ContactImpl.Type.Official)?.push(it);
+                    break;
+                case ContactImpl.Type.Corporation:
+                    this.contactMap?.get(ContactImpl.Type.Corporation)?.push(it);
+                    break;
+            }
+        });
+
+        // 缓存到客户端的实例
+        // 一起获取群放到缓存
+        this.roomList = await this._client.Room.findAll()
+        // console.log('通讯录', res);
+        // fs.writeFileSync('contact.json', JSON.stringify(Object.fromEntries(res)));
+        // set flag
+
 
     }
 }
