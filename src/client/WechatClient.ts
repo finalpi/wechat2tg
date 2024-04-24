@@ -234,10 +234,10 @@ export class WeChatClient {
             // this._tgClient.setAllMemberCache().then(() => {
             //     this._tgClient.calcShowMemberList()
             // });
-            // if (this.scanMsgId) {
-            //     this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId, this.scanMsgId)
-            //     this.scanMsgId = undefined
-            // }
+            if (this.scanMsgId) {
+                this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId, this.scanMsgId)
+                this.scanMsgId = undefined
+            }
         } else {
             this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登录失败!')
         }
