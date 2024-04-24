@@ -216,6 +216,7 @@ export class TelegramClient {
         bot.action('friendship-', ctx => {
             console.log('接受到 好友请求', ctx.match)
             this._weChatClient.client.Friendship.load(ctx.match[1])
+            ctx.answerCbQuery()
         })
 
         // 通知模式
@@ -231,6 +232,7 @@ export class TelegramClient {
 
             // 点击后持久化
             this.forwardSetting.writeToFile()
+            ctx.answerCbQuery()
         })
 
         // 修改回复设置
@@ -277,6 +279,7 @@ export class TelegramClient {
                 [Markup.button.callback(`添加白名单`, 'listAdd-')],
                 [Markup.button.callback(`白名单列表`, 'whiteList-1')]
             ]))
+            ctx.answerCbQuery()
         });
 
         // 白名单列表
@@ -286,6 +289,7 @@ export class TelegramClient {
             const list = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST)
             if (!list || list.length === 0) {
                 ctx.reply("白名单列表为空")
+                ctx.answerCbQuery()
                 return
             }
             const page = new Page(list, pageNum, 5)
@@ -296,6 +300,7 @@ export class TelegramClient {
             }
             buttons.push([Markup.button.callback('上一页', `whiteList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `whiteList-${pageNum + 1}`, !page.hasNext())])
             ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
+            ctx.answerCbQuery()
         })
 
         // 白名单移除
@@ -308,7 +313,7 @@ export class TelegramClient {
             }))
             this.forwardSetting.writeToFile()
             ctx.deleteMessage().then(res => {
-                ctx.reply("移除成功")
+                ctx.answerCbQuery('移除成功')
             })
         })
 
@@ -319,6 +324,7 @@ export class TelegramClient {
                 [Markup.button.callback(`添加黑名单`, 'listAdd-')],
                 [Markup.button.callback(`黑名单列表`, 'blackList-1')]
             ]))
+            ctx.answerCbQuery()
         });
 
         // 黑名单列表
@@ -328,6 +334,7 @@ export class TelegramClient {
             const list = this.forwardSetting.getVariable(VariableType.SETTING_BLACK_LIST)
             if (!list || list.length === 0) {
                 ctx.reply("黑名单列表为空")
+                ctx.answerCbQuery()
                 return
             }
             const page = new Page(list, pageNum, 5)
@@ -338,6 +345,7 @@ export class TelegramClient {
             }
             buttons.push([Markup.button.callback('上一页', `blackList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `blackList-${pageNum + 1}`, !page.hasNext())])
             ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
+            ctx.answerCbQuery()
         })
 
         // 黑名单移除
@@ -350,7 +358,7 @@ export class TelegramClient {
             }))
             this.forwardSetting.writeToFile()
             ctx.deleteMessage().then(res => {
-                ctx.reply("移除成功")
+                ctx.answerCbQuery("移除成功")
             })
         })
 
@@ -361,6 +369,7 @@ export class TelegramClient {
             ctx.reply('输入完整群名').then(res => {
                 listAdd = true
             })
+            ctx.answerCbQuery()
         })
 
 
@@ -448,6 +457,7 @@ export class TelegramClient {
             //     this._flagPinMessageType = 'room';
             // })
             this.setPin('room', await room?.topic())
+            ctx.answerCbQuery()
         })
 
         bot.action(/room-next-\d+/, async (ctx) => {
@@ -457,6 +467,7 @@ export class TelegramClient {
                     inline_keyboard: buttons
                 })
             })
+            ctx.answerCbQuery()
         })
 
         let contactMap = this._weChatClient.contactMap;
@@ -540,6 +551,7 @@ export class TelegramClient {
                 this.setPin(data.type === 0 ? 'room' : 'user', data.name)
             }
             ctx.deleteMessage()
+            ctx.answerCbQuery()
         });
 
         bot.action(/^[0-9a-z]+/, async (ctx) => {
@@ -559,6 +571,7 @@ export class TelegramClient {
             //     this._flagPinMessageType = 'user';
             // })
             this.setPin('user', reply ? reply : '')
+            ctx.answerCbQuery()
         })
 
         // 发送消息 回复等...
@@ -611,10 +624,9 @@ export class TelegramClient {
             if (this._flagPinMessageType === 'user' && this._currentSelectContact) {
                 this._currentSelectContact.say(text)
                     .then(() => {
-                        if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                            ctx.deleteMessage();
-                            ctx.replyWithHTML(`发送成功 <blockquote>${text}</blockquote>`)
-                        }
+                        ctx.reply("发送成功!", { reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }})
                         // ctx.replyWithHTML(`发送成功 <blockquote>${text}</blockquote>`)
                     })
                     .catch(() => {
@@ -630,8 +642,9 @@ export class TelegramClient {
                 this.selectRoom.say(text)
                     .then(() => {
                         if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                            ctx.deleteMessage();
-                            ctx.replyWithHTML(`发送成功 <blockquote>${text}</blockquote>`)
+                            ctx.reply("发送成功!", { reply_parameters: {
+                                message_id: ctx.message.message_id
+                            }})
                         }
                         // ctx.replyWithHTML(`发送成功 <blockquote>${text}</blockquote>`)
                     })
@@ -665,7 +678,9 @@ export class TelegramClient {
                         }
                     }
                     if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                        ctx.reply("发送成功!")
+                        ctx.reply("发送成功!", { reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }})
                     }
                 })
             }
@@ -690,7 +705,9 @@ export class TelegramClient {
                         }
                     }
                     if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                        ctx.reply("发送成功!")
+                        ctx.reply("发送成功!", { reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }})
                     }
                 })
             }
@@ -719,7 +736,9 @@ export class TelegramClient {
                         }
                     }
                     if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                        ctx.reply("发送成功!")
+                        ctx.reply("发送成功!", { reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }})
                     }
                 })
             }
@@ -751,7 +770,9 @@ export class TelegramClient {
                         }
                     }
                     if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                        ctx.reply("发送成功!")
+                        ctx.reply("发送成功!", { reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }})
                     }
                 })
             }
@@ -805,10 +826,14 @@ export class TelegramClient {
 
         // bot.action('UNKNOWN',
         //     ctx => this.pageContacts(ctx, contactMap?.get(0), unknownPage, currentSearchWord));
-        bot.action('INDIVIDUAL',
-            ctx => this.pageContacts(ctx, this._weChatClient.contactMap?.get(ContactImpl.Type.Individual), individualPage, currentSearchWord));
-        bot.action('OFFICIAL',
-            ctx => this.pageContacts(ctx, this._weChatClient.contactMap?.get(ContactImpl.Type.Official), officialPage, currentSearchWord));
+        bot.action('INDIVIDUAL',ctx => {
+            this.pageContacts(ctx, this._weChatClient.contactMap?.get(ContactImpl.Type.Individual), individualPage, currentSearchWord)
+            ctx.answerCbQuery()
+        });
+        bot.action('OFFICIAL',ctx => {
+            this.pageContacts(ctx, this._weChatClient.contactMap?.get(ContactImpl.Type.Official), officialPage, currentSearchWord)
+            ctx.answerCbQuery()
+        });
         // bot.action('CORPORATION',
         //     ctx => this.pageContacts(ctx, contactMap?.get(ContactImpl.Type.Corporation), corporationPage, currentSearchWord));
 
@@ -830,7 +855,9 @@ export class TelegramClient {
                 this.selectRoom?.say(fileBox).catch(() => ctx.reply('发送失败'));
             }
             if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                ctx.reply("发送成功!")
+                ctx.reply("发送成功!", { reply_parameters: {
+                    message_id: ctx.message?.message_id?ctx.message?.message_id:0
+                }})
             }
         }).catch(() => ctx.reply('发送失败'))
     }
@@ -869,10 +896,12 @@ export class TelegramClient {
         if (pageNumber != 0) {
             this._bot.action(/(&page:1-next-|&page:1-perv-)(\d+)/, async (ctu) => {
                 buttons = await this.toButtons({ctu: ctu, source: source, code: "&page:1-next-"});
+                ctu.answerCbQuery()
             })
 
             this._bot.action(/(&page:2-next-|&page:2-perv-)(\d+)/, async (ctu) => {
                 buttons = await this.toButtons({ctu: ctu, source: source, code: "&page:2-next-"});
+                ctu.answerCbQuery()
             })
         } else {
             const thatContactMap = that.weChatClient.contactMap;
@@ -886,11 +915,12 @@ export class TelegramClient {
 
             this._bot.action(/(&page:1-next-|&page:1-perv-)(\d+)/, async (ctu) => {
                 buttons = await this.toButtons({ctu: ctu, source: source1, code: "&page:1-next-"});
+                ctu.answerCbQuery()
             })
 
             this._bot.action(/(&page:2-next-|&page:2-perv-)(\d+)/, async (ctu) => {
                 buttons = await this.toButtons({ctu: ctu, source: source2, code: "&page:2-next-"});
-
+                ctu.answerCbQuery()
             })
         }
 
