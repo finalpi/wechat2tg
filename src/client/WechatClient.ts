@@ -336,7 +336,7 @@ export class WeChatClient {
         const topic = await roomEntity?.topic();
         // todo: 优化
         // const mediaCaption=
-        const identityStr = roomEntity ? `${topic} --- ${showSender} : ` : `${showSender} : `;
+        const identityStr = roomEntity ? `🚻${topic} --- 👨‍🎓${showSender} : ` : `👨‍🎓${showSender} : `;
         const sendMessageBody: SimpleMessage = {
             sender: showSender,
             body: '收到一条 未知消息类型',
