@@ -1,4 +1,4 @@
-# wechat2tg
+# [wechat2tg](https://github.com/finalpi/wechat2tg)
 
 English | [中文](README_zh.md)
 

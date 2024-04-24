@@ -1,4 +1,4 @@
-# wechat2tg
+# [wechat2tg](https://github.com/finalpi/wechat2tg)
 
 这个项目是基于 [wechaty](https://github.com/wechaty/wechaty) 实现的微信消息转发到 Telegram 机器人的项目,使用[puppet-wechat4u](https://github.com/wechaty/puppet-wechat4u)协议UOS实现,因此可以绕过微信web版某些账号无法登陆的问题。
 
