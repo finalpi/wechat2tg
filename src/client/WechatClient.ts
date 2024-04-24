@@ -75,12 +75,12 @@ export class WeChatClient {
             }
         })
         this._tgClient = tgClient;
-        this._contactMap = new Map<number, ContactInterface[]>([
-            [0, []],
-            [1, []],
-            [2, []],
-            [3, []]
-        ]);
+        // this._contactMap = new Map<number, Set<ContactInterface>>([
+        //     [0, new Set<ContactInterface>()],
+        //     [1, []],
+        //     [2, []],
+        //     [3, []]
+        // ]);
 
         this.scan = this.scan.bind(this);
         this.message = this.message.bind(this);
@@ -98,7 +98,7 @@ export class WeChatClient {
         return this._client;
     }
 
-    private _contactMap: Map<number, ContactInterface[]> | undefined;
+    private _contactMap: Map<number, Set<ContactInterface>> | undefined;
     private _roomList: RoomInterface[] = [];
 
     private _selectedContact: ContactInterface [] = [];
@@ -109,11 +109,11 @@ export class WeChatClient {
     private _started = false;
     private _cacheMemberDone = false;
 
-    public get contactMap(): Map<number, ContactInterface[]> | undefined {
+    public get contactMap(): Map<number, Set<ContactInterface>> | undefined {
         return this._contactMap;
     }
 
-    public set contactMap(contactMap: Map<number, ContactInterface[]> | undefined) {
+    public set contactMap(contactMap: Map<number, Set<ContactInterface>> | undefined) {
         this._contactMap = contactMap;
     }
 
@@ -493,16 +493,16 @@ export class WeChatClient {
             const type = it.type();
             switch (type) {
                 case ContactImpl.Type.Unknown:
-                    this.contactMap?.get(ContactImpl.Type.Unknown)?.push(it);
+                    this.contactMap?.get(ContactImpl.Type.Unknown)?.add(it);
                     break;
                 case ContactImpl.Type.Individual:
-                    this.contactMap?.get(ContactImpl.Type.Individual)?.push(it);
+                    this.contactMap?.get(ContactImpl.Type.Individual)?.add(it);
                     break;
                 case ContactImpl.Type.Official:
-                    this.contactMap?.get(ContactImpl.Type.Official)?.push(it);
+                    this.contactMap?.get(ContactImpl.Type.Official)?.add(it);
                     break;
                 case ContactImpl.Type.Corporation:
-                    this.contactMap?.get(ContactImpl.Type.Corporation)?.push(it);
+                    this.contactMap?.get(ContactImpl.Type.Corporation)?.add(it);
                     break;
             }
         });
