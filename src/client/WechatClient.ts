@@ -262,35 +262,37 @@ export class WeChatClient {
             this._tgClient.setCurrentSelectContact(message);
         }
 
-        const recentUsers = this._tgClient.recentUsers
-        // 如果不存在该联系人
-        const recentUser = recentUsers.find(item => (roomEntity && roomEntity.id) === item.talker?.id || (!roomEntity && talker.id === item.talker?.id))
-        if (!recentUser) {
-            // 如果最近联系人数量大于5,则移除掉多余的联系人
-            if (recentUsers.length >= 5) {
-                recentUsers.pop()
-            }
-            const idInstance = UniqueIdGenerator.getInstance();
-            if (roomEntity) {
-                // 房间
-                recentUsers.unshift(new TalkerEntity(roomTopic, 0, idInstance.generateId("recent"), roomEntity))
+        // 设置最近联系人列表
+        if (type === PUPPET.types.Contact.Individual) {
+            const recentUsers = this._tgClient.recentUsers
+            // 如果不存在该联系人
+            const recentUser = recentUsers.find(item => (roomEntity && roomEntity.id) === item.talker?.id || (!roomEntity && talker.id === item.talker?.id))
+            if (!recentUser) {
+                // 如果最近联系人数量大于5,则移除掉多余的联系人
+                if (recentUsers.length >= 5) {
+                    recentUsers.pop()
+                }
+                const idInstance = UniqueIdGenerator.getInstance();
+                if (roomEntity) {
+                    // 房间
+                    recentUsers.unshift(new TalkerEntity(roomTopic, 0, idInstance.generateId("recent"), roomEntity))
+                } else {
+                    // 个人
+                    recentUsers.unshift(new TalkerEntity(talker.name(), 1, idInstance.generateId("recent"), talker))
+                }
             } else {
-                // 个人
-                recentUsers.unshift(new TalkerEntity(talker.name(), 1, idInstance.generateId("recent"), talker))
-            }
-        } else {
-            // 找到元素在数组中的索引
-            const index = recentUsers.indexOf(recentUser);
+                // 找到元素在数组中的索引
+                const index = recentUsers.indexOf(recentUser);
 
-            // 如果元素存在于数组中
-            if (index !== -1) {
-                // 将元素从原索引位置删除
-                recentUsers.splice(index, 1);
-                // 将元素放在数组最前面
-                recentUsers.unshift(recentUser);
+                // 如果元素存在于数组中
+                if (index !== -1) {
+                    // 将元素从原索引位置删除
+                    recentUsers.splice(index, 1);
+                    // 将元素放在数组最前面
+                    recentUsers.unshift(recentUser);
+                }
             }
         }
-
 
         // console.info('message:', message)
         // attachment handle
