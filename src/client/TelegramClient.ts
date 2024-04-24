@@ -36,7 +36,7 @@ export class TelegramClient {
     private _chatId: number | string;
     private _ownerId: number;
     private loginCommandExecuted = false;
-    private static PAGE_SIZE = 6;
+    private static PAGE_SIZE = 18;
     private static LINES = 2;
     private _selectedMember: SelectedEntity [] = [];
     private _flagPinMessageType = '';
@@ -310,7 +310,7 @@ export class TelegramClient {
                 return item.id !== id + ''
             }))
             this.forwardSetting.writeToFile()
-            ctx.deleteMessage().then(res => {
+            ctx.deleteMessage().then(() => {
                 ctx.answerCbQuery('移除成功')
             })
         })
@@ -355,7 +355,7 @@ export class TelegramClient {
                 return item.id !== id + ''
             }))
             this.forwardSetting.writeToFile()
-            ctx.deleteMessage().then(res => {
+            ctx.deleteMessage().then(() => {
                 ctx.answerCbQuery("移除成功")
             })
         })
@@ -364,7 +364,7 @@ export class TelegramClient {
 
         // 黑白名单添加
         bot.action(/listAdd-/, ctx => {
-            ctx.reply('输入完整群名').then(res => {
+            ctx.reply('输入完整群名').then(() => {
                 listAdd = true
             })
             ctx.answerCbQuery()
@@ -458,7 +458,7 @@ export class TelegramClient {
                     inline_keyboard: buttons
                 })
             })
-           await ctx.answerCbQuery()
+            await ctx.answerCbQuery()
         })
 
         // let contactMap = this._weChatClient.contactMap;
@@ -800,10 +800,10 @@ export class TelegramClient {
             })
         })
 
-        const unknownPage = 0;
+        // const unknownPage = 0;
         const individualPage = 0;
         const officialPage = 0;
-        const corporationPage = 0;
+        // const corporationPage = 0;
         // const contactMap = this._weChatClient.contactMap;
 
         // bot.action('UNKNOWN',
@@ -1103,7 +1103,7 @@ export class TelegramClient {
             const row = [];
             for (let j = i; j < i + lineSize && j < slice.length; j++) {
                 const keyboard = {
-                    text: '🚻' + await rooms[j]?.topic(),
+                    text: '🚻' + await slice[j]?.topic(),
                     data: 'room-index-' + j
                 }
                 currentSelectRoomMap.set(keyboard.data, rooms[j]);
@@ -1122,7 +1122,7 @@ export class TelegramClient {
                 if (page > 0) {
                     buttons.push([prevButton]);
                 }
-                if (page < rooms.length) {
+                if (nextIndex < rooms.length) {
                     buttons.push([nextButton]);
                 }
             }
