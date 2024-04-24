@@ -23,7 +23,6 @@
     "telegraf": "^4.12.2",
     "ts-node": "^10.9.1",
     "wechaty": "^1.20.2",
-    "wechaty-puppet-wechat": "^1.18.4",
     "wechaty-puppet-wechat4u": "^1.14.14"
   },
   "devDependencies": {
