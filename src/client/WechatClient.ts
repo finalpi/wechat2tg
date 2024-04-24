@@ -24,6 +24,14 @@ import {NotionMode, VariableType} from "../models/Settings";
 
 
 export class WeChatClient {
+    get cacheMemberSendMessage(): boolean {
+        return this._cacheMemberSendMessage;
+    }
+
+    set cacheMemberSendMessage(value: boolean) {
+        this._cacheMemberSendMessage = value;
+    }
+
     get cacheMemberDone(): boolean {
         return this._cacheMemberDone;
     }
@@ -108,6 +116,7 @@ export class WeChatClient {
 
     private _started = false;
     private _cacheMemberDone = false;
+    private _cacheMemberSendMessage = false;
 
     public get contactMap(): Map<number, Set<ContactInterface>> | undefined {
         return this._contactMap;
@@ -173,7 +182,10 @@ export class WeChatClient {
         console.log('Wechat client ready!')
         this.cacheMember().then(() => {
             this.cacheMemberDone = true
-            this._tgClient.sendMessage({body: '联系人加载完成'})
+            if (!this.cacheMemberSendMessage) {
+                this.cacheMemberSendMessage = true
+                this._tgClient.sendMessage({body: '联系人加载完成'})
+            }
             console.log('cache member done!')
         })
     }
@@ -211,6 +223,8 @@ export class WeChatClient {
                 // this._client.Room.find({id: ''})
                 // 重新登陆就要等待加载
                 this.cacheMemberDone = false
+                this.cacheMemberSendMessage = false
+
 
                 this._tgClient.sendMessage({
                     body: '正在加载联系人...'
