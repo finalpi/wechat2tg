@@ -275,10 +275,10 @@ export class WeChatClient {
                 const idInstance = UniqueIdGenerator.getInstance();
                 if (roomEntity) {
                     // 房间
-                    recentUsers.unshift(new TalkerEntity(roomTopic, 0, idInstance.generateId("recent"), roomEntity))
+                    recentUsers.unshift(new TalkerEntity('‍🚻' + roomTopic, 0, idInstance.generateId("recent"), roomEntity))
                 } else {
                     // 个人
-                    recentUsers.unshift(new TalkerEntity(talker.name(), 1, idInstance.generateId("recent"), talker))
+                    recentUsers.unshift(new TalkerEntity('👨‍🎓' + talker.name(), 1, idInstance.generateId("recent"), talker))
                 }
             } else {
                 // 找到元素在数组中的索引
