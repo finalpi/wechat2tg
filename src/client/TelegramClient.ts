@@ -594,11 +594,13 @@ export class TelegramClient {
             if (this._flagPinMessageType === 'user' && this._currentSelectContact) {
                 this._currentSelectContact.say(text)
                     .then(() => {
-                        ctx.reply("发送成功!", {
-                            reply_parameters: {
-                                message_id: ctx.message.message_id
-                            }
-                        })
+                        if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                            ctx.reply("发送成功!", {
+                                reply_parameters: {
+                                    message_id: ctx.message.message_id
+                                }
+                            })
+                        }
                         // ctx.replyWithHTML(`发送成功 <blockquote>${text}</blockquote>`)
                     })
                     .catch(() => {
@@ -1034,23 +1036,13 @@ export class TelegramClient {
     }
 
     private async findPinMessage() {
-        // 获取聊天信息，包括已置顶消息的 ID
-        const chatInfo = await this._bot.telegram.getChat(this._chatId);
-
-        // 如果有置顶消息
-        if (chatInfo.pinned_message) {
-            this.pinnedMessageId = chatInfo.pinned_message.message_id;
-            // 刚启动无回复用户
-            this._bot.telegram.editMessageText(this._chatId, this.pinnedMessageId, undefined, `当前无回复用户`).catch(e => {
-                // 无需处理
-            })
-        } else {
-            // 发送消息并且pin
-            this._bot.telegram.sendMessage(this._chatId, `当前无回复用户`).then(msg => {
-                this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
-                this.pinnedMessageId = msg.message_id
-            })
-        }
+        //取消ping所有消息
+        await this._bot.telegram.unpinAllChatMessages(this._chatId)
+        // 发送消息并且pin
+        this._bot.telegram.sendMessage(this._chatId, `当前无回复用户`).then(msg => {
+            this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
+            this.pinnedMessageId = msg.message_id
+        })
     }
 
     private setPin(type: string, name: string | undefined) {
