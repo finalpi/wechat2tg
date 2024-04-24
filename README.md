@@ -4,8 +4,6 @@ English | [中文](README_zh.md)
 
 This project is based on [wechaty](https://github.com/wechaty/wechaty) and aims to forward WeChat messages to a Telegram bot. It is currently in the testing phase and uses the UOS protocol's puppet implementation, which can bypass some issues with certain accounts not being able to log in to the WeChat web version.
 
-![](https://s1.imagehub.cc/images/2023/06/30/imagea3d9cbc1eb0fa6c7.png)
-
 Currently implemented features include:
 
 1. Forwarding group messages that @ you in WeChat to a Telegram bot

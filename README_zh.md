@@ -1,7 +1,6 @@
 # 微信消息转发到 Telegram
 
-这个项目是基于 [wechaty](https://github.com/wechaty/wechaty) 实现的微信消息转发到 Telegram 机器人的项目,使用UOS协议的puppet实现,因此可以绕过微信web版某些账号无法登陆的问题。  
-![](https://s1.imagehub.cc/images/2023/06/30/imagea3d9cbc1eb0fa6c7.png)
+这个项目是基于 [wechaty](https://github.com/wechaty/wechaty) 实现的微信消息转发到 Telegram 机器人的项目,使用UOS协议的puppet实现,因此可以绕过微信web版某些账号无法登陆的问题。
 
 目前已经实现的功能:
 1. 将微信@你的群消息转发至telegram机器人
