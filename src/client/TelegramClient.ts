@@ -17,6 +17,7 @@ import {UniqueIdGenerator} from "../utils/IdUtils";
 import {Page} from "../models/Page";
 import {FileUtils} from "../utils/FileUtils";
 import {ContactImpl, ContactInterface, MessageInterface, RoomInterface} from "wechaty/impls";
+import {CacheHelper} from "../utils/CacheHelper";
 
 export class TelegramClient {
     get selectedMember(): SelectedEntity[] {
@@ -44,7 +45,7 @@ export class TelegramClient {
     private selectRoom: ContactInterface | RoomInterface | undefined;
     private _recentUsers: TalkerEntity [] = [];
     private wechatStartFlag = false;
-    private searchList:any[] = []
+    private searchList: any[] = []
 
     private forwardSetting: VariableContainer = new VariableContainer();
 
@@ -187,7 +188,7 @@ export class TelegramClient {
         const variables = this.forwardSetting.getAllVariables()
         if (variables.chat_id && variables.chat_id !== '') {
             this._chatId = variables.chat_id
-            this._bot.telegram.sendMessage(this._chatId, `程序开始初始化...`)
+            // this._bot.telegram.sendMessage(this._chatId, `程序开始初始化...`)
             // 找到置顶消息
             this.findPinMessage();
             if (!this.wechatStartFlag) {
@@ -215,14 +216,14 @@ export class TelegramClient {
         // 好友请求处理
         bot.action(/friendship-accept/, async ctx => {
             console.log('接受到 好友请求', ctx.match.input)
-            const friend = this._weChatClient.friendShipList.find(item=>item.id===ctx.match.input)?.friendship
-            if (!friend){
-                ctx.deleteMessage().then(()=>ctx.reply("好友申请已过期!"))
+            const friend = this._weChatClient.friendShipList.find(item => item.id === ctx.match.input)?.friendship
+            if (!friend) {
+                ctx.deleteMessage().then(() => ctx.reply("好友申请已过期!"))
                 ctx.answerCbQuery()
                 return
             } else {
                 await friend.accept()
-                ctx.deleteMessage().then(()=>ctx.reply("添加成功!"))
+                ctx.deleteMessage().then(() => ctx.reply("添加成功!"))
             }
             ctx.answerCbQuery()
         })
@@ -273,6 +274,18 @@ export class TelegramClient {
             const b = !this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT);
             const answerText = b ? '关闭' : '开启';
             this.forwardSetting.setVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT, b)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
+            // 点击后修改上面按钮
+            ctx.editMessageReplyMarkup(this.getSettingButton());
+            return ctx.answerCbQuery(answerText)
+        })
+
+        // 接受公众号消息
+        bot.action(VariableType.SETTING_FORWARD_SELF, ctx => {
+            const b = !this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF);
+            const answerText = b ? '开启' : '关闭';
+            this.forwardSetting.setVariable(VariableType.SETTING_FORWARD_SELF, b)
             // 修改后持成文件
             this.forwardSetting.writeToFile()
             // 点击后修改上面按钮
@@ -440,9 +453,9 @@ export class TelegramClient {
             if (match) {
                 const topic = match[1];  // 提取用户名
                 const roomList = await this._weChatClient.client.Room.findAll({topic: topic})
-                if (roomList && roomList.length > 0){
+                if (roomList && roomList.length > 0) {
                     const buttons: tg.InlineKeyboardButton[][] = [];
-                    await roomList.forEach(async item=>{
+                    await roomList.forEach(async item => {
                         const id = UniqueIdGenerator.getInstance().generateId("search")
                         this.searchList.push({
                             id: id,
@@ -451,8 +464,8 @@ export class TelegramClient {
                         })
                         buttons.push([Markup.button.callback(`👨‍🎓${await item.topic()}`, `${id}`)])
                     })
-                    ctx.reply("请选择联系人(点击回复):",Markup.inlineKeyboard(buttons))
-                }else {
+                    ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
+                } else {
                     ctx.reply("未找到该群组:" + topic)
                 }
                 return
@@ -526,9 +539,9 @@ export class TelegramClient {
             if (match) {
                 const username = match[1];  // 提取用户名
                 const contactList = await this._weChatClient.client.Contact.findAll({name: username})
-                if (contactList && contactList.length > 0){
+                if (contactList && contactList.length > 0) {
                     const buttons: tg.InlineKeyboardButton[][] = [];
-                    contactList.forEach(item=>{
+                    contactList.forEach(item => {
                         const id = UniqueIdGenerator.getInstance().generateId("search")
                         this.searchList.push({
                             id: id,
@@ -537,8 +550,8 @@ export class TelegramClient {
                         })
                         buttons.push([Markup.button.callback(`👨‍🎓${item.name()}`, `${id}`)])
                     })
-                    ctx.reply("请选择联系人(点击回复):",Markup.inlineKeyboard(buttons))
-                }else {
+                    ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
+                } else {
                     ctx.reply("未找到该用户:" + username)
                 }
                 return
@@ -564,11 +577,11 @@ export class TelegramClient {
 
         })
 
-        bot.action(/search/,async ctx=> {
-            const element = this.searchList.find(item=>item.id === ctx.match.input)
+        bot.action(/search/, async ctx => {
+            const element = this.searchList.find(item => item.id === ctx.match.input)
             ctx.deleteMessage()
-            if (element){
-                if (element.type === 0){
+            if (element) {
+                if (element.type === 0) {
                     this._currentSelectContact = element.contact;
                     const talker = element.contact
                     const alias = await talker.alias()
@@ -577,7 +590,7 @@ export class TelegramClient {
                     } else {
                         this.setPin('user', talker.name())
                     }
-                }else {
+                } else {
                     const room = element.contact
                     this.setPin('room', await room.topic())
                     this.selectRoom = room
@@ -646,24 +659,35 @@ export class TelegramClient {
             // 如果是回复的消息 优先回复该发送的消息
             if (replyMessageId) {
                 // try get weChat cache message id
+                // 假设回复消息是撤回命令
+                if (text === '&rm') {
+                    const undoMessageCache = CacheHelper.getInstances().getUndoMessageCache(replyMessageId);
+                    if (undoMessageCache) {
+                        // 撤回消息
+                        this.weChatClient.client.Message.find({id: undoMessageCache.wechat_message_id})
+                            .then(message => {
+                            message?.recall().then(() => {
+                                ctx.reply('撤回成功')
+                            }).catch(() => {
+                                ctx.reply('撤回失败')
+                            })
+                        })
+                    } else {
+                        ctx.reply('当前消息不能撤回或者已经过期')
+                    }
+                    return;
+                }
                 // todo: 可以去找到最原始的消息 非必要
                 const weChatMessageId = this._messageMap.get(replyMessageId)
                 if (weChatMessageId) {
                     // 添加或者移除名单
 
-                    // 回复消息是添加或者移除名单的命令
-                    if (text === '&add' || text === '&rm') {
-                        const replyWechatMessage = await this.weChatClient.client.Message.find({id: weChatMessageId})
-                        // 根据当前模式添加到黑白名单
-                        if (this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK) {
-                            // let toContact = replyWechatMessage.room()
-                        }
-                        return;
-                    }
-
                     this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
-                        message?.say(ctx.message.text).then(() => {
-                            //
+                        message?.say(ctx.message.text).then(msg => {
+                            // 保存到undo消息缓存
+                            if (msg) {
+                                CacheHelper.getInstances().addUndoMessageCache(ctx.message.message_id, msg.id)
+                            }
                         }).catch(() => {
                             ctx.deleteMessage();
                             ctx.replyWithHTML(`发送失败 <blockquote>${text}</blockquote>`)
@@ -676,7 +700,13 @@ export class TelegramClient {
             // 当前有回复的'个人用户' 并且是选择了用户的情况下
             if (this._flagPinMessageType === 'user' && this._currentSelectContact) {
                 this._currentSelectContact.say(text)
-                    .then(() => {
+                    .then((msg) => {
+
+                        if (msg) {
+                            CacheHelper.getInstances().addUndoMessageCache(
+                                ctx.message.message_id, msg.id)
+                        }
+
                         if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
                             ctx.reply("发送成功!", {
                                 reply_parameters: {
@@ -697,7 +727,13 @@ export class TelegramClient {
             // 当前有回复的'群' 并且是选择了群的情况下
             if (this._flagPinMessageType === 'room' && this.selectRoom) {
                 this.selectRoom.say(text)
-                    .then(() => {
+                    .then(msg => {
+
+                        if (msg) {
+                            CacheHelper.getInstances().addUndoMessageCache(
+                                ctx.message.message_id, msg.id)
+                        }
+
                         if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
                             ctx.reply("发送成功!", {
                                 reply_parameters: {
@@ -724,16 +760,31 @@ export class TelegramClient {
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
                     const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message.audio.file_name);
                     if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
-                        this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                        this._currentSelectContact?.say(fileBox).then(msg => {
+                            if (msg) {
+                                CacheHelper.getInstances().addUndoMessageCache(
+                                    ctx.message.message_id, msg.id)
+                            }
+                        }).catch(() => ctx.reply('发送失败'));
                         const text = ctx.message.caption
                         if (text) {
                             this._currentSelectContact?.say(text).catch(() => ctx.reply('发送失败'));
                         }
                     } else {
-                        this.selectRoom?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                        this.selectRoom?.say(fileBox).then(msg => {
+                            if (msg) {
+                                CacheHelper.getInstances().addUndoMessageCache(
+                                    ctx.message.message_id, msg.id)
+                            }
+                        }).catch(() => ctx.reply('发送失败'));
                         const text = ctx.message.caption
                         if (text) {
-                            this.selectRoom?.say(text).catch(() => ctx.reply('发送失败'));
+                            this.selectRoom?.say(text).then(msg => {
+                                if (msg) {
+                                    CacheHelper.getInstances().addUndoMessageCache(
+                                        ctx.message.message_id, msg.id)
+                                }
+                            }).catch(() => ctx.reply('发送失败'));
                         }
                     }
                     if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
@@ -753,16 +804,36 @@ export class TelegramClient {
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
                     const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message.video.file_name);
                     if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
-                        this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                        this._currentSelectContact?.say(fileBox).then(msg => {
+                            if (msg) {
+                                CacheHelper.getInstances().addUndoMessageCache(
+                                    ctx.message.message_id, msg.id)
+                            }
+                        }).catch(() => ctx.reply('发送失败'));
                         const text = ctx.message.caption
                         if (text) {
-                            this._currentSelectContact?.say(text).catch(() => ctx.reply('发送失败'));
+                            this._currentSelectContact?.say(text).then(msg => {
+                                if (msg) {
+                                    CacheHelper.getInstances().addUndoMessageCache(
+                                        ctx.message.message_id, msg.id)
+                                }
+                            }).catch(() => ctx.reply('发送失败'));
                         }
                     } else {
-                        this.selectRoom?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                        this.selectRoom?.say(fileBox).then(msg => {
+                            if (msg) {
+                                CacheHelper.getInstances().addUndoMessageCache(
+                                    ctx.message.message_id, msg.id)
+                            }
+                        }).catch(() => ctx.reply('发送失败'));
                         const text = ctx.message.caption
                         if (text) {
-                            this.selectRoom?.say(text).catch(() => ctx.reply('发送失败'));
+                            this.selectRoom?.say(text).then(msg => {
+                                if (msg) {
+                                    CacheHelper.getInstances().addUndoMessageCache(
+                                        ctx.message.message_id, msg.id)
+                                }
+                            }).catch(() => ctx.reply('发送失败'));
                         }
                     }
                     if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
@@ -786,16 +857,36 @@ export class TelegramClient {
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
                     const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message.document.file_name);
                     if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
-                        this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                        this._currentSelectContact?.say(fileBox).then(msg => {
+                            if (msg) {
+                                CacheHelper.getInstances().addUndoMessageCache(
+                                    ctx.message.message_id, msg.id)
+                            }
+                        }).catch(() => ctx.reply('发送失败'));
                         const text = ctx.message.caption
                         if (text) {
-                            this._currentSelectContact?.say(text).catch(() => ctx.reply('发送失败'));
+                            this._currentSelectContact?.say(text).then(msg => {
+                                if (msg) {
+                                    CacheHelper.getInstances().addUndoMessageCache(
+                                        ctx.message.message_id, msg.id)
+                                }
+                            }).catch(() => ctx.reply('发送失败'));
                         }
                     } else {
-                        this.selectRoom?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                        this.selectRoom?.say(fileBox).then(msg => {
+                            if (msg) {
+                                CacheHelper.getInstances().addUndoMessageCache(
+                                    ctx.message.message_id, msg.id)
+                            }
+                        }).catch(() => ctx.reply('发送失败'));
                         const text = ctx.message.caption
                         if (text) {
-                            this.selectRoom?.say(text).catch(() => ctx.reply('发送失败'));
+                            this.selectRoom?.say(text).then(msg => {
+                                if (msg) {
+                                    CacheHelper.getInstances().addUndoMessageCache(
+                                        ctx.message.message_id, msg.id)
+                                }
+                            }).catch(() => ctx.reply('发送失败'));
                         }
                     }
                     if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
@@ -822,16 +913,31 @@ export class TelegramClient {
 
                     // Send the FileBox to the contact
                     if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
-                        this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                        this._currentSelectContact?.say(fileBox).then(msg => {
+                            if (msg) {
+                                CacheHelper.getInstances().addUndoMessageCache(
+                                    ctx.message.message_id, msg.id)
+                            }
+                        }).catch(() => ctx.reply('发送失败'));
                         const text = ctx.message.caption
                         if (text) {
-                            this._currentSelectContact?.say(text)
+                            this._currentSelectContact?.say(text).then(msg => {
+                                if (msg) {
+                                    CacheHelper.getInstances().addUndoMessageCache(
+                                        ctx.message.message_id, msg.id)
+                                }
+                            }).catch(() => ctx.reply('发送失败'));
                         }
                     } else {
                         this.selectRoom?.say(fileBox)
                         const text = ctx.message.caption
                         if (text) {
-                            this.selectRoom?.say(text).catch(() => ctx.reply('发送失败'));
+                            this.selectRoom?.say(text).then(msg => {
+                                if (msg) {
+                                    CacheHelper.getInstances().addUndoMessageCache(
+                                        ctx.message.message_id, msg.id)
+                                }
+                            }).catch(() => ctx.reply('发送失败'));
                         }
                     }
                     if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
@@ -863,9 +969,19 @@ export class TelegramClient {
                     if (fs.existsSync(gifFile)) {
                         const fileBox = FileBox.fromFile(gifFile);
                         if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
-                            this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                            this._currentSelectContact?.say(fileBox).then(msg => {
+                                if (msg) {
+                                    CacheHelper.getInstances().addUndoMessageCache(
+                                        ctx.message.message_id, msg.id)
+                                }
+                            }).catch(() => ctx.reply('发送失败'));
                         } else {
-                            this.selectRoom?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                            this.selectRoom?.say(fileBox).then(msg => {
+                                if (msg) {
+                                    CacheHelper.getInstances().addUndoMessageCache(
+                                        ctx.message.message_id, msg.id)
+                                }
+                            }).catch(() => ctx.reply('发送失败'));
                         }
                     } else { // 文件不存在转换
                         this.sendGif(saveFile, gifFile, ctx);
@@ -917,7 +1033,12 @@ export class TelegramClient {
         new ConverterHelper().webmToGif(saveFile, gifFile).then(() => {
             const fileBox = FileBox.fromFile(gifFile);
             if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
-                this._currentSelectContact?.say(fileBox).catch(() => ctx.reply('发送失败'));
+                this._currentSelectContact?.say(fileBox).then(msg => {
+                    if(msg && ctx.message) {
+                        CacheHelper.getInstances().addUndoMessageCache(
+                            ctx.message.message_id, msg.id)
+                    }
+                }).catch(() => ctx.reply('发送失败'));
             } else {
                 this.selectRoom?.say(fileBox).catch(() => ctx.reply('发送失败'));
             }
@@ -1122,10 +1243,10 @@ export class TelegramClient {
         //取消ping所有消息
         await this._bot.telegram.unpinAllChatMessages(this._chatId)
         // 发送消息并且pin
-        this._bot.telegram.sendMessage(this._chatId, `当前无回复用户`).then(msg => {
-            this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
-            this.pinnedMessageId = msg.message_id
-        })
+        // this._bot.telegram.sendMessage(this._chatId, `当前无回复用户`).then(msg => {
+        //     this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
+        //     this.pinnedMessageId = msg.message_id
+        // })
     }
 
     private setPin(type: string, name: string | undefined) {
@@ -1297,10 +1418,11 @@ export class TelegramClient {
     private getSettingButton() {
         return {
             inline_keyboard: [
-                [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK?'黑名单':'白名单'})`, VariableType.SETTING_NOTION_MODE),],
+                [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK ? '黑名单' : '白名单'})`, VariableType.SETTING_NOTION_MODE),],
                 [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS) ? '开启' : '关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
                 [Markup.button.callback(`自动切换联系人(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH) ? '开启' : '关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
                 [Markup.button.callback(`接收公众号消息(${this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) ? '关闭' : '开启'})`, VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT),],
+                [Markup.button.callback(`转发自己发送的消息(${this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF) ? '开启' : '关闭'})`, VariableType.SETTING_FORWARD_SELF),],
                 [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE ?
                     Markup.button.callback('白名单群组', VariableType.SETTING_WHITE_LIST) :
                     Markup.button.callback('黑名单群组', VariableType.SETTING_BLACK_LIST)]

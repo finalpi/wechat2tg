@@ -33,10 +33,10 @@ export class TalkerEntity {
         this._name = value;
     }
 
-    private _name: string = '';
+    private _name = '';
     // 类型:0-群组,1-个人
-    private _type: number = 0;
-    private _id: string = '';
+    private _type = 0;
+    private _id = '';
     private _talker: ContactInterface | RoomInterface | undefined = undefined;
 
     constructor(name: string, type: number, id: string, talker: ContactInterface | RoomInterface | undefined) {
