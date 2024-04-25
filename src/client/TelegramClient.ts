@@ -212,9 +212,17 @@ export class TelegramClient {
         });
 
         // 好友请求处理
-        bot.action('friendship-', ctx => {
-            console.log('接受到 好友请求', ctx.match)
-            this._weChatClient.client.Friendship.load(ctx.match[1])
+        bot.action(/friendship-accept/, async ctx => {
+            console.log('接受到 好友请求', ctx.match.input)
+            const friend = this._weChatClient.friendShipList.find(item=>item.id===ctx.match.input)?.friendship
+            if (!friend){
+                ctx.deleteMessage().then(()=>ctx.reply("好友申请已过期!"))
+                ctx.answerCbQuery()
+                return
+            } else {
+                await friend.accept()
+                ctx.deleteMessage().then(()=>ctx.reply("添加成功!"))
+            }
             ctx.answerCbQuery()
         })
 
