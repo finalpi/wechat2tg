@@ -12,18 +12,25 @@ import {
 } from 'wechaty/impls';
 import {TelegramClient} from './TelegramClient';
 import {EmojiConverter} from "../utils/EmojiUtils";
-import * as console from "node:console";
 import {MemberCacheType} from "../models/TgCache";
 import {SimpleMessage} from "../models/Message";
 import {TalkerEntity} from "../models/TalkerCache";
 import {UniqueIdGenerator} from "../utils/IdUtils"
 import {NotionMode, VariableType} from "../models/Settings";
+import {FriendshipItem} from "../models/FriendshipItem"
 // import {FmtString} from "telegraf/format";
 
 // import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
 
 
 export class WeChatClient {
+    get friendShipList(): FriendshipItem[] {
+        return this._friendShipList;
+    }
+
+    set friendShipList(value: FriendshipItem[]) {
+        this._friendShipList = value;
+    }
     get cacheMemberSendMessage(): boolean {
         return this._cacheMemberSendMessage;
     }
@@ -117,6 +124,7 @@ export class WeChatClient {
     private _started = false;
     private _cacheMemberDone = false;
     private _cacheMemberSendMessage = false;
+    private _friendShipList: FriendshipItem[] = []
 
     public get contactMap(): Map<number, Set<ContactInterface>> | undefined {
         return this._contactMap;
@@ -161,16 +169,16 @@ export class WeChatClient {
         if (friendship.type() === FriendshipImpl.Type.Receive) {
             const contact = friendship.contact()
             const hello = friendship.hello()
-            const friendshipId = friendship.id;
+            const id = UniqueIdGenerator.getInstance().generateId("friendship-accept")
+            this._friendShipList.push(new FriendshipItem(id,friendship))
             this._tgClient.bot.telegram.sendMessage(
-                this._tgClient.chatId, `收到好友请求: ${contact.name()} \n 验证消息: ${hello}`,
+                this._tgClient.chatId, `👨‍🎓${contact.name()}请求添加您为好友:\n${hello}`,
                 {
                     reply_markup: {
                         inline_keyboard:
                             [
                                 [
-                                    {text: '接受', callback_data: `friendship-accept-${friendshipId}`},
-                                    {text: '拒绝', callback_data: `friendship-reject-${friendshipId}`},
+                                    {text: '接受', callback_data: `${id}`},
                                 ]
                             ]
                     }
