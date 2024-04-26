@@ -304,7 +304,7 @@ export class WeChatClient {
 
         // todo: 优化
         // const mediaCaption=
-        const identityStr = roomEntity ? `🚻${roomTopic} --- 👨‍🎓${showSender} : ` : `👨‍🎓${showSender} : `;
+        let identityStr = roomEntity ? `🚻${roomTopic} --- 👨‍🎓${showSender} : ` : `👨‍🎓${showSender} : `;
         const sendMessageBody: SimpleMessage = {
             sender: showSender,
             body: '收到一条 未知消息类型',
@@ -322,6 +322,7 @@ export class WeChatClient {
                 } else {
                     toSender = message.room()?.payload?.topic ? `${message.room()?.payload?.topic}` : '未知群组'
                 }
+                identityStr = roomEntity ? `👨‍🎓我->🚻${roomTopic}: ` : `👨‍🎓我 -> 👨‍🎓${toSender} : `;
                 const meTitle = `‍我 -> ${toSender}`;
                 sendMessageBody.sender = meTitle;
                 showSender = meTitle;
