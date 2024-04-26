@@ -126,7 +126,7 @@ export class WeChatClient {
     private _cacheMemberDone = false;
     private _cacheMemberSendMessage = false;
     private _friendShipList: FriendshipItem[] = []
-    private loadMsg:number|undefined = undefined
+    private loadMsg: number | undefined = undefined
 
     public get contactMap(): Map<number, Set<ContactInterface>> | undefined {
         return this._contactMap;
@@ -188,9 +188,9 @@ export class WeChatClient {
                 })
         }
         if (friendship.type() === FriendshipImpl.Type.Confirm) {
-            setTimeout(()=>{
+            setTimeout(() => {
                 this.cacheMember()
-            },10000)
+            }, 10000)
         }
     }
 
@@ -200,12 +200,12 @@ export class WeChatClient {
             this.cacheMemberDone = true
             if (!this.cacheMemberSendMessage) {
                 this.cacheMemberSendMessage = true
-                this._tgClient.bot.telegram.editMessageText(this._tgClient.chatId,this.loadMsg,undefined,"联系人加载完成").then(msg=>{
-                    setTimeout(()=>{
-                        if (this.loadMsg){
-                            this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId,this.loadMsg)
+                this._tgClient.bot.telegram.editMessageText(this._tgClient.chatId, this.loadMsg, undefined, "联系人加载完成").then(msg => {
+                    setTimeout(() => {
+                        if (this.loadMsg) {
+                            this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId, this.loadMsg)
                         }
-                    },10 * 1000)
+                    }, 10 * 1000)
                 })
             }
             console.log('cache member done!')
@@ -248,7 +248,7 @@ export class WeChatClient {
                 this.cacheMemberSendMessage = false
 
 
-                this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId,"正在加载联系人...").then(value=>{
+                this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, "正在加载联系人...").then(value => {
                     this.loadMsg = value.message_id
                 })
             })
@@ -340,10 +340,18 @@ export class WeChatClient {
             talker?.type() === PUPPET.types.Contact.Official) {
             return
         }
-        // 添加用户至最近联系人
-        while (!talker.isReady()) {
-            await talker.sync()
-        }
+
+        setTimeout(() => {
+            // 添加用户至最近联系人
+            let flag = true
+            let count = 0
+            while (!talker.isReady() && count < 5 && flag) {
+                count++
+                talker.sync().then(() => flag = false).catch(() => console.log('sync error'))
+            }
+        }, 5000)
+
+
         // 黑白名单过滤
         if (roomEntity) {
             const blackFind = this._tgClient.setting.getVariable(VariableType.SETTING_BLACK_LIST).find(item => item.name === roomTopic);
@@ -360,7 +368,7 @@ export class WeChatClient {
         }
         // 自动设置回复人
         const type = talker.type()
-        if (!message.self()){
+        if (!message.self()) {
             if (this._tgClient.setting && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_SWITCH) && type === PUPPET.types.Contact.Individual) {
                 this._tgClient.setCurrentSelectContact(message);
             }
