@@ -341,16 +341,12 @@ export class WeChatClient {
             return
         }
 
-        setTimeout(() => {
-            // 添加用户至最近联系人
-            let flag = true
-            let count = 0
-            while (!talker.isReady() && count < 5 && flag) {
-                count++
-                talker.sync().then(() => flag = false).catch(() => console.log('sync error'))
-            }
-        }, 5000)
-
+        // 添加用户至最近联系人
+        let count = 0
+        while (!talker.isReady() && count < 5) {
+            talker.sync().catch(() => console.log('sync error'))
+            count++
+        }
 
         // 黑白名单过滤
         if (roomEntity) {
