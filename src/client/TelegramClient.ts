@@ -1470,6 +1470,9 @@ export class TelegramClient {
             const row = []
             for (let j = i; j < i + lines && j < slice.length; j++) {
                 const alias = await slice[j].alias();
+                if (!slice[j].isReady()) {
+                    await slice[j].sync()
+                }
                 row.push(Markup.button.callback(alias ? `[${alias}] ${slice[j].name()}` : slice[j].name(), slice[j].id.replace(/@/, '')))
             }
             buttons.push(row);
