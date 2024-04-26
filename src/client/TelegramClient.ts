@@ -688,6 +688,13 @@ export class TelegramClient {
                             if (msg) {
                                 CacheHelper.getInstances().addUndoMessageCache(ctx.message.message_id, msg.id)
                             }
+                            if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                ctx.reply("发送成功!", {
+                                    reply_parameters: {
+                                        message_id: ctx.message.message_id
+                                    }
+                                })
+                            }
                         }).catch(() => {
                             ctx.deleteMessage();
                             ctx.replyWithHTML(`发送失败 <blockquote>${text}</blockquote>`)
@@ -754,11 +761,137 @@ export class TelegramClient {
             return;
         })
 
+        bot.on(message('voice'),ctx=>{
+            if (ctx.message.voice) {
+                const fileId = ctx.message.voice.file_id;
+                ctx.telegram.getFileLink(fileId).then(fileLink => {
+                    const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message.voice.file_unique_id + '.mp3');
+                    const replyMessageId = ctx.update.message['reply_to_message']?.message_id;
+                    // 如果是回复的消息 优先回复该发送的消息
+                    if (replyMessageId) {
+                        // try get weChat cache message id
+                        const weChatMessageId = this._messageMap.get(replyMessageId)
+                        if (weChatMessageId) {
+                            // 添加或者移除名单
+
+                            this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
+                                message?.say(fileBox).then(msg => {
+                                    // 保存到undo消息缓存
+                                    if (msg) {
+                                        CacheHelper.getInstances().addUndoMessageCache(ctx.message.message_id, msg.id)
+                                    }
+                                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                        ctx.reply("发送成功!", {
+                                            reply_parameters: {
+                                                message_id: ctx.message.message_id
+                                            }
+                                        })
+                                    }
+                                }).catch(() => {
+                                    ctx.reply("发送失败!", {
+                                        reply_parameters: {
+                                            message_id: ctx.message.message_id
+                                        }
+                                    })
+                                });
+                                const text = ctx.message.caption
+                                if (text) {
+                                    message?.say(text).then(msg => {
+                                        if (msg) {
+                                            CacheHelper.getInstances().addUndoMessageCache(
+                                                ctx.message.message_id, msg.id)
+                                        }
+                                    }).catch(() => ctx.reply('发送失败'));
+                                }
+                            });
+                        }
+                        return;
+                    }
+                    if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
+                        this._currentSelectContact?.say(fileBox).then(msg => {
+                            if (msg) {
+                                CacheHelper.getInstances().addUndoMessageCache(
+                                    ctx.message.message_id, msg.id)
+                            }
+                        }).catch(() => ctx.reply('发送失败'));
+                        const text = ctx.message.caption
+                        if (text) {
+                            this._currentSelectContact?.say(text).catch(() => ctx.reply('发送失败'));
+                        }
+                    } else {
+                        this.selectRoom?.say(fileBox).then(msg => {
+                            if (msg) {
+                                CacheHelper.getInstances().addUndoMessageCache(
+                                    ctx.message.message_id, msg.id)
+                            }
+                        }).catch(() => ctx.reply('发送失败'));
+                        const text = ctx.message.caption
+                        if (text) {
+                            this.selectRoom?.say(text).then(msg => {
+                                if (msg) {
+                                    CacheHelper.getInstances().addUndoMessageCache(
+                                        ctx.message.message_id, msg.id)
+                                }
+                            }).catch(() => ctx.reply('发送失败'));
+                        }
+                    }
+                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                        ctx.reply("发送成功!", {
+                            reply_parameters: {
+                                message_id: ctx.message.message_id
+                            }
+                        })
+                    }
+                })
+            }
+        })
+
         bot.on(message('audio'), ctx => {
             if (ctx.message.audio) {
                 const fileId = ctx.message.audio.file_id;
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
                     const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message.audio.file_name);
+                    const replyMessageId = ctx.update.message['reply_to_message']?.message_id;
+                    // 如果是回复的消息 优先回复该发送的消息
+                    if (replyMessageId) {
+                        // try get weChat cache message id
+                        const weChatMessageId = this._messageMap.get(replyMessageId)
+                        if (weChatMessageId) {
+                            // 添加或者移除名单
+
+                            this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
+                                message?.say(fileBox).then(msg => {
+                                    // 保存到undo消息缓存
+                                    if (msg) {
+                                        CacheHelper.getInstances().addUndoMessageCache(ctx.message.message_id, msg.id)
+                                    }
+                                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                        ctx.reply("发送成功!", {
+                                            reply_parameters: {
+                                                message_id: ctx.message.message_id
+                                            }
+                                        })
+                                    }
+                                }).catch(() => {
+                                    ctx.reply("发送失败!", {
+                                        reply_parameters: {
+                                            message_id: ctx.message.message_id
+                                        }
+                                    })
+                                });
+                                const text = ctx.message.caption
+                                if (text) {
+                                    message?.say(text).then(msg => {
+                                        if (msg) {
+                                            CacheHelper.getInstances().addUndoMessageCache(
+                                                ctx.message.message_id, msg.id)
+                                        }
+                                    }).catch(() => ctx.reply('发送失败'));
+                                }
+                            });
+                        }
+                        return;
+                    }
                     if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
                         this._currentSelectContact?.say(fileBox).then(msg => {
                             if (msg) {
@@ -803,6 +936,47 @@ export class TelegramClient {
                 const fileId = ctx.message.video.file_id;
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
                     const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message.video.file_name);
+                    const replyMessageId = ctx.update.message['reply_to_message']?.message_id;
+                    // 如果是回复的消息 优先回复该发送的消息
+                    if (replyMessageId) {
+                        // try get weChat cache message id
+                        const weChatMessageId = this._messageMap.get(replyMessageId)
+                        if (weChatMessageId) {
+                            // 添加或者移除名单
+
+                            this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
+                                message?.say(fileBox).then(msg => {
+                                    // 保存到undo消息缓存
+                                    if (msg) {
+                                        CacheHelper.getInstances().addUndoMessageCache(ctx.message.message_id, msg.id)
+                                    }
+                                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                        ctx.reply("发送成功!", {
+                                            reply_parameters: {
+                                                message_id: ctx.message.message_id
+                                            }
+                                        })
+                                    }
+                                }).catch(() => {
+                                    ctx.reply("发送失败!", {
+                                        reply_parameters: {
+                                            message_id: ctx.message.message_id
+                                        }
+                                    })
+                                });
+                                const text = ctx.message.caption
+                                if (text) {
+                                    message?.say(text).then(msg => {
+                                        if (msg) {
+                                            CacheHelper.getInstances().addUndoMessageCache(
+                                                ctx.message.message_id, msg.id)
+                                        }
+                                    }).catch(() => ctx.reply('发送失败'));
+                                }
+                            });
+                        }
+                        return;
+                    }
                     if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
                         this._currentSelectContact?.say(fileBox).then(msg => {
                             if (msg) {
@@ -856,6 +1030,47 @@ export class TelegramClient {
                 const fileId = ctx.message.document.file_id;
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
                     const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message.document.file_name);
+                    const replyMessageId = ctx.update.message['reply_to_message']?.message_id;
+                    // 如果是回复的消息 优先回复该发送的消息
+                    if (replyMessageId) {
+                        // try get weChat cache message id
+                        const weChatMessageId = this._messageMap.get(replyMessageId)
+                        if (weChatMessageId) {
+                            // 添加或者移除名单
+
+                            this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
+                                message?.say(fileBox).then(msg => {
+                                    // 保存到undo消息缓存
+                                    if (msg) {
+                                        CacheHelper.getInstances().addUndoMessageCache(ctx.message.message_id, msg.id)
+                                    }
+                                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                        ctx.reply("发送成功!", {
+                                            reply_parameters: {
+                                                message_id: ctx.message.message_id
+                                            }
+                                        })
+                                    }
+                                }).catch(() => {
+                                    ctx.reply("发送失败!", {
+                                        reply_parameters: {
+                                            message_id: ctx.message.message_id
+                                        }
+                                    })
+                                });
+                                const text = ctx.message.caption
+                                if (text) {
+                                    message?.say(text).then(msg => {
+                                        if (msg) {
+                                            CacheHelper.getInstances().addUndoMessageCache(
+                                                ctx.message.message_id, msg.id)
+                                        }
+                                    }).catch(() => ctx.reply('发送失败'));
+                                }
+                            });
+                        }
+                        return;
+                    }
                     if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
                         this._currentSelectContact?.say(fileBox).then(msg => {
                             if (msg) {
@@ -910,6 +1125,47 @@ export class TelegramClient {
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
                     // Create a FileBox from URL
                     const fileBox = FileBox.fromUrl(fileLink.toString());
+                    const replyMessageId = ctx.update.message['reply_to_message']?.message_id;
+                    // 如果是回复的消息 优先回复该发送的消息
+                    if (replyMessageId) {
+                        // try get weChat cache message id
+                        const weChatMessageId = this._messageMap.get(replyMessageId)
+                        if (weChatMessageId) {
+                            // 添加或者移除名单
+
+                            this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
+                                message?.say(fileBox).then(msg => {
+                                    // 保存到undo消息缓存
+                                    if (msg) {
+                                        CacheHelper.getInstances().addUndoMessageCache(ctx.message.message_id, msg.id)
+                                    }
+                                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                        ctx.reply("发送成功!", {
+                                            reply_parameters: {
+                                                message_id: ctx.message.message_id
+                                            }
+                                        })
+                                    }
+                                }).catch(() => {
+                                    ctx.reply("发送失败!", {
+                                        reply_parameters: {
+                                            message_id: ctx.message.message_id
+                                        }
+                                    })
+                                });
+                                const text = ctx.message.caption
+                                if (text) {
+                                    message?.say(text).then(msg => {
+                                        if (msg) {
+                                            CacheHelper.getInstances().addUndoMessageCache(
+                                                ctx.message.message_id, msg.id)
+                                        }
+                                    }).catch(() => ctx.reply('发送失败'));
+                                }
+                            });
+                        }
+                        return;
+                    }
 
                     // Send the FileBox to the contact
                     if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
@@ -968,11 +1224,50 @@ export class TelegramClient {
                 if (fs.existsSync(saveFile)) {
                     if (fs.existsSync(gifFile)) {
                         const fileBox = FileBox.fromFile(gifFile);
+                        const replyMessageId = ctx.update.message['reply_to_message']?.message_id;
+                        // 如果是回复的消息 优先回复该发送的消息
+                        if (replyMessageId) {
+                            // try get weChat cache message id
+                            const weChatMessageId = this._messageMap.get(replyMessageId)
+                            if (weChatMessageId) {
+                                // 添加或者移除名单
+
+                                this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
+                                    message?.say(fileBox).then(msg => {
+                                        // 保存到undo消息缓存
+                                        if (msg) {
+                                            CacheHelper.getInstances().addUndoMessageCache(ctx.message.message_id, msg.id)
+                                        }
+                                        if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                            ctx.reply("发送成功!", {
+                                                reply_parameters: {
+                                                    message_id: ctx.message.message_id
+                                                }
+                                            })
+                                        }
+                                    }).catch(() => {
+                                        ctx.reply("发送失败!", {
+                                            reply_parameters: {
+                                                message_id: ctx.message.message_id
+                                            }
+                                        })
+                                    });
+                                });
+                            }
+                            return;
+                        }
                         if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
                             this._currentSelectContact?.say(fileBox).then(msg => {
                                 if (msg) {
                                     CacheHelper.getInstances().addUndoMessageCache(
                                         ctx.message.message_id, msg.id)
+                                }
+                                if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                    ctx.reply("发送成功!", {
+                                        reply_parameters: {
+                                            message_id: ctx.message.message_id
+                                        }
+                                    })
                                 }
                             }).catch(() => ctx.reply('发送失败'));
                         } else {
@@ -980,6 +1275,13 @@ export class TelegramClient {
                                 if (msg) {
                                     CacheHelper.getInstances().addUndoMessageCache(
                                         ctx.message.message_id, msg.id)
+                                }
+                                if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                    ctx.reply("发送成功!", {
+                                        reply_parameters: {
+                                            message_id: ctx.message.message_id
+                                        }
+                                    })
                                 }
                             }).catch(() => ctx.reply('发送失败'));
                         }
