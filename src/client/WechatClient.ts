@@ -169,9 +169,9 @@ export class WeChatClient {
     }
 
     private friendship(friendship: FriendshipInterface) {
+        const contact = friendship.contact()
+        const hello = friendship.hello()
         if (friendship.type() === FriendshipImpl.Type.Receive) {
-            const contact = friendship.contact()
-            const hello = friendship.hello()
             const id = UniqueIdGenerator.getInstance().generateId("friendship-accept")
             this._friendShipList.push(new FriendshipItem(id, friendship))
             this._tgClient.bot.telegram.sendMessage(
@@ -186,6 +186,11 @@ export class WeChatClient {
                             ]
                     }
                 })
+        }
+        if (friendship.type() === FriendshipImpl.Type.Confirm) {
+            setTimeout(()=>{
+                this.cacheMember()
+            },10000)
         }
     }
 
