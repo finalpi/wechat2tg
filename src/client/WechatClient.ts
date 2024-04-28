@@ -175,7 +175,7 @@ export class WeChatClient {
             const id = UniqueIdGenerator.getInstance().generateId("friendship-accept")
             this._friendShipList.push(new FriendshipItem(id, friendship))
             this._tgClient.bot.telegram.sendMessage(
-                this._tgClient.chatId, `👨‍🎓${contact.name()}请求添加您为好友:\n${hello}`,
+                this._tgClient.chatId, `🐵${contact.name()}请求添加您为好友:\n${hello}`,
                 {
                     reply_markup: {
                         inline_keyboard:
@@ -309,7 +309,7 @@ export class WeChatClient {
 
         // todo: 优化
         // const mediaCaption=
-        let identityStr = roomEntity ? `🚻${roomTopic} --- 👨‍🎓${showSender} : ` : `👨‍🎓${showSender} : `;
+        let identityStr = roomEntity ? `🚻${roomTopic} --- 🐵${showSender} : ` : `🐵${showSender} : `;
         const sendMessageBody: SimpleMessage = {
             sender: showSender,
             body: '收到一条 未知消息类型',
@@ -327,7 +327,7 @@ export class WeChatClient {
                 } else {
                     toSender = message.room()?.payload?.topic ? `${message.room()?.payload?.topic}` : '未知群组'
                 }
-                identityStr = roomEntity ? `👨‍🎓我->🚻${roomTopic}: ` : `👨‍🎓我 -> 👨‍🎓${toSender} : `;
+                identityStr = roomEntity ? `🐵我->🚻${roomTopic}: ` : `🐵我 -> 🐵${toSender} : `;
                 const meTitle = `‍我 -> ${toSender}`;
                 sendMessageBody.sender = meTitle;
                 showSender = meTitle;
@@ -385,7 +385,7 @@ export class WeChatClient {
                         recentUsers.unshift(new TalkerEntity('‍🚻' + roomTopic, 0, idInstance.generateId("recent"), roomEntity))
                     } else {
                         // 个人
-                        recentUsers.unshift(new TalkerEntity('👨‍🎓' + talker.name(), 1, idInstance.generateId("recent"), talker))
+                        recentUsers.unshift(new TalkerEntity('🐵' + talker.name(), 1, idInstance.generateId("recent"), talker))
                     }
                 } else {
                     // 找到元素在数组中的索引

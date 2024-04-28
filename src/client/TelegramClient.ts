@@ -465,7 +465,7 @@ export class TelegramClient {
                             contact: item,
                             type: 1
                         })
-                        buttons.push([Markup.button.callback(`👨‍🎓${await item.topic()}`, `${id}`)])
+                        buttons.push([Markup.button.callback(`🐵${await item.topic()}`, `${id}`)])
                     })
                     ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
                 } else {
@@ -575,9 +575,9 @@ export class TelegramClient {
                             type: 0
                         })
                         if (item.payload?.alias){
-                            buttons.push([Markup.button.callback(`👨‍🎓${item.payload?.alias}[${item.name()}]`, `${id}`)])
+                            buttons.push([Markup.button.callback(`🐵${item.payload?.alias}[${item.name()}]`, `${id}`)])
                         }else {
-                            buttons.push([Markup.button.callback(`👨‍🎓${item.name()}`, `${id}`)])
+                            buttons.push([Markup.button.callback(`🐵${item.name()}`, `${id}`)])
                         }
                     })
                     ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
@@ -1588,7 +1588,7 @@ export class TelegramClient {
         // 判断是否是群组
         let str = ''
         if (type === 'user') {
-            str = `当前回复用户:👨‍🎓 ${name}`
+            str = `当前回复用户:🐵 ${name}`
         } else {
             str = `当前回复群组:🚻 ${name}`
         }
