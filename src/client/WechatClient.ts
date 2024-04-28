@@ -546,7 +546,11 @@ export class WeChatClient {
         const contactList = await this._client.Contact.findAll();
         // 不知道是什么很多空的 过滤掉没名字和不是朋友的
         const filter = contactList.filter(it => it.name() && it.friend());
-
+        contactList.forEach(item=>{
+            if (item.payload?.alias === item.name()){
+                item.sync()
+            }
+        })
         filter.forEach(it => {
             const type = it.type();
             switch (type) {
