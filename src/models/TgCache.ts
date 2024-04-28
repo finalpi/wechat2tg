@@ -23,9 +23,9 @@ export class SelectedEntity {
         this._id = value;
     }
 
-    private _id: string = '';
-    private _type: string = '';
-    private _showName: string = '';
+    private _id = '';
+    private _type = '';
+    private _showName = '';
 }
 
 export type MemberCacheType = {

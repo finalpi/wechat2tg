@@ -5,3 +5,4 @@ wechat_bot.memory-card.json
 avatar/*
 .env
 dist
+storage/**

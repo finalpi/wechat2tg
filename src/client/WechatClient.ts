@@ -31,6 +31,7 @@ export class WeChatClient {
     set friendShipList(value: FriendshipItem[]) {
         this._friendShipList = value;
     }
+
     get cacheMemberSendMessage(): boolean {
         return this._cacheMemberSendMessage;
     }
@@ -125,6 +126,7 @@ export class WeChatClient {
     private _cacheMemberDone = false;
     private _cacheMemberSendMessage = false;
     private _friendShipList: FriendshipItem[] = []
+    private loadMsg: number | undefined = undefined
 
     public get contactMap(): Map<number, Set<ContactInterface>> | undefined {
         return this._contactMap;
@@ -156,6 +158,7 @@ export class WeChatClient {
             .on('message', this.message)
             .on('logout', () => console.log('on logout...'))
             .on('stop', () => console.log('on stop...'))
+            .on('post', () => console.log('on post...'))
             .on('friendship', this.friendship)
             .on('ready', this.onReady)
             .on('error', this.error);
@@ -166,11 +169,11 @@ export class WeChatClient {
     }
 
     private friendship(friendship: FriendshipInterface) {
+        const contact = friendship.contact()
+        const hello = friendship.hello()
         if (friendship.type() === FriendshipImpl.Type.Receive) {
-            const contact = friendship.contact()
-            const hello = friendship.hello()
             const id = UniqueIdGenerator.getInstance().generateId("friendship-accept")
-            this._friendShipList.push(new FriendshipItem(id,friendship))
+            this._friendShipList.push(new FriendshipItem(id, friendship))
             this._tgClient.bot.telegram.sendMessage(
                 this._tgClient.chatId, `👨‍🎓${contact.name()}请求添加您为好友:\n${hello}`,
                 {
@@ -184,6 +187,11 @@ export class WeChatClient {
                     }
                 })
         }
+        if (friendship.type() === FriendshipImpl.Type.Confirm) {
+            setTimeout(() => {
+                this.cacheMember()
+            }, 10000)
+        }
     }
 
     private onReady() {
@@ -192,7 +200,13 @@ export class WeChatClient {
             this.cacheMemberDone = true
             if (!this.cacheMemberSendMessage) {
                 this.cacheMemberSendMessage = true
-                this._tgClient.sendMessage({body: '联系人加载完成'})
+                this._tgClient.bot.telegram.editMessageText(this._tgClient.chatId, this.loadMsg, undefined, "联系人加载完成").then(msg => {
+                    setTimeout(() => {
+                        if (this.loadMsg) {
+                            this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId, this.loadMsg)
+                        }
+                    }, 10 * 1000)
+                })
             }
             console.log('cache member done!')
         })
@@ -234,8 +248,8 @@ export class WeChatClient {
                 this.cacheMemberSendMessage = false
 
 
-                this._tgClient.sendMessage({
-                    body: '正在加载联系人...'
+                this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, "正在加载联系人...").then(value => {
+                    this.loadMsg = value.message_id
                 })
             })
             // // 登陆后就缓存所有的联系人和房间
@@ -279,22 +293,61 @@ export class WeChatClient {
     }
 
     private async message(message: MessageInterface) {
-        // 过滤掉自己所发送的消息
+        const talker = message.talker();
+        const [roomEntity] = await Promise.all([message.room()])
+
+        // console.info('message:', message)
+        // attachment handle
+        const messageType = message.type();
+
+
+        const alias = await talker.alias();
+        let showSender: string = alias ? `[${alias}] ${talker.name()}` : talker.name();
+
+        // const topic = await roomEntity?.topic();
+        const roomTopic = await roomEntity?.topic() || '';
+
+        // todo: 优化
+        // const mediaCaption=
+        let identityStr = roomEntity ? `🚻${roomTopic} --- 👨‍🎓${showSender} : ` : `👨‍🎓${showSender} : `;
+        const sendMessageBody: SimpleMessage = {
+            sender: showSender,
+            body: '收到一条 未知消息类型',
+            room: roomTopic,
+            id: message.id
+        }
+
         if (message.self()) {
-            return
+            // 过滤掉自己所发送的消息
+            if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF)) {
+                let toSender = '';
+                const to = message.listener();
+                if (to) {
+                    toSender = !to.payload?.alias ? `${to?.name()}` : `[${to.payload?.alias}] ${to?.name()}`
+                } else {
+                    toSender = message.room()?.payload?.topic ? `${message.room()?.payload?.topic}` : '未知群组'
+                }
+                identityStr = roomEntity ? `👨‍🎓我->🚻${roomTopic}: ` : `👨‍🎓我 -> 👨‍🎓${toSender} : `;
+                const meTitle = `‍我 -> ${toSender}`;
+                sendMessageBody.sender = meTitle;
+                showSender = meTitle;
+            } else {
+                return
+            }
         }
         // 过滤公众号消息
         if (this._tgClient.setting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) &&
-            message.from()?.type() === PUPPET.types.Contact.Official) {
+            talker?.type() === PUPPET.types.Contact.Official) {
             return
         }
+
         // 添加用户至最近联系人
-        const [roomEntity] = await Promise.all([message.room()])
-        const talker = message.talker();
-        while (!talker.isReady()) {
-            await talker.sync()
+        let count = 0
+        while (!talker.isReady() && count < 5) {
+            talker.sync().catch(() => console.log('sync error'))
+            count++
         }
-        const roomTopic = await roomEntity?.topic() || '';
+
         // 黑白名单过滤
         if (roomEntity) {
             const blackFind = this._tgClient.setting.getVariable(VariableType.SETTING_BLACK_LIST).find(item => item.name === roomTopic);
@@ -311,64 +364,47 @@ export class WeChatClient {
         }
         // 自动设置回复人
         const type = talker.type()
-        if (this._tgClient.setting && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_SWITCH) && type === PUPPET.types.Contact.Individual) {
-            this._tgClient.setCurrentSelectContact(message);
-        }
+        if (!message.self()) {
+            if (this._tgClient.setting && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_SWITCH) && type === PUPPET.types.Contact.Individual) {
+                this._tgClient.setCurrentSelectContact(message);
+            }
 
-        // 设置最近联系人列表
-        if (type === PUPPET.types.Contact.Individual) {
-            const recentUsers = this._tgClient.recentUsers
-            // 如果不存在该联系人
-            const recentUser = recentUsers.find(item => (roomEntity && roomEntity.id) === item.talker?.id || (!roomEntity && talker.id === item.talker?.id))
-            if (!recentUser) {
-                // 如果最近联系人数量大于5,则移除掉多余的联系人
-                if (recentUsers.length >= 5) {
-                    recentUsers.pop()
-                }
-                const idInstance = UniqueIdGenerator.getInstance();
-                if (roomEntity) {
-                    // 房间
-                    recentUsers.unshift(new TalkerEntity('‍🚻' + roomTopic, 0, idInstance.generateId("recent"), roomEntity))
+            // 设置最近联系人列表
+            if (type === PUPPET.types.Contact.Individual) {
+                const recentUsers = this._tgClient.recentUsers
+                // 如果不存在该联系人
+                const recentUser = recentUsers.find(item => (roomEntity && roomEntity.id) === item.talker?.id || (!roomEntity && talker.id === item.talker?.id))
+                if (!recentUser) {
+                    // 如果最近联系人数量大于5,则移除掉多余的联系人
+                    if (recentUsers.length >= 5) {
+                        recentUsers.pop()
+                    }
+                    const idInstance = UniqueIdGenerator.getInstance();
+                    if (roomEntity) {
+                        // 房间
+                        recentUsers.unshift(new TalkerEntity('‍🚻' + roomTopic, 0, idInstance.generateId("recent"), roomEntity))
+                    } else {
+                        // 个人
+                        recentUsers.unshift(new TalkerEntity('👨‍🎓' + talker.name(), 1, idInstance.generateId("recent"), talker))
+                    }
                 } else {
-                    // 个人
-                    recentUsers.unshift(new TalkerEntity('👨‍🎓' + talker.name(), 1, idInstance.generateId("recent"), talker))
-                }
-            } else {
-                // 找到元素在数组中的索引
-                const index = recentUsers.indexOf(recentUser);
+                    // 找到元素在数组中的索引
+                    const index = recentUsers.indexOf(recentUser);
 
-                // 如果元素存在于数组中
-                if (index !== -1) {
-                    // 将元素从原索引位置删除
-                    recentUsers.splice(index, 1);
-                    // 将元素放在数组最前面
-                    recentUsers.unshift(recentUser);
+                    // 如果元素存在于数组中
+                    if (index !== -1) {
+                        // 将元素从原索引位置删除
+                        recentUsers.splice(index, 1);
+                        // 将元素放在数组最前面
+                        recentUsers.unshift(recentUser);
+                    }
                 }
             }
         }
 
-        // console.info('message:', message)
-        // attachment handle
-        const messageType = message.type();
-
-
-        const alias = await talker.alias();
-        const showSender: string = alias ? `[${alias}] ${talker.name()}` : talker.name();
-
-        const topic = await roomEntity?.topic();
-        // todo: 优化
-        // const mediaCaption=
-        const identityStr = roomEntity ? `🚻${topic} --- 👨‍🎓${showSender} : ` : `👨‍🎓${showSender} : `;
-        const sendMessageBody: SimpleMessage = {
-            sender: showSender,
-            body: '收到一条 未知消息类型',
-            room: roomTopic,
-            id: message.id
-        }
-
         switch (messageType) {
             case PUPPET.types.Message.Unknown:
-                console.log(talker.name(), ': 发送了unknown message...')
+                // console.log(talker.name(), ': 发送了unknown message...')
 
                 if (message.text() === '收到红包，请在手机上查看') {
                     sendMessageBody.body = '收到红包，请在手机上查看'
@@ -510,7 +546,11 @@ export class WeChatClient {
         const contactList = await this._client.Contact.findAll();
         // 不知道是什么很多空的 过滤掉没名字和不是朋友的
         const filter = contactList.filter(it => it.name() && it.friend());
-
+        contactList.forEach(item=>{
+            if (item.payload?.alias === item.name()){
+                item.sync()
+            }
+        })
         filter.forEach(it => {
             const type = it.type();
             switch (type) {

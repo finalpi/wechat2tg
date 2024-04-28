@@ -1,4 +1,3 @@
-import {Contact} from "wechaty";
 import * as fs from "node:fs";
 
 export class VariableContainer {
@@ -11,6 +10,7 @@ export class VariableContainer {
         [VariableType.SETTING_AUTO_SWITCH]: boolean,
         [VariableType.SETTING_CHAT_ID]: string,
         [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: boolean,
+        [VariableType.SETTING_FORWARD_SELF]: boolean,
     } = {
         [VariableType.SETTING_NOTION_MODE]: NotionMode.BLACK,
         [VariableType.SETTING_WHITE_LIST]: [],
@@ -19,6 +19,7 @@ export class VariableContainer {
         [VariableType.SETTING_AUTO_SWITCH]: true,
         [VariableType.SETTING_CHAT_ID]: '',
         [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: false,
+        [VariableType.SETTING_FORWARD_SELF]: false,
     };
 
     setVariable<T extends VariableType>(key: T, value: VariableMap[T]) {
@@ -39,8 +40,8 @@ export class VariableContainer {
             if (!fs.existsSync(StorageSettings.STORAGE_FOLDER)) {
                 fs.mkdirSync(StorageSettings.STORAGE_FOLDER);
             }
-            const wechatParsedData = fs.existsSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`)?JSON.parse(fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`, 'utf8')):{};
-            const tgParsedData = fs.existsSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.OWNER_FILE_NAME}`)?JSON.parse(fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.OWNER_FILE_NAME}`, 'utf8')):{};
+            const wechatParsedData = fs.existsSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`) ? JSON.parse(fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`, 'utf8')) : {};
+            const tgParsedData = fs.existsSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.OWNER_FILE_NAME}`) ? JSON.parse(fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.OWNER_FILE_NAME}`, 'utf8')) : {};
 
             this.variables = {...wechatParsedData, ...tgParsedData};
         } catch (error) {
@@ -52,11 +53,13 @@ export class VariableContainer {
     writeToFile(filePath = `${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`): void {
         try {
             const data = {
-                [VariableType.SETTING_NOTION_MODE]: this.variables[VariableType.SETTING_NOTION_MODE]?this.variables[VariableType.SETTING_NOTION_MODE]:NotionMode.BLACK,
-                [VariableType.SETTING_WHITE_LIST]: this.variables[VariableType.SETTING_WHITE_LIST]?this.variables[VariableType.SETTING_WHITE_LIST]:[],
-                [VariableType.SETTING_BLACK_LIST]: this.variables[VariableType.SETTING_BLACK_LIST]?this.variables[VariableType.SETTING_BLACK_LIST]:[],
-                [VariableType.SETTING_REPLY_SUCCESS]: this.variables[VariableType.SETTING_REPLY_SUCCESS]?this.variables[VariableType.SETTING_REPLY_SUCCESS]:false,
-                [VariableType.SETTING_AUTO_SWITCH]: this.variables[VariableType.SETTING_AUTO_SWITCH]?this.variables[VariableType.SETTING_AUTO_SWITCH]:false,
+                [VariableType.SETTING_NOTION_MODE]: this.variables[VariableType.SETTING_NOTION_MODE] ? this.variables[VariableType.SETTING_NOTION_MODE] : NotionMode.BLACK,
+                [VariableType.SETTING_WHITE_LIST]: this.variables[VariableType.SETTING_WHITE_LIST] ? this.variables[VariableType.SETTING_WHITE_LIST] : [],
+                [VariableType.SETTING_BLACK_LIST]: this.variables[VariableType.SETTING_BLACK_LIST] ? this.variables[VariableType.SETTING_BLACK_LIST] : [],
+                [VariableType.SETTING_REPLY_SUCCESS]: this.variables[VariableType.SETTING_REPLY_SUCCESS] ? this.variables[VariableType.SETTING_REPLY_SUCCESS] : false,
+                [VariableType.SETTING_AUTO_SWITCH]: this.variables[VariableType.SETTING_AUTO_SWITCH] ? this.variables[VariableType.SETTING_AUTO_SWITCH] : false,
+                [VariableType.SETTING_FORWARD_SELF]: this.variables[VariableType.SETTING_FORWARD_SELF] ? this.variables[VariableType.SETTING_FORWARD_SELF] : false,
+                [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: this.variables[VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT] ? this.variables[VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT] : false,
             };
             fs.writeFileSync(filePath, JSON.stringify(data), 'utf8');
             console.log('File written successfully.');
@@ -81,6 +84,8 @@ export enum VariableType {
     SETTING_CHAT_ID = 'chat_id',
     // 接受公众号消息
     SETTING_ACCEPT_OFFICIAL_ACCOUNT = 'Setting_Accept_Official_Account',
+    // 转发自己发的消息
+    SETTING_FORWARD_SELF = 'Setting_Forward_Self',
 }
 
 export enum NotionMode {
@@ -97,6 +102,7 @@ type VariableMap = {
     [VariableType.SETTING_AUTO_SWITCH]: boolean,
     [VariableType.SETTING_CHAT_ID]: string,
     [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: boolean,
+    [VariableType.SETTING_FORWARD_SELF]: boolean,
 };
 
 export class GroupListSave {
