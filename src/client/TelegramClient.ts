@@ -449,27 +449,30 @@ export class TelegramClient {
             const messageText = ctx.update.message.text;
 
             // 正则表达式用来分离命令后面的参数
-            // const match = messageText.match(/\/room\s+([\p{L}\p{N}_]+)/u);
-            // if (match) {
-            //     const topic = match[1];  // 提取用户名
-            //     const roomList = await this._weChatClient.client.Room.findAll({topic: topic})
-            //     if (roomList && roomList.length > 0) {
-            //         const buttons: tg.InlineKeyboardButton[][] = [];
-            //         await roomList.forEach(async item => {
-            //             const id = UniqueIdGenerator.getInstance().generateId("search")
-            //             this.searchList.push({
-            //                 id: id,
-            //                 contact: item,
-            //                 type: 1
-            //             })
-            //             buttons.push([Markup.button.callback(`👨‍🎓${await item.topic()}`, `${id}`)])
-            //         })
-            //         ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
-            //     } else {
-            //         ctx.reply("未找到该群组:" + topic)
-            //     }
-            //     return
-            // }
+            const match = messageText.match(/\/room\s+([\p{L}\p{N}_]+)/u);
+            if (match) {
+                const topic = match[1];  // 提取用户名
+                const filterRoom = this._weChatClient.roomList.filter(room => {
+                    // const roomName = ;
+                    return room.payload?.topic?.includes(topic)
+                })
+                if (filterRoom && filterRoom.length > 0) {
+                    const buttons: tg.InlineKeyboardButton[][] = [];
+                    await filterRoom.forEach(async item => {
+                        const id = UniqueIdGenerator.getInstance().generateId("search")
+                        this.searchList.push({
+                            id: id,
+                            contact: item,
+                            type: 1
+                        })
+                        buttons.push([Markup.button.callback(`👨‍🎓${await item.topic()}`, `${id}`)])
+                    })
+                    ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
+                } else {
+                    ctx.reply("未找到该群组:" + topic)
+                }
+                return
+            }
 
             const topic = ctx.message.text.split(' ')[1];
             // 缓存加载
@@ -535,27 +538,54 @@ export class TelegramClient {
             const messageText = ctx.update.message.text;
 
             // 正则表达式用来分离命令后面的参数
-            // const match = messageText.match(/\/user\s+([\p{L}\p{N}_]+)/u);
-            // if (match) {
-            //     const username = match[1];  // 提取用户名
-            //     const contactList = await this._weChatClient.client.Contact.findAll({name: username})
-            //     if (contactList && contactList.length > 0) {
-            //         const buttons: tg.InlineKeyboardButton[][] = [];
-            //         contactList.forEach(item => {
-            //             const id = UniqueIdGenerator.getInstance().generateId("search")
-            //             this.searchList.push({
-            //                 id: id,
-            //                 contact: item,
-            //                 type: 0
-            //             })
-            //             buttons.push([Markup.button.callback(`👨‍🎓${item.name()}`, `${id}`)])
-            //         })
-            //         ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
-            //     } else {
-            //         ctx.reply("未找到该用户:" + username)
-            //     }
-            //     return
-            // }
+            const match = messageText.match(/\/user\s+([\p{L}\p{N}_]+)/u);
+            if (match) {
+                const username = match[1];  // 提取用户名
+                const individual = this._weChatClient.contactMap?.get(ContactImpl.Type.Individual);
+                const official = this._weChatClient.contactMap?.get(ContactImpl.Type.Official);
+                const individualFilter:ContactInterface[] = []
+                individual?.forEach(async item=>{
+                    const alias = item.payload?.alias
+                    if (alias?.includes(username)){
+                        individualFilter.push(item)
+                        return
+                    }
+                    if (item.name().includes(username)){
+                        individualFilter.push(item)
+                    }
+                })
+                const officialFilter:ContactInterface[] = []
+                official?.forEach(async item=>{
+                    const alias = item.payload?.alias
+                    if (alias?.includes(username)){
+                        officialFilter.push(item)
+                        return
+                    }
+                    if (item.name().includes(username)){
+                        officialFilter.push(item)
+                    }
+                })
+                if ((individualFilter && individualFilter.length > 0) || (officialFilter && officialFilter.length > 0)) {
+                    const buttons: tg.InlineKeyboardButton[][] = [];
+                    [...officialFilter,...individualFilter].forEach(item => {
+                        const id = UniqueIdGenerator.getInstance().generateId("search")
+                        this.searchList.push({
+                            id: id,
+                            contact: item,
+                            type: 0
+                        })
+                        if (item.payload?.alias){
+                            buttons.push([Markup.button.callback(`👨‍🎓${item.payload?.alias}[${item.name()}]`, `${id}`)])
+                        }else {
+                            buttons.push([Markup.button.callback(`👨‍🎓${item.name()}`, `${id}`)])
+                        }
+                    })
+                    ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
+                } else {
+                    ctx.reply("未找到该用户:" + username)
+                }
+                return
+            }
 
             if (ctx.message.text) {
                 currentSearchWord = ctx.message.text.split(' ')[1];
