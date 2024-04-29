@@ -460,8 +460,13 @@ export class WeChatClient {
                         const fileName = fBox.name;
 
                         const tgClient = this._tgClient
-                        tgClient.bot.telegram.sendDocument(
-                            tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
+                        if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)){
+                            tgClient.bot.telegram.sendPhoto(
+                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
+                        }else {
+                            tgClient.bot.telegram.sendDocument(
+                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
+                        }
                     })
                 })
                 break;
@@ -494,8 +499,13 @@ export class WeChatClient {
                         const fileName = fBox.name;
 
                         const tgClient = this._tgClient
-                        tgClient.bot.telegram.sendVideo(
-                            tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
+                        if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)){
+                            tgClient.bot.telegram.sendVideo(
+                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
+                        }else {
+                            tgClient.bot.telegram.sendDocument(
+                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
+                        }
                     })
                 })
                 break;
