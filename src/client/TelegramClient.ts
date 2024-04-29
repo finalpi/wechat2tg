@@ -365,7 +365,7 @@ export class TelegramClient {
                 buttons.push([Markup.button.callback(`🚻${pageListElement.name}`, `blackListRemove-${pageListElement.id}`)])
             }
             buttons.push([Markup.button.callback('上一页', `blackList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `blackList-${pageNum + 1}`, !page.hasNext())])
-            ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
+            ctx.editMessageText('黑名单列表(点击移除):', Markup.inlineKeyboard(buttons))
             ctx.answerCbQuery()
         })
 
