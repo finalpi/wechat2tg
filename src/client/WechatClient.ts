@@ -300,6 +300,8 @@ export class WeChatClient {
         // attachment handle
         const messageType = message.type();
 
+        // console.debug('on message', message)
+
 
         const alias = await talker.alias();
         let showSender: string = alias ? `[${alias}] ${talker.name()}` : talker.name();
@@ -421,6 +423,18 @@ export class WeChatClient {
 
                 if (messageTxt) {
                     // console.log('showSender is :', showSender, 'talker id is :', talker.id, 'message text is ', messageTxt,)
+                    // 地址
+                    if (messageTxt.endsWith('pictype=location')) {
+                        const locationText = `收到一个位置信息:\n <code>${message.text().split(`\n`)[0].replace(':', '')}</code>`
+                        this._tgClient.sendMessage({
+                            sender: showSender,
+                            body: locationText,
+                            room: roomTopic,
+                            id: message.id,
+                            not_escape_html: true,
+                        })
+                        return;
+                    }
                     // 表情转换
                     const emojiConverter = new EmojiConverter();
                     const convertedText = emojiConverter.convert(messageTxt);
@@ -449,6 +463,13 @@ export class WeChatClient {
                             tgClient.chatId, {source: buff, filename: fileName}, {
                                 caption: identityStr
                             })
+                    })
+                }).catch(() => {
+                    this._tgClient.sendMessage({
+                        sender: showSender,
+                        body: message.text(),
+                        room: roomTopic,
+                        id: message.id
                     })
                 })
                 break;

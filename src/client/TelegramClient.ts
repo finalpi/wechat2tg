@@ -1409,15 +1409,14 @@ export class TelegramClient {
         return;
     }
 
-    public sendMessage(message: SimpleMessage) {
+    public async sendMessage(message: SimpleMessage) {
         // console.log('发送文本消息', message)
-        return this.bot.telegram.sendMessage(this._chatId, SimpleMessageSender.send(message), {
+        const res = await this.bot.telegram.sendMessage(this._chatId, SimpleMessageSender.send(message), {
             parse_mode: 'HTML'
-        }).then(res => {
-            if (message.id) {
-                this.messageMap.set(res.message_id, message.id);
-            }
         });
+        if (message.id) {
+            this.messageMap.set(res.message_id, message.id);
+        }
     }
 
     private async pageContacts(ctx: NarrowedContext<Context<tg.Update>, tg.Update>, source: ContactInterface[] | undefined, pageNumber: number, currentSearchWord: string) {
