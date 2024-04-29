@@ -312,6 +312,9 @@ export class WeChatClient {
         // todo: 优化
         // const mediaCaption=
         let identityStr = roomEntity ? `🚻${roomTopic} --- 🐵${showSender} : ` : `🐵${showSender} : `;
+        if (talker?.type() === PUPPET.types.Contact.Official){
+            identityStr = `📣${showSender} : `;
+        }
         const sendMessageBody: SimpleMessage = {
             sender: showSender,
             body: '收到一条 未知消息类型',
@@ -430,6 +433,7 @@ export class WeChatClient {
                             sender: showSender,
                             body: locationText,
                             room: roomTopic,
+                            type: talker?.type() === PUPPET.types.Contact.Official?1:0,
                             id: message.id,
                             not_escape_html: true,
                         })
@@ -442,6 +446,7 @@ export class WeChatClient {
                         sender: showSender,
                         body: convertedText,
                         room: roomTopic,
+                        type: talker?.type() === PUPPET.types.Contact.Official?1:0,
                         id: message.id
                     })
                 }

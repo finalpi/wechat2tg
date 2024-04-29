@@ -17,6 +17,7 @@ import {Page} from "../models/Page";
 import {FileUtils} from "../utils/FileUtils";
 import {ContactImpl, ContactInterface, MessageInterface, RoomInterface} from "wechaty/impls";
 import {CacheHelper} from "../utils/CacheHelper";
+import * as PUPPET from "wechaty-puppet";
 
 export class TelegramClient {
     get selectedMember(): SelectedEntity[] {
@@ -487,7 +488,7 @@ export class TelegramClient {
                             contact: item,
                             type: 1
                         })
-                        buttons.push([Markup.button.callback(`🐵${await item.topic()}`, `${id}`)])
+                        buttons.push([Markup.button.callback(`🚻${await item.topic()}`, `${id}`)])
                     })
                     ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
                 } else {
@@ -596,10 +597,14 @@ export class TelegramClient {
                             contact: item,
                             type: 0
                         })
-                        if (item.payload?.alias){
-                            buttons.push([Markup.button.callback(`🐵${item.payload?.alias}[${item.name()}]`, `${id}`)])
+                        if (item.payload?.type === PUPPET.types.Contact.Official){
+                            buttons.push([Markup.button.callback(`📣${item.name()}`, `${id}`)])
                         }else {
-                            buttons.push([Markup.button.callback(`🐵${item.name()}`, `${id}`)])
+                            if (item.payload?.alias){
+                                buttons.push([Markup.button.callback(`🐵${item.payload?.alias}[${item.name()}]`, `${id}`)])
+                            }else {
+                                buttons.push([Markup.button.callback(`🐵${item.name()}`, `${id}`)])
+                            }
                         }
                     })
                     ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
@@ -633,6 +638,12 @@ export class TelegramClient {
             const element = this.searchList.find(item => item.id === ctx.match.input)
             ctx.deleteMessage()
             if (element) {
+                if (element.contact?.payload.type === PUPPET.types.Contact.Official){
+                    this._currentSelectContact = element.contact;
+                    this.setPin('official', element.contact.name())
+                    ctx.answerCbQuery()
+                    return
+                }
                 if (element.type === 0) {
                     this._currentSelectContact = element.contact;
                     const talker = element.contact
@@ -687,8 +698,11 @@ export class TelegramClient {
             this._currentSelectContact = await this._weChatClient.client.Contact.find({id: id})
             // console.log(ctx.match.input
             const reply = await this._currentSelectContact?.alias() || this._currentSelectContact?.name()
-
-            this.setPin('user', reply ? reply : '')
+            if (this._currentSelectContact?.type() === PUPPET.types.Contact.Official){
+                this.setPin('official', reply ? reply : '')
+            }else {
+                this.setPin('user', reply ? reply : '')
+            }
             ctx.answerCbQuery()
         })
 
@@ -1609,10 +1623,14 @@ export class TelegramClient {
         let str = ''
         if (type === 'user') {
             str = `当前回复用户:🐵 ${name}`
-        } else {
+            this._flagPinMessageType = type;
+        } else if (type === 'room'){
             str = `当前回复群组:🚻 ${name}`
+            this._flagPinMessageType = type;
+        } else if (type === 'official'){
+            str = `当前回复公众号:📣 ${name}`
+            this._flagPinMessageType = 'user';
         }
-        this._flagPinMessageType = type;
         if (this.pinnedMessageId) {
             // 修改pin的内容
             this._bot.telegram.editMessageText(this._chatId, this.pinnedMessageId, undefined, str).catch(e => {

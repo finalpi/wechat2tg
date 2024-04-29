@@ -4,6 +4,7 @@ export interface SimpleMessage {
     id?: string;
     room?: string;
     sender?: string;
+    type?: number;
     body: string | FmtString;
     not_escape_html?: boolean;
 }
@@ -22,9 +23,12 @@ export class SimpleMessageSender implements MessageSender {
         if (simpleMessage instanceof FmtString) {
             return simpleMessage;
         } else if (simpleMessage.sender) {
-            const title = simpleMessage.room === ''
+            let title = simpleMessage.room === ''
                 ? `<b>🐵${simpleMessage.sender} : </b> \n` :
                 `<i>🚻${simpleMessage.room}</i> ---- <b>🐵${simpleMessage.sender} : </b> \n`;
+            if (simpleMessage.type === 1){
+                title = `<b>📣${simpleMessage.sender} : </b> \n`;
+            }
             return `${title}${!simpleMessage.not_escape_html ? this.escapeHTML(typeof simpleMessage.body === "string" ? simpleMessage.body : '') : simpleMessage.body}`;
         } else {
             return simpleMessage.body;
