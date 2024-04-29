@@ -13,8 +13,7 @@ This project is based on [wechaty](https://github.com/wechaty/wechaty) and imple
 ## Notice
 
 1. This project is intended only for technical research and learning and must not be used for illegal purposes.
-2. Due to the use of web protocol microsoft may be blocked, please note before use!!
-3. Please submit any issues you encounter to the issue tracker.
+2. Please submit any issues you encounter to the issue tracker.
 
 ## Installation
 
