@@ -340,7 +340,7 @@ export class TelegramClient {
             const buttons = []
             const pageList = page.getList(pageNum)
             for (const pageListElement of pageList) {
-                buttons.push([Markup.button.callback(`🚻${pageListElement.name}`, `whiteListRemove-${pageListElement.id}`)])
+                buttons.push([Markup.button.callback(`🌐${pageListElement.name}`, `whiteListRemove-${pageListElement.id}`)])
             }
             buttons.push([Markup.button.callback('上一页', `whiteList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `whiteList-${pageNum + 1}`, !page.hasNext())])
             ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
@@ -385,7 +385,7 @@ export class TelegramClient {
             const buttons = []
             const pageList = page.getList(pageNum)
             for (const pageListElement of pageList) {
-                buttons.push([Markup.button.callback(`🚻${pageListElement.name}`, `blackListRemove-${pageListElement.id}`)])
+                buttons.push([Markup.button.callback(`🌐${pageListElement.name}`, `blackListRemove-${pageListElement.id}`)])
             }
             buttons.push([Markup.button.callback('上一页', `blackList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `blackList-${pageNum + 1}`, !page.hasNext())])
             ctx.editMessageText('黑名单列表(点击移除):', Markup.inlineKeyboard(buttons))
@@ -488,7 +488,7 @@ export class TelegramClient {
                             contact: item,
                             type: 1
                         })
-                        buttons.push([Markup.button.callback(`🚻${await item.topic()}`, `${id}`)])
+                        buttons.push([Markup.button.callback(`🌐${await item.topic()}`, `${id}`)])
                     })
                     ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
                 } else {
@@ -601,9 +601,9 @@ export class TelegramClient {
                             buttons.push([Markup.button.callback(`📣${item.name()}`, `${id}`)])
                         }else {
                             if (item.payload?.alias){
-                                buttons.push([Markup.button.callback(`🐵${item.payload?.alias}[${item.name()}]`, `${id}`)])
+                                buttons.push([Markup.button.callback(`👤${item.payload?.alias}[${item.name()}]`, `${id}`)])
                             }else {
-                                buttons.push([Markup.button.callback(`🐵${item.name()}`, `${id}`)])
+                                buttons.push([Markup.button.callback(`👤${item.name()}`, `${id}`)])
                             }
                         }
                     })
@@ -1626,10 +1626,10 @@ export class TelegramClient {
         // 判断是否是群组
         let str = ''
         if (type === 'user') {
-            str = `当前回复用户:🐵 ${name}`
+            str = `当前回复用户:👤 ${name}`
             this._flagPinMessageType = type;
         } else if (type === 'room'){
-            str = `当前回复群组:🚻 ${name}`
+            str = `当前回复群组:🌐 ${name}`
             this._flagPinMessageType = type;
         } else if (type === 'official'){
             str = `当前回复公众号:📣 ${name}`
@@ -1676,7 +1676,7 @@ export class TelegramClient {
             const row = [];
             for (let j = i; j < i + lineSize && j < slice.length; j++) {
                 const keyboard = {
-                    text: '🚻' + await slice[j]?.topic(),
+                    text: '🌐' + await slice[j]?.topic(),
                     data: 'room-index-' + j
                 }
                 currentSelectRoomMap.set(keyboard.data, rooms[j]);
