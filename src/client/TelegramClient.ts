@@ -1609,8 +1609,12 @@ export class TelegramClient {
     }
 
     private async findPinMessage() {
-        //取消ping所有消息
-        await this._bot.telegram.unpinAllChatMessages(this._chatId)
+        //找到pin消息
+        const chatInfo = await this._bot.telegram.getChat(this.chatId)
+        if (chatInfo.pinned_message){
+            this.pinnedMessageId = chatInfo.pinned_message.message_id
+            this._bot.telegram.editMessageText(this.chatId,this.pinnedMessageId,undefined,"当前无回复用户")
+        }
         // 发送消息并且pin
         // this._bot.telegram.sendMessage(this._chatId, `当前无回复用户`).then(msg => {
         //     this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
