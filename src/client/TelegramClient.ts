@@ -1774,11 +1774,11 @@ export class TelegramClient {
     private getSettingButton() {
         return {
             inline_keyboard: [
-                [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK ? '黑名单' : '白名单'})`, VariableType.SETTING_NOTION_MODE),],
+                [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK ? '黑名单模式' : '白名单模式'})`, VariableType.SETTING_NOTION_MODE),],
                 [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS) ? '开启' : '关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
                 [Markup.button.callback(`自动切换联系人(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH) ? '开启' : '关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
                 [Markup.button.callback(`接收公众号消息(${this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) ? '关闭' : '开启'})`, VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT),],
-                [Markup.button.callback(`转发自己发送的消息(${this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF) ? '开启' : '关闭'})`, VariableType.SETTING_FORWARD_SELF),],
+                [Markup.button.callback(`转发自己在微信发送的消息(${this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF) ? '开启' : '关闭'})`, VariableType.SETTING_FORWARD_SELF),],
                 [Markup.button.callback(`媒体质量压缩(${this.forwardSetting.getVariable(VariableType.SETTING_COMPRESSION) ? '开启' : '关闭'})`, VariableType.SETTING_COMPRESSION),],
                 [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE ?
                     Markup.button.callback('白名单群组', VariableType.SETTING_WHITE_LIST) :
