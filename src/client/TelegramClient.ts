@@ -5,7 +5,6 @@ import {BotHelpText, SimpleMessage, SimpleMessageSender} from "../models/Message
 import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from "https-proxy-agent";
 import * as tg from "telegraf/src/core/types/typegram";
-// import {ContactInterface} from "wechaty/dist/esm/src/mods/impls";
 import {message} from "telegraf/filters";
 import {FileBox} from 'file-box'
 import * as fs from "node:fs";
@@ -18,6 +17,7 @@ import {Page} from "../models/Page";
 import {FileUtils} from "../utils/FileUtils";
 import {ContactImpl, ContactInterface, MessageInterface, RoomInterface} from "wechaty/impls";
 import {CacheHelper} from "../utils/CacheHelper";
+import * as PUPPET from "wechaty-puppet";
 
 export class TelegramClient {
     get selectedMember(): SelectedEntity[] {
@@ -175,6 +175,17 @@ export class TelegramClient {
             // {command: 'quit', description: '退出程序!! 会停止程序,需要手动重启(未实现)'},
         ]);
 
+        bot.use((ctx, next) => {
+            if (!this._chatId){
+                return next()
+            }
+            if (ctx.chat && this._chatId === ctx.chat.id) {
+                return next(); // 如果用户授权，则继续处理下一个中间件或命令
+            } else {
+                return ctx.reply('Sorry, you are not authorized to interact with this bot.'); // 如果用户未授权，发送提示消息
+            }
+        });
+
         bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
 
         bot.start(async ctx => {
@@ -293,6 +304,18 @@ export class TelegramClient {
             return ctx.answerCbQuery(answerText)
         })
 
+        // 媒体质量压缩
+        bot.action(VariableType.SETTING_COMPRESSION, ctx => {
+            const b = !this.forwardSetting.getVariable(VariableType.SETTING_COMPRESSION);
+            const answerText = b ? '开启' : '关闭';
+            this.forwardSetting.setVariable(VariableType.SETTING_COMPRESSION, b)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
+            // 点击后修改上面按钮
+            ctx.editMessageReplyMarkup(this.getSettingButton());
+            return ctx.answerCbQuery(answerText)
+        })
+
         // 白名单设置
         bot.action(VariableType.SETTING_WHITE_LIST, ctx => {
             // 当前白名单
@@ -365,7 +388,7 @@ export class TelegramClient {
                 buttons.push([Markup.button.callback(`🚻${pageListElement.name}`, `blackListRemove-${pageListElement.id}`)])
             }
             buttons.push([Markup.button.callback('上一页', `blackList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `blackList-${pageNum + 1}`, !page.hasNext())])
-            ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
+            ctx.editMessageText('黑名单列表(点击移除):', Markup.inlineKeyboard(buttons))
             ctx.answerCbQuery()
         })
 
@@ -465,7 +488,7 @@ export class TelegramClient {
                             contact: item,
                             type: 1
                         })
-                        buttons.push([Markup.button.callback(`👨‍🎓${await item.topic()}`, `${id}`)])
+                        buttons.push([Markup.button.callback(`🚻${await item.topic()}`, `${id}`)])
                     })
                     ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
                 } else {
@@ -544,7 +567,7 @@ export class TelegramClient {
                 const individual = this._weChatClient.contactMap?.get(ContactImpl.Type.Individual);
                 const official = this._weChatClient.contactMap?.get(ContactImpl.Type.Official);
                 const individualFilter:ContactInterface[] = []
-                individual?.forEach(async item=>{
+                individual?.forEach( item=>{
                     const alias = item.payload?.alias
                     if (alias?.includes(username)){
                         individualFilter.push(item)
@@ -555,7 +578,7 @@ export class TelegramClient {
                     }
                 })
                 const officialFilter:ContactInterface[] = []
-                official?.forEach(async item=>{
+                official?.forEach( item=>{
                     const alias = item.payload?.alias
                     if (alias?.includes(username)){
                         officialFilter.push(item)
@@ -574,10 +597,14 @@ export class TelegramClient {
                             contact: item,
                             type: 0
                         })
-                        if (item.payload?.alias){
-                            buttons.push([Markup.button.callback(`👨‍🎓${item.payload?.alias}[${item.name()}]`, `${id}`)])
+                        if (item.payload?.type === PUPPET.types.Contact.Official){
+                            buttons.push([Markup.button.callback(`📣${item.name()}`, `${id}`)])
                         }else {
-                            buttons.push([Markup.button.callback(`👨‍🎓${item.name()}`, `${id}`)])
+                            if (item.payload?.alias){
+                                buttons.push([Markup.button.callback(`🐵${item.payload?.alias}[${item.name()}]`, `${id}`)])
+                            }else {
+                                buttons.push([Markup.button.callback(`🐵${item.name()}`, `${id}`)])
+                            }
                         }
                     })
                     ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
@@ -611,6 +638,12 @@ export class TelegramClient {
             const element = this.searchList.find(item => item.id === ctx.match.input)
             ctx.deleteMessage()
             if (element) {
+                if (element.contact?.payload.type === PUPPET.types.Contact.Official){
+                    this._currentSelectContact = element.contact;
+                    this.setPin('official', element.contact.name())
+                    ctx.answerCbQuery()
+                    return
+                }
                 if (element.type === 0) {
                     this._currentSelectContact = element.contact;
                     const talker = element.contact
@@ -665,8 +698,11 @@ export class TelegramClient {
             this._currentSelectContact = await this._weChatClient.client.Contact.find({id: id})
             // console.log(ctx.match.input
             const reply = await this._currentSelectContact?.alias() || this._currentSelectContact?.name()
-
-            this.setPin('user', reply ? reply : '')
+            if (this._currentSelectContact?.type() === PUPPET.types.Contact.Official){
+                this.setPin('official', reply ? reply : '')
+            }else {
+                this.setPin('user', reply ? reply : '')
+            }
             ctx.answerCbQuery()
         })
 
@@ -738,7 +774,6 @@ export class TelegramClient {
             if (this._flagPinMessageType === 'user' && this._currentSelectContact) {
                 this._currentSelectContact.say(text)
                     .then((msg) => {
-
                         if (msg) {
                             CacheHelper.getInstances().addUndoMessageCache(
                                 ctx.message.message_id, msg.id)
@@ -1388,15 +1423,14 @@ export class TelegramClient {
         return;
     }
 
-    public sendMessage(message: SimpleMessage) {
+    public async sendMessage(message: SimpleMessage) {
         // console.log('发送文本消息', message)
-        return this.bot.telegram.sendMessage(this._chatId, SimpleMessageSender.send(message), {
+        const res = await this.bot.telegram.sendMessage(this._chatId, SimpleMessageSender.send(message), {
             parse_mode: 'HTML'
-        }).then(res => {
-            if (message.id) {
-                this.messageMap.set(res.message_id, message.id);
-            }
         });
+        if (message.id) {
+            this.messageMap.set(res.message_id, message.id);
+        }
     }
 
     private async pageContacts(ctx: NarrowedContext<Context<tg.Update>, tg.Update>, source: ContactInterface[] | undefined, pageNumber: number, currentSearchWord: string) {
@@ -1575,8 +1609,12 @@ export class TelegramClient {
     }
 
     private async findPinMessage() {
-        //取消ping所有消息
-        await this._bot.telegram.unpinAllChatMessages(this._chatId)
+        //找到pin消息
+        const chatInfo = await this._bot.telegram.getChat(this.chatId)
+        if (chatInfo.pinned_message){
+            this.pinnedMessageId = chatInfo.pinned_message.message_id
+            this._bot.telegram.editMessageText(this.chatId,this.pinnedMessageId,undefined,"当前无回复用户")
+        }
         // 发送消息并且pin
         // this._bot.telegram.sendMessage(this._chatId, `当前无回复用户`).then(msg => {
         //     this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
@@ -1588,11 +1626,15 @@ export class TelegramClient {
         // 判断是否是群组
         let str = ''
         if (type === 'user') {
-            str = `当前回复用户:👨‍🎓 ${name}`
-        } else {
+            str = `当前回复用户:🐵 ${name}`
+            this._flagPinMessageType = type;
+        } else if (type === 'room'){
             str = `当前回复群组:🚻 ${name}`
+            this._flagPinMessageType = type;
+        } else if (type === 'official'){
+            str = `当前回复公众号:📣 ${name}`
+            this._flagPinMessageType = 'user';
         }
-        this._flagPinMessageType = type;
         if (this.pinnedMessageId) {
             // 修改pin的内容
             this._bot.telegram.editMessageText(this._chatId, this.pinnedMessageId, undefined, str).catch(e => {
@@ -1753,11 +1795,12 @@ export class TelegramClient {
     private getSettingButton() {
         return {
             inline_keyboard: [
-                [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK ? '黑名单' : '白名单'})`, VariableType.SETTING_NOTION_MODE),],
+                [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK ? '黑名单模式' : '白名单模式'})`, VariableType.SETTING_NOTION_MODE),],
                 [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS) ? '开启' : '关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
                 [Markup.button.callback(`自动切换联系人(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH) ? '开启' : '关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
                 [Markup.button.callback(`接收公众号消息(${this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) ? '关闭' : '开启'})`, VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT),],
-                [Markup.button.callback(`转发自己发送的消息(${this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF) ? '开启' : '关闭'})`, VariableType.SETTING_FORWARD_SELF),],
+                [Markup.button.callback(`转发自己在微信发送的消息(${this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF) ? '开启' : '关闭'})`, VariableType.SETTING_FORWARD_SELF),],
+                [Markup.button.callback(`媒体质量压缩(${this.forwardSetting.getVariable(VariableType.SETTING_COMPRESSION) ? '开启' : '关闭'})`, VariableType.SETTING_COMPRESSION),],
                 [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE ?
                     Markup.button.callback('白名单群组', VariableType.SETTING_WHITE_LIST) :
                     Markup.button.callback('黑名单群组', VariableType.SETTING_BLACK_LIST)]

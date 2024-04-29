@@ -88,7 +88,7 @@ Blacklist mode: Do not receive messages from groups in the blacklist
 
 Feedback on successful delivery: Whether to provide feedback on the message delivery status
 
-Automatic contact switch: Automatically switches back to replying to a user or group if they reply
+Automatic contact switch: Automatically switches back to replying to a user or group if they reply. **Please note that having a message sent to you just before sending may result in an incorrectly sent message!**
 
 Receive official account messages: Whether to accept messages from official accounts
 

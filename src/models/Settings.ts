@@ -11,6 +11,7 @@ export class VariableContainer {
         [VariableType.SETTING_CHAT_ID]: string,
         [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: boolean,
         [VariableType.SETTING_FORWARD_SELF]: boolean,
+        [VariableType.SETTING_COMPRESSION]: boolean,
     } = {
         [VariableType.SETTING_NOTION_MODE]: NotionMode.BLACK,
         [VariableType.SETTING_WHITE_LIST]: [],
@@ -20,6 +21,7 @@ export class VariableContainer {
         [VariableType.SETTING_CHAT_ID]: '',
         [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: false,
         [VariableType.SETTING_FORWARD_SELF]: false,
+        [VariableType.SETTING_COMPRESSION]: false,
     };
 
     setVariable<T extends VariableType>(key: T, value: VariableMap[T]) {
@@ -59,6 +61,7 @@ export class VariableContainer {
                 [VariableType.SETTING_REPLY_SUCCESS]: this.variables[VariableType.SETTING_REPLY_SUCCESS] ? this.variables[VariableType.SETTING_REPLY_SUCCESS] : false,
                 [VariableType.SETTING_AUTO_SWITCH]: this.variables[VariableType.SETTING_AUTO_SWITCH] ? this.variables[VariableType.SETTING_AUTO_SWITCH] : false,
                 [VariableType.SETTING_FORWARD_SELF]: this.variables[VariableType.SETTING_FORWARD_SELF] ? this.variables[VariableType.SETTING_FORWARD_SELF] : false,
+                [VariableType.SETTING_COMPRESSION]: this.variables[VariableType.SETTING_COMPRESSION] ? this.variables[VariableType.SETTING_COMPRESSION] : false,
                 [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: this.variables[VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT] ? this.variables[VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT] : false,
             };
             fs.writeFileSync(filePath, JSON.stringify(data), 'utf8');
@@ -86,6 +89,8 @@ export enum VariableType {
     SETTING_ACCEPT_OFFICIAL_ACCOUNT = 'Setting_Accept_Official_Account',
     // 转发自己发的消息
     SETTING_FORWARD_SELF = 'Setting_Forward_Self',
+    // 媒体是否压缩
+    SETTING_COMPRESSION = 'Setting_Compression',
 }
 
 export enum NotionMode {
@@ -103,6 +108,7 @@ type VariableMap = {
     [VariableType.SETTING_CHAT_ID]: string,
     [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: boolean,
     [VariableType.SETTING_FORWARD_SELF]: boolean,
+    [VariableType.SETTING_COMPRESSION]: boolean,
 };
 
 export class GroupListSave {

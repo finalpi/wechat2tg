@@ -4,7 +4,9 @@ export interface SimpleMessage {
     id?: string;
     room?: string;
     sender?: string;
+    type?: number;
     body: string | FmtString;
+    not_escape_html?: boolean;
 }
 
 export interface MessageSender {
@@ -20,17 +22,20 @@ export class SimpleMessageSender implements MessageSender {
     sendMessage(simpleMessage: SimpleMessage): string | FmtString {
         if (simpleMessage instanceof FmtString) {
             return simpleMessage;
-        } else if (simpleMessage.sender){
-            const title = simpleMessage.room === ''
-                ? `<b>👨‍🎓${simpleMessage.sender} : </b> \n` :
-                `<i>🚻${simpleMessage.room}</i> ---- <b>👨‍🎓${simpleMessage.sender} : </b> \n`;
-            return `${title}${this.escapeHTML(typeof simpleMessage.body === "string" ? simpleMessage.body :'')}`;
+        } else if (simpleMessage.sender) {
+            let title = simpleMessage.room === ''
+                ? `<b>🐵${simpleMessage.sender} : </b> \n` :
+                `<i>🚻${simpleMessage.room}</i> ---- <b>🐵${simpleMessage.sender} : </b> \n`;
+            if (simpleMessage.type === 1){
+                title = `<b>📣${simpleMessage.sender} : </b> \n`;
+            }
+            return `${title}${!simpleMessage.not_escape_html ? this.escapeHTML(typeof simpleMessage.body === "string" ? simpleMessage.body : '') : simpleMessage.body}`;
         } else {
             return simpleMessage.body;
         }
     }
 
-    private escapeHTML(str:string) {
+    private escapeHTML(str: string) {
         return str.replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
@@ -45,7 +50,7 @@ export class SimpleMessageSender implements MessageSender {
 }
 
 
-export class BotHelpText{
+export class BotHelpText {
     static help = `
                             **欢迎使用本Bot**
                             
