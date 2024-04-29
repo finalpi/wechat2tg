@@ -460,7 +460,7 @@ export class WeChatClient {
                         const fileName = fBox.name;
 
                         const tgClient = this._tgClient
-                        tgClient.bot.telegram.sendPhoto(
+                        tgClient.bot.telegram.sendDocument(
                             tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
                     })
                 })
