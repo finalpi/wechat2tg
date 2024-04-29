@@ -13,7 +13,8 @@ This project is based on [wechaty](https://github.com/wechaty/wechaty) and imple
 ## Notice
 
 1. This project is intended only for technical research and learning and must not be used for illegal purposes.
-2. Please submit any issues you encounter to the issue tracker.
+2. Due to the use of web protocol microsoft may be blocked, please note before use!!
+3. Please submit any issues you encounter to the issue tracker.
 
 ## Installation
 
@@ -88,7 +89,7 @@ Blacklist mode: Do not receive messages from groups in the blacklist
 
 Feedback on successful delivery: Whether to provide feedback on the message delivery status
 
-Automatic contact switch: Automatically switches back to replying to a user or group if they reply
+Automatic contact switch: Automatically switches back to replying to a user or group if they reply. **Please note that having a message sent to you just before sending may result in an incorrectly sent message!**
 
 Receive official account messages: Whether to accept messages from official accounts
 
