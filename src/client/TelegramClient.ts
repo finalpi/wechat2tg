@@ -174,6 +174,17 @@ export class TelegramClient {
             // {command: 'quit', description: '退出程序!! 会停止程序,需要手动重启(未实现)'},
         ]);
 
+        bot.use((ctx, next) => {
+            if (!this._chatId){
+                return next()
+            }
+            if (ctx.chat && this._chatId === ctx.chat.id) {
+                return next(); // 如果用户授权，则继续处理下一个中间件或命令
+            } else {
+                return ctx.reply('Sorry, you are not authorized to interact with this bot.'); // 如果用户未授权，发送提示消息
+            }
+        });
+
         bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
 
         bot.start(async ctx => {
@@ -242,17 +253,6 @@ export class TelegramClient {
             this.forwardSetting.writeToFile()
             ctx.answerCbQuery()
         })
-
-        bot.use((ctx, next) => {
-            if (!this._chatId){
-                return next()
-            }
-            if (ctx.chat && this._chatId === ctx.chat.id) {
-                return next(); // 如果用户授权，则继续处理下一个中间件或命令
-            } else {
-                return ctx.reply('Sorry, you are not authorized to interact with this bot.'); // 如果用户未授权，发送提示消息
-            }
-        });
 
         // 修改回复设置
         bot.action(VariableType.SETTING_REPLY_SUCCESS, ctx => {
