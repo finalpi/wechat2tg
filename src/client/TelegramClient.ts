@@ -5,7 +5,6 @@ import {BotHelpText, SimpleMessage, SimpleMessageSender} from "../models/Message
 import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from "https-proxy-agent";
 import * as tg from "telegraf/src/core/types/typegram";
-// import {ContactInterface} from "wechaty/dist/esm/src/mods/impls";
 import {message} from "telegraf/filters";
 import {FileBox} from 'file-box'
 import * as fs from "node:fs";
@@ -544,7 +543,7 @@ export class TelegramClient {
                 const individual = this._weChatClient.contactMap?.get(ContactImpl.Type.Individual);
                 const official = this._weChatClient.contactMap?.get(ContactImpl.Type.Official);
                 const individualFilter:ContactInterface[] = []
-                individual?.forEach(async item=>{
+                individual?.forEach( item=>{
                     const alias = item.payload?.alias
                     if (alias?.includes(username)){
                         individualFilter.push(item)
@@ -555,7 +554,7 @@ export class TelegramClient {
                     }
                 })
                 const officialFilter:ContactInterface[] = []
-                official?.forEach(async item=>{
+                official?.forEach( item=>{
                     const alias = item.payload?.alias
                     if (alias?.includes(username)){
                         officialFilter.push(item)
@@ -738,7 +737,6 @@ export class TelegramClient {
             if (this._flagPinMessageType === 'user' && this._currentSelectContact) {
                 this._currentSelectContact.say(text)
                     .then((msg) => {
-
                         if (msg) {
                             CacheHelper.getInstances().addUndoMessageCache(
                                 ctx.message.message_id, msg.id)
