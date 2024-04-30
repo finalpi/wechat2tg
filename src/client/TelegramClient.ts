@@ -410,7 +410,7 @@ export class TelegramClient {
 
         // 黑白名单添加
         bot.action(/listAdd-/, ctx => {
-            ctx.reply('输入完整群名').then(() => {
+            ctx.reply('输入要加入名单的群名').then(() => {
                 listAdd = true
             })
             ctx.answerCbQuery()
@@ -497,15 +497,15 @@ export class TelegramClient {
                 return
             }
 
-            const topic = ctx.message.text.split(' ')[1];
-            // 缓存加载
-            const filterRoom = this._weChatClient.roomList.filter(room => {
-                // const roomName = ;
-                return room.payload?.topic?.includes(topic)
-            })
+            // const topic = ctx.message.text.split(' ')[1];
+            // // 缓存加载
+            // const filterRoom = this._weChatClient.roomList.filter(room => {
+            //     // const roomName = ;
+            //     return room.payload?.topic?.includes(topic)
+            // })
 
             const count = 0;
-            searchRooms = filterRoom;
+            searchRooms = this._weChatClient.roomList;
             this.generateRoomButtons(searchRooms, currentSelectRoomMap, count).then(buttons => {
                 if (buttons.length === 0) {
                     ctx.reply('没有找到群聊')
@@ -690,6 +690,15 @@ export class TelegramClient {
             ctx.answerCbQuery()
         });
 
+        bot.action(/.*addBlackOrWhite.*/, (ctx) => {
+            const data = addBlackOrWhite.find(item => item.id === ctx.match.input)
+            if (data) {
+                this.addToWhiteOrBlackList(data.text)
+            }
+            ctx.deleteMessage()
+            ctx.answerCbQuery()
+        });
+
         bot.action(/^[0-9a-z]+/, async (ctx) => {
             // ctx.update.callback_query.message
             console.log('点击了用户', ctx.match.input)
@@ -705,19 +714,31 @@ export class TelegramClient {
             }
             ctx.answerCbQuery()
         })
-
+        let addBlackOrWhite:any[] = []
         // 发送消息 回复等...
         bot.on(message('text'), async ctx => {
             const text = ctx.message.text; // 获取消息内容
             if (listAdd) {
                 // 黑白名单添加
                 listAdd = false
-                const roomList = await this._weChatClient.client.Room.findAll({topic: text})
+                addBlackOrWhite = []
+                const roomList = this._weChatClient.roomList.filter(room => {
+                    // const roomName = ;
+                    return room.payload?.topic?.includes(text)
+                })
                 if (roomList.length === 0) {
                     ctx.reply('未找到该群组,请检查群名称是否正确')
                 } else {
-                    this.addToWhiteOrBlackList(text)
-                    ctx.reply('添加成功')
+                    const buttons: tg.InlineKeyboardButton[][] = [];
+                    roomList.forEach( item=>{
+                        const id = UniqueIdGenerator.getInstance().generateId("addBlackOrWhite")
+                        addBlackOrWhite.push({
+                            id: id,
+                            text: item.payload?.topic
+                        })
+                        buttons.push([Markup.button.callback(`🌐${item.payload?.topic}`, `${id}`)]);
+                    });
+                    ctx.reply('请选择群组(点击添加):',Markup.inlineKeyboard(buttons))
                 }
                 return
             }
@@ -1613,7 +1634,9 @@ export class TelegramClient {
         const chatInfo = await this._bot.telegram.getChat(this.chatId)
         if (chatInfo.pinned_message){
             this.pinnedMessageId = chatInfo.pinned_message.message_id
-            this._bot.telegram.editMessageText(this.chatId,this.pinnedMessageId,undefined,"当前无回复用户")
+            this._bot.telegram.editMessageText(this.chatId,this.pinnedMessageId,undefined,"当前无回复用户").catch(e => {
+                //名字相同不用管
+            })
         }
         // 发送消息并且pin
         // this._bot.telegram.sendMessage(this._chatId, `当前无回复用户`).then(msg => {
@@ -1776,6 +1799,7 @@ export class TelegramClient {
             }
             if (!find) {
                 blackList.push({id: id + '', name: text})
+                this.bot.telegram.sendMessage(this.chatId,"添加成功")
             }
         } else {
             const whiteList = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST);
@@ -1787,6 +1811,7 @@ export class TelegramClient {
             }
             if (!find) {
                 whiteList.push({id: id + '', name: text})
+                this.bot.telegram.sendMessage(this.chatId,"添加成功")
             }
         }
         this.forwardSetting.writeToFile()
