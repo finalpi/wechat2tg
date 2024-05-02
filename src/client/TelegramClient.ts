@@ -179,8 +179,15 @@ export class TelegramClient {
             if (!this._chatId) {
                 return next()
             }
+
             if (ctx.chat && this._chatId === ctx.chat.id) {
                 return next(); // 如果用户授权，则继续处理下一个中间件或命令
+            }
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            // help 命令 start 命令
+            if (ctx.message['text'] === '/start' || ctx.message['text'] === '/help') {
+                return next();
             } else {
                 return ctx.reply('Sorry, you are not authorized to interact with this bot.'); // 如果用户未授权，发送提示消息
             }
