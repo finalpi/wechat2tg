@@ -18,6 +18,8 @@ import {TalkerEntity} from "../models/TalkerCache";
 import {UniqueIdGenerator} from "../utils/IdUtils"
 import {NotionMode, VariableType} from "../models/Settings";
 import {FriendshipItem} from "../models/FriendshipItem"
+import {MessageUtils} from "../utils/MessageUtils";
+import {FileBox} from "file-box";
 // import {FmtString} from "telegraf/format";
 
 // import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
@@ -407,6 +409,15 @@ export class WeChatClient {
             }
         }
 
+        const sendMessageWhenNoAvatar = (name?: string) => {
+            this._tgClient.sendMessage({
+                sender: showSender,
+                body: `收到一条 👤${name ? name : '未知'} 的名片消息,请在手机上查看`,
+                room: roomTopic,
+                id: message.id
+            })
+        }
+
         switch (messageType) {
             case PUPPET.types.Message.Unknown:
                 // console.log(talker.name(), ': 发送了unknown message...')
@@ -453,7 +464,23 @@ export class WeChatClient {
             }
                 break;
             case PUPPET.types.Message.Contact:
-                console.log('contact message')
+                // 收到名片消息
+                MessageUtils.messageTextToContact(message.text()).then(res => {
+                    const shareContactCaption = `收到一条 👤${res.nickname} 的名片消息,请在手机上查看\n${identityStr}`
+                    if (res.bigheadimgurl) {
+                        FileBox.fromUrl(res.bigheadimgurl).toBuffer().then(avatarBuff => {
+                            this._tgClient.bot.telegram.sendPhoto(
+                                this._tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption})
+                        }).catch(() => {
+                            sendMessageWhenNoAvatar(res.nickname)
+                        })
+                    } else {
+                        sendMessageWhenNoAvatar(res.nickname)
+                    }
+                }).catch(() => {
+                    sendMessageWhenNoAvatar()
+                })
+                // console.log('contact message', message)
                 break;
             case PUPPET.types.Message.Attachment: {
                 message.toFileBox().then(fBox => {
