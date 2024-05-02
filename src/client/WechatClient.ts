@@ -312,7 +312,7 @@ export class WeChatClient {
         // todo: 优化
         // const mediaCaption=
         let identityStr = roomEntity ? `🌐${roomTopic} --- 👤${showSender} : ` : `👤${showSender} : `;
-        if (talker?.type() === PUPPET.types.Contact.Official){
+        if (talker?.type() === PUPPET.types.Contact.Official) {
             identityStr = `📣${showSender} : `;
         }
         const sendMessageBody: SimpleMessage = {
@@ -426,14 +426,14 @@ export class WeChatClient {
 
                 if (messageTxt) {
                     // console.log('showSender is :', showSender, 'talker id is :', talker.id, 'message text is ', messageTxt,)
-                    // 地址
+                    // 地址 只有个人发送的才会有这个连接的文本出现
                     if (messageTxt.endsWith('pictype=location')) {
                         const locationText = `收到一个位置信息:\n <code>${message.text().split(`\n`)[0].replace(':', '')}</code>`
                         this._tgClient.sendMessage({
                             sender: showSender,
                             body: locationText,
                             room: roomTopic,
-                            type: talker?.type() === PUPPET.types.Contact.Official?1:0,
+                            type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                             id: message.id,
                             not_escape_html: true,
                         })
@@ -446,7 +446,7 @@ export class WeChatClient {
                         sender: showSender,
                         body: convertedText,
                         room: roomTopic,
-                        type: talker?.type() === PUPPET.types.Contact.Official?1:0,
+                        type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                         id: message.id
                     })
                 }
@@ -486,10 +486,10 @@ export class WeChatClient {
                         const fileName = fBox.name;
 
                         const tgClient = this._tgClient
-                        if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)){
+                        if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) {
                             tgClient.bot.telegram.sendPhoto(
                                 tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
-                        }else {
+                        } else {
                             tgClient.bot.telegram.sendDocument(
                                 tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
                         }
@@ -525,10 +525,10 @@ export class WeChatClient {
                         const fileName = fBox.name;
 
                         const tgClient = this._tgClient
-                        if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)){
+                        if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) {
                             tgClient.bot.telegram.sendVideo(
                                 tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
-                        }else {
+                        } else {
                             tgClient.bot.telegram.sendDocument(
                                 tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
                         }
@@ -590,9 +590,9 @@ export class WeChatClient {
         const contactList = await this._client.Contact.findAll();
         // 不知道是什么很多空的 过滤掉没名字和不是朋友的
         const filter = contactList.filter(it => it.name() && it.friend());
-        await contactList.forEach(async item=>{
+        await contactList.forEach(async item => {
             let count = 0;
-            while (item.payload?.alias === item.name() && count < 5){
+            while (item.payload?.alias === item.name() && count < 5) {
                 await item.sync()
                 count++
             }

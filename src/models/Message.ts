@@ -26,7 +26,7 @@ export class SimpleMessageSender implements MessageSender {
             let title = simpleMessage.room === ''
                 ? `<b>👤${simpleMessage.sender} : </b> \n` :
                 `<i>🌐${simpleMessage.room}</i> ---- <b>👤${simpleMessage.sender} : </b> \n`;
-            if (simpleMessage.type === 1){
+            if (simpleMessage.type === 1) {
                 title = `<b>📣${simpleMessage.sender} : </b> \n`;
             }
             return `${title}${!simpleMessage.not_escape_html ? this.escapeHTML(typeof simpleMessage.body === "string" ? simpleMessage.body : '') : simpleMessage.body}`;

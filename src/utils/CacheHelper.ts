@@ -1,4 +1,4 @@
-export class CacheHelper{
+export class CacheHelper {
     private undoMessageCaches: Map<number | string, undoMessageCache> = new Map();
     private static undoCacheExpiryTime: number = 2 * 60 * 1000; // 默认缓存过期时间为2分钟
     private static undoCleanupInterval: number = 3 * 1000; // 3秒清理过期的缓存
@@ -11,10 +11,10 @@ export class CacheHelper{
     }
 
     public static getInstances(): CacheHelper {
-            if(!CacheHelper.instance){
-                CacheHelper.instance = new CacheHelper();
-            }
-            return CacheHelper.instance;
+        if (!CacheHelper.instance) {
+            CacheHelper.instance = new CacheHelper();
+        }
+        return CacheHelper.instance;
     }
 
     private startCleanupInterval(): void {
