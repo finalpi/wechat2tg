@@ -230,6 +230,7 @@ export class WeChatClient {
     public reset() {
         this._client.reset().then(() => {
             console.log('reset ... ')
+            this.resetValue()
         })
     }
 
@@ -237,6 +238,7 @@ export class WeChatClient {
         this._client.logout();
         // this._client.reset().then()
         console.log('logout ... ')
+        this.resetValue()
     }
 
     private login() {
@@ -269,7 +271,7 @@ export class WeChatClient {
 
     // scan qrcode login
     private scan(qrcode: string, status: ScanStatus) {
-        console.log('---------scan login---------')
+        console.log('---------on scan---------')
         if (status === ScanStatus.Waiting || status === ScanStatus.Timeout) {
             const qrcodeImageUrl = encodeURIComponent(qrcode)
 
@@ -650,5 +652,12 @@ export class WeChatClient {
         // set flag
 
 
+    }
+
+    private resetValue() {
+        this.contactMap?.clear();
+        this.cacheMemberDone = false
+        this.cacheMemberSendMessage = false
+        this.roomList?.splice(0, this.roomList.length)
     }
 }
