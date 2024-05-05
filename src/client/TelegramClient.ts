@@ -861,7 +861,7 @@ export class TelegramClient {
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
                     const nowShangHaiZh = new Date().toLocaleString('zh', {
                         timeZone: 'Asia/ShangHai'
-                    }).toString().replaceAll('/','-')
+                    }).toString().replaceAll('/', '-')
                     console.log('voice name', nowShangHaiZh)
                     const fileBox = FileBox.fromUrl(fileLink.toString(), {name: `语音-${nowShangHaiZh.toLocaleLowerCase()}.mp3`});
                     const replyMessageId = ctx.update.message['reply_to_message']?.message_id;
@@ -1674,12 +1674,20 @@ export class TelegramClient {
             // 修改pin的内容
             this._bot.telegram.editMessageText(this._chatId, this.pinnedMessageId, undefined, str).catch(e => {
                 // 名字相同不用管
+                // pin消息被删除了
+                // 发送消息并且pin
+                this._bot.telegram.sendMessage(this._chatId, str).then(msg => {
+                    this._bot.telegram.pinChatMessage(this._chatId, msg.message_id).then(() => {
+                        this.pinnedMessageId = msg.message_id
+                    });
+                })
             })
         } else {
             // 发送消息并且pin
             this._bot.telegram.sendMessage(this._chatId, str).then(msg => {
-                this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
-                this.pinnedMessageId = msg.message_id
+                this._bot.telegram.pinChatMessage(this._chatId, msg.message_id).then(() => {
+                    this.pinnedMessageId = msg.message_id
+                });
             })
         }
     }
