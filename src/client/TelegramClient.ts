@@ -18,6 +18,7 @@ import {FileUtils} from "../utils/FileUtils";
 import {ContactImpl, ContactInterface, MessageInterface, RoomInterface} from "wechaty/impls";
 import {CacheHelper} from "../utils/CacheHelper";
 import * as PUPPET from "wechaty-puppet";
+import * as timers from "node:timers";
 
 export class TelegramClient {
     get selectedMember(): SelectedEntity[] {
@@ -858,7 +859,11 @@ export class TelegramClient {
             if (ctx.message.voice) {
                 const fileId = ctx.message.voice.file_id;
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
-                    const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message.voice.file_unique_id + '.mp3');
+                    const nowShangHaiZh = new Date().toLocaleString('zh', {
+                        timeZone: 'Asia/ShangHai'
+                    }).toString().replaceAll('/','-')
+                    console.log('voice name', nowShangHaiZh)
+                    const fileBox = FileBox.fromUrl(fileLink.toString(), {name: `语音-${nowShangHaiZh.toLocaleLowerCase()}.mp3`});
                     const replyMessageId = ctx.update.message['reply_to_message']?.message_id;
                     // 如果是回复的消息 优先回复该发送的消息
                     if (replyMessageId) {
