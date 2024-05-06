@@ -18,7 +18,7 @@ ENV PROXY_PORT=""
 ENV PROXY_USERNAME=""
 ENV PROXY_PASSWORD=""
 
-RUN npm config set registry registry.npmmirror.com
+RUN npm config set registry https://registry.npmmirror.com
 RUN npm install
 
 COPY . .
