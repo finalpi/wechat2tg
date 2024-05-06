@@ -18,7 +18,7 @@ ENV PROXY_PORT=""
 ENV PROXY_USERNAME=""
 ENV PROXY_PASSWORD=""
 
-RUN npm config set registry https://registry.npmmirror.com
+RUN npm config set network-timeout 300000
 RUN npm install
 
 COPY . .
