@@ -18,8 +18,7 @@ ENV PROXY_PORT=""
 ENV PROXY_USERNAME=""
 ENV PROXY_PASSWORD=""
 
-RUN npm config set network-timeout 300000
-RUN npm install
+RUN npm install --fetch-timeout=300000
 
 COPY . .
 
