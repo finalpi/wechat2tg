@@ -230,7 +230,6 @@ export class WeChatClient {
     public reset() {
         this._client.reset().then(() => {
             console.log('reset ... ')
-            this.resetValue()
         })
     }
 
@@ -663,5 +662,8 @@ export class WeChatClient {
         this.cacheMemberDone = false
         this.cacheMemberSendMessage = false
         this.roomList?.splice(0, this.roomList.length)
+        this.tgClient.selectedMember = []
+        this.tgClient.flagPinMessageType = ''
+        this.tgClient.findPinMessage()
     }
 }

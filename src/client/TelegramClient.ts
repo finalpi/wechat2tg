@@ -21,6 +21,13 @@ import * as PUPPET from "wechaty-puppet";
 import * as timers from "node:timers";
 
 export class TelegramClient {
+    get flagPinMessageType(): string {
+        return this._flagPinMessageType;
+    }
+
+    set flagPinMessageType(value: string) {
+        this._flagPinMessageType = value;
+    }
     get selectedMember(): SelectedEntity[] {
         return this._selectedMember;
     }
@@ -1641,7 +1648,7 @@ export class TelegramClient {
 
     }
 
-    private async findPinMessage() {
+    public async findPinMessage() {
         //找到pin消息
         const chatInfo = await this._bot.telegram.getChat(this.chatId)
         if (chatInfo.pinned_message) {
