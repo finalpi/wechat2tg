@@ -18,7 +18,7 @@ ENV PROXY_PORT=""
 ENV PROXY_USERNAME=""
 ENV PROXY_PASSWORD=""
 
-RUN npm install
+RUN npm install --fetch-retries=5
 
 COPY . .
 
