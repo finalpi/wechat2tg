@@ -18,7 +18,8 @@ ENV PROXY_PORT=""
 ENV PROXY_USERNAME=""
 ENV PROXY_PASSWORD=""
 
-RUN npm install --fetch-retries=5
+RUN npm config set registry registry.npmmirror.com
+RUN npm install
 
 COPY . .
 
