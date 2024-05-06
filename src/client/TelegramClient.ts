@@ -28,6 +28,7 @@ export class TelegramClient {
     set flagPinMessageType(value: string) {
         this._flagPinMessageType = value;
     }
+
     get selectedMember(): SelectedEntity[] {
         return this._selectedMember;
     }
@@ -1653,9 +1654,13 @@ export class TelegramClient {
         const chatInfo = await this._bot.telegram.getChat(this.chatId)
         if (chatInfo.pinned_message) {
             this.pinnedMessageId = chatInfo.pinned_message.message_id
-            this._bot.telegram.editMessageText(this.chatId, this.pinnedMessageId, undefined, "当前无回复用户").catch(e => {
+            this._bot.telegram.editMessageText(this.chatId, this.pinnedMessageId, undefined, "当前无回复用户").then((res) => {
+                if (typeof res !== 'boolean') {
+                    this._bot.telegram.pinChatMessage(this._chatId, res.message_id)
+                }
+            }).catch(e => {
                 //名字相同不用管
-                if(e.response.error_code === 400){
+                if (e.response.error_code === 400) {
                     return
                 }
                 this._bot.telegram.sendMessage(this._chatId, "当前无回复用户").then(msg => {
@@ -1666,10 +1671,10 @@ export class TelegramClient {
             })
         }
         // 发送消息并且pin
-        // this._bot.telegram.sendMessage(this._chatId, `当前无回复用户`).then(msg => {
-        //     this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
-        //     this.pinnedMessageId = msg.message_id
-        // })
+        this._bot.telegram.sendMessage(this._chatId, `当前无回复用户`).then(msg => {
+            this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
+            this.pinnedMessageId = msg.message_id
+        })
     }
 
     private setPin(type: string, name: string | undefined) {
@@ -1687,18 +1692,18 @@ export class TelegramClient {
         }
         if (this.pinnedMessageId) {
             // 修改pin的内容
-            this._bot.telegram.editMessageText(this._chatId, this.pinnedMessageId, undefined, str).catch(e => {
+            // let editMessageSuccess = true;
+            this._bot.telegram.editMessageText(this._chatId, this.pinnedMessageId, undefined, str).then(async (res) => {
+                if (typeof res !== 'boolean') {
+                    this._bot.telegram.pinChatMessage(this._chatId, res.message_id)
+                }
+            }).catch(e => {
                 // 名字相同不用管
                 // pin消息被删除了
                 // 发送消息并且pin
-                if(e.response.error_code === 400){
+                if (e.response.error_code === 400) {
                     return
                 }
-                this._bot.telegram.sendMessage(this._chatId, str).then(msg => {
-                    this._bot.telegram.pinChatMessage(this._chatId, msg.message_id).then(() => {
-                        this.pinnedMessageId = msg.message_id
-                    });
-                })
             })
         } else {
             // 发送消息并且pin
