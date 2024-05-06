@@ -1648,6 +1648,14 @@ export class TelegramClient {
             this.pinnedMessageId = chatInfo.pinned_message.message_id
             this._bot.telegram.editMessageText(this.chatId, this.pinnedMessageId, undefined, "当前无回复用户").catch(e => {
                 //名字相同不用管
+                if(e.response.error_code === 400){
+                    return
+                }
+                this._bot.telegram.sendMessage(this._chatId, "当前无回复用户").then(msg => {
+                    this._bot.telegram.pinChatMessage(this._chatId, msg.message_id).then(() => {
+                        this.pinnedMessageId = msg.message_id
+                    });
+                })
             })
         }
         // 发送消息并且pin
@@ -1676,6 +1684,9 @@ export class TelegramClient {
                 // 名字相同不用管
                 // pin消息被删除了
                 // 发送消息并且pin
+                if(e.response.error_code === 400){
+                    return
+                }
                 this._bot.telegram.sendMessage(this._chatId, str).then(msg => {
                     this._bot.telegram.pinChatMessage(this._chatId, msg.message_id).then(() => {
                         this.pinnedMessageId = msg.message_id
