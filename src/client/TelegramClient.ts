@@ -762,7 +762,7 @@ export class TelegramClient {
             // 如果是回复的消息 优先回复该发送的消息
             if (replyMessageId) {
                 // try get weChat cache message id
-                // 假设回复消息是撤回命令
+                // 假设回复消息是撤回命令 撤回web协议获取不到消息id 放弃
                 if (text === '&rm') {
                     const undoMessageCache = CacheHelper.getInstances().getUndoMessageCache(replyMessageId);
                     if (undoMessageCache) {
@@ -780,8 +780,31 @@ export class TelegramClient {
                     }
                     return;
                 }
-                // todo: 可以去找到最原始的消息 非必要
                 const weChatMessageId = this._messageMap.get(replyMessageId)
+                // 设置别名
+                if (text.startsWith('&alias') && weChatMessageId) {
+                    this.weChatClient.client.Message.find({id: weChatMessageId}).then(msg => {
+                        msg?.talker()?.alias(text.substring(6).trimStart()).then(async () => {
+                            const cacheContacts = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual);
+                            if (cacheContacts) {
+                                for (const item of cacheContacts) {
+                                    if (item.id === msg?.talker()?.id) {
+                                        await item.alias(text.substring(6).trimStart())
+                                        await item.sync()
+                                        break
+                                    }
+                                }
+                            }
+                            ctx.reply('备注设置成功')
+                        })
+                    }).catch(() => {
+                        ctx.reply('备注设置失败')
+                    })
+                    return;
+                }
+
+                // todo: 可以去找到最原始的消息 非必要
+
                 if (weChatMessageId) {
                     // 添加或者移除名单
 
