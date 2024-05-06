@@ -1669,12 +1669,13 @@ export class TelegramClient {
                     });
                 })
             })
+        }else {
+            // 发送消息并且pin
+            this._bot.telegram.sendMessage(this._chatId, `当前无回复用户`).then(msg => {
+                this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
+                this.pinnedMessageId = msg.message_id
+            })
         }
-        // 发送消息并且pin
-        this._bot.telegram.sendMessage(this._chatId, `当前无回复用户`).then(msg => {
-            this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
-            this.pinnedMessageId = msg.message_id
-        })
     }
 
     private setPin(type: string, name: string | undefined) {
