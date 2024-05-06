@@ -323,6 +323,7 @@ export class WeChatClient {
             sender: showSender,
             body: '收到一条 未知消息类型',
             room: roomTopic,
+            type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
             id: message.id
         }
 
@@ -415,6 +416,7 @@ export class WeChatClient {
             this._tgClient.sendMessage({
                 sender: showSender,
                 body: `收到一条 👤${name ? name : '未知'} 的名片消息,请在手机上查看`,
+                type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                 room: roomTopic,
                 id: message.id
             })
@@ -502,6 +504,7 @@ export class WeChatClient {
                     this._tgClient.sendMessage({
                         sender: showSender,
                         body: message.text(),
+                        type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                         room: roomTopic,
                         id: message.id
                     })
@@ -568,6 +571,7 @@ export class WeChatClient {
             case PUPPET.types.Message.Emoticon: // 处理表情消息的逻辑
                 this._tgClient.sendMessage({
                     sender: showSender,
+                    type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                     body: "[动画表情]",
                     room: roomTopic,
                     id: message.id
