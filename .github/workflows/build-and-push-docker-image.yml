@@ -3,7 +3,7 @@ name: Build and Push Docker Image
 on:
   push:
     branches:
-      - 'refactor/ts-single-dev'
+      - 'master'
 
 jobs:
   build-and-push:
@@ -38,7 +38,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: finalpi/wechat2tg-dev:latest
+          tags: finalpi/wechat2tg:latest
           platforms: linux/amd64,linux/arm64/v8,linux/arm/v7
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,mode=max,dest=/tmp/.buildx-cache
