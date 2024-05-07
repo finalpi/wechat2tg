@@ -353,11 +353,15 @@ export class TelegramClient {
                 ctx.answerCbQuery()
                 return
             }
-            const page = new Page(list, pageNum, 5)
+            const page = new Page(list, pageNum, TelegramClient.PAGE_SIZE)
             const buttons = []
             const pageList = page.getList(pageNum)
-            for (const pageListElement of pageList) {
-                buttons.push([Markup.button.callback(`🌐${pageListElement.name}`, `whiteListRemove-${pageListElement.id}`)])
+            for (let i = 0; i < pageList.length; i += 2) {
+                const buttonRow = [Markup.button.callback(`🌐${pageList[i].name}`, `whiteListRemove-${pageList[i].id}`)];
+                if (i + 1 < pageList.length) {
+                    buttonRow.push(Markup.button.callback(`🌐${pageList[i + 1].name}`, `whiteListRemove-${pageList[i + 1].id}`));
+                }
+                buttons.push(buttonRow);
             }
             buttons.push([Markup.button.callback('上一页', `whiteList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `whiteList-${pageNum + 1}`, !page.hasNext())])
             ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
@@ -398,11 +402,15 @@ export class TelegramClient {
                 ctx.answerCbQuery()
                 return
             }
-            const page = new Page(list, pageNum, 5)
+            const page = new Page(list, pageNum, TelegramClient.PAGE_SIZE)
             const buttons = []
             const pageList = page.getList(pageNum)
-            for (const pageListElement of pageList) {
-                buttons.push([Markup.button.callback(`🌐${pageListElement.name}`, `blackListRemove-${pageListElement.id}`)])
+            for (let i = 0; i < pageList.length; i += 2) {
+                const buttonRow = [Markup.button.callback(`🌐${pageList[i].name}`, `whiteListRemove-${pageList[i].id}`)];
+                if (i + 1 < pageList.length) {
+                    buttonRow.push(Markup.button.callback(`🌐${pageList[i + 1].name}`, `whiteListRemove-${pageList[i + 1].id}`));
+                }
+                buttons.push(buttonRow);
             }
             buttons.push([Markup.button.callback('上一页', `blackList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `blackList-${pageNum + 1}`, !page.hasNext())])
             ctx.editMessageText('黑名单列表(点击移除):', Markup.inlineKeyboard(buttons))
@@ -498,6 +506,7 @@ export class TelegramClient {
                 })
                 if (filterRoom && filterRoom.length > 0) {
                     const buttons: tg.InlineKeyboardButton[][] = [];
+                    this.searchList = [];
                     await filterRoom.forEach(async item => {
                         const id = UniqueIdGenerator.getInstance().generateId("search")
                         this.searchList.push({
@@ -505,8 +514,21 @@ export class TelegramClient {
                             contact: item,
                             type: 1
                         })
-                        buttons.push([Markup.button.callback(`🌐${await item.topic()}`, `${id}`)])
                     })
+                    const page = new Page(this.searchList,1,TelegramClient.PAGE_SIZE)
+                    const pageList = page.getList(1)
+                    for (let i = 0; i < pageList.length; i += 2) {
+                        const item = pageList[i].contact
+                        const buttonRow = [Markup.button.callback(`🌐${await item.topic()}`, `${pageList[i].id}`)];
+                        if (i + 1 < pageList.length) {
+                            const item1 = pageList[i + 1].contact
+                            buttonRow.push(Markup.button.callback(`🌐${await item1.topic()}`, `${pageList[i + 1].id}`));
+                        }
+                        buttons.push(buttonRow);
+                    }
+                    if (page.hasNext()){
+                        buttons.push([Markup.button.callback(`下一页`, `search-2`)])
+                    }
                     ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
                 } else {
                     ctx.reply("未找到该群组:" + topic)
@@ -607,6 +629,7 @@ export class TelegramClient {
                 })
                 if ((individualFilter && individualFilter.length > 0) || (officialFilter && officialFilter.length > 0)) {
                     const buttons: tg.InlineKeyboardButton[][] = [];
+                    this.searchList = [];
                     [...officialFilter, ...individualFilter].forEach(item => {
                         const id = UniqueIdGenerator.getInstance().generateId("search")
                         this.searchList.push({
@@ -614,16 +637,38 @@ export class TelegramClient {
                             contact: item,
                             type: 0
                         })
+                    })
+                    const page = new Page(this.searchList,1,TelegramClient.PAGE_SIZE)
+                    const pageList = page.getList(1)
+                    for (let i = 0; i < pageList.length; i += 2) {
+                        const item = pageList[i].contact
+                        const buttonRow:tg.InlineKeyboardButton[] = [];
                         if (item.payload?.type === PUPPET.types.Contact.Official) {
-                            buttons.push([Markup.button.callback(`📣${item.name()}`, `${id}`)])
+                            buttonRow.push(Markup.button.callback(`📣${item.name()}`, `${pageList[i].id}`))
                         } else {
                             if (item.payload?.alias) {
-                                buttons.push([Markup.button.callback(`👤${item.payload?.alias}[${item.name()}]`, `${id}`)])
+                                buttonRow.push(Markup.button.callback(`👤${item.payload?.alias}[${item.name()}]`, `${pageList[i].id}`))
                             } else {
-                                buttons.push([Markup.button.callback(`👤${item.name()}`, `${id}`)])
+                                buttonRow.push(Markup.button.callback(`👤${item.name()}`, `${pageList[i].id}`))
                             }
                         }
-                    })
+                        if (i + 1 < pageList.length) {
+                            const item1 = pageList[i + 1].contact
+                            if (item1.payload?.type === PUPPET.types.Contact.Official) {
+                                buttonRow.push(Markup.button.callback(`📣${item1.name()}`, `${pageList[i + 1].id}`))
+                            } else {
+                                if (item1.payload?.alias) {
+                                    buttonRow.push(Markup.button.callback(`👤${item1.payload?.alias}[${item1.name()}]`, `${pageList[i + 1].id}`))
+                                } else {
+                                    buttonRow.push(Markup.button.callback(`👤${item1.name()}`, `${pageList[i + 1].id}`))
+                                }
+                            }
+                        }
+                        buttons.push(buttonRow);
+                    }
+                    if (page.hasNext()){
+                        buttons.push([Markup.button.callback(`下一页`, `search-2`)])
+                    }
                     ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
                 } else {
                     ctx.reply("未找到该用户:" + username)
@@ -649,6 +694,60 @@ export class TelegramClient {
             // Send message with inline keyboard
             ctx.reply('请选择类型：', inlineKeyboard);
 
+        })
+
+        bot.action(/search-(\d+)/,  async (ctx) => {
+            const buttons: tg.InlineKeyboardButton[][] = [];
+            const page = parseInt(ctx.match[1]);
+            const page1 = new Page(this.searchList,page,TelegramClient.PAGE_SIZE)
+            const pageList = page1.getList(page)
+            for (let i = 0; i < pageList.length; i += 2) {
+                const type = pageList[i].type
+                if(type === 1){
+                    const item = pageList[i].contact
+                    const buttonRow = [Markup.button.callback(`🌐${await item.topic()}`, `${pageList[i].id}`)];
+                    if (i + 1 < pageList.length) {
+                        const item1 = pageList[i + 1].contact
+                        buttonRow.push(Markup.button.callback(`🌐${await item1.topic()}`, `${pageList[i + 1].id}`));
+                    }
+                    buttons.push(buttonRow);
+                }else {
+                    const item = pageList[i].contact
+                    const buttonRow:tg.InlineKeyboardButton[] = [];
+                    if (item.payload?.type === PUPPET.types.Contact.Official) {
+                        buttonRow.push(Markup.button.callback(`📣${item.name()}`, `${pageList[i].id}`))
+                    } else {
+                        if (item.payload?.alias) {
+                            buttonRow.push(Markup.button.callback(`👤${item.payload?.alias}[${item.name()}]`, `${pageList[i].id}`))
+                        } else {
+                            buttonRow.push(Markup.button.callback(`👤${item.name()}`, `${pageList[i].id}`))
+                        }
+                    }
+                    if (i + 1 < pageList.length) {
+                        const item1 = pageList[i + 1].contact
+                        if (item1.payload?.type === PUPPET.types.Contact.Official) {
+                            buttonRow.push(Markup.button.callback(`📣${item1.name()}`, `${pageList[i + 1].id}`))
+                        } else {
+                            if (item1.payload?.alias) {
+                                buttonRow.push(Markup.button.callback(`👤${item1.payload?.alias}[${item1.name()}]`, `${pageList[i + 1].id}`))
+                            } else {
+                                buttonRow.push(Markup.button.callback(`👤${item1.name()}`, `${pageList[i + 1].id}`))
+                            }
+                        }
+                    }
+                    buttons.push(buttonRow);
+                }
+            }
+            const lastButton = []
+            if (page1.hasLast()){
+                lastButton.push(Markup.button.callback(`上一页`, `search-${page-1}`))
+            }
+            if (page1.hasNext()){
+                lastButton.push(Markup.button.callback(`下一页`, `search-${page+1}`))
+            }
+            buttons.push(lastButton)
+            ctx.editMessageText('请选择群组(点击添加):', Markup.inlineKeyboard(buttons))
+            ctx.answerCbQuery()
         })
 
         bot.action(/search/, async ctx => {
@@ -707,6 +806,30 @@ export class TelegramClient {
             ctx.answerCbQuery()
         });
 
+        bot.action(/addBlackOrWhite-(\d+)/,  (ctx) => {
+            const buttons: tg.InlineKeyboardButton[][] = [];
+            const page = parseInt(ctx.match[1]);
+            const page1 = new Page(addBlackOrWhite,page,TelegramClient.PAGE_SIZE)
+            const pageList = page1.getList(page)
+            for (let i = 0; i < pageList.length; i += 2) {
+                const buttonRow = [Markup.button.callback(`🌐${pageList[i].text}`, `${pageList[i].id}`)];
+                if (i + 1 < pageList.length) {
+                    buttonRow.push(Markup.button.callback(`🌐${pageList[i + 1].text}`, `${pageList[i + 1].id}`));
+                }
+                buttons.push(buttonRow);
+            }
+            const lastButton = []
+            if (page1.hasLast()){
+                lastButton.push(Markup.button.callback(`上一页`, `addBlackOrWhite-${page-1}`))
+            }
+            if (page1.hasNext()){
+                lastButton.push(Markup.button.callback(`下一页`, `addBlackOrWhite-${page+1}`))
+            }
+            buttons.push(lastButton)
+            ctx.editMessageText('请选择群组(点击添加):', Markup.inlineKeyboard(buttons))
+            ctx.answerCbQuery()
+        })
+
         bot.action(/.*addBlackOrWhite.*/, (ctx) => {
             const data = addBlackOrWhite.find(item => item.id === ctx.match.input)
             if (data) {
@@ -753,8 +876,19 @@ export class TelegramClient {
                             id: id,
                             text: item.payload?.topic
                         })
-                        buttons.push([Markup.button.callback(`🌐${item.payload?.topic}`, `${id}`)]);
                     });
+                    const page1 = new Page(addBlackOrWhite,1,TelegramClient.PAGE_SIZE)
+                    const pageList = page1.getList(1)
+                    for (let i = 0; i < pageList.length; i += 2) {
+                        const buttonRow = [Markup.button.callback(`🌐${pageList[i].text}`, `${pageList[i].id}`)];
+                        if (i + 1 < pageList.length) {
+                            buttonRow.push(Markup.button.callback(`🌐${pageList[i + 1].text}`, `${pageList[i + 1].id}`));
+                        }
+                        buttons.push(buttonRow);
+                    }
+                    if (page1.hasNext()) {
+                        buttons.push([Markup.button.callback(`下一页`, `addBlackOrWhite-2`)])
+                    }
                     ctx.reply('请选择群组(点击添加):', Markup.inlineKeyboard(buttons))
                 }
                 return
