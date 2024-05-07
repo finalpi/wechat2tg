@@ -26,6 +26,59 @@ import {FileBox} from "file-box";
 
 
 export class WeChatClient {
+
+
+    constructor(private readonly tgClient: TelegramClient) {
+        this._client = WechatyBuilder.build({
+            name: './storage/wechat_bot',
+            puppet: 'wechaty-puppet-wechat4u',
+            puppetOptions: {
+                uos: true
+            }
+        })
+        this._tgClient = tgClient;
+        this._contactMap = new Map<number, Set<ContactInterface>>([
+            [0, new Set<ContactInterface>()],
+            [1, new Set<ContactInterface>()],
+            [2, new Set<ContactInterface>()],
+            [3, new Set<ContactInterface>()]
+        ]);
+
+        this.scan = this.scan.bind(this);
+        this.message = this.message.bind(this);
+        this.start = this.start.bind(this);
+        this.friendship = this.friendship.bind(this);
+        this.init = this.init.bind(this);
+        this.logout = this.logout.bind(this);
+        this.login = this.login.bind(this);
+        this.onReady = this.onReady.bind(this)
+    }
+
+    private readonly _client: WechatyInterface;
+    private readonly _tgClient: TelegramClient;
+
+    private _contactMap: Map<number, Set<ContactInterface>> | undefined;
+    private _roomList: RoomInterface[] = [];
+
+    private _selectedContact: ContactInterface [] = [];
+    private _selectedRoom: RoomInterface [] = [];
+    private _memberCache: MemberCacheType[] = [];
+    private scanMsgId: number | undefined = undefined
+
+    private _started = false;
+    private _cacheMemberDone = false;
+    private _cacheMemberSendMessage = false;
+    private _friendShipList: FriendshipItem[] = []
+    private loadMsg: number | undefined = undefined
+
+    public get contactMap(): Map<number, Set<ContactInterface>> | undefined {
+        return this._contactMap;
+    }
+
+    public set contactMap(contactMap: Map<number, Set<ContactInterface>> | undefined) {
+        this._contactMap = contactMap;
+    }
+
     get friendShipList(): FriendshipItem[] {
         return this._friendShipList;
     }
@@ -82,60 +135,8 @@ export class WeChatClient {
         this._selectedContact = value;
     }
 
-    private readonly _tgClient: TelegramClient;
-
-    constructor(private readonly tgClient: TelegramClient) {
-        this._client = WechatyBuilder.build({
-            name: './storage/wechat_bot',
-            puppet: 'wechaty-puppet-wechat4u',
-            puppetOptions: {
-                uos: true
-            }
-        })
-        this._tgClient = tgClient;
-        this._contactMap = new Map<number, Set<ContactInterface>>([
-            [0, new Set<ContactInterface>()],
-            [1, new Set<ContactInterface>()],
-            [2, new Set<ContactInterface>()],
-            [3, new Set<ContactInterface>()]
-        ]);
-
-        this.scan = this.scan.bind(this);
-        this.message = this.message.bind(this);
-        this.start = this.start.bind(this);
-        this.friendship = this.friendship.bind(this);
-        this.init = this.init.bind(this);
-        this.logout = this.logout.bind(this);
-        this.login = this.login.bind(this);
-        this.onReady = this.onReady.bind(this)
-    }
-
-    private readonly _client: WechatyInterface;
-
     public get client() {
         return this._client;
-    }
-
-    private _contactMap: Map<number, Set<ContactInterface>> | undefined;
-    private _roomList: RoomInterface[] = [];
-
-    private _selectedContact: ContactInterface [] = [];
-    private _selectedRoom: RoomInterface [] = [];
-    private _memberCache: MemberCacheType[] = [];
-    private scanMsgId: number | undefined = undefined
-
-    private _started = false;
-    private _cacheMemberDone = false;
-    private _cacheMemberSendMessage = false;
-    private _friendShipList: FriendshipItem[] = []
-    private loadMsg: number | undefined = undefined
-
-    public get contactMap(): Map<number, Set<ContactInterface>> | undefined {
-        return this._contactMap;
-    }
-
-    public set contactMap(contactMap: Map<number, Set<ContactInterface>> | undefined) {
-        this._contactMap = contactMap;
     }
 
     public async start() {
