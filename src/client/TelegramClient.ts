@@ -184,6 +184,7 @@ export class TelegramClient {
             // {command: 'quit', description: '退出程序!! 会停止程序,需要手动重启(未实现)'},
         ]);
 
+        // 此方法需要放在所有监听方法之前,先拦截命令做处理
         bot.use((ctx, next) => {
             if (!this._chatId) {
                 return next()
