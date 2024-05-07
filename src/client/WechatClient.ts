@@ -18,6 +18,8 @@ import {TalkerEntity} from "../models/TalkerCache";
 import {UniqueIdGenerator} from "../utils/IdUtils"
 import {NotionMode, VariableType} from "../models/Settings";
 import {FriendshipItem} from "../models/FriendshipItem"
+import {MessageUtils} from "../utils/MessageUtils";
+import {FileBox} from "file-box";
 // import {FmtString} from "telegraf/format";
 
 // import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
@@ -235,6 +237,7 @@ export class WeChatClient {
         this._client.logout();
         // this._client.reset().then()
         console.log('logout ... ')
+        this.resetValue()
     }
 
     private login() {
@@ -267,7 +270,7 @@ export class WeChatClient {
 
     // scan qrcode login
     private scan(qrcode: string, status: ScanStatus) {
-        console.log('---------scan login---------')
+        console.log('---------on scan---------')
         if (status === ScanStatus.Waiting || status === ScanStatus.Timeout) {
             const qrcodeImageUrl = encodeURIComponent(qrcode)
 
@@ -312,13 +315,14 @@ export class WeChatClient {
         // todo: 优化
         // const mediaCaption=
         let identityStr = roomEntity ? `🌐${roomTopic} --- 👤${showSender} : ` : `👤${showSender} : `;
-        if (talker?.type() === PUPPET.types.Contact.Official){
+        if (talker?.type() === PUPPET.types.Contact.Official) {
             identityStr = `📣${showSender} : `;
         }
         const sendMessageBody: SimpleMessage = {
             sender: showSender,
             body: '收到一条 未知消息类型',
             room: roomTopic,
+            type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
             id: message.id
         }
 
@@ -407,6 +411,16 @@ export class WeChatClient {
             }
         }
 
+        const sendMessageWhenNoAvatar = (name?: string) => {
+            this._tgClient.sendMessage({
+                sender: showSender,
+                body: `收到一条 👤${name ? name : '未知'} 的名片消息,请在手机上查看`,
+                type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                room: roomTopic,
+                id: message.id
+            })
+        }
+
         switch (messageType) {
             case PUPPET.types.Message.Unknown:
                 // console.log(talker.name(), ': 发送了unknown message...')
@@ -426,14 +440,14 @@ export class WeChatClient {
 
                 if (messageTxt) {
                     // console.log('showSender is :', showSender, 'talker id is :', talker.id, 'message text is ', messageTxt,)
-                    // 地址
+                    // 地址 只有个人发送的才会有这个连接的文本出现
                     if (messageTxt.endsWith('pictype=location')) {
                         const locationText = `收到一个位置信息:\n <code>${message.text().split(`\n`)[0].replace(':', '')}</code>`
                         this._tgClient.sendMessage({
                             sender: showSender,
                             body: locationText,
                             room: roomTopic,
-                            type: talker?.type() === PUPPET.types.Contact.Official?1:0,
+                            type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                             id: message.id,
                             not_escape_html: true,
                         })
@@ -446,14 +460,30 @@ export class WeChatClient {
                         sender: showSender,
                         body: convertedText,
                         room: roomTopic,
-                        type: talker?.type() === PUPPET.types.Contact.Official?1:0,
+                        type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                         id: message.id
                     })
                 }
             }
                 break;
             case PUPPET.types.Message.Contact:
-                console.log('contact message')
+                // 收到名片消息
+                MessageUtils.messageTextToContact(message.text()).then(res => {
+                    const shareContactCaption = `收到一条 👤${res.nickname} 的名片消息,请在手机上查看\n${identityStr}`
+                    if (res.bigheadimgurl) {
+                        FileBox.fromUrl(res.bigheadimgurl).toBuffer().then(avatarBuff => {
+                            this._tgClient.bot.telegram.sendPhoto(
+                                this._tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption})
+                        }).catch(() => {
+                            sendMessageWhenNoAvatar(res.nickname)
+                        })
+                    } else {
+                        sendMessageWhenNoAvatar(res.nickname)
+                    }
+                }).catch(() => {
+                    sendMessageWhenNoAvatar()
+                })
+                // console.log('contact message', message)
                 break;
             case PUPPET.types.Message.Attachment: {
                 message.toFileBox().then(fBox => {
@@ -473,6 +503,7 @@ export class WeChatClient {
                     this._tgClient.sendMessage({
                         sender: showSender,
                         body: message.text(),
+                        type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                         room: roomTopic,
                         id: message.id
                     })
@@ -486,10 +517,10 @@ export class WeChatClient {
                         const fileName = fBox.name;
 
                         const tgClient = this._tgClient
-                        if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)){
+                        if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) {
                             tgClient.bot.telegram.sendPhoto(
                                 tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
-                        }else {
+                        } else {
                             tgClient.bot.telegram.sendDocument(
                                 tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
                         }
@@ -525,10 +556,10 @@ export class WeChatClient {
                         const fileName = fBox.name;
 
                         const tgClient = this._tgClient
-                        if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)){
+                        if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) {
                             tgClient.bot.telegram.sendVideo(
                                 tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
-                        }else {
+                        } else {
                             tgClient.bot.telegram.sendDocument(
                                 tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
                         }
@@ -539,15 +570,24 @@ export class WeChatClient {
             case PUPPET.types.Message.Emoticon: // 处理表情消息的逻辑
                 this._tgClient.sendMessage({
                     sender: showSender,
+                    type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                     body: "[动画表情]",
                     room: roomTopic,
                     id: message.id
                 })
                 break;
             case PUPPET.types.Message.Location: // 处理位置消息的逻辑
+                break;
             case PUPPET.types.Message.MiniProgram: // 处理小程序消息的逻辑
+                sendMessageBody.body = '收到一条小程序消息'
+                this._tgClient.sendMessage(sendMessageBody)
+                break;
             case PUPPET.types.Message.RedEnvelope: // 处理红包消息的逻辑 12
+                break;
             case PUPPET.types.Message.Url: // 处理链接消息的逻辑
+                sendMessageBody.body = '收到一条链接消息'
+                this._tgClient.sendMessage(sendMessageBody)
+                break;
             case PUPPET.types.Message.Post: // 处理帖子消息的逻辑
                 // sendMessageBody.body = `收到一条暂不支持的消息类型: ${messageType}`
                 // this._tgClient.sendMessage(sendMessageBody)
@@ -582,9 +622,9 @@ export class WeChatClient {
         const contactList = await this._client.Contact.findAll();
         // 不知道是什么很多空的 过滤掉没名字和不是朋友的
         const filter = contactList.filter(it => it.name() && it.friend());
-        await contactList.forEach(async item=>{
+        await contactList.forEach(async item => {
             let count = 0;
-            while (item.payload?.alias === item.name() && count < 5){
+            while (item.payload?.alias === item.name() && count < 5) {
                 await item.sync()
                 count++
             }
@@ -615,5 +655,15 @@ export class WeChatClient {
         // set flag
 
 
+    }
+
+    private resetValue() {
+        this.contactMap?.clear();
+        this.cacheMemberDone = false
+        this.cacheMemberSendMessage = false
+        this.roomList?.splice(0, this.roomList.length)
+        this.tgClient.selectedMember = []
+        this.tgClient.flagPinMessageType = ''
+        this.tgClient.findPinMessage()
     }
 }

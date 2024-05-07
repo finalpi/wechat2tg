@@ -18,8 +18,17 @@ import {FileUtils} from "../utils/FileUtils";
 import {ContactImpl, ContactInterface, MessageInterface, RoomInterface} from "wechaty/impls";
 import {CacheHelper} from "../utils/CacheHelper";
 import * as PUPPET from "wechaty-puppet";
+import * as timers from "node:timers";
 
 export class TelegramClient {
+    get flagPinMessageType(): string {
+        return this._flagPinMessageType;
+    }
+
+    set flagPinMessageType(value: string) {
+        this._flagPinMessageType = value;
+    }
+
     get selectedMember(): SelectedEntity[] {
         return this._selectedMember;
     }
@@ -175,12 +184,20 @@ export class TelegramClient {
             // {command: 'quit', description: '退出程序!! 会停止程序,需要手动重启(未实现)'},
         ]);
 
+        // 此方法需要放在所有监听方法之前,先拦截命令做处理
         bot.use((ctx, next) => {
-            if (!this._chatId){
+            if (!this._chatId) {
                 return next()
             }
+
             if (ctx.chat && this._chatId === ctx.chat.id) {
                 return next(); // 如果用户授权，则继续处理下一个中间件或命令
+            }
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            // help 命令 start 命令
+            if (ctx.message['text'] === '/start' || ctx.message['text'] === '/help') {
+                return next();
             } else {
                 return ctx.reply('Sorry, you are not authorized to interact with this bot.'); // 如果用户未授权，发送提示消息
             }
@@ -566,43 +583,43 @@ export class TelegramClient {
                 const username = match[1];  // 提取用户名
                 const individual = this._weChatClient.contactMap?.get(ContactImpl.Type.Individual);
                 const official = this._weChatClient.contactMap?.get(ContactImpl.Type.Official);
-                const individualFilter:ContactInterface[] = []
-                individual?.forEach( item=>{
+                const individualFilter: ContactInterface[] = []
+                individual?.forEach(item => {
                     const alias = item.payload?.alias
-                    if (alias?.includes(username)){
+                    if (alias?.includes(username)) {
                         individualFilter.push(item)
                         return
                     }
-                    if (item.name().includes(username)){
+                    if (item.name().includes(username)) {
                         individualFilter.push(item)
                     }
                 })
-                const officialFilter:ContactInterface[] = []
-                official?.forEach( item=>{
+                const officialFilter: ContactInterface[] = []
+                official?.forEach(item => {
                     const alias = item.payload?.alias
-                    if (alias?.includes(username)){
+                    if (alias?.includes(username)) {
                         officialFilter.push(item)
                         return
                     }
-                    if (item.name().includes(username)){
+                    if (item.name().includes(username)) {
                         officialFilter.push(item)
                     }
                 })
                 if ((individualFilter && individualFilter.length > 0) || (officialFilter && officialFilter.length > 0)) {
                     const buttons: tg.InlineKeyboardButton[][] = [];
-                    [...officialFilter,...individualFilter].forEach(item => {
+                    [...officialFilter, ...individualFilter].forEach(item => {
                         const id = UniqueIdGenerator.getInstance().generateId("search")
                         this.searchList.push({
                             id: id,
                             contact: item,
                             type: 0
                         })
-                        if (item.payload?.type === PUPPET.types.Contact.Official){
+                        if (item.payload?.type === PUPPET.types.Contact.Official) {
                             buttons.push([Markup.button.callback(`📣${item.name()}`, `${id}`)])
-                        }else {
-                            if (item.payload?.alias){
+                        } else {
+                            if (item.payload?.alias) {
                                 buttons.push([Markup.button.callback(`👤${item.payload?.alias}[${item.name()}]`, `${id}`)])
-                            }else {
+                            } else {
                                 buttons.push([Markup.button.callback(`👤${item.name()}`, `${id}`)])
                             }
                         }
@@ -638,7 +655,7 @@ export class TelegramClient {
             const element = this.searchList.find(item => item.id === ctx.match.input)
             ctx.deleteMessage()
             if (element) {
-                if (element.contact?.payload.type === PUPPET.types.Contact.Official){
+                if (element.contact?.payload.type === PUPPET.types.Contact.Official) {
                     this._currentSelectContact = element.contact;
                     this.setPin('official', element.contact.name())
                     ctx.answerCbQuery()
@@ -707,14 +724,14 @@ export class TelegramClient {
             this._currentSelectContact = await this._weChatClient.client.Contact.find({id: id})
             // console.log(ctx.match.input
             const reply = await this._currentSelectContact?.alias() || this._currentSelectContact?.name()
-            if (this._currentSelectContact?.type() === PUPPET.types.Contact.Official){
+            if (this._currentSelectContact?.type() === PUPPET.types.Contact.Official) {
                 this.setPin('official', reply ? reply : '')
-            }else {
+            } else {
                 this.setPin('user', reply ? reply : '')
             }
             ctx.answerCbQuery()
         })
-        let addBlackOrWhite:any[] = []
+        let addBlackOrWhite: any[] = []
         // 发送消息 回复等...
         bot.on(message('text'), async ctx => {
             const text = ctx.message.text; // 获取消息内容
@@ -730,7 +747,7 @@ export class TelegramClient {
                     ctx.reply('未找到该群组,请检查群名称是否正确')
                 } else {
                     const buttons: tg.InlineKeyboardButton[][] = [];
-                    roomList.forEach( item=>{
+                    roomList.forEach(item => {
                         const id = UniqueIdGenerator.getInstance().generateId("addBlackOrWhite")
                         addBlackOrWhite.push({
                             id: id,
@@ -738,7 +755,7 @@ export class TelegramClient {
                         })
                         buttons.push([Markup.button.callback(`🌐${item.payload?.topic}`, `${id}`)]);
                     });
-                    ctx.reply('请选择群组(点击添加):',Markup.inlineKeyboard(buttons))
+                    ctx.reply('请选择群组(点击添加):', Markup.inlineKeyboard(buttons))
                 }
                 return
             }
@@ -746,26 +763,49 @@ export class TelegramClient {
             // 如果是回复的消息 优先回复该发送的消息
             if (replyMessageId) {
                 // try get weChat cache message id
-                // 假设回复消息是撤回命令
+                // 假设回复消息是撤回命令 撤回web协议获取不到消息id 放弃
                 if (text === '&rm') {
                     const undoMessageCache = CacheHelper.getInstances().getUndoMessageCache(replyMessageId);
                     if (undoMessageCache) {
                         // 撤回消息
                         this.weChatClient.client.Message.find({id: undoMessageCache.wechat_message_id})
                             .then(message => {
-                            message?.recall().then(() => {
-                                ctx.reply('撤回成功')
-                            }).catch(() => {
-                                ctx.reply('撤回失败')
+                                message?.recall().then(() => {
+                                    ctx.reply('撤回成功')
+                                }).catch(() => {
+                                    ctx.reply('撤回失败')
+                                })
                             })
-                        })
                     } else {
                         ctx.reply('当前消息不能撤回或者已经过期')
                     }
                     return;
                 }
-                // todo: 可以去找到最原始的消息 非必要
                 const weChatMessageId = this._messageMap.get(replyMessageId)
+                // 设置别名
+                if (text.startsWith('&alias') && weChatMessageId) {
+                    this.weChatClient.client.Message.find({id: weChatMessageId}).then(msg => {
+                        msg?.talker()?.alias(text.substring(6).trimStart()).then(async () => {
+                            const cacheContacts = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual);
+                            if (cacheContacts) {
+                                for (const item of cacheContacts) {
+                                    if (item.id === msg?.talker()?.id) {
+                                        await item.alias(text.substring(6).trimStart())
+                                        await item.sync()
+                                        break
+                                    }
+                                }
+                            }
+                            ctx.reply('备注设置成功')
+                        })
+                    }).catch(() => {
+                        ctx.reply('备注设置失败')
+                    })
+                    return;
+                }
+
+                // todo: 可以去找到最原始的消息 非必要
+
                 if (weChatMessageId) {
                     // 添加或者移除名单
 
@@ -847,11 +887,15 @@ export class TelegramClient {
             return;
         })
 
-        bot.on(message('voice'),ctx=>{
+        bot.on(message('voice'), ctx => {
             if (ctx.message.voice) {
                 const fileId = ctx.message.voice.file_id;
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
-                    const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message.voice.file_unique_id + '.mp3');
+                    const nowShangHaiZh = new Date().toLocaleString('zh', {
+                        timeZone: 'Asia/ShangHai'
+                    }).toString().replaceAll('/', '-')
+                    console.log('voice name', nowShangHaiZh)
+                    const fileBox = FileBox.fromUrl(fileLink.toString(), {name: `语音-${nowShangHaiZh.toLocaleLowerCase()}.mp3`});
                     const replyMessageId = ctx.update.message['reply_to_message']?.message_id;
                     // 如果是回复的消息 优先回复该发送的消息
                     if (replyMessageId) {
@@ -1422,7 +1466,7 @@ export class TelegramClient {
             const fileBox = FileBox.fromFile(gifFile);
             if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
                 this._currentSelectContact?.say(fileBox).then(msg => {
-                    if(msg && ctx.message) {
+                    if (msg && ctx.message) {
                         CacheHelper.getInstances().addUndoMessageCache(
                             ctx.message.message_id, msg.id)
                     }
@@ -1629,20 +1673,33 @@ export class TelegramClient {
 
     }
 
-    private async findPinMessage() {
+    public async findPinMessage() {
         //找到pin消息
         const chatInfo = await this._bot.telegram.getChat(this.chatId)
-        if (chatInfo.pinned_message){
+        if (chatInfo.pinned_message) {
             this.pinnedMessageId = chatInfo.pinned_message.message_id
-            this._bot.telegram.editMessageText(this.chatId,this.pinnedMessageId,undefined,"当前无回复用户").catch(e => {
+            this._bot.telegram.editMessageText(this.chatId, this.pinnedMessageId, undefined, "当前无回复用户").then((res) => {
+                if (typeof res !== 'boolean') {
+                    this._bot.telegram.pinChatMessage(this._chatId, res.message_id)
+                }
+            }).catch(e => {
                 //名字相同不用管
+                if (e.response.error_code === 400) {
+                    return
+                }
+                this._bot.telegram.sendMessage(this._chatId, "当前无回复用户").then(msg => {
+                    this._bot.telegram.pinChatMessage(this._chatId, msg.message_id).then(() => {
+                        this.pinnedMessageId = msg.message_id
+                    });
+                })
+            })
+        }else {
+            // 发送消息并且pin
+            this._bot.telegram.sendMessage(this._chatId, `当前无回复用户`).then(msg => {
+                this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
+                this.pinnedMessageId = msg.message_id
             })
         }
-        // 发送消息并且pin
-        // this._bot.telegram.sendMessage(this._chatId, `当前无回复用户`).then(msg => {
-        //     this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
-        //     this.pinnedMessageId = msg.message_id
-        // })
     }
 
     private setPin(type: string, name: string | undefined) {
@@ -1651,23 +1708,34 @@ export class TelegramClient {
         if (type === 'user') {
             str = `当前回复用户:👤 ${name}`
             this._flagPinMessageType = type;
-        } else if (type === 'room'){
+        } else if (type === 'room') {
             str = `当前回复群组:🌐 ${name}`
             this._flagPinMessageType = type;
-        } else if (type === 'official'){
+        } else if (type === 'official') {
             str = `当前回复公众号:📣 ${name}`
             this._flagPinMessageType = 'user';
         }
         if (this.pinnedMessageId) {
             // 修改pin的内容
-            this._bot.telegram.editMessageText(this._chatId, this.pinnedMessageId, undefined, str).catch(e => {
+            // let editMessageSuccess = true;
+            this._bot.telegram.editMessageText(this._chatId, this.pinnedMessageId, undefined, str).then(async (res) => {
+                if (typeof res !== 'boolean') {
+                    this._bot.telegram.pinChatMessage(this._chatId, res.message_id)
+                }
+            }).catch(e => {
                 // 名字相同不用管
+                // pin消息被删除了
+                // 发送消息并且pin
+                if (e.response.error_code === 400) {
+                    return
+                }
             })
         } else {
             // 发送消息并且pin
             this._bot.telegram.sendMessage(this._chatId, str).then(msg => {
-                this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
-                this.pinnedMessageId = msg.message_id
+                this._bot.telegram.pinChatMessage(this._chatId, msg.message_id).then(() => {
+                    this.pinnedMessageId = msg.message_id
+                });
             })
         }
     }
@@ -1799,7 +1867,7 @@ export class TelegramClient {
             }
             if (!find) {
                 blackList.push({id: id + '', name: text})
-                this.bot.telegram.sendMessage(this.chatId,"添加成功")
+                this.bot.telegram.sendMessage(this.chatId, "添加成功")
             }
         } else {
             const whiteList = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST);
@@ -1811,7 +1879,7 @@ export class TelegramClient {
             }
             if (!find) {
                 whiteList.push({id: id + '', name: text})
-                this.bot.telegram.sendMessage(this.chatId,"添加成功")
+                this.bot.telegram.sendMessage(this.chatId, "添加成功")
             }
         }
         this.forwardSetting.writeToFile()

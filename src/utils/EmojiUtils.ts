@@ -223,7 +223,7 @@ export class EmojiConverter {
     convert(text: string): string {
         let convertedText = text;
         for (const emojiText in this.emojiMapping) {
-            if (this.emojiMapping.hasOwnProperty(emojiText)) {
+            if (Object.prototype.hasOwnProperty.call(this.emojiMapping, emojiText)) {
                 const emojiUnicode = this.emojiMapping[emojiText];
                 const emojiRegex = new RegExp(emojiText.replace('[', '\\[').replace(']', '\\]'), 'g');
                 convertedText = convertedText.replace(emojiRegex, emojiUnicode);

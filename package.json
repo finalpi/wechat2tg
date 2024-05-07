@@ -19,6 +19,7 @@
     "fluent-ffmpeg": "^2.1.2",
     "https-proxy-agent": "^7.0.4",
     "qrcode": "^1.5.1",
+    "simple-xml-to-json": "^1.2.2",
     "socks-proxy-agent": "^7.0.0",
     "telegraf": "^4.12.2",
     "ts-node": "^10.9.1",

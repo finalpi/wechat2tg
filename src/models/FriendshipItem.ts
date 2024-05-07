@@ -8,6 +8,7 @@ export class FriendshipItem {
     set id(value: string) {
         this._id = value;
     }
+
     get friendship(): FriendshipInterface {
         return this._friendship;
     }
@@ -15,6 +16,7 @@ export class FriendshipItem {
     set friendship(value: FriendshipInterface) {
         this._friendship = value;
     }
+
     private _id: string;
     private _friendship: FriendshipInterface;
 
