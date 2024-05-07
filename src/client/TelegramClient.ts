@@ -21,26 +21,6 @@ import * as PUPPET from "wechaty-puppet";
 import * as timers from "node:timers";
 
 export class TelegramClient {
-    get flagPinMessageType(): string {
-        return this._flagPinMessageType;
-    }
-
-    set flagPinMessageType(value: string) {
-        this._flagPinMessageType = value;
-    }
-
-    get selectedMember(): SelectedEntity[] {
-        return this._selectedMember;
-    }
-
-    set selectedMember(value: SelectedEntity[]) {
-        this._selectedMember = value;
-    }
-
-    get recentUsers(): TalkerEntity[] {
-        return this._recentUsers;
-    }
-
     private _weChatClient: WeChatClient;
     private readonly _bot: Telegraf;
     private _chatId: number | string;
@@ -148,8 +128,28 @@ export class TelegramClient {
         return this._weChatClient;
     }
 
+    get flagPinMessageType(): string {
+        return this._flagPinMessageType;
+    }
+
+    set flagPinMessageType(value: string) {
+        this._flagPinMessageType = value;
+    }
+
+    get selectedMember(): SelectedEntity[] {
+        return this._selectedMember;
+    }
+
+    set selectedMember(value: SelectedEntity[]) {
+        this._selectedMember = value;
+    }
+
+    get recentUsers(): TalkerEntity[] {
+        return this._recentUsers;
+    }
+
     // Setter 方法
-    public set weChatClient(value: WeChatClient) {
+    set weChatClient(value: WeChatClient) {
         this._weChatClient = value;
     }
 
@@ -515,7 +515,7 @@ export class TelegramClient {
                             type: 1
                         })
                     })
-                    const page = new Page(this.searchList,1,TelegramClient.PAGE_SIZE)
+                    const page = new Page(this.searchList, 1, TelegramClient.PAGE_SIZE)
                     const pageList = page.getList(1)
                     for (let i = 0; i < pageList.length; i += 2) {
                         const item = pageList[i].contact
@@ -526,7 +526,7 @@ export class TelegramClient {
                         }
                         buttons.push(buttonRow);
                     }
-                    if (page.hasNext()){
+                    if (page.hasNext()) {
                         buttons.push([Markup.button.callback(`下一页`, `search-2`)])
                     }
                     ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
@@ -638,11 +638,11 @@ export class TelegramClient {
                             type: 0
                         })
                     })
-                    const page = new Page(this.searchList,1,TelegramClient.PAGE_SIZE)
+                    const page = new Page(this.searchList, 1, TelegramClient.PAGE_SIZE)
                     const pageList = page.getList(1)
                     for (let i = 0; i < pageList.length; i += 2) {
                         const item = pageList[i].contact
-                        const buttonRow:tg.InlineKeyboardButton[] = [];
+                        const buttonRow: tg.InlineKeyboardButton[] = [];
                         if (item.payload?.type === PUPPET.types.Contact.Official) {
                             buttonRow.push(Markup.button.callback(`📣${item.name()}`, `${pageList[i].id}`))
                         } else {
@@ -666,7 +666,7 @@ export class TelegramClient {
                         }
                         buttons.push(buttonRow);
                     }
-                    if (page.hasNext()){
+                    if (page.hasNext()) {
                         buttons.push([Markup.button.callback(`下一页`, `search-2`)])
                     }
                     ctx.reply("请选择联系人(点击回复):", Markup.inlineKeyboard(buttons))
@@ -696,14 +696,14 @@ export class TelegramClient {
 
         })
 
-        bot.action(/search-(\d+)/,  async (ctx) => {
+        bot.action(/search-(\d+)/, async (ctx) => {
             const buttons: tg.InlineKeyboardButton[][] = [];
             const page = parseInt(ctx.match[1]);
-            const page1 = new Page(this.searchList,page,TelegramClient.PAGE_SIZE)
+            const page1 = new Page(this.searchList, page, TelegramClient.PAGE_SIZE)
             const pageList = page1.getList(page)
             for (let i = 0; i < pageList.length; i += 2) {
                 const type = pageList[i].type
-                if(type === 1){
+                if (type === 1) {
                     const item = pageList[i].contact
                     const buttonRow = [Markup.button.callback(`🌐${await item.topic()}`, `${pageList[i].id}`)];
                     if (i + 1 < pageList.length) {
@@ -711,9 +711,9 @@ export class TelegramClient {
                         buttonRow.push(Markup.button.callback(`🌐${await item1.topic()}`, `${pageList[i + 1].id}`));
                     }
                     buttons.push(buttonRow);
-                }else {
+                } else {
                     const item = pageList[i].contact
-                    const buttonRow:tg.InlineKeyboardButton[] = [];
+                    const buttonRow: tg.InlineKeyboardButton[] = [];
                     if (item.payload?.type === PUPPET.types.Contact.Official) {
                         buttonRow.push(Markup.button.callback(`📣${item.name()}`, `${pageList[i].id}`))
                     } else {
@@ -739,11 +739,11 @@ export class TelegramClient {
                 }
             }
             const lastButton = []
-            if (page1.hasLast()){
-                lastButton.push(Markup.button.callback(`上一页`, `search-${page-1}`))
+            if (page1.hasLast()) {
+                lastButton.push(Markup.button.callback(`上一页`, `search-${page - 1}`))
             }
-            if (page1.hasNext()){
-                lastButton.push(Markup.button.callback(`下一页`, `search-${page+1}`))
+            if (page1.hasNext()) {
+                lastButton.push(Markup.button.callback(`下一页`, `search-${page + 1}`))
             }
             buttons.push(lastButton)
             ctx.editMessageText('请选择群组(点击添加):', Markup.inlineKeyboard(buttons))
@@ -806,10 +806,10 @@ export class TelegramClient {
             ctx.answerCbQuery()
         });
 
-        bot.action(/addBlackOrWhite-(\d+)/,  (ctx) => {
+        bot.action(/addBlackOrWhite-(\d+)/, (ctx) => {
             const buttons: tg.InlineKeyboardButton[][] = [];
             const page = parseInt(ctx.match[1]);
-            const page1 = new Page(addBlackOrWhite,page,TelegramClient.PAGE_SIZE)
+            const page1 = new Page(addBlackOrWhite, page, TelegramClient.PAGE_SIZE)
             const pageList = page1.getList(page)
             for (let i = 0; i < pageList.length; i += 2) {
                 const buttonRow = [Markup.button.callback(`🌐${pageList[i].text}`, `${pageList[i].id}`)];
@@ -819,11 +819,11 @@ export class TelegramClient {
                 buttons.push(buttonRow);
             }
             const lastButton = []
-            if (page1.hasLast()){
-                lastButton.push(Markup.button.callback(`上一页`, `addBlackOrWhite-${page-1}`))
+            if (page1.hasLast()) {
+                lastButton.push(Markup.button.callback(`上一页`, `addBlackOrWhite-${page - 1}`))
             }
-            if (page1.hasNext()){
-                lastButton.push(Markup.button.callback(`下一页`, `addBlackOrWhite-${page+1}`))
+            if (page1.hasNext()) {
+                lastButton.push(Markup.button.callback(`下一页`, `addBlackOrWhite-${page + 1}`))
             }
             buttons.push(lastButton)
             ctx.editMessageText('请选择群组(点击添加):', Markup.inlineKeyboard(buttons))
@@ -877,7 +877,7 @@ export class TelegramClient {
                             text: item.payload?.topic
                         })
                     });
-                    const page1 = new Page(addBlackOrWhite,1,TelegramClient.PAGE_SIZE)
+                    const page1 = new Page(addBlackOrWhite, 1, TelegramClient.PAGE_SIZE)
                     const pageList = page1.getList(1)
                     for (let i = 0; i < pageList.length; i += 2) {
                         const buttonRow = [Markup.button.callback(`🌐${pageList[i].text}`, `${pageList[i].id}`)];
@@ -1827,7 +1827,7 @@ export class TelegramClient {
                     });
                 })
             })
-        }else {
+        } else {
             // 发送消息并且pin
             this._bot.telegram.sendMessage(this._chatId, `当前无回复用户`).then(msg => {
                 this._bot.telegram.pinChatMessage(this._chatId, msg.message_id);
