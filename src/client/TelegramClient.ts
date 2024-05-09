@@ -1106,6 +1106,12 @@ export class TelegramClient {
                             }
                         })
                     }
+                }).catch(e=>{
+                    ctx.reply("文件过大,发送失败(telegram文件发送不能大于20M)", {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
                 })
             }
         })
@@ -1191,6 +1197,12 @@ export class TelegramClient {
                             }
                         })
                     }
+                }).catch(e=>{
+                    ctx.reply("文件过大,发送失败(telegram文件发送不能大于20M)", {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
                 })
             }
         })
@@ -1281,6 +1293,12 @@ export class TelegramClient {
                             }
                         })
                     }
+                }).catch(e=>{
+                    ctx.reply("文件过大,发送失败(telegram文件发送不能大于20M)", {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
                 })
             }
         })
@@ -1375,6 +1393,12 @@ export class TelegramClient {
                             }
                         })
                     }
+                }).catch(e=>{
+                    ctx.reply("文件过大,发送失败(telegram文件发送不能大于20M)", {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
                 })
             }
         });
@@ -1467,6 +1491,12 @@ export class TelegramClient {
                             }
                         })
                     }
+                }).catch(e=>{
+                    ctx.reply("文件过大,发送失败(telegram文件发送不能大于20M)", {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
                 })
             }
         })
@@ -1564,6 +1594,12 @@ export class TelegramClient {
                         }).catch(() => ctx.reply('发送失败, 原始文件保存失败'))
                     }
                 }
+            }).catch(e=>{
+                ctx.reply("文件过大,发送失败(telegram文件发送不能大于20M)", {
+                    reply_parameters: {
+                        message_id: ctx.message.message_id
+                    }
+                })
             })
         })
 
