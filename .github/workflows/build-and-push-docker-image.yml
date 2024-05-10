@@ -2,8 +2,8 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches:
-      - 'master'
+    tags:
+      - v*
 
 jobs:
   build-and-push:
@@ -31,14 +31,15 @@ jobs:
           key: ${{ runner.os }}-buildx-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-buildx-
-
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: finalpi/wechat2tg:latest
+          tags: |
+            finalpi/wechat2tg:latest
+            finalpi/wechat2tg:${{ github.event.release.tag_name }}
           platforms: linux/amd64,linux/arm64/v8,linux/arm/v7
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,mode=max,dest=/tmp/.buildx-cache
