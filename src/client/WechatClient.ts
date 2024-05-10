@@ -747,7 +747,13 @@ export class WeChatClient {
 
         // 缓存到客户端的实例
         // 一起获取群放到缓存
-        this.roomList = await this._client.Room.findAll()
+        const room = await this._client.Room.findAll()
+        room.forEach(async it=>{
+            const l = await it.memberAll()
+            if (l.length > 0){
+                this._roomList.push(it)
+            }
+        })
         // console.log('通讯录', res);
         // fs.writeFileSync('contact.json', JSON.stringify(Object.fromEntries(res)));
         // set flag
