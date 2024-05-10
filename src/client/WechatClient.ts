@@ -523,7 +523,9 @@ export class WeChatClient {
                     if (res.bigheadimgurl) {
                         FileBox.fromUrl(res.bigheadimgurl).toBuffer().then(avatarBuff => {
                             this._tgClient.bot.telegram.sendPhoto(
-                                this._tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption})
+                                this._tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg=>{
+                                this._tgClient.saveMessage(msg.message_id,message.id)
+                            })
                         }).catch(() => {
                             sendMessageWhenNoAvatar(res.nickname)
                         })
@@ -547,7 +549,9 @@ export class WeChatClient {
                         tgClient.bot.telegram.sendDocument(
                             tgClient.chatId, {source: buff, filename: fileName}, {
                                 caption: identityStr
-                            }).catch(e=>{
+                            }).then(msg=>{
+                            this._tgClient.saveMessage(msg.message_id,message.id)
+                        }).catch(e=>{
                             this._tgClient.sendMessage({
                                 sender: showSender,
                                 body: "[文件]文件过大,请在微信上查收",
@@ -577,7 +581,9 @@ export class WeChatClient {
                         const tgClient = this._tgClient
                         if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) {
                             tgClient.bot.telegram.sendPhoto(
-                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).catch(e=>{
+                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg=>{
+                                this._tgClient.saveMessage(msg.message_id,message.id)
+                            }).catch(e=>{
                                 this._tgClient.sendMessage({
                                     sender: showSender,
                                     body: "[图片]文件过大,请在微信上查收",
@@ -588,7 +594,9 @@ export class WeChatClient {
                             })
                         } else {
                             tgClient.bot.telegram.sendDocument(
-                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).catch(e=>{
+                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg=>{
+                                this._tgClient.saveMessage(msg.message_id,message.id)
+                            }).catch(e=>{
                                 this._tgClient.sendMessage({
                                     sender: showSender,
                                     body: "[图片]文件过大,请在微信上查收",
@@ -609,7 +617,9 @@ export class WeChatClient {
                         let fileName = fBox.name;
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendVoice(
-                            tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).catch(res => {
+                            tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg=>{
+                            this._tgClient.saveMessage(msg.message_id,message.id)
+                        }).catch(res => {
                             if (fileName.endsWith('.sil')) {
                                 fileName = fileName.replace('.sil', '.mp3')
                             }
@@ -617,7 +627,9 @@ export class WeChatClient {
                             tgClient.bot.telegram.sendDocument(tgClient.chatId, {
                                 source: buff,
                                 filename: fileName
-                            }, {caption: identityStr}).catch(e=>{
+                            }, {caption: identityStr}).then(msg=>{
+                                this._tgClient.saveMessage(msg.message_id,message.id)
+                            }).catch(e=>{
                                 this._tgClient.sendMessage({
                                     sender: showSender,
                                     body: "[语音]文件过大,请在微信上查收",
@@ -640,7 +652,9 @@ export class WeChatClient {
                         const tgClient = this._tgClient
                         if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) {
                             tgClient.bot.telegram.sendVideo(
-                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).catch(e=>{
+                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg=>{
+                                this._tgClient.saveMessage(msg.message_id,message.id)
+                            }).catch(e=>{
                                 this._tgClient.sendMessage({
                                     sender: showSender,
                                     body: "[视频]文件过大,请在微信上查收",
@@ -651,7 +665,9 @@ export class WeChatClient {
                             })
                         } else {
                             tgClient.bot.telegram.sendDocument(
-                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).catch(e=>{
+                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg=>{
+                                this._tgClient.saveMessage(msg.message_id,message.id)
+                            }).catch(e=>{
                                 this._tgClient.sendMessage({
                                     sender: showSender,
                                     body: "[视频]文件过大,请在微信上查收",

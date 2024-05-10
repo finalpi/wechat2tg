@@ -1707,6 +1707,10 @@ export class TelegramClient {
         }
     }
 
+    public saveMessage(tgMessageId: number,wechatMessageId: string){
+        this.messageMap.set(tgMessageId, wechatMessageId);
+    }
+
     private async pageContacts(ctx: NarrowedContext<Context<tg.Update>, tg.Update>, source: ContactInterface[] | undefined, pageNumber: number, currentSearchWord: string) {
 
 
