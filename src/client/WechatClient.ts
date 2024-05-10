@@ -498,7 +498,15 @@ export class WeChatClient {
                         tgClient.bot.telegram.sendDocument(
                             tgClient.chatId, {source: buff, filename: fileName}, {
                                 caption: identityStr
+                            }).catch(e=>{
+                            this._tgClient.sendMessage({
+                                sender: showSender,
+                                body: "[文件]文件过大,请在微信上查收",
+                                room: roomTopic,
+                                type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                                id: message.id
                             })
+                        })
                     })
                 }).catch(() => {
                     this._tgClient.sendMessage({
@@ -520,10 +528,26 @@ export class WeChatClient {
                         const tgClient = this._tgClient
                         if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) {
                             tgClient.bot.telegram.sendPhoto(
-                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
+                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).catch(e=>{
+                                this._tgClient.sendMessage({
+                                    sender: showSender,
+                                    body: "[图片]文件过大,请在微信上查收",
+                                    room: roomTopic,
+                                    type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                                    id: message.id
+                                })
+                            })
                         } else {
                             tgClient.bot.telegram.sendDocument(
-                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
+                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).catch(e=>{
+                                this._tgClient.sendMessage({
+                                    sender: showSender,
+                                    body: "[图片]文件过大,请在微信上查收",
+                                    room: roomTopic,
+                                    type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                                    id: message.id
+                                })
+                            })
                         }
                     })
                 })
@@ -544,7 +568,15 @@ export class WeChatClient {
                             tgClient.bot.telegram.sendDocument(tgClient.chatId, {
                                 source: buff,
                                 filename: fileName
-                            }, {caption: identityStr})
+                            }, {caption: identityStr}).catch(e=>{
+                                this._tgClient.sendMessage({
+                                    sender: showSender,
+                                    body: "[语音]文件过大,请在微信上查收",
+                                    room: roomTopic,
+                                    type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                                    id: message.id
+                                })
+                            })
                         })
                     })
                 })
@@ -559,10 +591,26 @@ export class WeChatClient {
                         const tgClient = this._tgClient
                         if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) {
                             tgClient.bot.telegram.sendVideo(
-                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
+                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).catch(e=>{
+                                this._tgClient.sendMessage({
+                                    sender: showSender,
+                                    body: "[视频]文件过大,请在微信上查收",
+                                    room: roomTopic,
+                                    type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                                    id: message.id
+                                })
+                            })
                         } else {
                             tgClient.bot.telegram.sendDocument(
-                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr})
+                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).catch(e=>{
+                                this._tgClient.sendMessage({
+                                    sender: showSender,
+                                    body: "[视频]文件过大,请在微信上查收",
+                                    room: roomTopic,
+                                    type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                                    id: message.id
+                                })
+                            })
                         }
                     })
                 })
