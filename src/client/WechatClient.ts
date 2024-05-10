@@ -20,6 +20,7 @@ import {NotionMode, VariableType} from "../models/Settings";
 import {FriendshipItem} from "../models/FriendshipItem"
 import {MessageUtils} from "../utils/MessageUtils";
 import {FileBox} from "file-box";
+import * as fs from "fs";
 // import {FmtString} from "telegraf/format";
 
 // import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
@@ -52,6 +53,9 @@ export class WeChatClient {
         this.logout = this.logout.bind(this);
         this.login = this.login.bind(this);
         this.onReady = this.onReady.bind(this)
+        this.roomTopic = this.roomTopic.bind(this)
+        this.roomJoin = this.roomJoin.bind(this)
+        this.roomLeave = this.roomLeave.bind(this)
     }
 
     private readonly _client: WechatyInterface;
@@ -159,9 +163,12 @@ export class WeChatClient {
         this._client.on('login', this.login)
             .on('scan', this.scan)
             .on('message', this.message)
-            .on('logout', () => console.log('on logout...'))
+            .on('logout', this.logout)
             .on('stop', () => console.log('on stop...'))
             .on('post', () => console.log('on post...'))
+            .on('room-join', this.roomJoin)
+            .on('room-topic', this.roomTopic)
+            .on('room-leave', this.roomLeave)
             .on('friendship', this.friendship)
             .on('ready', this.onReady)
             .on('error', this.error);
@@ -191,11 +198,52 @@ export class WeChatClient {
                 })
         }
         if (friendship.type() === FriendshipImpl.Type.Confirm) {
-            setTimeout(() => {
-                this.cacheMember()
-            }, 10000)
+            const type = contact.type();
+            switch (type) {
+                case ContactImpl.Type.Unknown:
+                    this.contactMap?.get(ContactImpl.Type.Unknown)?.add(contact);
+                    break;
+                case ContactImpl.Type.Individual:
+                    this.contactMap?.get(ContactImpl.Type.Individual)?.add(contact);
+                    break;
+                case ContactImpl.Type.Official:
+                    this.contactMap?.get(ContactImpl.Type.Official)?.add(contact);
+                    break;
+                case ContactImpl.Type.Corporation:
+                    this.contactMap?.get(ContactImpl.Type.Corporation)?.add(contact);
+                    break;
+            }
         }
     }
+
+    private roomJoin(room: RoomInterface, inviteeList: ContactInterface[] , inviter: ContactInterface){
+        inviteeList.forEach(item=>{
+            if (item.self()){
+                const item = this._roomList.find(it=>it.id === room.id)
+                if (!item){
+                    this.roomList.push(room)
+                }
+            }
+        })
+    }
+
+    private roomLeave(room: RoomInterface, leaverList: ContactInterface[]){
+        leaverList.forEach(leaver=>{
+            if (leaver.self()){
+                this._roomList = this._roomList.filter(it=>it.id != room.id)
+            }
+        })
+    }
+
+    private roomTopic(room: RoomInterface, topic: string, oldTopic: string, changer: ContactInterface){
+        const item = this._roomList.find(it=>it.id === room.id)
+        if (item){
+            if (item.payload?.topic !== topic){
+                this._roomList[this._roomList.indexOf(item)].sync()
+            }
+        }
+    }
+
 
     private onReady() {
         console.log('Wechat client ready!')
@@ -229,15 +277,16 @@ export class WeChatClient {
     }
 
     public reset() {
-        this._client.reset().then(() => {
-            console.log('reset ... ')
-        })
+        // this._client.reset().then(() => {
+        console.log('reset ... ')
+        // })
+        this._client.logout();
     }
 
     public async logout() {
-        this._client.logout();
+        // this._client.logout();
         // this._client.reset().then()
-        console.log('logout ... ')
+
         this.resetValue()
     }
 
@@ -698,7 +747,13 @@ export class WeChatClient {
 
         // 缓存到客户端的实例
         // 一起获取群放到缓存
-        this.roomList = await this._client.Room.findAll()
+        const room = await this._client.Room.findAll()
+        room.forEach(async it=>{
+            const l = await it.memberAll()
+            if (l.length > 0){
+                this._roomList.push(it)
+            }
+        })
         // console.log('通讯录', res);
         // fs.writeFileSync('contact.json', JSON.stringify(Object.fromEntries(res)));
         // set flag
@@ -707,12 +762,27 @@ export class WeChatClient {
     }
 
     private resetValue() {
-        this.contactMap?.clear();
-        this.cacheMemberDone = false
-        this.cacheMemberSendMessage = false
-        this.roomList?.splice(0, this.roomList.length)
-        this.tgClient.selectedMember = []
-        this.tgClient.flagPinMessageType = ''
-        this.tgClient.findPinMessage()
+        const filePath = 'storage/wechat_bot.memory-card.json'
+        fs.access(filePath, fs.constants.F_OK, (err) => {
+            if (!err) {
+                // 文件存在，删除文件
+                fs.unlink(filePath, (err) => {
+                    if (err) {
+                        console.error('Error deleting file:', err);
+                    } else {
+                        console.log('File deleted successfully');
+                    }
+                    this.contactMap?.get(ContactImpl.Type.Individual)?.clear()
+                    this.contactMap?.get(ContactImpl.Type.Official)?.clear()
+                    this.cacheMemberDone = false
+                    this.cacheMemberSendMessage = false
+                    this._roomList = []
+                    this.tgClient.selectedMember = []
+                    this.tgClient.flagPinMessageType = ''
+                    this.tgClient.findPinMessage()
+                    this.tgClient.reset()
+                });
+            }
+        });
     }
 }
