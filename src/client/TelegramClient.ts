@@ -488,6 +488,10 @@ export class TelegramClient {
         let searchRooms: RoomInterface [] = [];
 
         bot.command('room', async ctx => {
+            if (!this._weChatClient.client.isLoggedIn) {
+                ctx.reply('请先登陆微信');
+                return;
+            }
 
             if (!this._weChatClient.cacheMemberDone) {
                 ctx.reply('正在加载联系人列表,现在返回的数据可能不完整')
@@ -583,7 +587,7 @@ export class TelegramClient {
 
             // wait all contact loaded
             if (!this._weChatClient.client.isLoggedIn) {
-                ctx.reply('请先登陆并获取用户列表');
+                ctx.reply('请先登陆微信');
                 return;
             }
 
@@ -779,6 +783,11 @@ export class TelegramClient {
         })
 
         bot.command('recent', async ctx => {
+            if (!this._weChatClient.client.isLoggedIn) {
+                ctx.reply('请先登陆微信');
+                return;
+            }
+
             if (this.recentUsers.length == 0) {
                 ctx.reply('最近联系人为空')
                 return
@@ -893,6 +902,12 @@ export class TelegramClient {
                 }
                 return
             }
+
+            if (!this._weChatClient.client.isLoggedIn) {
+                ctx.reply('请先登陆微信');
+                return;
+            }
+
             const replyMessageId = ctx.update.message['reply_to_message']?.message_id;
             // 如果是回复的消息 优先回复该发送的消息
             if (replyMessageId) {
@@ -1022,6 +1037,10 @@ export class TelegramClient {
         })
 
         bot.on(message('voice'), ctx => {
+            if (!this._weChatClient.client.isLoggedIn) {
+                ctx.reply('请先登陆微信');
+                return;
+            }
             if (ctx.message.voice) {
                 const fileId = ctx.message.voice.file_id;
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
@@ -1117,6 +1136,10 @@ export class TelegramClient {
         })
 
         bot.on(message('audio'), ctx => {
+            if (!this._weChatClient.client.isLoggedIn) {
+                ctx.reply('请先登陆微信');
+                return;
+            }
             if (ctx.message.audio) {
                 const fileId = ctx.message.audio.file_id;
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
@@ -1208,6 +1231,10 @@ export class TelegramClient {
         })
 
         bot.on(message('video'), ctx => {
+            if (!this._weChatClient.client.isLoggedIn) {
+                ctx.reply('请先登陆微信');
+                return;
+            }
             if (ctx.message.video) {
                 const fileId = ctx.message.video.file_id;
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
@@ -1304,6 +1331,10 @@ export class TelegramClient {
         })
 
         bot.on(message('document'), ctx => {
+            if (!this._weChatClient.client.isLoggedIn) {
+                ctx.reply('请先登陆微信');
+                return;
+            }
             // 转发文件 没有压缩的图片也是文件
 
             // console.log('发送文件....')
@@ -1404,6 +1435,10 @@ export class TelegramClient {
         });
 
         bot.on(message('photo'), async ctx => {
+            if (!this._weChatClient.client.isLoggedIn) {
+                ctx.reply('请先登陆微信');
+                return;
+            }
             if (ctx.message.photo) {
                 // Get the file_id of the largest size photo
                 const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
@@ -1502,6 +1537,10 @@ export class TelegramClient {
         })
 
         bot.on(message('sticker'), ctx => {
+            if (!this._weChatClient.client.isLoggedIn) {
+                ctx.reply('请先登陆微信');
+                return;
+            }
             const fileId = ctx.message.sticker.file_id
             ctx.telegram.getFileLink(fileId).then(fileLink => {
                 const uniqueId = ctx.message.sticker.file_unique_id
