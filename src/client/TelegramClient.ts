@@ -2070,4 +2070,13 @@ export class TelegramClient {
             ],
         }
     }
+
+    public reset(){
+        this._weChatClient.stop()
+        this._weChatClient = new WeChatClient(this);
+        this._weChatClient.start().then(() => {
+            // 标记为已执行
+            this.loginCommandExecuted = true;
+        })
+    }
 }
