@@ -336,7 +336,7 @@ export class TelegramClient {
         // 白名单设置
         bot.action(VariableType.SETTING_WHITE_LIST, ctx => {
             // 当前白名单
-            ctx.reply('白名单管理:', Markup.inlineKeyboard([
+            ctx.editMessageText('白名单管理:', Markup.inlineKeyboard([
                 [Markup.button.callback(`添加白名单`, 'listAdd-')],
                 [Markup.button.callback(`白名单列表`, 'whiteList-1')]
             ]))
@@ -385,7 +385,7 @@ export class TelegramClient {
         // 黑名单设置
         bot.action(VariableType.SETTING_BLACK_LIST, ctx => {
             // 当前黑名单
-            ctx.reply('黑名单管理:', Markup.inlineKeyboard([
+            ctx.editMessageText('黑名单管理:', Markup.inlineKeyboard([
                 [Markup.button.callback(`添加黑名单`, 'listAdd-')],
                 [Markup.button.callback(`黑名单列表`, 'blackList-1')]
             ]))
@@ -564,7 +564,7 @@ export class TelegramClient {
             // console.log(ctx.match.input)
             const room = currentSelectRoomMap.get(ctx.match.input)
             this.selectRoom = room;
-
+            ctx.deleteMessage()
             this.setPin('room', await room?.topic())
             ctx.answerCbQuery()
         })
@@ -851,7 +851,7 @@ export class TelegramClient {
         bot.action(/^[0-9a-z]+/, async (ctx) => {
             // ctx.update.callback_query.message
             console.log('点击了用户', ctx.match.input)
-            await ctx.reply('请输入消息内容')
+            ctx.deleteMessage()
             const id = ctx.match.input !== 'filehelper' ? '@' + ctx.match.input : 'filehelper';
             this._currentSelectContact = await this._weChatClient.client.Contact.find({id: id})
             // console.log(ctx.match.input
@@ -1752,7 +1752,7 @@ export class TelegramClient {
             })
         }
 
-        ctx.reply('请选择联系人(点击回复):', {
+        ctx.editMessageText('请选择联系人(点击回复):', {
             ...Markup.inlineKeyboard(buttons),
         })
 
