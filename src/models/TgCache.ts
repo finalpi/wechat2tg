@@ -1,31 +1,31 @@
 export class SelectedEntity {
     get showName(): string {
-        return this._showName;
+        return this._showName
     }
 
     set showName(value: string) {
-        this._showName = value;
+        this._showName = value
     }
 
     get type(): string {
-        return this._type;
+        return this._type
     }
 
     set type(value: string) {
-        this._type = value;
+        this._type = value
     }
 
     get id(): string {
-        return this._id;
+        return this._id
     }
 
     set id(value: string) {
-        this._id = value;
+        this._id = value
     }
 
-    private _id = '';
-    private _type = '';
-    private _showName = '';
+    private _id = ''
+    private _type = ''
+    private _showName = ''
 }
 
 export type MemberCacheType = {
@@ -33,4 +33,3 @@ export type MemberCacheType = {
     show_name: string;
     shot_id: string;
 }
-

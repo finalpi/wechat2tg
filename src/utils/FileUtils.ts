@@ -1,7 +1,7 @@
-import axios, {AxiosRequestConfig} from 'axios';
-import * as fs from 'fs';
-import {config} from "../config";
-import {SocksProxyAgent} from "socks-proxy-agent";
+import axios, {AxiosRequestConfig} from 'axios'
+import * as fs from 'fs'
+import {config} from '../config'
+import {SocksProxyAgent} from 'socks-proxy-agent'
 
 export class FileUtils {
 
@@ -11,7 +11,7 @@ export class FileUtils {
             method: 'GET',
             url: fileUrl,
             responseType: 'stream'
-        };
+        }
 
         if (config.HOST !== '' && config.PROTOCOL === 'http' || config.PROTOCOL === 'https') {
             axiosConfig.proxy = {
@@ -21,7 +21,7 @@ export class FileUtils {
                     username: config.USERNAME,
                     password: config.PASSWORD
                 }
-            };
+            }
         } else if (config.PROTOCOL === 'socks5') {
             const info = {
                 hostname: config.HOST,
@@ -29,24 +29,24 @@ export class FileUtils {
                 username: config.USERNAME,
                 password: config.PASSWORD
             }
-            const agent = new SocksProxyAgent(info);
-            axiosConfig.httpAgent = agent;
-            axiosConfig.httpsAgent = agent;
+            const agent = new SocksProxyAgent(info)
+            axiosConfig.httpAgent = agent
+            axiosConfig.httpsAgent = agent
         } else {
-            throw new Error('Unsupported proxy protocol');
+            throw new Error('Unsupported proxy protocol')
         }
 
         try {
-            const response = await axios(axiosConfig);
-            const writer = fs.createWriteStream(savePath);
-            response.data.pipe(writer);
+            const response = await axios(axiosConfig)
+            const writer = fs.createWriteStream(savePath)
+            response.data.pipe(writer)
             return new Promise<void>((resolve, reject) => {
-                writer.on('finish', resolve);
-                writer.on('error', reject);
-            });
+                writer.on('finish', resolve)
+                writer.on('error', reject)
+            })
         } catch (error) {
-            console.error('下载文件失败:', error);
-            throw error;
+            console.error('下载文件失败:', error)
+            throw error
         }
     }
 }
