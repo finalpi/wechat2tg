@@ -37,8 +37,6 @@ jobs:
 
       - name: Build and push
         uses: docker/build-push-action@v5
-        build-args: |
-          APP_VERSION=${{ env.APP_VERSION }}
         with:
           context: .
           file: ./Dockerfile
