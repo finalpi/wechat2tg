@@ -31,15 +31,20 @@ jobs:
           key: ${{ runner.os }}-buildx-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-buildx-
+      - name: Generate App Version
+        run: echo APP_VERSION=`git describe --tags --always` >> $GITHUB_ENV
+
       - name: Build and push
         uses: docker/build-push-action@v5
+        build-args: |
+          APP_VERSION=${{ env.APP_VERSION }}
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: |
+          tags:
             finalpi/wechat2tg:latest
-            finalpi/wechat2tg:${{ github.event.release.tag_name }}
+            finalpi/wechat2tg:${{ env.APP_VERSION }}
           platforms: linux/amd64,linux/arm64/v8,linux/arm/v7
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,mode=max,dest=/tmp/.buildx-cache
