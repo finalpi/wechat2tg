@@ -1,4 +1,4 @@
-import * as fs from "node:fs";
+import * as fs from 'node:fs'
 
 export class VariableContainer {
 
@@ -22,32 +22,32 @@ export class VariableContainer {
         [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: false,
         [VariableType.SETTING_FORWARD_SELF]: false,
         [VariableType.SETTING_COMPRESSION]: false,
-    };
+    }
 
     setVariable<T extends VariableType>(key: T, value: VariableMap[T]) {
-        this.variables[key] = value;
+        this.variables[key] = value
     }
 
     getVariable<T extends VariableType>(key: T): VariableMap[T] {
-        return this.variables[key];
+        return this.variables[key]
     }
 
     getAllVariables() {
-        return this.variables;
+        return this.variables
     }
 
     // 解析文件为属性
     parseFromFile(): void {
         try {
             if (!fs.existsSync(StorageSettings.STORAGE_FOLDER)) {
-                fs.mkdirSync(StorageSettings.STORAGE_FOLDER);
+                fs.mkdirSync(StorageSettings.STORAGE_FOLDER)
             }
-            const wechatParsedData = fs.existsSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`) ? JSON.parse(fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`, 'utf8')) : {};
-            const tgParsedData = fs.existsSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.OWNER_FILE_NAME}`) ? JSON.parse(fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.OWNER_FILE_NAME}`, 'utf8')) : {};
+            const wechatParsedData = fs.existsSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`) ? JSON.parse(fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`, 'utf8')) : {}
+            const tgParsedData = fs.existsSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.OWNER_FILE_NAME}`) ? JSON.parse(fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.OWNER_FILE_NAME}`, 'utf8')) : {}
 
-            this.variables = {...wechatParsedData, ...tgParsedData};
+            this.variables = {...wechatParsedData, ...tgParsedData}
         } catch (error) {
-            console.error('Error parsing file:', error);
+            console.error('Error parsing file:', error)
         }
     }
 
@@ -63,11 +63,11 @@ export class VariableContainer {
                 [VariableType.SETTING_FORWARD_SELF]: this.variables[VariableType.SETTING_FORWARD_SELF] ? this.variables[VariableType.SETTING_FORWARD_SELF] : false,
                 [VariableType.SETTING_COMPRESSION]: this.variables[VariableType.SETTING_COMPRESSION] ? this.variables[VariableType.SETTING_COMPRESSION] : false,
                 [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: this.variables[VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT] ? this.variables[VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT] : false,
-            };
-            fs.writeFileSync(filePath, JSON.stringify(data), 'utf8');
-            console.log('File written successfully.');
+            }
+            fs.writeFileSync(filePath, JSON.stringify(data), 'utf8')
+            console.log('File written successfully.')
         } catch (error) {
-            console.error('Error writing to file:', error);
+            console.error('Error writing to file:', error)
         }
     }
 }

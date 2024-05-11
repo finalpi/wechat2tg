@@ -1,4 +1,4 @@
-import {FmtString} from "telegraf/format";
+import {FmtString} from 'telegraf/format'
 
 export interface SimpleMessage {
     id?: string;
@@ -21,17 +21,17 @@ export class SimpleMessageSender implements MessageSender {
 
     sendMessage(simpleMessage: SimpleMessage): string | FmtString {
         if (simpleMessage instanceof FmtString) {
-            return simpleMessage;
+            return simpleMessage
         } else if (simpleMessage.sender) {
             let title = simpleMessage.room === ''
                 ? `<b>👤${simpleMessage.sender} : </b> \n` :
-                `<i>🌐${simpleMessage.room}</i> ---- <b>👤${simpleMessage.sender} : </b> \n`;
+                `<i>🌐${simpleMessage.room}</i> ---- <b>👤${simpleMessage.sender} : </b> \n`
             if (simpleMessage.type === 1) {
-                title = `<b>📣${simpleMessage.sender} : </b> \n`;
+                title = `<b>📣${simpleMessage.sender} : </b> \n`
             }
-            return `${title}${!simpleMessage.not_escape_html ? this.escapeHTML(typeof simpleMessage.body === "string" ? simpleMessage.body : '') : simpleMessage.body}`;
+            return `${title}${!simpleMessage.not_escape_html ? this.escapeHTML(typeof simpleMessage.body === 'string' ? simpleMessage.body : '') : simpleMessage.body}`
         } else {
-            return simpleMessage.body;
+            return simpleMessage.body
         }
     }
 
@@ -40,11 +40,11 @@ export class SimpleMessageSender implements MessageSender {
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
+            .replace(/'/g, '&#39;')
     }
 
     static send(simpleMessage: SimpleMessage) {
-        return new SimpleMessageSender().sendMessage(simpleMessage);
+        return new SimpleMessageSender().sendMessage(simpleMessage)
     }
 
 }
@@ -64,5 +64,5 @@ export class BotHelpText {
 5\\. 当前回复的用户或者群会被pin
 6\\. 回复转发的消息能直接直接转发到对应的人或者群（暂时不支持回复回复的消息，而且不改变当前正在回复的用户）
 7\\. 由于使用的web协议的微信协议所以可能会**封号**（目前我没遇到过），使用前请三思 
-`;
+`
 }

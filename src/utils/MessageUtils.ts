@@ -1,16 +1,16 @@
-import {MyMessageContact} from "../models/MyContact";
-import {convertXML} from "simple-xml-to-json";
+import {MyMessageContact} from '../models/MyContact'
+import {convertXML} from 'simple-xml-to-json'
 
 export class MessageUtils {
-    private static instance: MessageUtils;
+    private static instance: MessageUtils
     private constructor() {
         //
     }
     public getInstance (): MessageUtils {
         if (!MessageUtils.instance) {
-            MessageUtils.instance = new MessageUtils();
+            MessageUtils.instance = new MessageUtils()
         }
-        return MessageUtils.instance;
+        return MessageUtils.instance
     }
 
     public static messageTextToContact(messageText: string): Promise<MyMessageContact> {
@@ -20,8 +20,8 @@ export class MessageUtils {
             messageText = messageText.substring(firstIndex, messageText.length)
         }
         return new Promise((resolve) => {
-            const contact: MyMessageContact = convertXML(messageText)['msg'];
-            return resolve(contact);
+            const contact: MyMessageContact = convertXML(messageText)['msg']
+            return resolve(contact)
         })
     }
 }
