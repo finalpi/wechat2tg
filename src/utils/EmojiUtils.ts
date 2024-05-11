@@ -218,17 +218,17 @@ export class EmojiConverter {
         '[Waddle]': '🐧',
         '[Tremble]': '😨',
         '[Twirl]': '🔄'
-    };
+    }
 
     convert(text: string): string {
-        let convertedText = text;
+        let convertedText = text
         for (const emojiText in this.emojiMapping) {
             if (Object.prototype.hasOwnProperty.call(this.emojiMapping, emojiText)) {
-                const emojiUnicode = this.emojiMapping[emojiText];
-                const emojiRegex = new RegExp(emojiText.replace('[', '\\[').replace(']', '\\]'), 'g');
-                convertedText = convertedText.replace(emojiRegex, emojiUnicode);
+                const emojiUnicode = this.emojiMapping[emojiText]
+                const emojiRegex = new RegExp(emojiText.replace('[', '\\[').replace(']', '\\]'), 'g')
+                convertedText = convertedText.replace(emojiRegex, emojiUnicode)
             }
         }
-        return convertedText;
+        return convertedText
     }
 }

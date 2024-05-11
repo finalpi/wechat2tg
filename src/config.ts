@@ -1,8 +1,8 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-import dotenv from 'dotenv';
+import dotenv from 'dotenv'
 
-dotenv.config();
+dotenv.config()
 
 export const config = {
     BOT_TOKEN: process.env.BOT_TOKEN?.toString() || '', // tg bot father 申请的 bot token
@@ -12,6 +12,3 @@ export const config = {
 	USERNAME: process.env.PROXY_USERNAME?.toString() || '' , // 代理服务器用户名
 	PASSWORD: process.env.PROXY_PASSWORD?.toString() || '' , // 代理服务器密码
 }
-
-
-

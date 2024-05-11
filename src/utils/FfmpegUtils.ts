@@ -1,12 +1,12 @@
-import ffmpegStatic from "ffmpeg-static";
+import ffmpegStatic from 'ffmpeg-static'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const ffmpeg = require('fluent-ffmpeg');
+const ffmpeg = require('fluent-ffmpeg')
 
 
 export class ConverterHelper {
     constructor() {
         // 设置 ffmpeg-static 的路径
-        ffmpeg.setFfmpegPath(ffmpegStatic);
+        ffmpeg.setFfmpegPath(ffmpegStatic)
     }
 
     async webmToGif(inputFile: string | Buffer, outputFile: string): Promise<void> {
@@ -18,13 +18,13 @@ export class ConverterHelper {
                 .saveToFile(outputFile)
                 .on('end', () => {
                     console.log('file has been converted successfully')
-                    resolve();
+                    resolve()
                 })
                 .on('error', (error: Error) => {
-                    console.error('an error happened: ' + error.message);
-                    reject(error);
-                });
-        });
+                    console.error('an error happened: ' + error.message)
+                    reject(error)
+                })
+        })
     }
 
 }

@@ -1,8 +1,8 @@
-const ffmpeg = require('fluent-ffmpeg');
+const ffmpeg = require('fluent-ffmpeg')
 
-import ffmpegStatic from "ffmpeg-static";
+import ffmpegStatic from 'ffmpeg-static'
 // Tell fluent-ffmpeg where it can find FFmpeg
-ffmpeg.setFfmpegPath(ffmpegStatic);
+ffmpeg.setFfmpegPath(ffmpegStatic)
 
 // Run FFmpeg
 ffmpeg()
@@ -30,10 +30,10 @@ ffmpeg()
 
     // The callback that is run when FFmpeg is finished
     .on('end', () => {
-        console.log('FFmpeg has finished.');
+        console.log('FFmpeg has finished.')
     })
 
     // The callback that is run when FFmpeg encountered an error
     .on('error', (error: Error) => {
-        console.error(error);
-    });
+        console.error(error)
+    })
