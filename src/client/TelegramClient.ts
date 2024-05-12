@@ -34,6 +34,7 @@ export class TelegramClient {
     private _recentUsers: TalkerEntity [] = []
     private wechatStartFlag = false
     private searchList: any[] = []
+    private botStartTime = new Date()
 
     private forwardSetting: VariableContainer = new VariableContainer()
 
@@ -185,6 +186,13 @@ export class TelegramClient {
 
         // 此方法需要放在所有监听方法之前,先拦截命令做处理
         bot.use((ctx, next) => {
+            if (ctx.message){
+                const messageDate = new Date(ctx.message?.date * 1000);
+                if (messageDate.getTime() < this.botStartTime.getTime()){
+                    return;
+                }
+            }
+
             if (!this._chatId) {
                 return next()
             }
