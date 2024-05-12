@@ -494,7 +494,7 @@ export class WeChatClient {
                     // console.log('showSender is :', showSender, 'talker id is :', talker.id, 'message text is ', messageTxt,)
                     // 地址 只有个人发送的才会有这个连接的文本出现
                     if (messageTxt.endsWith('pictype=location')) {
-                        const locationText = `收到一个位置信息:\n <code>${message.text().split('\n')[0].replace(':', '')}</code>`
+                        const locationText = `位置信息: <code>${message.text().split('\n')[0].replace(':', '')}</code>`
                         this._tgClient.sendMessage({
                             sender: showSender,
                             body: locationText,
@@ -742,8 +742,6 @@ export class WeChatClient {
                     id: message.id
                 })
                 break
-            case PUPPET.types.Message.Location: // 处理位置消息的逻辑
-                break
             case PUPPET.types.Message.MiniProgram: // 处理小程序消息的逻辑
                 sendMessageBody.body = '收到一条小程序消息'
                 this._tgClient.sendMessage(sendMessageBody)
@@ -751,12 +749,10 @@ export class WeChatClient {
             case PUPPET.types.Message.RedEnvelope: // 处理红包消息的逻辑 12
                 break
             case PUPPET.types.Message.Url: // 处理链接消息的逻辑
-                sendMessageBody.body = '收到一条链接消息'
-                this._tgClient.sendMessage(sendMessageBody)
-                break
-            case PUPPET.types.Message.Post: // 处理帖子消息的逻辑
-                // sendMessageBody.body = `收到一条暂不支持的消息类型: ${messageType}`
-                // this._tgClient.sendMessage(sendMessageBody)
+                message.toUrlLink().then(url => {
+                    sendMessageBody.body = `链接消息：${url.description()} <a href="${url.url()}">${url.title()}</a>`
+                    this._tgClient.sendMessage({...sendMessageBody, not_escape_html: true})
+                })
                 break
             case PUPPET.types.Message.Transfer: // 处理转账消息的逻辑 11
                 sendMessageBody.body = '收到一条转账消息'
@@ -768,6 +764,14 @@ export class WeChatClient {
                 break
             case PUPPET.types.Message.GroupNote:
                 // 处理群公告消息的逻辑
+                break
+            case PUPPET.types.Message.ChatHistory:  // ChatHistory(19)
+                break
+            case PUPPET.types.Message.Post: // 处理帖子消息的逻辑
+                // sendMessageBody.body = `收到一条暂不支持的消息类型: ${messageType}`
+                // this._tgClient.sendMessage(sendMessageBody)
+                break
+            case PUPPET.types.Message.Location: // 处理位置消息的逻辑
                 break
             default:
                 break
