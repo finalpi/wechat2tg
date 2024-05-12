@@ -19,7 +19,7 @@ import {UniqueIdGenerator} from '../utils/IdUtils'
 import {NotionMode, VariableType} from '../models/Settings'
 import {FriendshipItem} from '../models/FriendshipItem'
 import {MessageUtils} from '../utils/MessageUtils'
-import {FileBox} from 'file-box'
+import {FileBox, type FileBoxInterface} from 'file-box'
 import * as fs from 'fs'
 // import {FmtString} from "telegraf/format";
 
@@ -145,7 +145,9 @@ export class WeChatClient {
 
     public async start() {
         this.init()
-        if (this._client === null) return
+        if (this._client === null) {
+            return
+        }
         // if(this._client.ready().then())
         if (!this._started) {
             await this._client.start().then(() => {
@@ -216,29 +218,29 @@ export class WeChatClient {
         }
     }
 
-    private roomJoin(room: RoomInterface, inviteeList: ContactInterface[] , inviter: ContactInterface){
-        inviteeList.forEach(item=>{
-            if (item.self()){
-                const item = this._roomList.find(it=>it.id === room.id)
-                if (!item){
+    private roomJoin(room: RoomInterface, inviteeList: ContactInterface[], inviter: ContactInterface) {
+        inviteeList.forEach(item => {
+            if (item.self()) {
+                const item = this._roomList.find(it => it.id === room.id)
+                if (!item) {
                     this.roomList.push(room)
                 }
             }
         })
     }
 
-    private roomLeave(room: RoomInterface, leaverList: ContactInterface[]){
-        leaverList.forEach(leaver=>{
-            if (leaver.self()){
-                this._roomList = this._roomList.filter(it=>it.id != room.id)
+    private roomLeave(room: RoomInterface, leaverList: ContactInterface[]) {
+        leaverList.forEach(leaver => {
+            if (leaver.self()) {
+                this._roomList = this._roomList.filter(it => it.id != room.id)
             }
         })
     }
 
-    private roomTopic(room: RoomInterface, topic: string, oldTopic: string, changer: ContactInterface){
-        const item = this._roomList.find(it=>it.id === room.id)
-        if (item){
-            if (item.payload?.topic !== topic){
+    private roomTopic(room: RoomInterface, topic: string, oldTopic: string, changer: ContactInterface) {
+        const item = this._roomList.find(it => it.id === room.id)
+        if (item) {
+            if (item.payload?.topic !== topic) {
                 this._roomList[this._roomList.indexOf(item)].sync()
             }
         }
@@ -523,8 +525,8 @@ export class WeChatClient {
                     if (res.bigheadimgurl) {
                         FileBox.fromUrl(res.bigheadimgurl).toBuffer().then(avatarBuff => {
                             this._tgClient.bot.telegram.sendPhoto(
-                                this._tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg=>{
-                                this._tgClient.saveMessage(msg.message_id,message.id)
+                                this._tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {
+                                this._tgClient.saveMessage(msg.message_id, message.id)
                             })
                         }).catch(() => {
                             sendMessageWhenNoAvatar(res.nickname)
@@ -540,6 +542,15 @@ export class WeChatClient {
             case PUPPET.types.Message.Attachment: {
                 message.toFileBox().then(fBox => {
                     // 这里可以保存一份在本地 但是没有映射关系没法知道是谁的
+                    if (this.sentMessageWhenFileToLage(fBox, {
+                        sender: showSender,
+                        body: '[文件]过大,请在微信上查收',
+                        room: roomTopic,
+                        type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                        id: message.id
+                    })) {
+                        return
+                    }
                     fBox.toBuffer().then(buff => {
 
                         // 语音文件 .sil直接重命名为mp3 可以直接播放
@@ -549,12 +560,12 @@ export class WeChatClient {
                         tgClient.bot.telegram.sendDocument(
                             tgClient.chatId, {source: buff, filename: fileName}, {
                                 caption: identityStr
-                            }).then(msg=>{
-                            this._tgClient.saveMessage(msg.message_id,message.id)
-                        }).catch(e=>{
+                            }).then(msg => {
+                            this._tgClient.saveMessage(msg.message_id, message.id)
+                        }).catch(e => {
                             this._tgClient.sendMessage({
                                 sender: showSender,
-                                body: '[文件]文件过大,请在微信上查收',
+                                body: '[文件]转发失败，请在微信上查收',
                                 room: roomTopic,
                                 type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                                 id: message.id
@@ -574,6 +585,16 @@ export class WeChatClient {
             }
             case PUPPET.types.Message.Image: {
                 message.toFileBox().then(fBox => {
+
+                    if (this.sentMessageWhenFileToLage(fBox, {
+                        sender: showSender,
+                        body: '[图片]过大,请在微信上查收',
+                        room: roomTopic,
+                        type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                        id: message.id
+                    })) {
+                        return
+                    }
                     // 这里可以保存一份在本地 但是没有映射关系没法知道是谁的
                     fBox.toBuffer().then(buff => {
                         const fileName = fBox.name
@@ -581,12 +602,15 @@ export class WeChatClient {
                         const tgClient = this._tgClient
                         if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) {
                             tgClient.bot.telegram.sendPhoto(
-                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg=>{
-                                this._tgClient.saveMessage(msg.message_id,message.id)
-                            }).catch(e=>{
+                                tgClient.chatId, {
+                                    source: buff,
+                                    filename: fileName
+                                }, {caption: identityStr}).then(msg => {
+                                this._tgClient.saveMessage(msg.message_id, message.id)
+                            }).catch(e => {
                                 this._tgClient.sendMessage({
                                     sender: showSender,
-                                    body: '[图片]文件过大,请在微信上查收',
+                                    body: '[图片]文件转发失败，请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                                     id: message.id
@@ -594,12 +618,15 @@ export class WeChatClient {
                             })
                         } else {
                             tgClient.bot.telegram.sendDocument(
-                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg=>{
-                                this._tgClient.saveMessage(msg.message_id,message.id)
-                            }).catch(e=>{
+                                tgClient.chatId, {
+                                    source: buff,
+                                    filename: fileName
+                                }, {caption: identityStr}).then(msg => {
+                                this._tgClient.saveMessage(msg.message_id, message.id)
+                            }).catch(e => {
                                 this._tgClient.sendMessage({
                                     sender: showSender,
-                                    body: '[图片]文件过大,请在微信上查收',
+                                    body: '[图片]文件转发失败，请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                                     id: message.id
@@ -614,11 +641,20 @@ export class WeChatClient {
                 message.toFileBox().then(fBox => {
                     // 这里可以保存一份在本地 但是没有映射关系没法知道是谁的
                     fBox.toBuffer().then(buff => {
+                        if (this.sentMessageWhenFileToLage(fBox, {
+                            sender: showSender,
+                            body: '[语音]过大,请在微信上查收',
+                            room: roomTopic,
+                            type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                            id: message.id
+                        })) {
+                            return
+                        }
                         let fileName = fBox.name
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendVoice(
-                            tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg=>{
-                            this._tgClient.saveMessage(msg.message_id,message.id)
+                            tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg => {
+                            this._tgClient.saveMessage(msg.message_id, message.id)
                         }).catch(res => {
                             if (fileName.endsWith('.sil')) {
                                 fileName = fileName.replace('.sil', '.mp3')
@@ -627,12 +663,12 @@ export class WeChatClient {
                             tgClient.bot.telegram.sendDocument(tgClient.chatId, {
                                 source: buff,
                                 filename: fileName
-                            }, {caption: identityStr}).then(msg=>{
-                                this._tgClient.saveMessage(msg.message_id,message.id)
-                            }).catch(e=>{
+                            }, {caption: identityStr}).then(msg => {
+                                this._tgClient.saveMessage(msg.message_id, message.id)
+                            }).catch(e => {
                                 this._tgClient.sendMessage({
                                     sender: showSender,
-                                    body: '[语音]文件过大,请在微信上查收',
+                                    body: '[语音]文件转发失败,请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                                     id: message.id
@@ -649,15 +685,28 @@ export class WeChatClient {
                     fBox.toBuffer().then(buff => {
                         const fileName = fBox.name
 
+                        if (this.sentMessageWhenFileToLage(fBox, {
+                            sender: showSender,
+                            body: '[视频]过大,请在微信上查收',
+                            room: roomTopic,
+                            type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                            id: message.id
+                        })) {
+                            return
+                        }
+
                         const tgClient = this._tgClient
                         if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) {
                             tgClient.bot.telegram.sendVideo(
-                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg=>{
-                                this._tgClient.saveMessage(msg.message_id,message.id)
-                            }).catch(e=>{
+                                tgClient.chatId, {
+                                    source: buff,
+                                    filename: fileName
+                                }, {caption: identityStr}).then(msg => {
+                                this._tgClient.saveMessage(msg.message_id, message.id)
+                            }).catch(e => {
                                 this._tgClient.sendMessage({
                                     sender: showSender,
-                                    body: '[视频]文件过大,请在微信上查收',
+                                    body: '[视频]文件转发失败,请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                                     id: message.id
@@ -665,12 +714,15 @@ export class WeChatClient {
                             })
                         } else {
                             tgClient.bot.telegram.sendDocument(
-                                tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg=>{
-                                this._tgClient.saveMessage(msg.message_id,message.id)
-                            }).catch(e=>{
+                                tgClient.chatId, {
+                                    source: buff,
+                                    filename: fileName
+                                }, {caption: identityStr}).then(msg => {
+                                this._tgClient.saveMessage(msg.message_id, message.id)
+                            }).catch(e => {
                                 this._tgClient.sendMessage({
                                     sender: showSender,
-                                    body: '[视频]文件过大,请在微信上查收',
+                                    body: '[视频]文件转发失败,请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                                     id: message.id
@@ -764,9 +816,9 @@ export class WeChatClient {
         // 缓存到客户端的实例
         // 一起获取群放到缓存
         const room = await this._client.Room.findAll()
-        room.forEach(async it=>{
+        room.forEach(async it => {
             const l = await it.memberAll()
-            if (l.length > 0){
+            if (l.length > 0) {
                 this._roomList.push(it)
             }
         })
@@ -800,5 +852,13 @@ export class WeChatClient {
                 })
             }
         })
+    }
+
+    private sentMessageWhenFileToLage(fileBox: FileBoxInterface, message: SimpleMessage): boolean {
+        if (fileBox.size > 1024 * 1024 * 50) {
+            this._tgClient.sendMessage(message)
+            return true
+        }
+        return false
     }
 }

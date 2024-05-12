@@ -1042,11 +1042,18 @@ export class TelegramClient {
             }
             if (ctx.message.voice) {
                 const fileId = ctx.message.voice.file_id
+                if (ctx.message.voice.file_size && ctx.message.voice.file_size > 20971520) {
+                    ctx.reply('语音文件过大，bot发送文件不能大于20M', {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
+                    return
+                }
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
                     const nowShangHaiZh = new Date().toLocaleString('zh', {
                         timeZone: 'Asia/ShangHai'
                     }).toString().replaceAll('/', '-')
-                    console.log('voice name', nowShangHaiZh)
                     const fileBox = FileBox.fromUrl(fileLink.toString(), {name: `语音-${nowShangHaiZh.toLocaleLowerCase()}.mp3`})
                     const replyMessageId = ctx.update.message['reply_to_message']?.message_id
                     // 如果是回复的消息 优先回复该发送的消息
@@ -1125,7 +1132,7 @@ export class TelegramClient {
                         })
                     }
                 }).catch(e => {
-                    ctx.reply('文件过大,发送失败(telegram文件发送不能大于20M)', {
+                    ctx.reply('文件发送失败', {
                         reply_parameters: {
                             message_id: ctx.message.message_id
                         }
@@ -1141,6 +1148,14 @@ export class TelegramClient {
             }
             if (ctx.message.audio) {
                 const fileId = ctx.message.audio.file_id
+                if (ctx.message.audio.file_size && ctx.message.audio.file_size > 20971520) {
+                    ctx.reply('bot发送文件不能大于20M', {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
+                    return
+                }
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
                     const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message.audio.file_name)
                     const replyMessageId = ctx.update.message['reply_to_message']?.message_id
@@ -1220,7 +1235,7 @@ export class TelegramClient {
                         })
                     }
                 }).catch(e => {
-                    ctx.reply('文件过大,发送失败(telegram文件发送不能大于20M)', {
+                    ctx.reply('音频发送失败', {
                         reply_parameters: {
                             message_id: ctx.message.message_id
                         }
@@ -1236,6 +1251,14 @@ export class TelegramClient {
             }
             if (ctx.message.video) {
                 const fileId = ctx.message.video.file_id
+                if (ctx.message.video.file_size && ctx.message.video.file_size > 20971520) {
+                    ctx.reply('bot发送文件不能大于20M', {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
+                    return
+                }
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
                     const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message.video.file_name)
                     const replyMessageId = ctx.update.message['reply_to_message']?.message_id
@@ -1320,7 +1343,7 @@ export class TelegramClient {
                         })
                     }
                 }).catch(e => {
-                    ctx.reply('文件过大,发送失败(telegram文件发送不能大于20M)', {
+                    ctx.reply('文件发送失败', {
                         reply_parameters: {
                             message_id: ctx.message.message_id
                         }
@@ -1340,6 +1363,14 @@ export class TelegramClient {
 
             if (ctx.message.document) {
                 const fileId = ctx.message.document.file_id
+                if (ctx.message.document.file_size && ctx.message.document.file_size > 20971520) {
+                    ctx.reply('bot发送文件不能大于20M', {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
+                    return
+                }
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
                     const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message.document.file_name)
                     const replyMessageId = ctx.update.message['reply_to_message']?.message_id
@@ -1424,7 +1455,7 @@ export class TelegramClient {
                         })
                     }
                 }).catch(e => {
-                    ctx.reply('文件过大,发送失败(telegram文件发送不能大于20M)', {
+                    ctx.reply('文件发送失败', {
                         reply_parameters: {
                             message_id: ctx.message.message_id
                         }
@@ -1442,6 +1473,15 @@ export class TelegramClient {
                 // Get the file_id of the largest size photo
                 const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id
                 // const fileId = ctx.message.photo[ctx.message.photo.length - 1];
+                const fileSize = ctx.message.photo[ctx.message.photo.length - 1].file_size
+                if (fileSize && fileSize > 20971520) {
+                    ctx.reply('bot发送文件不能大于20M', {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
+                    return
+                }
 
                 // Get the file link using telegram API
                 ctx.telegram.getFileLink(fileId).then(fileLink => {
@@ -1526,7 +1566,7 @@ export class TelegramClient {
                         })
                     }
                 }).catch(e => {
-                    ctx.reply('文件过大,发送失败(telegram文件发送不能大于20M)', {
+                    ctx.reply('图片发送失败', {
                         reply_parameters: {
                             message_id: ctx.message.message_id
                         }
