@@ -575,7 +575,7 @@ export class WeChatClient {
                 }).catch(() => {
                     this._tgClient.sendMessage({
                         sender: showSender,
-                        body: message.text(),
+                        body: `接收文件${message.payload?.filename}出错`,
                         type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                         room: roomTopic,
                         id: message.id
