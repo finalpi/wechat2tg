@@ -148,7 +148,6 @@ export class TelegramClient {
         return this._recentUsers
     }
 
-    // Setter 方法
     set weChatClient(value: WeChatClient) {
         this._weChatClient = value
     }
@@ -186,10 +185,10 @@ export class TelegramClient {
 
         // 此方法需要放在所有监听方法之前,先拦截命令做处理
         bot.use((ctx, next) => {
-            if (ctx.message){
-                const messageDate = new Date(ctx.message?.date * 1000);
-                if (messageDate.getTime() < this.botStartTime.getTime()){
-                    return;
+            if (ctx.message) {
+                const messageDate = new Date(ctx.message?.date * 1000)
+                if (messageDate.getTime() < this.botStartTime.getTime()) {
+                    return
                 }
             }
 
