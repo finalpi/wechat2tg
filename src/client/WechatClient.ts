@@ -9,6 +9,7 @@ import {
     MessageInterface,
     RoomInterface,
     WechatyInterface,
+    RoomInvitationInterface
 } from 'wechaty/impls'
 import {TelegramClient} from './TelegramClient'
 import {EmojiConverter} from '../utils/EmojiUtils'
@@ -56,6 +57,7 @@ export class WeChatClient {
         this.roomTopic = this.roomTopic.bind(this)
         this.roomJoin = this.roomJoin.bind(this)
         this.roomLeave = this.roomLeave.bind(this)
+        this.roomInvite = this.roomInvite.bind(this)
     }
 
     private readonly _client: WechatyInterface
@@ -171,9 +173,18 @@ export class WeChatClient {
             .on('room-join', this.roomJoin)
             .on('room-topic', this.roomTopic)
             .on('room-leave', this.roomLeave)
+            .on('room-invite', this.roomInvite)
             .on('friendship', this.friendship)
             .on('ready', this.onReady)
             .on('error', this.error)
+    }
+
+    private roomInvite(roomInvitation: RoomInvitationInterface) {
+        this._tgClient.sendMessage({
+            sender: '未知用户 type 没有',
+            body: '邀请你加入群聊(无法获取用户名和群名)',
+            id: roomInvitation.id,
+        })
     }
 
     private error(error: Error) {
@@ -245,7 +256,6 @@ export class WeChatClient {
             }
         }
     }
-
 
     private onReady() {
         console.log('Wechat client ready!')
@@ -355,7 +365,7 @@ export class WeChatClient {
         // attachment handle
         const messageType = message.type()
 
-        // console.debug('on message', message)
+        // console.info('on message ... ', message)
 
 
         const alias = await talker.alias()

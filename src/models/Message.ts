@@ -23,7 +23,7 @@ export class SimpleMessageSender implements MessageSender {
         if (simpleMessage instanceof FmtString) {
             return simpleMessage
         } else if (simpleMessage.sender) {
-            let title = simpleMessage.room === ''
+            let title = !simpleMessage.room || simpleMessage.room === ''
                 ? `<b>👤${simpleMessage.sender} : </b> \n` :
                 `<i>🌐${simpleMessage.room}</i> ---- <b>👤${simpleMessage.sender} : </b> \n`
             if (simpleMessage.type === 1) {
