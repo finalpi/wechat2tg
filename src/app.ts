@@ -1,8 +1,8 @@
-import { TelegramClient } from './client/TelegramClient'
+import { TelegramBotClient } from './client/TelegramBotClient'
 import { WeChatClient } from './client/WechatClient'
 
 
-const bot = new TelegramClient()
+const bot = new TelegramBotClient()
 bot.init()
 
 

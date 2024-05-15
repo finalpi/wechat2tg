@@ -11,7 +11,7 @@ import {
     WechatyInterface,
     RoomInvitationInterface
 } from 'wechaty/impls'
-import {TelegramClient} from './TelegramClient'
+import {TelegramBotClient} from './TelegramBotClient'
 import {EmojiConverter} from '../utils/EmojiUtils'
 import {MemberCacheType} from '../models/TgCache'
 import {SimpleMessage} from '../models/Message'
@@ -30,7 +30,7 @@ import * as fs from 'fs'
 export class WeChatClient {
 
 
-    constructor(private readonly tgClient: TelegramClient) {
+    constructor(private readonly tgClient: TelegramBotClient) {
         this._client = WechatyBuilder.build({
             name: './storage/wechat_bot',
             puppet: 'wechaty-puppet-wechat4u',
@@ -61,7 +61,7 @@ export class WeChatClient {
     }
 
     private readonly _client: WechatyInterface
-    private readonly _tgClient: TelegramClient
+    private readonly _tgClient: TelegramBotClient
 
     private _contactMap: Map<number, Set<ContactInterface>> | undefined
     private _roomList: RoomInterface[] = []

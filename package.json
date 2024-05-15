@@ -22,6 +22,7 @@
     "simple-xml-to-json": "^1.2.2",
     "socks-proxy-agent": "^7.0.0",
     "telegraf": "^4.12.2",
+    "telegram": "^2.21.2",
     "ts-node": "^10.9.1",
     "wechaty": "^1.20.2",
     "wechaty-puppet-wechat4u": "^1.14.14"
