@@ -18,9 +18,15 @@ import {FileUtils} from '../utils/FileUtils'
 import {ContactImpl, ContactInterface, MessageInterface, RoomInterface} from 'wechaty/impls'
 import {CacheHelper} from '../utils/CacheHelper'
 import * as PUPPET from 'wechaty-puppet'
-import {TelegramClient} from "./TelegramClient";
+import {TelegramClient} from "./TelegramClient"
+import * as sqlite3 from 'sqlite3'
+import {Database} from 'sqlite3'
+import {BindItem} from '../models/BindItem'
 
 export class TelegramBotClient {
+    get db(): Database {
+        return this._db
+    }
     private _weChatClient: WeChatClient
     private _tgClient: TelegramClient | undefined
     private readonly _bot: Telegraf
@@ -37,6 +43,7 @@ export class TelegramBotClient {
     private wechatStartFlag = false
     private searchList: any[] = []
     private botStartTime = new Date()
+    private _db = new sqlite3.Database('storage/database.sqlite')
 
     private forwardSetting: VariableContainer = new VariableContainer()
 
@@ -87,6 +94,15 @@ export class TelegramBotClient {
                 this._tgClient = new TelegramClient(this)
             }
         }
+        // 初始化sqllight数据库
+        this.db.serialize(() => {
+            this.db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='rooms'", (err, row) => {
+                if (!row) {
+                    // 如果表不存在，则创建表
+                    this.db.run("CREATE TABLE rooms (name TEXT, chat_id INT, type INT, bind_id TEXT)")
+                }
+            });
+        })
     }
 
     public get messageMap(): Map<number, string> {
@@ -191,6 +207,15 @@ export class TelegramBotClient {
         ]
         bot.telegram.setMyCommands(commands)
 
+        bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
+
+        bot.start(async ctx => {
+            ctx.reply(
+                '请输入 /login 登陆,或者输入 /help 查看帮助\n' +
+                '请注意执行/login 后你就是该机器的所有者'
+                , Markup.removeKeyboard())
+        })
+
         // 此方法需要放在所有监听方法之前,先拦截命令做处理
         bot.use((ctx, next) => {
             if (ctx.message) {
@@ -199,8 +224,15 @@ export class TelegramBotClient {
                     return
                 }
             }
-
             if (!this._chatId) {
+                return next()
+            }
+
+            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
+                return next()
+            }
+
+            if (ctx.chat && ctx.chat.type.includes('group') && ctx.callbackQuery && ctx.callbackQuery.from.id === this._chatId){
                 return next()
             }
 
@@ -209,21 +241,7 @@ export class TelegramBotClient {
             }
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
-            // help 命令 start 命令
-            if (ctx.message['text'] === '/start' || ctx.message['text'] === '/help') {
-                return next()
-            } else {
-                return ctx.reply('Sorry, you are not authorized to interact with this bot.') // 如果用户未授权，发送提示消息
-            }
-        })
-
-        bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
-
-        bot.start(async ctx => {
-            ctx.reply(
-                '请输入 /login 登陆,或者输入 /help 查看帮助\n' +
-                '请注意执行/login 后你就是该机器的所有者'
-                , Markup.removeKeyboard())
+            return ctx.reply('Sorry, you are not authorized to interact with this bot.') // 如果用户未授权，发送提示消息
         })
 
         // 重启时判断是否有主人,如果存在主人则自动登录微信
@@ -577,9 +595,29 @@ export class TelegramBotClient {
         bot.action(/room-index-\d+/, async (ctx) => {
             // console.log(ctx.match.input)
             const room = currentSelectRoomMap.get(ctx.match.input)
+            const roomTopic = await room?.topic()
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                // 群组绑定
+                this.db.serialize(() => {
+                    this.db.get(`SELECT name FROM rooms WHERE name = '${roomTopic}'`, (err, row) => {
+                        if (!row) {
+                            const stmt = this.db.prepare("INSERT INTO rooms VALUES (?, ?, ?, ?)");
+                            stmt.run(roomTopic,ctx.chat?.id,1,ctx.match.input);
+                            stmt.finalize();
+                        } else {
+                            const stmt = this.db.prepare(`UPDATE rooms SET chat_id = ${ctx.chat?.id} WHERE name = '${roomTopic}'`);
+                            stmt.run();
+                            stmt.finalize();
+                        }
+                    })
+                });
+                ctx.deleteMessage()
+                ctx.answerCbQuery()
+                return
+            }
             this.selectRoom = room
             ctx.deleteMessage()
-            this.setPin('room', await room?.topic())
+            this.setPin('room', roomTopic)
             ctx.answerCbQuery()
         })
 
@@ -1754,11 +1792,21 @@ export class TelegramBotClient {
 
     public async sendMessage(message: SimpleMessage) {
         // console.log('发送文本消息', message)
-        const res = await this.bot.telegram.sendMessage(this._chatId, SimpleMessageSender.send(message), {
-            parse_mode: 'HTML'
-        })
-        if (message.id) {
-            this.messageMap.set(res.message_id, message.id)
+        let chatId = this._chatId
+        if (message.room && message.room !== ''){
+            this.db.serialize(() => {
+                this.db.get(`SELECT * FROM rooms WHERE name = '${message.room}'`, async (err, row: BindItem) => {
+                    if (row) {
+                        chatId = row.chat_id
+                    }
+                    const res = await this.bot.telegram.sendMessage(chatId, SimpleMessageSender.send(message), {
+                        parse_mode: 'HTML'
+                    })
+                    if (message.id) {
+                        this.messageMap.set(res.message_id, message.id)
+                    }
+                });
+            });
         }
     }
 
