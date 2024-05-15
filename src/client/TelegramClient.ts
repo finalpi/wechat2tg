@@ -21,14 +21,23 @@ export class TelegramClient {
     constructor(telegramBotClient: TelegramBotClient) {
         this.apiId = parseInt(config.API_ID)
         this.apiHash = config.API_HASH
-        this._client = new GramClient(this.storeSession, this.apiId, this.apiHash, {
-            connectionRetries: 5,
-            proxy: {
-                ip: config.HOST,
-                port: parseInt(config.PORT),
-                socksType: 5,
-            },
-        })
+        ///
+        if (config.HOST) {
+            this._client = new GramClient(this.storeSession, this.apiId, this.apiHash, {
+                connectionRetries: 5,
+                proxy: {
+                    ip: config.HOST,
+                    port: parseInt(config.PORT),
+                    socksType: 5,
+                },
+            })
+        } else {
+            this._client = new GramClient(this.storeSession, this.apiId, this.apiHash, {
+                connectionRetries: 5,
+            })
+        }
+
+
         this.telegramBotClient = telegramBotClient
         this._client.start({
             botAuthToken: config.BOT_TOKEN,
