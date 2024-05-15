@@ -18,7 +18,7 @@ import {FileUtils} from '../utils/FileUtils'
 import {ContactImpl, ContactInterface, MessageInterface, RoomInterface} from 'wechaty/impls'
 import {CacheHelper} from '../utils/CacheHelper'
 import * as PUPPET from 'wechaty-puppet'
-import {TelegramClient} from "./TelegramClient"
+import {TelegramClient} from './TelegramClient'
 import * as sqlite3 from 'sqlite3'
 import {Database} from 'sqlite3'
 import {BindItem} from '../models/BindItem'
@@ -94,15 +94,6 @@ export class TelegramBotClient {
                 this._tgClient = new TelegramClient(this)
             }
         }
-        // 初始化sqllight数据库
-        this.db.serialize(() => {
-            this.db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='rooms'", (err, row) => {
-                if (!row) {
-                    // 如果表不存在，则创建表
-                    this.db.run("CREATE TABLE rooms (name TEXT, chat_id INT, type INT, bind_id TEXT)")
-                }
-            });
-        })
     }
 
     public get messageMap(): Map<number, string> {
@@ -170,10 +161,6 @@ export class TelegramBotClient {
 
     get recentUsers(): TalkerEntity[] {
         return this._recentUsers
-    }
-
-    set weChatClient(value: WeChatClient) {
-        this._weChatClient = value
     }
 
 
@@ -538,7 +525,7 @@ export class TelegramBotClient {
                 const topic = match[1]  // 提取用户名
                 const filterRoom = this._weChatClient.roomList.filter(room => {
                     // const roomName = ;
-                    return room.payload?.topic?.includes(topic)
+                    return room.room.payload?.topic?.includes(topic)
                 })
                 if (filterRoom && filterRoom.length > 0) {
                     const buttons: tg.InlineKeyboardButton[][] = []
@@ -580,7 +567,7 @@ export class TelegramBotClient {
             // })
 
             const count = 0
-            searchRooms = this._weChatClient.roomList
+            searchRooms = this._weChatClient.roomList.map(it=>it.room)
             this.generateRoomButtons(searchRooms, currentSelectRoomMap, count).then(buttons => {
                 if (buttons.length === 0) {
                     ctx.reply('没有找到群聊')
@@ -599,18 +586,18 @@ export class TelegramBotClient {
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 // 群组绑定
                 this.db.serialize(() => {
-                    this.db.get(`SELECT name FROM rooms WHERE name = '${roomTopic}'`, (err, row) => {
+                    this.db.get(`SELECT name FROM tb_bind_item WHERE name = '${roomTopic}' AND type=1`, (err, row) => {
                         if (!row) {
-                            const stmt = this.db.prepare("INSERT INTO rooms VALUES (?, ?, ?, ?)");
-                            stmt.run(roomTopic,ctx.chat?.id,1,ctx.match.input);
-                            stmt.finalize();
+                            const stmt = this.db.prepare('INSERT INTO tb_bind_item VALUES (?, ?, ?, ?, ?)')
+                            stmt.run(roomTopic,ctx.chat?.id,1,ctx.match.input,'')
+                            stmt.finalize()
                         } else {
-                            const stmt = this.db.prepare(`UPDATE rooms SET chat_id = ${ctx.chat?.id} WHERE name = '${roomTopic}'`);
-                            stmt.run();
-                            stmt.finalize();
+                            const stmt = this.db.prepare(`UPDATE tb_bind_item SET chat_id = ${ctx.chat?.id},bind_id = ${ctx.match.input} WHERE name = '${roomTopic}' AND type=1`)
+                            stmt.run()
+                            stmt.finalize()
                         }
                     })
-                });
+                })
                 ctx.deleteMessage()
                 ctx.answerCbQuery()
                 return
@@ -663,24 +650,24 @@ export class TelegramBotClient {
                 const official = this._weChatClient.contactMap?.get(ContactImpl.Type.Official)
                 const individualFilter: ContactInterface[] = []
                 individual?.forEach(item => {
-                    const alias = item.payload?.alias
+                    const alias = item.contact.payload?.alias
                     if (alias?.includes(username)) {
-                        individualFilter.push(item)
+                        individualFilter.push(item.contact)
                         return
                     }
-                    if (item.name().includes(username)) {
-                        individualFilter.push(item)
+                    if (item.contact.name().includes(username)) {
+                        individualFilter.push(item.contact)
                     }
                 })
                 const officialFilter: ContactInterface[] = []
                 official?.forEach(item => {
-                    const alias = item.payload?.alias
+                    const alias = item.contact.payload?.alias
                     if (alias?.includes(username)) {
-                        officialFilter.push(item)
+                        officialFilter.push(item.contact)
                         return
                     }
-                    if (item.name().includes(username)) {
-                        officialFilter.push(item)
+                    if (item.contact.name().includes(username)) {
+                        officialFilter.push(item.contact)
                     }
                 })
                 if ((individualFilter && individualFilter.length > 0) || (officialFilter && officialFilter.length > 0)) {
@@ -925,7 +912,7 @@ export class TelegramBotClient {
                 addBlackOrWhite = []
                 const roomList = this._weChatClient.roomList.filter(room => {
                     // const roomName = ;
-                    return room.payload?.topic?.includes(text)
+                    return room.room.payload?.topic?.includes(text)
                 })
                 if (roomList.length === 0) {
                     ctx.reply('未找到该群组,请检查群名称是否正确')
@@ -935,7 +922,7 @@ export class TelegramBotClient {
                         const id = UniqueIdGenerator.getInstance().generateId('addBlackOrWhite')
                         addBlackOrWhite.push({
                             id: id,
-                            text: item.payload?.topic
+                            text: item.room.payload?.topic
                         })
                     })
                     const page1 = new Page(addBlackOrWhite, 1, TelegramBotClient.PAGE_SIZE)
@@ -990,9 +977,9 @@ export class TelegramBotClient {
                             const cacheContacts = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
                             if (cacheContacts) {
                                 for (const item of cacheContacts) {
-                                    if (item.id === msg?.talker()?.id) {
-                                        await item.alias(text.substring(6).trimStart())
-                                        await item.sync()
+                                    if (item.contact.id === msg?.talker()?.id) {
+                                        await item.contact.alias(text.substring(6).trimStart())
+                                        await item.contact.sync()
                                         break
                                     }
                                 }
@@ -1744,11 +1731,11 @@ export class TelegramBotClient {
         // bot.action('UNKNOWN',
         //     ctx => this.pageContacts(ctx, contactMap?.get(0), unknownPage, currentSearchWord));
         bot.action('INDIVIDUAL', ctx => {
-            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Individual) || []], individualPage, currentSearchWord)
+            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Individual) || []].map(item=>item.contact), individualPage, currentSearchWord)
             ctx.answerCbQuery()
         })
         bot.action('OFFICIAL', ctx => {
-            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Official) || []], officialPage, currentSearchWord)
+            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Official) || []].map(item=>item.contact), officialPage, currentSearchWord)
             ctx.answerCbQuery()
         })
         // bot.action('CORPORATION',
@@ -1795,7 +1782,7 @@ export class TelegramBotClient {
         let chatId = this._chatId
         if (message.room && message.room !== ''){
             this.db.serialize(() => {
-                this.db.get(`SELECT * FROM rooms WHERE name = '${message.room}'`, async (err, row: BindItem) => {
+                this.db.get(`SELECT * FROM tb_bind_item WHERE name = '${message.room}' AND type=1`, async (err, row: BindItem) => {
                     if (row) {
                         chatId = row.chat_id
                     }
@@ -1805,8 +1792,8 @@ export class TelegramBotClient {
                     if (message.id) {
                         this.messageMap.set(res.message_id, message.id)
                     }
-                });
-            });
+                })
+            })
         }
     }
 
@@ -1841,8 +1828,8 @@ export class TelegramBotClient {
         } else {
             const thatContactMap = that.weChatClient.contactMap
 
-            let source1: ContactInterface[] | undefined = [...thatContactMap?.get(1) || []]
-            let source2: ContactInterface[] | undefined = [...thatContactMap?.get(2) || []]
+            let source1: ContactInterface[] | undefined = [...thatContactMap?.get(1) || []].map(item=>item.contact)
+            let source2: ContactInterface[] | undefined = [...thatContactMap?.get(2) || []].map(item=>item.contact)
 
             source1 = await TelegramBotClient.filterByNameAndAlias(currentSearchWord, source1)
             source2 = await TelegramBotClient.filterByNameAndAlias(currentSearchWord, source2)
@@ -2153,16 +2140,16 @@ export class TelegramBotClient {
             contactMap?.forEach(it => {
                 it.forEach(contact => {
                     res.push({
-                        id: contact.id,
-                        show_name: contact.payload?.alias ? `[${contact.payload.alias}] ${contact.name()}` : contact.name(),
+                        id: contact.contact.id,
+                        show_name: contact.contact.payload?.alias ? `[${contact.contact.payload.alias}] ${contact.contact.name()}` : contact.contact.name(),
                         shot_id: idGenerator.generateId('user'),
                     })
                 })
             })
             for (const it of roomList) {
                 res.push({
-                    id: it.id,
-                    show_name: await it.topic(),
+                    id: it.room.id,
+                    show_name: await it.room.topic(),
                     shot_id: idGenerator.generateId('room'),
                 })
             }

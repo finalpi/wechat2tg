@@ -22,6 +22,10 @@ import {FriendshipItem} from '../models/FriendshipItem'
 import {MessageUtils} from '../utils/MessageUtils'
 import {FileBox, type FileBoxInterface} from 'file-box'
 import * as fs from 'fs'
+import {RoomItem} from '../models/RoomItem'
+import {ContactItem} from '../models/ContactItem'
+import {BindItem} from '../models/BindItem'
+import {BindItemService} from '../service/BindItemService'
 // import {FmtString} from "telegraf/format";
 
 // import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
@@ -39,11 +43,11 @@ export class WeChatClient {
             }
         })
         this._tgClient = tgClient
-        this._contactMap = new Map<number, Set<ContactInterface>>([
-            [0, new Set<ContactInterface>()],
-            [1, new Set<ContactInterface>()],
-            [2, new Set<ContactInterface>()],
-            [3, new Set<ContactInterface>()]
+        this._contactMap = new Map<number, Set<ContactItem>>([
+            [0, new Set<ContactItem>()],
+            [1, new Set<ContactItem>()],
+            [2, new Set<ContactItem>()],
+            [3, new Set<ContactItem>()]
         ])
 
         this.scan = this.scan.bind(this)
@@ -63,8 +67,8 @@ export class WeChatClient {
     private readonly _client: WechatyInterface
     private readonly _tgClient: TelegramBotClient
 
-    private _contactMap: Map<number, Set<ContactInterface>> | undefined
-    private _roomList: RoomInterface[] = []
+    private _contactMap: Map<number, Set<ContactItem>> | undefined
+    private _roomList: RoomItem[] = []
 
     private _selectedContact: ContactInterface [] = []
     private _selectedRoom: RoomInterface [] = []
@@ -77,11 +81,11 @@ export class WeChatClient {
     private _friendShipList: FriendshipItem[] = []
     private loadMsg: number | undefined = undefined
 
-    public get contactMap(): Map<number, Set<ContactInterface>> | undefined {
+    public get contactMap(): Map<number, Set<ContactItem>> | undefined {
         return this._contactMap
     }
 
-    public set contactMap(contactMap: Map<number, Set<ContactInterface>> | undefined) {
+    public set contactMap(contactMap: Map<number, Set<ContactItem>> | undefined) {
         this._contactMap = contactMap
     }
 
@@ -117,11 +121,11 @@ export class WeChatClient {
         this._memberCache = value
     }
 
-    get roomList(): RoomInterface[] {
+    get roomList(): RoomItem[] {
         return this._roomList
     }
 
-    set roomList(value: RoomInterface[]) {
+    set roomList(value: RoomItem[]) {
         this._roomList = value
     }
 
@@ -212,18 +216,19 @@ export class WeChatClient {
         }
         if (friendship.type() === FriendshipImpl.Type.Confirm) {
             const type = contact.type()
+            const id = UniqueIdGenerator.getInstance().generateId('contact')
             switch (type) {
                 case ContactImpl.Type.Unknown:
-                    this.contactMap?.get(ContactImpl.Type.Unknown)?.add(contact)
+                    this.contactMap?.get(ContactImpl.Type.Unknown)?.add({id:id,contact:contact})
                     break
                 case ContactImpl.Type.Individual:
-                    this.contactMap?.get(ContactImpl.Type.Individual)?.add(contact)
+                    this.contactMap?.get(ContactImpl.Type.Individual)?.add({id:id,contact:contact})
                     break
                 case ContactImpl.Type.Official:
-                    this.contactMap?.get(ContactImpl.Type.Official)?.add(contact)
+                    this.contactMap?.get(ContactImpl.Type.Official)?.add({id:id,contact:contact})
                     break
                 case ContactImpl.Type.Corporation:
-                    this.contactMap?.get(ContactImpl.Type.Corporation)?.add(contact)
+                    this.contactMap?.get(ContactImpl.Type.Corporation)?.add({id:id,contact:contact})
                     break
             }
         }
@@ -234,7 +239,8 @@ export class WeChatClient {
             if (item.self()) {
                 const item = this._roomList.find(it => it.id === room.id)
                 if (!item) {
-                    this.roomList.push(room)
+                    const id = UniqueIdGenerator.getInstance().generateId('room')
+                    this.roomList.push({room:room,id:id})
                 }
             }
         })
@@ -249,10 +255,10 @@ export class WeChatClient {
     }
 
     private roomTopic(room: RoomInterface, topic: string, oldTopic: string, changer: ContactInterface) {
-        const item = this._roomList.find(it => it.id === room.id)
+        const item = this._roomList.find(it => it.room.id === room.id)
         if (item) {
-            if (item.payload?.topic !== topic) {
-                this._roomList[this._roomList.indexOf(item)].sync()
+            if (item.room.payload?.topic !== topic) {
+                this._roomList[this._roomList.indexOf(item)].room.sync()
             }
         }
     }
@@ -798,7 +804,7 @@ export class WeChatClient {
     }
 
     private async cacheMember() {
-
+        const db = this._tgClient.db
         const contactList = await this._client.Contact.findAll()
         // 不知道是什么很多空的 过滤掉没名字和不是朋友的
         const filter = contactList.filter(it => it.name() && it.friend())
@@ -809,20 +815,22 @@ export class WeChatClient {
                 count++
             }
         })
+        const bindItemService = new BindItemService(this._tgClient.db)
         filter.forEach(it => {
             const type = it.type()
+            const id = UniqueIdGenerator.getInstance().generateId('contact')
             switch (type) {
                 case ContactImpl.Type.Unknown:
-                    this.contactMap?.get(ContactImpl.Type.Unknown)?.add(it)
+                    this.contactMap?.get(ContactImpl.Type.Unknown)?.add({id:id,contact:it})
                     break
                 case ContactImpl.Type.Individual:
-                    this.contactMap?.get(ContactImpl.Type.Individual)?.add(it)
+                    this.contactMap?.get(ContactImpl.Type.Individual)?.add({id:id,contact:it})
                     break
                 case ContactImpl.Type.Official:
-                    this.contactMap?.get(ContactImpl.Type.Official)?.add(it)
+                    this.contactMap?.get(ContactImpl.Type.Official)?.add({id:id,contact:it})
                     break
                 case ContactImpl.Type.Corporation:
-                    this.contactMap?.get(ContactImpl.Type.Corporation)?.add(it)
+                    this.contactMap?.get(ContactImpl.Type.Corporation)?.add({id:id,contact:it})
                     break
             }
         })
@@ -830,12 +838,14 @@ export class WeChatClient {
         // 缓存到客户端的实例
         // 一起获取群放到缓存
         const room = await this._client.Room.findAll()
-        room.forEach(async it => {
+        await room.forEach(async it => {
             const l = await it.memberAll()
             if (l.length > 0) {
-                this._roomList.push(it)
+                const id = UniqueIdGenerator.getInstance().generateId('room')
+                this._roomList.push({room:it,id:id})
             }
         })
+        bindItemService.updateItem(this.roomList,this.contactMap)
         // console.log('通讯录', res);
         // fs.writeFileSync('contact.json', JSON.stringify(Object.fromEntries(res)));
         // set flag

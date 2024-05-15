@@ -5,4 +5,6 @@ export interface BindItem{
     type: number
     // 绑定的id
     bind_id: string
+    // 别名
+    alias: string
 }
