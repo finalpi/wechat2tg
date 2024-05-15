@@ -22,9 +22,8 @@ import {FriendshipItem} from '../models/FriendshipItem'
 import {MessageUtils} from '../utils/MessageUtils'
 import {FileBox, type FileBoxInterface} from 'file-box'
 import * as fs from 'fs'
-// import {FmtString} from "telegraf/format";
-
-// import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
+import {Buffer} from 'node:buffer'
+import {CustomFile} from 'telegram/client/uploads'
 
 
 export class WeChatClient {
@@ -391,6 +390,13 @@ export class WeChatClient {
         if (message.self()) {
             // 过滤掉自己所发送的消息
             if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF)) {
+                // 不转发文件
+                if (messageType === PUPPET.types.Message.Attachment
+                    || messageType === PUPPET.types.Message.Audio
+                    || messageType === PUPPET.types.Message.Image
+                    || messageType === PUPPET.types.Message.Video) {
+                    return
+                }
                 let toSender = ''
                 const to = message.listener()
                 if (to) {
@@ -551,7 +557,8 @@ export class WeChatClient {
                 break
             case PUPPET.types.Message.Attachment: {
                 message.toFileBox().then(fBox => {
-                    // 这里可以保存一份在本地 但是没有映射关系没法知道是谁的
+                    // 配置了tg api尝试发送大文件
+
                     if (this.sentMessageWhenFileToLage(fBox, {
                         sender: showSender,
                         body: '[文件]过大,请在微信上查收',
@@ -562,6 +569,25 @@ export class WeChatClient {
                         return
                     }
                     fBox.toBuffer().then(buff => {
+                        // 配置了 tg api 尝试发送大文件
+                        if (this.tgClient.tgClient) {
+                            const customFile = new CustomFile(fBox.name, fBox.size, '', buff)
+                            this.tgClient.tgClient.client.sendFile(this.tgClient.chatId, {
+                                workers: 5,
+                                file: customFile,
+                                caption: identityStr,
+                            }).catch((e) => {
+                                console.error(e)
+                                this._tgClient.sendMessage({
+                                    sender: showSender,
+                                    body: '[文件]转发失败，请在微信上查收',
+                                    room: roomTopic,
+                                    type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                                    id: message.id
+                                })
+                            })
+                            return
+                        }
 
                         // 语音文件 .sil直接重命名为mp3 可以直接播放
                         const fileName = fBox.name
@@ -607,6 +633,26 @@ export class WeChatClient {
                     }
                     // 这里可以保存一份在本地 但是没有映射关系没法知道是谁的
                     fBox.toBuffer().then(buff => {
+
+                        // 配置了 tg api 尝试发送大文件
+                        if (this.tgClient.tgClient) {
+                            const customFile = new CustomFile(fBox.name, fBox.size, '', buff)
+                            this.tgClient.tgClient.client.sendFile(this.tgClient.chatId, {
+                                workers: 5,
+                                file: customFile,
+                                caption: identityStr,
+                            }).catch((e) => {
+                                console.error(e)
+                                this._tgClient.sendMessage({
+                                    sender: showSender,
+                                    body: '[图片]转发失败，请在微信上查收',
+                                    room: roomTopic,
+                                    type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                                    id: message.id
+                                })
+                            })
+                            return
+                        }
                         const fileName = fBox.name
 
                         const tgClient = this._tgClient
@@ -693,6 +739,26 @@ export class WeChatClient {
                 message.toFileBox().then(fBox => {
                     // 这里可以保存一份在本地 但是没有映射关系没法知道是谁的
                     fBox.toBuffer().then(buff => {
+
+                        // 配置了 tg api 尝试发送大文件
+                        if (this.tgClient.tgClient) {
+                            const customFile = new CustomFile(fBox.name, fBox.size, '', buff)
+                            this.tgClient.tgClient.client.sendFile(this.tgClient.chatId, {
+                                workers: 5,
+                                file: customFile,
+                                caption: identityStr,
+                            }).catch((e) => {
+                                console.error(e)
+                                this._tgClient.sendMessage({
+                                    sender: showSender,
+                                    body: '[视频]转发失败，请在微信上查收',
+                                    room: roomTopic,
+                                    type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                                    id: message.id
+                                })
+                            })
+                            return
+                        }
                         const fileName = fBox.name
 
                         if (this.sentMessageWhenFileToLage(fBox, {
@@ -869,7 +935,8 @@ export class WeChatClient {
     }
 
     private sentMessageWhenFileToLage(fileBox: FileBoxInterface, message: SimpleMessage): boolean {
-        if (fileBox.size > 1024 * 1024 * 50) {
+        // 配置了tg api可以往下走发送
+        if (!this.tgClient.tgClient && fileBox.size > 1024 * 1024 * 50) {
             this._tgClient.sendMessage(message)
             return true
         }

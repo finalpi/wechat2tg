@@ -18,11 +18,15 @@ import {FileUtils} from '../utils/FileUtils'
 import {ContactImpl, ContactInterface, MessageInterface, RoomInterface} from 'wechaty/impls'
 import {CacheHelper} from '../utils/CacheHelper'
 import * as PUPPET from 'wechaty-puppet'
-import {TelegramClient} from "./TelegramClient";
+import {TelegramClient} from './TelegramClient'
 
 export class TelegramBotClient {
+    get tgClient(): TelegramClient | undefined {
+        return this._tgClient
+    }
+
     private _weChatClient: WeChatClient
-    private _tgClient: TelegramClient | undefined
+    private readonly _tgClient: TelegramClient | undefined
     private readonly _bot: Telegraf
     private _chatId: number | string
     private _ownerId: number
@@ -81,9 +85,9 @@ export class TelegramBotClient {
         // this._messageMap
         this.onWeChatLogout = this.onWeChatLogout.bind(this)
         this.onWeChatStop = this.onWeChatStop.bind(this)
-        if (config.API_ID && config.API_HASH){
+        if (config.API_ID && config.API_HASH) {
             // 启动tgclient
-            if (!this._tgClient){
+            if (!this._tgClient) {
                 this._tgClient = new TelegramClient(this)
             }
         }
