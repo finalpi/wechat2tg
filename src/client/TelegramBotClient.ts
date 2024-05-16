@@ -213,6 +213,24 @@ export class TelegramBotClient {
                 , Markup.removeKeyboard())
         })
 
+        bot.on(message('group_chat_created'), ctx=>{
+            ctx.reply('使用群组绑定功能,请确认机器人的Group Privacy(隐私模式)已经禁用掉了,请使用 /room 或者 /user 命令将联系人或者群组绑定')
+        })
+
+        bot.on(message('left_chat_member'), ctx=>{
+            if (ctx.message.left_chat_member.id === ctx.botInfo.id){
+                this.bindItemService.removeBindItemByChatId(ctx.message.chat.id)
+            }
+        })
+
+        bot.on(message('new_chat_members'), ctx=>{
+            for (const newChatMember of ctx.message.new_chat_members) {
+                if (newChatMember.id === ctx.botInfo.id){
+                    ctx.reply('使用群组绑定功能,请确认机器人的Group Privacy(隐私模式)已经禁用掉了,请使用 /room 或者 /user 命令将联系人或者群组绑定')
+                }
+            }
+        })
+
         // 此方法需要放在所有监听方法之前,先拦截命令做处理
         bot.use(async (ctx, next) => {
             if (ctx.message) {
@@ -225,16 +243,6 @@ export class TelegramBotClient {
                 return next()
             }
 
-            if (ctx.chat && ctx.chat.type.includes('group')) {
-                const chatId = ctx.chat.id
-                const botInfo = await ctx.telegram.getChatMember(chatId, ctx.botInfo.id)
-                if (botInfo.status === 'member' || botInfo.status === 'administrator' || botInfo.status === 'creator') {
-                    console.log('机器人在群组中')
-                } else {
-                    return
-                }
-            }
-
             if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
                 return next()
             }
@@ -244,7 +252,7 @@ export class TelegramBotClient {
             }
 
             if (ctx.chat && ctx.chat.type.includes('group') && !ctx.callbackQuery && !ctx.message){
-                return ctx.reply('使用群组绑定功能,请确认机器人的Group Privacy(隐私模式)已经禁用掉了,请使用 /room 或者 /user 命令将联系人或者群组绑定')
+                return
             }
 
             if (ctx.chat && this._chatId === ctx.chat.id) {
