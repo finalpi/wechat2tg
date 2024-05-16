@@ -19,8 +19,18 @@ import {ContactImpl, ContactInterface, MessageInterface, RoomInterface} from 'we
 import {CacheHelper} from '../utils/CacheHelper'
 import * as PUPPET from 'wechaty-puppet'
 import {TelegramClient} from './TelegramClient'
+import * as sqlite3 from 'sqlite3'
+import {Database} from 'sqlite3'
+import {BindItemService} from '../service/BindItemService'
+import {RoomItem} from '../models/RoomItem'
 
 export class TelegramBotClient {
+    get bindItemService(): BindItemService {
+        return this._bindItemService
+    }
+    get db(): Database {
+        return this._db
+    }
     get tgClient(): TelegramClient | undefined {
         return this._tgClient
     }
@@ -41,6 +51,7 @@ export class TelegramBotClient {
     private wechatStartFlag = false
     private searchList: any[] = []
     private botStartTime = new Date()
+    private _db = new sqlite3.Database('storage/database.sqlite')
 
     private forwardSetting: VariableContainer = new VariableContainer()
 
@@ -50,6 +61,7 @@ export class TelegramBotClient {
     private _currentSelectContact: ContactInterface | RoomInterface | undefined
     // 置顶消息
     private pinnedMessageId: number | undefined
+    private _bindItemService: BindItemService = new BindItemService(this.db)
 
 
     constructor() {
@@ -160,10 +172,6 @@ export class TelegramBotClient {
         return this._recentUsers
     }
 
-    set weChatClient(value: WeChatClient) {
-        this._weChatClient = value
-    }
-
 
     public init() {
         const bot = this._bot
@@ -195,6 +203,15 @@ export class TelegramBotClient {
         ]
         bot.telegram.setMyCommands(commands)
 
+        bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
+
+        bot.start(async ctx => {
+            ctx.reply(
+                '请输入 /login 登陆,或者输入 /help 查看帮助\n' +
+                '请注意执行/login 后你就是该机器的所有者'
+                , Markup.removeKeyboard())
+        })
+
         // 此方法需要放在所有监听方法之前,先拦截命令做处理
         bot.use((ctx, next) => {
             if (ctx.message) {
@@ -203,8 +220,15 @@ export class TelegramBotClient {
                     return
                 }
             }
-
             if (!this._chatId) {
+                return next()
+            }
+
+            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
+                return next()
+            }
+
+            if (ctx.chat && ctx.chat.type.includes('group') && ctx.callbackQuery && ctx.callbackQuery.from.id === this._chatId){
                 return next()
             }
 
@@ -213,21 +237,7 @@ export class TelegramBotClient {
             }
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
-            // help 命令 start 命令
-            if (ctx.message['text'] === '/start' || ctx.message['text'] === '/help') {
-                return next()
-            } else {
-                return ctx.reply('Sorry, you are not authorized to interact with this bot.') // 如果用户未授权，发送提示消息
-            }
-        })
-
-        bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
-
-        bot.start(async ctx => {
-            ctx.reply(
-                '请输入 /login 登陆,或者输入 /help 查看帮助\n' +
-                '请注意执行/login 后你就是该机器的所有者'
-                , Markup.removeKeyboard())
+            return ctx.reply('Sorry, you are not authorized to interact with this bot.') // 如果用户未授权，发送提示消息
         })
 
         // 重启时判断是否有主人,如果存在主人则自动登录微信
@@ -502,8 +512,8 @@ export class TelegramBotClient {
             }
         })
         // 选择群聊
-        const currentSelectRoomMap = new Map<string, RoomInterface>()
-        let searchRooms: RoomInterface [] = []
+        const currentSelectRoomMap = new Map<string, RoomItem>()
+        let searchRooms: RoomItem [] = []
 
         bot.command('room', async ctx => {
             if (!this._weChatClient.client.isLoggedIn) {
@@ -524,7 +534,7 @@ export class TelegramBotClient {
                 const topic = match[1]  // 提取用户名
                 const filterRoom = this._weChatClient.roomList.filter(room => {
                     // const roomName = ;
-                    return room.payload?.topic?.includes(topic)
+                    return room.room.payload?.topic?.includes(topic)
                 })
                 if (filterRoom && filterRoom.length > 0) {
                     const buttons: tg.InlineKeyboardButton[][] = []
@@ -581,9 +591,17 @@ export class TelegramBotClient {
         bot.action(/room-index-\d+/, async (ctx) => {
             // console.log(ctx.match.input)
             const room = currentSelectRoomMap.get(ctx.match.input)
-            this.selectRoom = room
+            const roomTopic = await room?.room?.topic()
+            if (ctx.chat && ctx.chat.type.includes('group') && room) {
+                // 群组绑定
+                this.bindItemService.bindGroup(roomTopic?roomTopic:'',ctx.chat?.id,1,room.id,'',room.room.id)
+                ctx.deleteMessage()
+                ctx.answerCbQuery()
+                return
+            }
+            this.selectRoom = room?.room
             ctx.deleteMessage()
-            this.setPin('room', await room?.topic())
+            this.setPin('room', roomTopic)
             ctx.answerCbQuery()
         })
 
@@ -629,24 +647,24 @@ export class TelegramBotClient {
                 const official = this._weChatClient.contactMap?.get(ContactImpl.Type.Official)
                 const individualFilter: ContactInterface[] = []
                 individual?.forEach(item => {
-                    const alias = item.payload?.alias
+                    const alias = item.contact.payload?.alias
                     if (alias?.includes(username)) {
-                        individualFilter.push(item)
+                        individualFilter.push(item.contact)
                         return
                     }
-                    if (item.name().includes(username)) {
-                        individualFilter.push(item)
+                    if (item.contact.name().includes(username)) {
+                        individualFilter.push(item.contact)
                     }
                 })
                 const officialFilter: ContactInterface[] = []
                 official?.forEach(item => {
-                    const alias = item.payload?.alias
+                    const alias = item.contact.payload?.alias
                     if (alias?.includes(username)) {
-                        officialFilter.push(item)
+                        officialFilter.push(item.contact)
                         return
                     }
-                    if (item.name().includes(username)) {
-                        officialFilter.push(item)
+                    if (item.contact.name().includes(username)) {
+                        officialFilter.push(item.contact)
                     }
                 })
                 if ((individualFilter && individualFilter.length > 0) || (officialFilter && officialFilter.length > 0)) {
@@ -870,6 +888,30 @@ export class TelegramBotClient {
             // ctx.update.callback_query.message
             console.log('点击了用户', ctx.match.input)
             ctx.deleteMessage()
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                const id = ctx.match.input !== 'filehelper' ? '@' + ctx.match.input : 'filehelper'
+                const contact = await this._weChatClient.client.Contact.find({id: id})
+                // 用户绑定
+                if (contact){
+                    let list
+                    if (contact?.type() !== PUPPET.types.Contact.Official){
+                        list = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
+                    }else {
+                        list = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
+                    }
+                    if (list){
+                        let find
+                        for (let listElement of list) {
+                            if (listElement.contact.id === contact.id){
+                                this.bindItemService.bindGroup(contact.payload?.name?contact.payload?.name:'',ctx.chat?.id,0,listElement.id,contact.payload?.alias?contact.payload?.alias:'',contact.id)
+                                break
+                            }
+                        }
+                    }
+                }
+                ctx.answerCbQuery()
+                return
+            }
             const id = ctx.match.input !== 'filehelper' ? '@' + ctx.match.input : 'filehelper'
             this._currentSelectContact = await this._weChatClient.client.Contact.find({id: id})
             // console.log(ctx.match.input
@@ -891,7 +933,7 @@ export class TelegramBotClient {
                 addBlackOrWhite = []
                 const roomList = this._weChatClient.roomList.filter(room => {
                     // const roomName = ;
-                    return room.payload?.topic?.includes(text)
+                    return room.room.payload?.topic?.includes(text)
                 })
                 if (roomList.length === 0) {
                     ctx.reply('未找到该群组,请检查群名称是否正确')
@@ -901,7 +943,7 @@ export class TelegramBotClient {
                         const id = UniqueIdGenerator.getInstance().generateId('addBlackOrWhite')
                         addBlackOrWhite.push({
                             id: id,
-                            text: item.payload?.topic
+                            text: item.room.payload?.topic
                         })
                     })
                     const page1 = new Page(addBlackOrWhite, 1, TelegramBotClient.PAGE_SIZE)
@@ -956,9 +998,9 @@ export class TelegramBotClient {
                             const cacheContacts = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
                             if (cacheContacts) {
                                 for (const item of cacheContacts) {
-                                    if (item.id === msg?.talker()?.id) {
-                                        await item.alias(text.substring(6).trimStart())
-                                        await item.sync()
+                                    if (item.contact.id === msg?.talker()?.id) {
+                                        await item.contact.alias(text.substring(6).trimStart())
+                                        await item.contact.sync()
                                         break
                                     }
                                 }
@@ -994,6 +1036,93 @@ export class TelegramBotClient {
                             ctx.replyWithHTML(`发送失败 <blockquote>${text}</blockquote>`)
                         })
                     })
+                }
+                return
+            }
+
+            // 如果是群组消息的情况
+            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
+                const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
+                if (bindItem){
+                    if (bindItem.type === 0){
+                        let findItem: ContactInterface | undefined = undefined
+                        const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
+                        individual?.forEach(value => {
+                            if (value.id === bindItem.bind_id){
+                                value.contact.say(text).then((msg) => {
+                                    if (msg) {
+                                        CacheHelper.getInstances().addUndoMessageCache(
+                                            ctx.message.message_id, msg.id)
+                                    }
+
+                                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                        ctx.reply('发送成功!', {
+                                            reply_parameters: {
+                                                message_id: ctx.message.message_id
+                                            }
+                                        })
+                                    }
+                                    // ctx.replyWithHTML(`发送成功 <blockquote>${text}</blockquote>`)
+                                })
+                                    .catch(() => {
+                                        ctx.deleteMessage()
+                                        ctx.replyWithHTML(`发送失败 <blockquote>${text}</blockquote>`)
+                                    })
+                                return
+                            }
+                        })
+                        const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
+                        if (!findItem){
+                            official?.forEach(value => {
+                                if (value.id === bindItem.bind_id){
+                                    value.contact.say(text).then((msg) => {
+                                        if (msg) {
+                                            CacheHelper.getInstances().addUndoMessageCache(
+                                                ctx.message.message_id, msg.id)
+                                        }
+
+                                        if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                            ctx.reply('发送成功!', {
+                                                reply_parameters: {
+                                                    message_id: ctx.message.message_id
+                                                }
+                                            })
+                                        }
+                                        // ctx.replyWithHTML(`发送成功 <blockquote>${text}</blockquote>`)
+                                    })
+                                        .catch(() => {
+                                            ctx.deleteMessage()
+                                            ctx.replyWithHTML(`发送失败 <blockquote>${text}</blockquote>`)
+                                        })
+                                    return
+                                }
+                            })
+                        }
+                    }else {
+                        const room = this.weChatClient.roomList.find(value=>value.id===bindItem.bind_id)
+                        if (room){
+                            room.room.say(text)
+                                .then(msg => {
+                                    if (msg) {
+                                        CacheHelper.getInstances().addUndoMessageCache(
+                                            ctx.message.message_id, msg.id)
+                                    }
+
+                                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                        ctx.reply('发送成功!', {
+                                            reply_parameters: {
+                                                message_id: ctx.message.message_id
+                                            }
+                                        })
+                                    }
+                                    // ctx.replyWithHTML(`发送成功 <blockquote>${text}</blockquote>`)
+                                })
+                                .catch(() => {
+                                    ctx.deleteMessage()
+                                    ctx.replyWithHTML(`发送失败 <blockquote>${text}</blockquote>`)
+                                })
+                        }
+                    }
                 }
                 return
             }
@@ -1054,7 +1183,7 @@ export class TelegramBotClient {
             return
         })
 
-        bot.on(message('voice'), ctx => {
+        bot.on(message('voice'), async ctx => {
             if (!this._weChatClient.client.isLoggedIn) {
                 ctx.reply('请先登陆微信')
                 return
@@ -1069,7 +1198,7 @@ export class TelegramBotClient {
                     })
                     return
                 }
-                ctx.telegram.getFileLink(fileId).then(fileLink => {
+                ctx.telegram.getFileLink(fileId).then(async fileLink => {
                     const nowShangHaiZh = new Date().toLocaleString('zh', {
                         timeZone: 'Asia/ShangHai'
                     }).toString().replaceAll('/', '-')
@@ -1112,6 +1241,71 @@ export class TelegramBotClient {
                                     }).catch(() => ctx.reply('发送失败'))
                                 }
                             })
+                        }
+                        return
+                    }
+                    // 如果是群组消息的情况
+                    if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
+                        const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
+                        if (bindItem){
+                            if (bindItem.type === 0){
+                                let findItem: ContactInterface | undefined = undefined
+                                const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
+                                individual?.forEach(value => {
+                                    if (value.id === bindItem.bind_id){
+                                        value.contact.say(fileBox).then(msg => {
+                                            if (msg) {
+                                                CacheHelper.getInstances().addUndoMessageCache(
+                                                    ctx.message.message_id, msg.id)
+                                            }
+                                        }).catch(() => ctx.reply('发送失败'))
+                                        const text = ctx.message.caption
+                                        if (text) {
+                                            value.contact?.say(text).catch(() => ctx.reply('发送失败'))
+                                        }
+                                        return
+                                    }
+                                })
+                                const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
+                                if (!findItem){
+                                    official?.forEach(value => {
+                                        if (value.id === bindItem.bind_id){
+                                            value.contact.say(fileBox).then(msg => {
+                                                if (msg) {
+                                                    CacheHelper.getInstances().addUndoMessageCache(
+                                                        ctx.message.message_id, msg.id)
+                                                }
+                                            }).catch(() => ctx.reply('发送失败'))
+                                            const text = ctx.message.caption
+                                            if (text) {
+                                                value.contact?.say(text).catch(() => ctx.reply('发送失败'))
+                                            }
+                                            return
+                                        }
+                                    })
+                                }
+                            }else {
+                                const room = this.weChatClient.roomList.find(value=>value.id===bindItem.bind_id)
+                                if (room){
+                                    room.room.say(fileBox).then(msg => {
+                                        if (msg) {
+                                            CacheHelper.getInstances().addUndoMessageCache(
+                                                ctx.message.message_id, msg.id)
+                                        }
+                                    }).catch(() => ctx.reply('发送失败'))
+                                    const text = ctx.message.caption
+                                    if (text) {
+                                        room.room.say(text).catch(() => ctx.reply('发送失败'))
+                                    }
+                                }
+                            }
+                            if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                ctx.reply('发送成功!', {
+                                    reply_parameters: {
+                                        message_id: ctx.message.message_id
+                                    }
+                                })
+                            }
                         }
                         return
                     }
@@ -1175,7 +1369,7 @@ export class TelegramBotClient {
                     })
                     return
                 }
-                ctx.telegram.getFileLink(fileId).then(fileLink => {
+                ctx.telegram.getFileLink(fileId).then(async fileLink => {
                     const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message.audio.file_name)
                     const replyMessageId = ctx.update.message['reply_to_message']?.message_id
                     // 如果是回复的消息 优先回复该发送的消息
@@ -1215,6 +1409,71 @@ export class TelegramBotClient {
                                     }).catch(() => ctx.reply('发送失败'))
                                 }
                             })
+                        }
+                        return
+                    }
+                    // 如果是群组消息的情况
+                    if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
+                        const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
+                        if (bindItem){
+                            if (bindItem.type === 0){
+                                let findItem: ContactInterface | undefined = undefined
+                                const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
+                                individual?.forEach(value => {
+                                    if (value.id === bindItem.bind_id){
+                                        value.contact.say(fileBox).then(msg => {
+                                            if (msg) {
+                                                CacheHelper.getInstances().addUndoMessageCache(
+                                                    ctx.message.message_id, msg.id)
+                                            }
+                                        }).catch(() => ctx.reply('发送失败'))
+                                        const text = ctx.message.caption
+                                        if (text) {
+                                            value.contact?.say(text).catch(() => ctx.reply('发送失败'))
+                                        }
+                                        return
+                                    }
+                                })
+                                const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
+                                if (!findItem){
+                                    official?.forEach(value => {
+                                        if (value.id === bindItem.bind_id){
+                                            value.contact.say(fileBox).then(msg => {
+                                                if (msg) {
+                                                    CacheHelper.getInstances().addUndoMessageCache(
+                                                        ctx.message.message_id, msg.id)
+                                                }
+                                            }).catch(() => ctx.reply('发送失败'))
+                                            const text = ctx.message.caption
+                                            if (text) {
+                                                value.contact?.say(text).catch(() => ctx.reply('发送失败'))
+                                            }
+                                            return
+                                        }
+                                    })
+                                }
+                            }else {
+                                const room = this.weChatClient.roomList.find(value=>value.id===bindItem.bind_id)
+                                if (room){
+                                    room.room.say(fileBox).then(msg => {
+                                        if (msg) {
+                                            CacheHelper.getInstances().addUndoMessageCache(
+                                                ctx.message.message_id, msg.id)
+                                        }
+                                    }).catch(() => ctx.reply('发送失败'))
+                                    const text = ctx.message.caption
+                                    if (text) {
+                                        room.room.say(text).catch(() => ctx.reply('发送失败'))
+                                    }
+                                }
+                            }
+                            if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                ctx.reply('发送成功!', {
+                                    reply_parameters: {
+                                        message_id: ctx.message.message_id
+                                    }
+                                })
+                            }
                         }
                         return
                     }
@@ -1279,7 +1538,7 @@ export class TelegramBotClient {
                     })
                     return
                 }
-                ctx.telegram.getFileLink(fileId).then(fileLink => {
+                ctx.telegram.getFileLink(fileId).then(async fileLink => {
                     const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message.video.file_name)
                     const replyMessageId = ctx.update.message['reply_to_message']?.message_id
                     // 如果是回复的消息 优先回复该发送的消息
@@ -1319,6 +1578,71 @@ export class TelegramBotClient {
                                     }).catch(() => ctx.reply('发送失败'))
                                 }
                             })
+                        }
+                        return
+                    }
+                    // 如果是群组消息的情况
+                    if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
+                        const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
+                        if (bindItem){
+                            if (bindItem.type === 0){
+                                let findItem: ContactInterface | undefined = undefined
+                                const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
+                                individual?.forEach(value => {
+                                    if (value.id === bindItem.bind_id){
+                                        value.contact.say(fileBox).then(msg => {
+                                            if (msg) {
+                                                CacheHelper.getInstances().addUndoMessageCache(
+                                                    ctx.message.message_id, msg.id)
+                                            }
+                                        }).catch(() => ctx.reply('发送失败'))
+                                        const text = ctx.message.caption
+                                        if (text) {
+                                            value.contact?.say(text).catch(() => ctx.reply('发送失败'))
+                                        }
+                                        return
+                                    }
+                                })
+                                const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
+                                if (!findItem){
+                                    official?.forEach(value => {
+                                        if (value.id === bindItem.bind_id){
+                                            value.contact.say(fileBox).then(msg => {
+                                                if (msg) {
+                                                    CacheHelper.getInstances().addUndoMessageCache(
+                                                        ctx.message.message_id, msg.id)
+                                                }
+                                            }).catch(() => ctx.reply('发送失败'))
+                                            const text = ctx.message.caption
+                                            if (text) {
+                                                value.contact?.say(text).catch(() => ctx.reply('发送失败'))
+                                            }
+                                            return
+                                        }
+                                    })
+                                }
+                            }else {
+                                const room = this.weChatClient.roomList.find(value=>value.id===bindItem.bind_id)
+                                if (room){
+                                    room.room.say(fileBox).then(msg => {
+                                        if (msg) {
+                                            CacheHelper.getInstances().addUndoMessageCache(
+                                                ctx.message.message_id, msg.id)
+                                        }
+                                    }).catch(() => ctx.reply('发送失败'))
+                                    const text = ctx.message.caption
+                                    if (text) {
+                                        room.room.say(text).catch(() => ctx.reply('发送失败'))
+                                    }
+                                }
+                            }
+                            if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                ctx.reply('发送成功!', {
+                                    reply_parameters: {
+                                        message_id: ctx.message.message_id
+                                    }
+                                })
+                            }
                         }
                         return
                     }
@@ -1391,7 +1715,7 @@ export class TelegramBotClient {
                     })
                     return
                 }
-                ctx.telegram.getFileLink(fileId).then(fileLink => {
+                ctx.telegram.getFileLink(fileId).then(async fileLink => {
                     const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message.document.file_name)
                     const replyMessageId = ctx.update.message['reply_to_message']?.message_id
                     // 如果是回复的消息 优先回复该发送的消息
@@ -1431,6 +1755,71 @@ export class TelegramBotClient {
                                     }).catch(() => ctx.reply('发送失败'))
                                 }
                             })
+                        }
+                        return
+                    }
+                    // 如果是群组消息的情况
+                    if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
+                        const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
+                        if (bindItem){
+                            if (bindItem.type === 0){
+                                let findItem: ContactInterface | undefined = undefined
+                                const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
+                                individual?.forEach(value => {
+                                    if (value.id === bindItem.bind_id){
+                                        value.contact.say(fileBox).then(msg => {
+                                            if (msg) {
+                                                CacheHelper.getInstances().addUndoMessageCache(
+                                                    ctx.message.message_id, msg.id)
+                                            }
+                                        }).catch(() => ctx.reply('发送失败'))
+                                        const text = ctx.message.caption
+                                        if (text) {
+                                            value.contact?.say(text).catch(() => ctx.reply('发送失败'))
+                                        }
+                                        return
+                                    }
+                                })
+                                const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
+                                if (!findItem){
+                                    official?.forEach(value => {
+                                        if (value.id === bindItem.bind_id){
+                                            value.contact.say(fileBox).then(msg => {
+                                                if (msg) {
+                                                    CacheHelper.getInstances().addUndoMessageCache(
+                                                        ctx.message.message_id, msg.id)
+                                                }
+                                            }).catch(() => ctx.reply('发送失败'))
+                                            const text = ctx.message.caption
+                                            if (text) {
+                                                value.contact?.say(text).catch(() => ctx.reply('发送失败'))
+                                            }
+                                            return
+                                        }
+                                    })
+                                }
+                            }else {
+                                const room = this.weChatClient.roomList.find(value=>value.id===bindItem.bind_id)
+                                if (room){
+                                    room.room.say(fileBox).then(msg => {
+                                        if (msg) {
+                                            CacheHelper.getInstances().addUndoMessageCache(
+                                                ctx.message.message_id, msg.id)
+                                        }
+                                    }).catch(() => ctx.reply('发送失败'))
+                                    const text = ctx.message.caption
+                                    if (text) {
+                                        room.room.say(text).catch(() => ctx.reply('发送失败'))
+                                    }
+                                }
+                            }
+                            if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                ctx.reply('发送成功!', {
+                                    reply_parameters: {
+                                        message_id: ctx.message.message_id
+                                    }
+                                })
+                            }
                         }
                         return
                     }
@@ -1504,7 +1893,7 @@ export class TelegramBotClient {
                 }
 
                 // Get the file link using telegram API
-                ctx.telegram.getFileLink(fileId).then(fileLink => {
+                ctx.telegram.getFileLink(fileId).then(async fileLink => {
                     // Create a FileBox from URL
                     const fileBox = FileBox.fromUrl(fileLink.toString())
                     const replyMessageId = ctx.update.message['reply_to_message']?.message_id
@@ -1548,7 +1937,71 @@ export class TelegramBotClient {
                         }
                         return
                     }
-
+                    // 如果是群组消息的情况
+                    if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
+                        const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
+                        if (bindItem){
+                            if (bindItem.type === 0){
+                                let findItem: ContactInterface | undefined = undefined
+                                const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
+                                individual?.forEach(value => {
+                                    if (value.id === bindItem.bind_id){
+                                        value.contact.say(fileBox).then(msg => {
+                                            if (msg) {
+                                                CacheHelper.getInstances().addUndoMessageCache(
+                                                    ctx.message.message_id, msg.id)
+                                            }
+                                        }).catch(() => ctx.reply('发送失败'))
+                                        const text = ctx.message.caption
+                                        if (text) {
+                                            value.contact?.say(text).catch(() => ctx.reply('发送失败'))
+                                        }
+                                        return
+                                    }
+                                })
+                                const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
+                                if (!findItem){
+                                    official?.forEach(value => {
+                                        if (value.id === bindItem.bind_id){
+                                            value.contact.say(fileBox).then(msg => {
+                                                if (msg) {
+                                                    CacheHelper.getInstances().addUndoMessageCache(
+                                                        ctx.message.message_id, msg.id)
+                                                }
+                                            }).catch(() => ctx.reply('发送失败'))
+                                            const text = ctx.message.caption
+                                            if (text) {
+                                                value.contact?.say(text).catch(() => ctx.reply('发送失败'))
+                                            }
+                                            return
+                                        }
+                                    })
+                                }
+                            }else {
+                                const room = this.weChatClient.roomList.find(value=>value.id===bindItem.bind_id)
+                                if (room){
+                                    room.room.say(fileBox).then(msg => {
+                                        if (msg) {
+                                            CacheHelper.getInstances().addUndoMessageCache(
+                                                ctx.message.message_id, msg.id)
+                                        }
+                                    }).catch(() => ctx.reply('发送失败'))
+                                    const text = ctx.message.caption
+                                    if (text) {
+                                        room.room.say(text).catch(() => ctx.reply('发送失败'))
+                                    }
+                                }
+                            }
+                            if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                ctx.reply('发送成功!', {
+                                    reply_parameters: {
+                                        message_id: ctx.message.message_id
+                                    }
+                                })
+                            }
+                        }
+                        return
+                    }
                     // Send the FileBox to the contact
                     if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
                         this._currentSelectContact?.say(fileBox).then(msg => {
@@ -1601,7 +2054,7 @@ export class TelegramBotClient {
                 return
             }
             const fileId = ctx.message.sticker.file_id
-            ctx.telegram.getFileLink(fileId).then(fileLink => {
+            ctx.telegram.getFileLink(fileId).then(async fileLink => {
                 const uniqueId = ctx.message.sticker.file_unique_id
                 // 判断文件夹是否存在
                 if (!fs.existsSync('save-files')) {
@@ -1648,11 +2101,48 @@ export class TelegramBotClient {
                             }
                             return
                         }
-                        if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
-                            this._currentSelectContact?.say(fileBox).then(msg => {
-                                if (msg) {
-                                    CacheHelper.getInstances().addUndoMessageCache(
-                                        ctx.message.message_id, msg.id)
+                        // 如果是群组消息的情况
+                        if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
+                            const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
+                            if (bindItem){
+                                if (bindItem.type === 0){
+                                    let findItem: ContactInterface | undefined = undefined
+                                    const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
+                                    individual?.forEach(value => {
+                                        if (value.id === bindItem.bind_id){
+                                            value.contact.say(fileBox).then(msg => {
+                                                if (msg) {
+                                                    CacheHelper.getInstances().addUndoMessageCache(
+                                                        ctx.message.message_id, msg.id)
+                                                }
+                                            }).catch(() => ctx.reply('发送失败'))
+                                            return
+                                        }
+                                    })
+                                    const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
+                                    if (!findItem){
+                                        official?.forEach(value => {
+                                            if (value.id === bindItem.bind_id){
+                                                value.contact.say(fileBox).then(msg => {
+                                                    if (msg) {
+                                                        CacheHelper.getInstances().addUndoMessageCache(
+                                                            ctx.message.message_id, msg.id)
+                                                    }
+                                                }).catch(() => ctx.reply('发送失败'))
+                                                return
+                                            }
+                                        })
+                                    }
+                                }else {
+                                    const room = this.weChatClient.roomList.find(value=>value.id===bindItem.bind_id)
+                                    if (room){
+                                        room.room.say(fileBox).then(msg => {
+                                            if (msg) {
+                                                CacheHelper.getInstances().addUndoMessageCache(
+                                                    ctx.message.message_id, msg.id)
+                                            }
+                                        }).catch(() => ctx.reply('发送失败'))
+                                    }
                                 }
                                 if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
                                     ctx.reply('发送成功!', {
@@ -1661,21 +2151,37 @@ export class TelegramBotClient {
                                         }
                                     })
                                 }
-                            }).catch(() => ctx.reply('发送失败'))
-                        } else {
-                            this.selectRoom?.say(fileBox).then(msg => {
-                                if (msg) {
-                                    CacheHelper.getInstances().addUndoMessageCache(
-                                        ctx.message.message_id, msg.id)
-                                }
-                                if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                                    ctx.reply('发送成功!', {
-                                        reply_parameters: {
-                                            message_id: ctx.message.message_id
-                                        }
-                                    })
-                                }
-                            }).catch(() => ctx.reply('发送失败'))
+                            }
+                        }else {
+                            if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
+                                this._currentSelectContact?.say(fileBox).then(msg => {
+                                    if (msg) {
+                                        CacheHelper.getInstances().addUndoMessageCache(
+                                            ctx.message.message_id, msg.id)
+                                    }
+                                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                        ctx.reply('发送成功!', {
+                                            reply_parameters: {
+                                                message_id: ctx.message.message_id
+                                            }
+                                        })
+                                    }
+                                }).catch(() => ctx.reply('发送失败'))
+                            } else {
+                                this.selectRoom?.say(fileBox).then(msg => {
+                                    if (msg) {
+                                        CacheHelper.getInstances().addUndoMessageCache(
+                                            ctx.message.message_id, msg.id)
+                                    }
+                                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                        ctx.reply('发送成功!', {
+                                            reply_parameters: {
+                                                message_id: ctx.message.message_id
+                                            }
+                                        })
+                                    }
+                                }).catch(() => ctx.reply('发送失败'))
+                            }
                         }
                     } else { // 文件不存在转换
                         this.sendGif(saveFile, gifFile, ctx)
@@ -1710,11 +2216,11 @@ export class TelegramBotClient {
         // bot.action('UNKNOWN',
         //     ctx => this.pageContacts(ctx, contactMap?.get(0), unknownPage, currentSearchWord));
         bot.action('INDIVIDUAL', ctx => {
-            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Individual) || []], individualPage, currentSearchWord)
+            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Individual) || []].map(item=>item.contact), individualPage, currentSearchWord)
             ctx.answerCbQuery()
         })
         bot.action('OFFICIAL', ctx => {
-            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Official) || []], officialPage, currentSearchWord)
+            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Official) || []].map(item=>item.contact), officialPage, currentSearchWord)
             ctx.answerCbQuery()
         })
         // bot.action('CORPORATION',
@@ -1730,8 +2236,56 @@ export class TelegramBotClient {
     }
 
     private async sendGif(saveFile: string, gifFile: string, ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
-        new ConverterHelper().webmToGif(saveFile, gifFile).then(() => {
+        new ConverterHelper().webmToGif(saveFile, gifFile).then(async () => {
             const fileBox = FileBox.fromFile(gifFile)
+            // 如果是群组消息的情况
+            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
+                const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
+                if (bindItem){
+                    if (bindItem.type === 0){
+                        let findItem: ContactInterface | undefined = undefined
+                        const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
+                        individual?.forEach(value => {
+                            if (value.id === bindItem.bind_id){
+                                value.contact.say(fileBox).then(msg => {
+                                    if (msg && ctx.message) {
+                                        CacheHelper.getInstances().addUndoMessageCache(
+                                            ctx.message.message_id, msg.id)
+                                    }
+                                }).catch(() => ctx.reply('发送失败'))
+                                return
+                            }
+                        })
+                        const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
+                        if (!findItem){
+                            official?.forEach(value => {
+                                if (value.id === bindItem.bind_id){
+                                    value.contact.say(fileBox).then(msg => {
+                                        if (msg && ctx.message) {
+                                            CacheHelper.getInstances().addUndoMessageCache(
+                                                ctx.message.message_id, msg.id)
+                                        }
+                                    }).catch(() => ctx.reply('发送失败'))
+                                    return
+                                }
+                            })
+                        }
+                    }else {
+                        const room = this.weChatClient.roomList.find(value=>value.id===bindItem.bind_id)
+                        if (room){
+                            room.room.say(fileBox).catch(() => ctx.reply('发送失败'))
+                        }
+                    }
+                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                        ctx.reply('发送成功!', {
+                            reply_parameters: {
+                                message_id: ctx.message.message_id
+                            }
+                        })
+                    }
+                }
+                return
+            }
             if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
                 this._currentSelectContact?.say(fileBox).then(msg => {
                     if (msg && ctx.message) {
@@ -1758,7 +2312,7 @@ export class TelegramBotClient {
 
     public async sendMessage(message: SimpleMessage) {
         // console.log('发送文本消息', message)
-        const res = await this.bot.telegram.sendMessage(this._chatId, SimpleMessageSender.send(message), {
+        const res = await this.bot.telegram.sendMessage(message.chatId, SimpleMessageSender.send(message), {
             parse_mode: 'HTML'
         })
         if (message.id) {
@@ -1797,8 +2351,8 @@ export class TelegramBotClient {
         } else {
             const thatContactMap = that.weChatClient.contactMap
 
-            let source1: ContactInterface[] | undefined = [...thatContactMap?.get(1) || []]
-            let source2: ContactInterface[] | undefined = [...thatContactMap?.get(2) || []]
+            let source1: ContactInterface[] | undefined = [...thatContactMap?.get(1) || []].map(item=>item.contact)
+            let source2: ContactInterface[] | undefined = [...thatContactMap?.get(2) || []].map(item=>item.contact)
 
             source1 = await TelegramBotClient.filterByNameAndAlias(currentSearchWord, source1)
             source2 = await TelegramBotClient.filterByNameAndAlias(currentSearchWord, source2)
@@ -2027,7 +2581,7 @@ export class TelegramBotClient {
         }).catch(() => ctx.reply('停止失败'))
     }
 
-    private async generateRoomButtons(rooms: RoomInterface[], currentSelectRoomMap: Map<string, RoomInterface>, page: number) {
+    private async generateRoomButtons(rooms: RoomItem[], currentSelectRoomMap: Map<string, RoomItem>, page: number) {
         const size = TelegramBotClient.PAGE_SIZE
         const lineSize = TelegramBotClient.LINES
         const buttons: tg.InlineKeyboardButton[][] = []
@@ -2039,7 +2593,7 @@ export class TelegramBotClient {
             const row = []
             for (let j = i; j < i + lineSize && j < slice.length; j++) {
                 const keyboard = {
-                    text: '🌐' + await slice[j]?.topic(),
+                    text: '🌐' + await slice[j].room?.topic(),
                     data: 'room-index-' + j
                 }
                 currentSelectRoomMap.set(keyboard.data, rooms[j])
@@ -2109,16 +2663,16 @@ export class TelegramBotClient {
             contactMap?.forEach(it => {
                 it.forEach(contact => {
                     res.push({
-                        id: contact.id,
-                        show_name: contact.payload?.alias ? `[${contact.payload.alias}] ${contact.name()}` : contact.name(),
+                        id: contact.contact.id,
+                        show_name: contact.contact.payload?.alias ? `[${contact.contact.payload.alias}] ${contact.contact.name()}` : contact.contact.name(),
                         shot_id: idGenerator.generateId('user'),
                     })
                 })
             })
             for (const it of roomList) {
                 res.push({
-                    id: it.id,
-                    show_name: await it.topic(),
+                    id: it.room.id,
+                    show_name: await it.room.topic(),
                     shot_id: idGenerator.generateId('room'),
                 })
             }

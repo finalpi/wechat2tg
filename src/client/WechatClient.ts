@@ -24,6 +24,13 @@ import {FileBox, type FileBoxInterface} from 'file-box'
 import * as fs from 'fs'
 import {Buffer} from 'node:buffer'
 import {CustomFile} from 'telegram/client/uploads'
+import {RoomItem} from '../models/RoomItem'
+import {ContactItem} from '../models/ContactItem'
+import {BindItem} from '../models/BindItem'
+import {BindItemService} from '../service/BindItemService'
+// import {FmtString} from "telegraf/format";
+
+// import type {FriendshipInterface} from "wechaty/src/user-modules/mod";
 
 
 export class WeChatClient {
@@ -38,11 +45,11 @@ export class WeChatClient {
             }
         })
         this._tgClient = tgClient
-        this._contactMap = new Map<number, Set<ContactInterface>>([
-            [0, new Set<ContactInterface>()],
-            [1, new Set<ContactInterface>()],
-            [2, new Set<ContactInterface>()],
-            [3, new Set<ContactInterface>()]
+        this._contactMap = new Map<number, Set<ContactItem>>([
+            [0, new Set<ContactItem>()],
+            [1, new Set<ContactItem>()],
+            [2, new Set<ContactItem>()],
+            [3, new Set<ContactItem>()]
         ])
 
         this.scan = this.scan.bind(this)
@@ -62,8 +69,8 @@ export class WeChatClient {
     private readonly _client: WechatyInterface
     private readonly _tgClient: TelegramBotClient
 
-    private _contactMap: Map<number, Set<ContactInterface>> | undefined
-    private _roomList: RoomInterface[] = []
+    private _contactMap: Map<number, Set<ContactItem>> | undefined
+    private _roomList: RoomItem[] = []
 
     private _selectedContact: ContactInterface [] = []
     private _selectedRoom: RoomInterface [] = []
@@ -76,11 +83,11 @@ export class WeChatClient {
     private _friendShipList: FriendshipItem[] = []
     private loadMsg: number | undefined = undefined
 
-    public get contactMap(): Map<number, Set<ContactInterface>> | undefined {
+    public get contactMap(): Map<number, Set<ContactItem>> | undefined {
         return this._contactMap
     }
 
-    public set contactMap(contactMap: Map<number, Set<ContactInterface>> | undefined) {
+    public set contactMap(contactMap: Map<number, Set<ContactItem>> | undefined) {
         this._contactMap = contactMap
     }
 
@@ -116,11 +123,11 @@ export class WeChatClient {
         this._memberCache = value
     }
 
-    get roomList(): RoomInterface[] {
+    get roomList(): RoomItem[] {
         return this._roomList
     }
 
-    set roomList(value: RoomInterface[]) {
+    set roomList(value: RoomItem[]) {
         this._roomList = value
     }
 
@@ -183,6 +190,7 @@ export class WeChatClient {
             sender: '未知用户 type 没有',
             body: '邀请你加入群聊(无法获取用户名和群名)',
             id: roomInvitation.id,
+            chatId: this.tgClient.chatId
         })
     }
 
@@ -211,18 +219,19 @@ export class WeChatClient {
         }
         if (friendship.type() === FriendshipImpl.Type.Confirm) {
             const type = contact.type()
+            const id = UniqueIdGenerator.getInstance().generateId('contact')
             switch (type) {
                 case ContactImpl.Type.Unknown:
-                    this.contactMap?.get(ContactImpl.Type.Unknown)?.add(contact)
+                    this.contactMap?.get(ContactImpl.Type.Unknown)?.add({id:id,contact:contact})
                     break
                 case ContactImpl.Type.Individual:
-                    this.contactMap?.get(ContactImpl.Type.Individual)?.add(contact)
+                    this.contactMap?.get(ContactImpl.Type.Individual)?.add({id:id,contact:contact})
                     break
                 case ContactImpl.Type.Official:
-                    this.contactMap?.get(ContactImpl.Type.Official)?.add(contact)
+                    this.contactMap?.get(ContactImpl.Type.Official)?.add({id:id,contact:contact})
                     break
                 case ContactImpl.Type.Corporation:
-                    this.contactMap?.get(ContactImpl.Type.Corporation)?.add(contact)
+                    this.contactMap?.get(ContactImpl.Type.Corporation)?.add({id:id,contact:contact})
                     break
             }
         }
@@ -233,7 +242,8 @@ export class WeChatClient {
             if (item.self()) {
                 const item = this._roomList.find(it => it.id === room.id)
                 if (!item) {
-                    this.roomList.push(room)
+                    const id = UniqueIdGenerator.getInstance().generateId('room')
+                    this.roomList.push({room:room,id:id})
                 }
             }
         })
@@ -248,10 +258,10 @@ export class WeChatClient {
     }
 
     private roomTopic(room: RoomInterface, topic: string, oldTopic: string, changer: ContactInterface) {
-        const item = this._roomList.find(it => it.id === room.id)
+        const item = this._roomList.find(it => it.room.id === room.id)
         if (item) {
-            if (item.payload?.topic !== topic) {
-                this._roomList[this._roomList.indexOf(item)].sync()
+            if (item.room.payload?.topic !== topic) {
+                this._roomList[this._roomList.indexOf(item)].room.sync()
             }
         }
     }
@@ -372,6 +382,12 @@ export class WeChatClient {
 
         // const topic = await roomEntity?.topic();
         const roomTopic = await roomEntity?.topic() || ''
+        let bindItem = undefined
+        if (roomEntity){
+            bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(roomEntity.id)
+        }else {
+            bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
+        }
 
         // todo: 优化
         // const mediaCaption=
@@ -384,7 +400,8 @@ export class WeChatClient {
             body: '收到一条 未知消息类型',
             room: roomTopic,
             type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-            id: message.id
+            id: message.id,
+            chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
         }
 
         if (message.self()) {
@@ -441,7 +458,7 @@ export class WeChatClient {
         }
         // 自动设置回复人
         const type = talker.type()
-        if (!message.self()) {
+        if (!message.self() && !bindItem) {
             if (this._tgClient.setting && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_SWITCH) && type === PUPPET.types.Contact.Individual) {
                 this._tgClient.setCurrentSelectContact(message)
             }
@@ -485,7 +502,8 @@ export class WeChatClient {
                 body: `收到一条 👤${name ? name : '未知'} 的名片消息,请在手机上查看`,
                 type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                 room: roomTopic,
-                id: message.id
+                id: message.id,
+                chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
             })
         }
 
@@ -518,6 +536,7 @@ export class WeChatClient {
                             type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                             id: message.id,
                             not_escape_html: true,
+                            chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                         })
                         return
                     }
@@ -529,7 +548,8 @@ export class WeChatClient {
                         body: convertedText,
                         room: roomTopic,
                         type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                        id: message.id
+                        id: message.id,
+                        chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                     })
                 }
             }
@@ -541,7 +561,7 @@ export class WeChatClient {
                     if (res.bigheadimgurl) {
                         FileBox.fromUrl(res.bigheadimgurl).toBuffer().then(avatarBuff => {
                             this._tgClient.bot.telegram.sendPhoto(
-                                this._tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {
+                                bindItem?bindItem.chat_id:this.tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {
                                 this._tgClient.saveMessage(msg.message_id, message.id)
                             })
                         }).catch(() => {
@@ -564,7 +584,8 @@ export class WeChatClient {
                         body: '[文件]过大,请在微信上查收',
                         room: roomTopic,
                         type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                        id: message.id
+                        id: message.id,
+                        chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                     })) {
                         return
                     }
@@ -594,7 +615,7 @@ export class WeChatClient {
 
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendDocument(
-                            tgClient.chatId, {source: buff, filename: fileName}, {
+                            bindItem?bindItem.chat_id:this.tgClient.chatId, {source: buff, filename: fileName}, {
                                 caption: identityStr
                             }).then(msg => {
                             this._tgClient.saveMessage(msg.message_id, message.id)
@@ -604,7 +625,8 @@ export class WeChatClient {
                                 body: '[文件]转发失败，请在微信上查收',
                                 room: roomTopic,
                                 type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                                id: message.id
+                                id: message.id,
+                                chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                             })
                         })
                     })
@@ -614,7 +636,8 @@ export class WeChatClient {
                         body: `接收文件${message.payload?.filename}出错`,
                         type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                         room: roomTopic,
-                        id: message.id
+                        id: message.id,
+                        chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                     })
                 })
                 break
@@ -627,7 +650,8 @@ export class WeChatClient {
                         body: '[图片]过大,请在微信上查收',
                         room: roomTopic,
                         type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                        id: message.id
+                        id: message.id,
+                        chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                     })) {
                         return
                     }
@@ -658,7 +682,7 @@ export class WeChatClient {
                         const tgClient = this._tgClient
                         if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) {
                             tgClient.bot.telegram.sendPhoto(
-                                tgClient.chatId, {
+                                bindItem?bindItem.chat_id:this.tgClient.chatId, {
                                     source: buff,
                                     filename: fileName
                                 }, {caption: identityStr}).then(msg => {
@@ -669,12 +693,13 @@ export class WeChatClient {
                                     body: '[图片]文件转发失败，请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                                    id: message.id
+                                    id: message.id,
+                                    chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                                 })
                             })
                         } else {
                             tgClient.bot.telegram.sendDocument(
-                                tgClient.chatId, {
+                                bindItem?bindItem.chat_id:this.tgClient.chatId, {
                                     source: buff,
                                     filename: fileName
                                 }, {caption: identityStr}).then(msg => {
@@ -685,7 +710,8 @@ export class WeChatClient {
                                     body: '[图片]文件转发失败，请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                                    id: message.id
+                                    id: message.id,
+                                    chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                                 })
                             })
                         }
@@ -702,21 +728,22 @@ export class WeChatClient {
                             body: '[语音]过大,请在微信上查收',
                             room: roomTopic,
                             type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                            id: message.id
+                            id: message.id,
+                            chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                         })) {
                             return
                         }
                         let fileName = fBox.name
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendVoice(
-                            tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg => {
+                            bindItem?bindItem.chat_id:this.tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg => {
                             this._tgClient.saveMessage(msg.message_id, message.id)
                         }).catch(res => {
                             if (fileName.endsWith('.sil')) {
                                 fileName = fileName.replace('.sil', '.mp3')
                             }
                             // 如果用户不接收语音则发送文件
-                            tgClient.bot.telegram.sendDocument(tgClient.chatId, {
+                            tgClient.bot.telegram.sendDocument(bindItem?bindItem.chat_id:this.tgClient.chatId, {
                                 source: buff,
                                 filename: fileName
                             }, {caption: identityStr}).then(msg => {
@@ -727,7 +754,8 @@ export class WeChatClient {
                                     body: '[语音]文件转发失败,请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                                    id: message.id
+                                    id: message.id,
+                                    chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                                 })
                             })
                         })
@@ -766,7 +794,8 @@ export class WeChatClient {
                             body: '[视频]过大,请在微信上查收',
                             room: roomTopic,
                             type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                            id: message.id
+                            id: message.id,
+                            chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                         })) {
                             return
                         }
@@ -774,7 +803,7 @@ export class WeChatClient {
                         const tgClient = this._tgClient
                         if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) {
                             tgClient.bot.telegram.sendVideo(
-                                tgClient.chatId, {
+                                bindItem?bindItem.chat_id:this.tgClient.chatId, {
                                     source: buff,
                                     filename: fileName
                                 }, {caption: identityStr}).then(msg => {
@@ -785,12 +814,13 @@ export class WeChatClient {
                                     body: '[视频]文件转发失败,请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                                    id: message.id
+                                    id: message.id,
+                                    chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                                 })
                             })
                         } else {
                             tgClient.bot.telegram.sendDocument(
-                                tgClient.chatId, {
+                                bindItem?bindItem.chat_id:this.tgClient.chatId, {
                                     source: buff,
                                     filename: fileName
                                 }, {caption: identityStr}).then(msg => {
@@ -801,7 +831,8 @@ export class WeChatClient {
                                     body: '[视频]文件转发失败,请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                                    id: message.id
+                                    id: message.id,
+                                    chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                                 })
                             })
                         }
@@ -815,7 +846,8 @@ export class WeChatClient {
                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                     body: '[动画表情]',
                     room: roomTopic,
-                    id: message.id
+                    id: message.id,
+                    chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                 })
                 break
             case PUPPET.types.Message.MiniProgram: // 处理小程序消息的逻辑
@@ -864,7 +896,7 @@ export class WeChatClient {
     }
 
     private async cacheMember() {
-
+        const db = this._tgClient.db
         const contactList = await this._client.Contact.findAll()
         // 不知道是什么很多空的 过滤掉没名字和不是朋友的
         const filter = contactList.filter(it => it.name() && it.friend())
@@ -875,20 +907,22 @@ export class WeChatClient {
                 count++
             }
         })
+        const bindItemService = new BindItemService(this._tgClient.db)
         filter.forEach(it => {
             const type = it.type()
+            const id = UniqueIdGenerator.getInstance().generateId('contact')
             switch (type) {
                 case ContactImpl.Type.Unknown:
-                    this.contactMap?.get(ContactImpl.Type.Unknown)?.add(it)
+                    this.contactMap?.get(ContactImpl.Type.Unknown)?.add({id:id,contact:it})
                     break
                 case ContactImpl.Type.Individual:
-                    this.contactMap?.get(ContactImpl.Type.Individual)?.add(it)
+                    this.contactMap?.get(ContactImpl.Type.Individual)?.add({id:id,contact:it})
                     break
                 case ContactImpl.Type.Official:
-                    this.contactMap?.get(ContactImpl.Type.Official)?.add(it)
+                    this.contactMap?.get(ContactImpl.Type.Official)?.add({id:id,contact:it})
                     break
                 case ContactImpl.Type.Corporation:
-                    this.contactMap?.get(ContactImpl.Type.Corporation)?.add(it)
+                    this.contactMap?.get(ContactImpl.Type.Corporation)?.add({id:id,contact:it})
                     break
             }
         })
@@ -896,12 +930,14 @@ export class WeChatClient {
         // 缓存到客户端的实例
         // 一起获取群放到缓存
         const room = await this._client.Room.findAll()
-        room.forEach(async it => {
+        await room.forEach(async it => {
             const l = await it.memberAll()
             if (l.length > 0) {
-                this._roomList.push(it)
+                const id = UniqueIdGenerator.getInstance().generateId('room')
+                this._roomList.push({room:it,id:id})
             }
         })
+        bindItemService.updateItem(this.roomList,this.contactMap)
         // console.log('通讯录', res);
         // fs.writeFileSync('contact.json', JSON.stringify(Object.fromEntries(res)));
         // set flag

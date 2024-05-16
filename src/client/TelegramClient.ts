@@ -1,6 +1,8 @@
 import {config} from '../config'
 import {StoreSession} from 'telegram/sessions'
 import {Api, TelegramClient as GramClient} from 'telegram'
+import * as console from 'console'
+import {Context} from 'telegraf'
 import {TelegramBotClient} from './TelegramBotClient'
 
 export class TelegramClient {
