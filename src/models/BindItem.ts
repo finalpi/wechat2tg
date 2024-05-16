@@ -7,4 +7,6 @@ export interface BindItem{
     bind_id: string
     // 别名
     alias: string
+    // 微信的动态id
+    wechat_id: string
 }

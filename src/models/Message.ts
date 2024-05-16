@@ -7,6 +7,7 @@ export interface SimpleMessage {
     type?: number;
     body: string | FmtString;
     not_escape_html?: boolean;
+    chatId: number | string
 }
 
 export interface MessageSender {

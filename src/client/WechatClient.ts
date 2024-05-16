@@ -188,6 +188,7 @@ export class WeChatClient {
             sender: '未知用户 type 没有',
             body: '邀请你加入群聊(无法获取用户名和群名)',
             id: roomInvitation.id,
+            chatId: this.tgClient.chatId
         })
     }
 
@@ -379,6 +380,12 @@ export class WeChatClient {
 
         // const topic = await roomEntity?.topic();
         const roomTopic = await roomEntity?.topic() || ''
+        let bindItem = undefined
+        if (roomEntity){
+            bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(roomEntity.id)
+        }else {
+            bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
+        }
 
         // todo: 优化
         // const mediaCaption=
@@ -391,7 +398,8 @@ export class WeChatClient {
             body: '收到一条 未知消息类型',
             room: roomTopic,
             type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-            id: message.id
+            id: message.id,
+            chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
         }
 
         if (message.self()) {
@@ -441,7 +449,7 @@ export class WeChatClient {
         }
         // 自动设置回复人
         const type = talker.type()
-        if (!message.self()) {
+        if (!message.self() && !bindItem) {
             if (this._tgClient.setting && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_SWITCH) && type === PUPPET.types.Contact.Individual) {
                 this._tgClient.setCurrentSelectContact(message)
             }
@@ -485,7 +493,8 @@ export class WeChatClient {
                 body: `收到一条 👤${name ? name : '未知'} 的名片消息,请在手机上查看`,
                 type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                 room: roomTopic,
-                id: message.id
+                id: message.id,
+                chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
             })
         }
 
@@ -518,6 +527,7 @@ export class WeChatClient {
                             type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                             id: message.id,
                             not_escape_html: true,
+                            chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                         })
                         return
                     }
@@ -529,7 +539,8 @@ export class WeChatClient {
                         body: convertedText,
                         room: roomTopic,
                         type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                        id: message.id
+                        id: message.id,
+                        chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                     })
                 }
             }
@@ -541,7 +552,7 @@ export class WeChatClient {
                     if (res.bigheadimgurl) {
                         FileBox.fromUrl(res.bigheadimgurl).toBuffer().then(avatarBuff => {
                             this._tgClient.bot.telegram.sendPhoto(
-                                this._tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {
+                                bindItem?bindItem.chat_id:this.tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {
                                 this._tgClient.saveMessage(msg.message_id, message.id)
                             })
                         }).catch(() => {
@@ -563,7 +574,8 @@ export class WeChatClient {
                         body: '[文件]过大,请在微信上查收',
                         room: roomTopic,
                         type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                        id: message.id
+                        id: message.id,
+                        chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                     })) {
                         return
                     }
@@ -574,7 +586,7 @@ export class WeChatClient {
 
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendDocument(
-                            tgClient.chatId, {source: buff, filename: fileName}, {
+                            bindItem?bindItem.chat_id:this.tgClient.chatId, {source: buff, filename: fileName}, {
                                 caption: identityStr
                             }).then(msg => {
                             this._tgClient.saveMessage(msg.message_id, message.id)
@@ -584,7 +596,8 @@ export class WeChatClient {
                                 body: '[文件]转发失败，请在微信上查收',
                                 room: roomTopic,
                                 type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                                id: message.id
+                                id: message.id,
+                                chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                             })
                         })
                     })
@@ -594,7 +607,8 @@ export class WeChatClient {
                         body: `接收文件${message.payload?.filename}出错`,
                         type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                         room: roomTopic,
-                        id: message.id
+                        id: message.id,
+                        chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                     })
                 })
                 break
@@ -607,7 +621,8 @@ export class WeChatClient {
                         body: '[图片]过大,请在微信上查收',
                         room: roomTopic,
                         type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                        id: message.id
+                        id: message.id,
+                        chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                     })) {
                         return
                     }
@@ -618,7 +633,7 @@ export class WeChatClient {
                         const tgClient = this._tgClient
                         if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) {
                             tgClient.bot.telegram.sendPhoto(
-                                tgClient.chatId, {
+                                bindItem?bindItem.chat_id:this.tgClient.chatId, {
                                     source: buff,
                                     filename: fileName
                                 }, {caption: identityStr}).then(msg => {
@@ -629,12 +644,13 @@ export class WeChatClient {
                                     body: '[图片]文件转发失败，请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                                    id: message.id
+                                    id: message.id,
+                                    chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                                 })
                             })
                         } else {
                             tgClient.bot.telegram.sendDocument(
-                                tgClient.chatId, {
+                                bindItem?bindItem.chat_id:this.tgClient.chatId, {
                                     source: buff,
                                     filename: fileName
                                 }, {caption: identityStr}).then(msg => {
@@ -645,7 +661,8 @@ export class WeChatClient {
                                     body: '[图片]文件转发失败，请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                                    id: message.id
+                                    id: message.id,
+                                    chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                                 })
                             })
                         }
@@ -662,21 +679,22 @@ export class WeChatClient {
                             body: '[语音]过大,请在微信上查收',
                             room: roomTopic,
                             type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                            id: message.id
+                            id: message.id,
+                            chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                         })) {
                             return
                         }
                         let fileName = fBox.name
                         const tgClient = this._tgClient
                         tgClient.bot.telegram.sendVoice(
-                            tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg => {
+                            bindItem?bindItem.chat_id:this.tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg => {
                             this._tgClient.saveMessage(msg.message_id, message.id)
                         }).catch(res => {
                             if (fileName.endsWith('.sil')) {
                                 fileName = fileName.replace('.sil', '.mp3')
                             }
                             // 如果用户不接收语音则发送文件
-                            tgClient.bot.telegram.sendDocument(tgClient.chatId, {
+                            tgClient.bot.telegram.sendDocument(bindItem?bindItem.chat_id:this.tgClient.chatId, {
                                 source: buff,
                                 filename: fileName
                             }, {caption: identityStr}).then(msg => {
@@ -687,7 +705,8 @@ export class WeChatClient {
                                     body: '[语音]文件转发失败,请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                                    id: message.id
+                                    id: message.id,
+                                    chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                                 })
                             })
                         })
@@ -706,7 +725,8 @@ export class WeChatClient {
                             body: '[视频]过大,请在微信上查收',
                             room: roomTopic,
                             type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                            id: message.id
+                            id: message.id,
+                            chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                         })) {
                             return
                         }
@@ -714,7 +734,7 @@ export class WeChatClient {
                         const tgClient = this._tgClient
                         if (this._tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) {
                             tgClient.bot.telegram.sendVideo(
-                                tgClient.chatId, {
+                                bindItem?bindItem.chat_id:this.tgClient.chatId, {
                                     source: buff,
                                     filename: fileName
                                 }, {caption: identityStr}).then(msg => {
@@ -725,12 +745,13 @@ export class WeChatClient {
                                     body: '[视频]文件转发失败,请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                                    id: message.id
+                                    id: message.id,
+                                    chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                                 })
                             })
                         } else {
                             tgClient.bot.telegram.sendDocument(
-                                tgClient.chatId, {
+                                bindItem?bindItem.chat_id:this.tgClient.chatId, {
                                     source: buff,
                                     filename: fileName
                                 }, {caption: identityStr}).then(msg => {
@@ -741,7 +762,8 @@ export class WeChatClient {
                                     body: '[视频]文件转发失败,请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                                    id: message.id
+                                    id: message.id,
+                                    chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                                 })
                             })
                         }
@@ -755,7 +777,8 @@ export class WeChatClient {
                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                     body: '[动画表情]',
                     room: roomTopic,
-                    id: message.id
+                    id: message.id,
+                    chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                 })
                 break
             case PUPPET.types.Message.MiniProgram: // 处理小程序消息的逻辑
