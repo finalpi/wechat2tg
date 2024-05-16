@@ -23,6 +23,7 @@ import * as sqlite3 from 'sqlite3'
 import {Database} from 'sqlite3'
 import {BindItemService} from '../service/BindItemService'
 import {RoomItem} from '../models/RoomItem'
+import {ContactItem} from '../models/ContactItem'
 
 export class TelegramBotClient {
     get bindItemService(): BindItemService {
@@ -1155,58 +1156,47 @@ export class TelegramBotClient {
                 const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
                 if (bindItem){
                     if (bindItem.type === 0){
-                        const findItem: ContactInterface | undefined = undefined
+                        let findItem: ContactItem | undefined = undefined
                         const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
-                        individual?.forEach(value => {
-                            if (value.id === bindItem.bind_id){
-                                value.contact.say(text).then((msg) => {
-                                    if (msg) {
-                                        CacheHelper.getInstances().addUndoMessageCache(
-                                            ctx.message.message_id, msg.id)
-                                    }
-
-                                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                                        ctx.reply('发送成功!', {
-                                            reply_parameters: {
-                                                message_id: ctx.message.message_id
-                                            }
-                                        })
-                                    }
-                                    // ctx.replyWithHTML(`发送成功 <blockquote>${text}</blockquote>`)
-                                })
-                                    .catch(() => {
-                                        ctx.deleteMessage()
-                                        ctx.replyWithHTML(`发送失败 <blockquote>${text}</blockquote>`)
-                                    })
-                                return
+                        if (individual){
+                            for (const contactItem of individual) {
+                                if (contactItem.id === bindItem.bind_id){
+                                    findItem = contactItem
+                                    break
+                                }
                             }
-                        })
+                        }
                         const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
                         if (!findItem){
-                            official?.forEach(value => {
-                                if (value.id === bindItem.bind_id){
-                                    value.contact.say(text).then((msg) => {
-                                        if (msg) {
-                                            CacheHelper.getInstances().addUndoMessageCache(
-                                                ctx.message.message_id, msg.id)
-                                        }
-
-                                        if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                                            ctx.reply('发送成功!', {
-                                                reply_parameters: {
-                                                    message_id: ctx.message.message_id
-                                                }
-                                            })
-                                        }
-                                        // ctx.replyWithHTML(`发送成功 <blockquote>${text}</blockquote>`)
-                                    })
-                                        .catch(() => {
-                                            ctx.deleteMessage()
-                                            ctx.replyWithHTML(`发送失败 <blockquote>${text}</blockquote>`)
-                                        })
-                                    return
+                            if (official){
+                                for (const contactItem of official) {
+                                    if (contactItem.id === bindItem.bind_id){
+                                        findItem = contactItem
+                                        break
+                                    }
                                 }
+                            }
+                        }
+                        if (findItem){
+                            findItem.contact.say(text).then((msg) => {
+                                if (msg) {
+                                    CacheHelper.getInstances().addUndoMessageCache(
+                                        ctx.message.message_id, msg.id)
+                                }
+
+                                if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                    ctx.reply('发送成功!', {
+                                        reply_parameters: {
+                                            message_id: ctx.message.message_id
+                                        }
+                                    })
+                                }
+                                // ctx.replyWithHTML(`发送成功 <blockquote>${text}</blockquote>`)
                             })
+                                .catch(() => {
+                                    ctx.deleteMessage()
+                                    ctx.replyWithHTML(`发送失败 <blockquote>${text}</blockquote>`)
+                                })
                         }
                     }else {
                         const room = this.weChatClient.roomList.find(value=>value.id === bindItem.bind_id)
