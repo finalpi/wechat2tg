@@ -24,6 +24,7 @@ import {Database} from 'sqlite3'
 import {BindItemService} from '../service/BindItemService'
 import {RoomItem} from '../models/RoomItem'
 import {ContactItem} from '../models/ContactItem'
+import {CustomFile} from 'telegram/client/uploads'
 
 export class TelegramBotClient {
     get bindItemService(): BindItemService {
@@ -197,6 +198,8 @@ export class TelegramBotClient {
             {command: 'settings', description: '程序设置'},
             {command: 'check', description: '微信登录状态'},
             {command: 'bind', description: '查询群组的绑定状态'},
+            {command: 'unbind', description: '解绑群组'},
+            {command: 'cgdata', description: '设置群组的头像和名称(需要管理员权限)'},
             {command: 'reset', description: '清空缓存重新登陆'},
             {command: 'stop', description: '停止微信客户端,需要重新登陆'},
             // {command: 'logout', description: '退出登陆'},
@@ -261,7 +264,9 @@ export class TelegramBotClient {
             }
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
-            return ctx.reply('Sorry, you are not authorized to interact with this bot.') // 如果用户未授权，发送提示消息
+            if (ctx.message && !ctx.message.from.is_bot){
+                return ctx.reply('Sorry, you are not authorized to interact with this bot.') // 如果用户未授权，发送提示消息
+            }
         })
 
         // 重启时判断是否有主人,如果存在主人则自动登录微信
@@ -499,6 +504,63 @@ export class TelegramBotClient {
             ctx.reply('重置成功')
         })
 
+        bot.command('cgdata', async (ctx) => {
+            if (ctx.chat && ctx.chat.type.includes('group')){
+                const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
+                if (!bindItem){
+                    return ctx.reply('当前未绑定联系人或群组')
+                }
+                // 获取群组管理员列表
+                const administrators = await ctx.telegram.getChatAdministrators(ctx.chat.id)
+
+                // 检查机器人是否在管理员列表中
+                const botId = ctx.botInfo.id
+                const isAdmin = administrators.some(admin => admin.user.id === botId)
+
+                if (!isAdmin) {
+                    return ctx.reply('机器人不是该群组的管理员')
+                }
+                if (bindItem.type === 0){
+                    let findItem: ContactItem | undefined = undefined
+                    const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
+                    if (individual){
+                        for (const contactItem of individual) {
+                            if (contactItem.id === bindItem.bind_id){
+                                findItem = contactItem
+                                break
+                            }
+                        }
+                    }
+                    const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
+                    if (!findItem){
+                        if (official){
+                            for (const contactItem of official) {
+                                if (contactItem.id === bindItem.bind_id){
+                                    findItem = contactItem
+                                    break
+                                }
+                            }
+                        }
+                    }
+                    if (findItem){
+                        await ctx.telegram.setChatTitle(ctx.chat.id, `${bindItem.alias}[${bindItem.name}]`)
+                        // 获取头像
+                        findItem.contact.avatar().then(fbox=>{
+                            fbox.toBuffer().then(async buff=>{
+                                await ctx.telegram.setChatPhoto(ctx.chat.id, {
+                                    source: buff
+                                })
+                            })
+                        })
+                    }
+                }else {
+                    await ctx.telegram.setChatTitle(ctx.chat.id, bindItem.name)
+                }
+            }else {
+                return ctx.reply('该命令仅支持在群组使用')
+            }
+        })
+
         bot.command('bind', async (ctx) => {
             if (ctx.chat && ctx.chat.type.includes('group')){
                 const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
@@ -511,6 +573,15 @@ export class TelegramBotClient {
                 }else {
                     ctx.reply('当前未绑定任何联系人或者群聊')
                 }
+            }else {
+                ctx.reply('该命令仅支持在群组中使用')
+            }
+        })
+
+        bot.command('unbind', async (ctx) => {
+            if (ctx.chat && ctx.chat.type.includes('group')){
+                await this.bindItemService.removeBindItemByChatId(ctx.chat.id)
+                ctx.reply('取消绑定成功')
             }else {
                 ctx.reply('该命令仅支持在群组中使用')
             }
