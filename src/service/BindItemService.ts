@@ -71,8 +71,6 @@ export class BindItemService{
                         this.bindGroup(name ? name : '',bindItem.chat_id,bindItem.type,find.id,find.contact.payload?.alias ? find.contact.payload.alias : '',find.contact.id)
                         continue
                     }
-                    // 如果找不到则删除该元素
-                    this.removeBindItemByChatId(bindItem.chat_id)
                 }
                 if (official){
                     let find
@@ -109,9 +107,9 @@ export class BindItemService{
                         this.bindGroup(name ? name : '',bindItem.chat_id,bindItem.type,find.id,find.contact.payload?.alias ? find.contact.payload.alias : '',find.contact.id)
                         continue
                     }
-                    // 如果找不到则删除该元素
-                    this.removeBindItemByChatId(bindItem.chat_id)
                 }
+                // 如果找不到则删除该元素
+                this.removeBindItemByChatId(bindItem.chat_id)
             }else {
                 let room = roomList.find(item=>item.room.id === bindItem.wechat_id)
                 if (room){
