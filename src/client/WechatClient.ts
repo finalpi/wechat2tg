@@ -604,7 +604,8 @@ export class WeChatClient {
                                     body: '[文件]转发失败，请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                                    id: message.id
+                                    id: message.id,
+                                    chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                                 })
                             })
                             return
@@ -672,7 +673,8 @@ export class WeChatClient {
                                     body: '[图片]转发失败，请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                                    id: message.id
+                                    id: message.id,
+                                    chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                                 })
                             })
                             return
@@ -782,7 +784,8 @@ export class WeChatClient {
                                     body: '[视频]转发失败，请在微信上查收',
                                     room: roomTopic,
                                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                                    id: message.id
+                                    id: message.id,
+                                    chatId: bindItem?bindItem.chat_id:this.tgClient.chatId
                                 })
                             })
                             return
