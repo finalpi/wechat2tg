@@ -2335,14 +2335,21 @@ export class TelegramBotClient {
         })
         // bot.action('CORPORATION',
         //     ctx => this.pageContacts(ctx, contactMap?.get(ContactImpl.Type.Corporation), corporationPage, currentSearchWord));
-
-
-        bot.launch().then(() => {
+        this.botLaunch(bot)
+    }
+    private async botLaunch(bot: Telegraf, retryCount = 5) {
+        try {
+            await bot.launch()
             console.log('Telegram Bot started')
-        }).catch((err) => {
-            console.error('Telegram Bot start failed', err)
-        })
-
+        } catch (error) {
+            console.error('Telegram Bot start failed', error)
+            if (retryCount > 0) {
+                console.log(`Retrying launch... (${retryCount} attempts left)`)
+                await this.botLaunch(bot, retryCount - 1)
+            } else {
+                console.error('Maximum retry attempts reached. Unable to start bot.')
+            }
+        }
     }
 
     private async sendGif(saveFile: string, gifFile: string, ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
