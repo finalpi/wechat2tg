@@ -53,13 +53,25 @@ export class BindItemService{
                         continue
                     }
                     if (bindItem.alias && bindItem.alias !== ''){
+                        const aliasList = []
                         for (const contactItem of individual) {
                             if (contactItem.contact.payload?.alias === bindItem.alias){
-                                find = contactItem
-                                break
+                                if (!find){
+                                    find = contactItem
+                                }
+                                aliasList.push(contactItem)
                             }
                         }
                         if (find){
+                            // 处理同别名的情况
+                            if (aliasList.length > 1) {
+                                for (const aliasListElement of aliasList) {
+                                    if (aliasListElement.contact.payload?.name === bindItem.name){
+                                        find = aliasListElement
+                                        break
+                                    }
+                                }
+                            }
                             const name = find.contact.payload?.name
                             this.bindGroup(name ? name : '',bindItem.chat_id,bindItem.type,find.id,find.contact.payload?.alias ? find.contact.payload.alias : '',find.contact.id)
                             continue
