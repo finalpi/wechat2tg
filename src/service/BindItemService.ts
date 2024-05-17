@@ -126,7 +126,7 @@ export class BindItemService{
                     }
                 }
                 // 如果找不到则删除该元素
-                await this.tgBotClient.telegram.sendMessage(bindItem.chat_id,'找不到对应的绑定信息,请重新绑定')
+                await this.tgBotClient.telegram.sendMessage(bindItem.chat_id,'找不到对应的绑定信息,请使用 /room 或者 /user 命令将联系人或者群组绑定')
                 this.removeBindItemByChatId(bindItem.chat_id)
             }else {
                 let room = roomList.find(item=>item.room.id === bindItem.wechat_id)
@@ -143,7 +143,7 @@ export class BindItemService{
                     continue
                 }
                 // 如果找不到则删除该元素
-                await this.tgBotClient.telegram.sendMessage(bindItem.chat_id,'找不到对应的绑定信息,请重新绑定')
+                await this.tgBotClient.telegram.sendMessage(bindItem.chat_id,'找不到对应的绑定信息,请使用 /room 或者 /user 命令将联系人或者群组绑定')
                 this.removeBindItemByChatId(bindItem.chat_id)
             }
         }

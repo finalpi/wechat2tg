@@ -109,6 +109,32 @@ PROXY_USERNAME=
 PROXY_PASSWORD=
 ```
 
+### Receiving and Sending Large Files
+
+Due to Telegram Bot API limitations, files larger than 20MB cannot be sent, and files larger than 50MB cannot be received. If you need to send or receive larger files, please configure your `API_ID` and `API_HASH`.
+
+How to obtain `API_ID` and `API_HASH`:
+
+1. Log in to your [telegram account](https://my.telegram.org/)
+
+2. Click on "API development tools" and fill in your application details (only the application title and short name are required).
+
+3. Finally, click "Create application."
+
+### Grouping Messages
+
+**Note:** Because wechaty-puppet-wechat4u changes the ID each time it logs in again, it is not possible to obtain a unique key for each contact and group. The method to determine whether it is the same contact or group is by the contact's remark and nickname. This method may incorrectly bind to contacts and groups upon the next login if the remarks or nicknames are not unique, or if the name of the contact or group changes, which might cause binding failure. In such cases, re-binding is required.
+
+1. Turn off the bot's privacy mode. Open BotFather, enter /mybots, select your bot, click Bot Settings - Group Privacy - Turn off. When you see Privacy mode is disabled for xxx, it means it has been successfully turned off.
+
+2. Create a telegram group, add the bot to the group, and bind according to the prompts. Afterward, messages from the contact or group will be forwarded to the group.
+
+`/bind`: View the contacts or groups currently bound to the group.
+
+`/unbind`: Unbind the contacts or groups currently bound to the group.
+
+`/cgdata`: Set the group avatar and nickname to the WeChat contact or group (requires admin privileges).
+
 ## License
 MIT
 

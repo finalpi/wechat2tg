@@ -846,13 +846,13 @@ export class WeChatClient {
             case PUPPET.types.Message.Contact:
                 return '名片消息'
             case PUPPET.types.Message.Attachment:
-                return '文件消息'
+                return '文件'
             case PUPPET.types.Message.Image:
-                return '图片消息'
+                return '图片'
             case PUPPET.types.Message.Audio:
-                return '音频消息'
+                return '音频'
             case PUPPET.types.Message.Video:
-                return '视频消息'
+                return '视频'
             case PUPPET.types.Message.Emoticon:
                 return '表情消息'
             case PUPPET.types.Message.MiniProgram:

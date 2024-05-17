@@ -110,6 +110,31 @@ PROXY_USERNAME=
 PROXY_PASSWORD=
 ```
 
+### 大文件的接受和发送
+
+因为Telegram Bot API的限制,不能发送超过20MB的文件,或者接收超过50MB的文件,如果你需要收发大文件的消息内容,请配置你的`API_ID`和`API_HASH`
+
+`API_ID`和`API_HASH`的获取方法:
+
+1. 登录您的[telegram account](https://my.telegram.org/)
+
+2. 然后点击“API development tools”并填写您的应用程序详细信息（只需应用程序标题和简称）
+
+3. 最后点击“Create application”
+
+### 对消息进行分组
+
+**注意:** 因为`wechaty-puppet-wechat4u`每次重新登录的时候,id都会变化,所以没办法获取每个联系人和群组的唯一key,判断是否是同一个联系人和群组的方式是通过联系人的备注和昵称进行判断的,此方法在备注或者昵称不唯一的情况下,在下一次重新登录的时候,可能会错误的绑定到联系人和群组,或者当联系人或者群组的名称发生变化的时候,有可能会出现绑定失败的情况,此情况需要重新绑定.
+
+1. 关闭掉机器人的隐私模式,打开BotFather,输入`/mybots`,选择你的bot,点击`Bot Settings`-`Group Privacy`-`Turn off`,出现`Privacy mode is disabled for xxx`就说明关闭成功了.
+2. 创建telegram group,将bot拉入该群组然后按照提示绑定即可,之后该联系人或者群组的消息就会转发到该group里面
+
+`/bind`:查看当前group绑定的联系人或者群组
+
+`/unbind`:解绑当前group绑定的联系人或者群组
+
+`/cgdata`:设置group的头像和昵称为微信联系人或群组(需要管理员权限)
+
 ## License
 
 [MIT](LICENSE)
