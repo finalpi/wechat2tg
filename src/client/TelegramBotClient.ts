@@ -8,9 +8,9 @@ import * as tg from 'telegraf/src/core/types/typegram'
 import {message} from 'telegraf/filters'
 import {FileBox} from 'file-box'
 import * as fs from 'node:fs'
-import {NotionListType, NotionMode, StorageSettings, VariableContainer, VariableType} from '../models/Settings'
+import {NotionMode, StorageSettings, VariableContainer, VariableType} from '../models/Settings'
 import {ConverterHelper} from '../utils/FfmpegUtils'
-import {MemberCacheType, SelectedEntity} from '../models/TgCache'
+import {SelectedEntity} from '../models/TgCache'
 import {TalkerEntity} from '../models/TalkerCache'
 import {UniqueIdGenerator} from '../utils/IdUtils'
 import {Page} from '../models/Page'
@@ -24,15 +24,16 @@ import {Database} from 'sqlite3'
 import {BindItemService} from '../service/BindItemService'
 import {RoomItem} from '../models/RoomItem'
 import {ContactItem} from '../models/ContactItem'
-import {CustomFile} from 'telegram/client/uploads'
 
 export class TelegramBotClient {
     get bindItemService(): BindItemService {
         return this._bindItemService
     }
+
     get db(): Database {
         return this._db
     }
+
     get tgClient(): TelegramClient | undefined {
         return this._tgClient
     }
@@ -63,13 +64,13 @@ export class TelegramBotClient {
     private _currentSelectContact: ContactInterface | RoomInterface | undefined
     // 置顶消息
     private pinnedMessageId: number | undefined
-    private _bindItemService: BindItemService
+    private readonly _bindItemService: BindItemService
 
 
     constructor() {
         this._weChatClient = new WeChatClient(this)
         this._bot = new Telegraf(config.BOT_TOKEN)
-        this._bindItemService = new BindItemService(this.db,this._bot)
+        this._bindItemService = new BindItemService(this.db, this._bot)
         this._chatId = 0
         this._ownerId = 0
         this._chatId = 0
@@ -101,7 +102,7 @@ export class TelegramBotClient {
         this.onWeChatLogout = this.onWeChatLogout.bind(this)
         this.onWeChatStop = this.onWeChatStop.bind(this)
         if (config.API_ID && config.API_HASH) {
-            // 启动tgclient
+            // 启动tg client
             if (!this._tgClient) {
                 this._tgClient = new TelegramClient(this)
             }
@@ -218,19 +219,19 @@ export class TelegramBotClient {
                 , Markup.removeKeyboard())
         })
 
-        bot.on(message('group_chat_created'), ctx=>{
+        bot.on(message('group_chat_created'), ctx => {
             ctx.reply('请确保机器人的Group Privacy(隐私模式)已经禁用掉了,请使用 /room 或者 /user 命令将联系人或者群组绑定')
         })
 
-        bot.on(message('left_chat_member'), ctx=>{
-            if (ctx.message.left_chat_member.id === ctx.botInfo.id){
+        bot.on(message('left_chat_member'), ctx => {
+            if (ctx.message.left_chat_member.id === ctx.botInfo.id) {
                 this.bindItemService.removeBindItemByChatId(ctx.message.chat.id)
             }
         })
 
-        bot.on(message('new_chat_members'), ctx=>{
+        bot.on(message('new_chat_members'), ctx => {
             for (const newChatMember of ctx.message.new_chat_members) {
-                if (newChatMember.id === ctx.botInfo.id){
+                if (newChatMember.id === ctx.botInfo.id) {
                     ctx.reply('请确保机器人的Group Privacy(隐私模式)已经禁用掉了,请使用 /room 或者 /user 命令将联系人或者群组绑定')
                 }
             }
@@ -248,15 +249,15 @@ export class TelegramBotClient {
                 return next()
             }
 
-            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
+            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
                 return next()
             }
 
-            if (ctx.chat && ctx.chat.type.includes('group') && ctx.callbackQuery && ctx.callbackQuery.from.id === this._chatId){
+            if (ctx.chat && ctx.chat.type.includes('group') && ctx.callbackQuery && ctx.callbackQuery.from.id === this._chatId) {
                 return next()
             }
 
-            if (ctx.chat && ctx.chat.type.includes('group') && !ctx.callbackQuery && !ctx.message){
+            if (ctx.chat && ctx.chat.type.includes('group') && !ctx.callbackQuery && !ctx.message) {
                 return
             }
 
@@ -265,7 +266,7 @@ export class TelegramBotClient {
             }
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
-            if (ctx.message && !ctx.message.from.is_bot){
+            if (ctx.message && !ctx.message.from.is_bot) {
                 return ctx.reply('Sorry, you are not authorized to interact with this bot.') // 如果用户未授权，发送提示消息
             }
         })
@@ -506,9 +507,9 @@ export class TelegramBotClient {
         })
 
         bot.command('cgdata', async (ctx) => {
-            if (ctx.chat && ctx.chat.type.includes('group')){
+            if (ctx.chat && ctx.chat.type.includes('group')) {
                 const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
-                if (!bindItem){
+                if (!bindItem) {
                     return ctx.reply('当前未绑定联系人或群组')
                 }
                 // 获取群组管理员列表
@@ -521,69 +522,69 @@ export class TelegramBotClient {
                 if (!isAdmin) {
                     return ctx.reply('机器人不是该群组的管理员')
                 }
-                if (bindItem.type === 0){
+                if (bindItem.type === 0) {
                     let findItem: ContactItem | undefined = undefined
                     const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
-                    if (individual){
+                    if (individual) {
                         for (const contactItem of individual) {
-                            if (contactItem.id === bindItem.bind_id){
+                            if (contactItem.id === bindItem.bind_id) {
                                 findItem = contactItem
                                 break
                             }
                         }
                     }
                     const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
-                    if (!findItem){
-                        if (official){
+                    if (!findItem) {
+                        if (official) {
                             for (const contactItem of official) {
-                                if (contactItem.id === bindItem.bind_id){
+                                if (contactItem.id === bindItem.bind_id) {
                                     findItem = contactItem
                                     break
                                 }
                             }
                         }
                     }
-                    if (findItem){
+                    if (findItem) {
                         await ctx.telegram.setChatTitle(ctx.chat.id, `${bindItem.alias}[${bindItem.name}]`)
                         // 获取头像
-                        findItem.contact.avatar().then(fbox=>{
-                            fbox.toBuffer().then(async buff=>{
+                        findItem.contact.avatar().then(fbox => {
+                            fbox.toBuffer().then(async buff => {
                                 await ctx.telegram.setChatPhoto(ctx.chat.id, {
                                     source: buff
                                 })
                             })
                         })
                     }
-                }else {
+                } else {
                     await ctx.telegram.setChatTitle(ctx.chat.id, bindItem.name)
                 }
-            }else {
+            } else {
                 return ctx.reply('该命令仅支持在群组使用')
             }
         })
 
         bot.command('bind', async (ctx) => {
-            if (ctx.chat && ctx.chat.type.includes('group')){
+            if (ctx.chat && ctx.chat.type.includes('group')) {
                 const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
-                if (bindItem){
-                    if (bindItem.type === 0){
+                if (bindItem) {
+                    if (bindItem.type === 0) {
                         ctx.reply(`当前绑定联系人:${bindItem.alias}[${bindItem.name}]`)
-                    }else {
+                    } else {
                         ctx.reply(`当前绑定群组:${bindItem.alias}[${bindItem.name}]`)
                     }
-                }else {
+                } else {
                     ctx.reply('当前未绑定任何联系人或者群聊')
                 }
-            }else {
+            } else {
                 ctx.reply('该命令仅支持在群组中使用')
             }
         })
 
         bot.command('unbind', async (ctx) => {
-            if (ctx.chat && ctx.chat.type.includes('group')){
+            if (ctx.chat && ctx.chat.type.includes('group')) {
                 await this.bindItemService.removeBindItemByChatId(ctx.chat.id)
                 ctx.reply('取消绑定成功')
-            }else {
+            } else {
                 ctx.reply('该命令仅支持在群组中使用')
             }
         })
@@ -706,7 +707,7 @@ export class TelegramBotClient {
             const roomTopic = await room?.room?.topic()
             if (ctx.chat && ctx.chat.type.includes('group') && room) {
                 // 群组绑定
-                this.bindItemService.bindGroup(roomTopic ? roomTopic : '',ctx.chat?.id,1,room.id,'',room.room.id)
+                this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, room.id, '', room.room.id)
                 ctx.deleteMessage()
                 ctx.answerCbQuery()
                 return
@@ -910,10 +911,10 @@ export class TelegramBotClient {
                     if (ctx.chat && ctx.chat.type.includes('group')) {
                         // 群组绑定
                         const contactList = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
-                        if (contactList){
+                        if (contactList) {
                             for (const contactListElement of contactList) {
-                                if (contactListElement.contact.id === element.contact.id){
-                                    this.bindItemService.bindGroup(element.contact.payload?.name ? element.contact.payload?.name : '',ctx.chat?.id,0,contactListElement.id,element.contact.payload?.alias ? element.contact.payload?.alias : '',element.contact.id)
+                                if (contactListElement.contact.id === element.contact.id) {
+                                    this.bindItemService.bindGroup(element.contact.payload?.name ? element.contact.payload?.name : '', ctx.chat?.id, 0, contactListElement.id, element.contact.payload?.alias ? element.contact.payload?.alias : '', element.contact.id)
                                     break
                                 }
                             }
@@ -932,10 +933,10 @@ export class TelegramBotClient {
                     if (ctx.chat && ctx.chat.type.includes('group')) {
                         // 群组绑定
                         const contactList = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
-                        if (contactList){
+                        if (contactList) {
                             for (const contactListElement of contactList) {
-                                if (contactListElement.contact.id === talker.id){
-                                    this.bindItemService.bindGroup(talker.payload?.name ? talker.payload?.name : '',ctx.chat?.id,0,contactListElement.id,talker.payload?.alias ? talker.payload?.alias : '',talker.id)
+                                if (contactListElement.contact.id === talker.id) {
+                                    this.bindItemService.bindGroup(talker.payload?.name ? talker.payload?.name : '', ctx.chat?.id, 0, contactListElement.id, talker.payload?.alias ? talker.payload?.alias : '', talker.id)
                                     break
                                 }
                             }
@@ -954,9 +955,9 @@ export class TelegramBotClient {
                     const roomTopic = await room.topic()
                     if (ctx.chat && ctx.chat.type.includes('group')) {
                         // 群组绑定
-                        const roomItem = this.weChatClient.roomList.find(item=>item.room.id === room.id)
-                        if (roomItem){
-                            this.bindItemService.bindGroup(roomTopic ? roomTopic : '',ctx.chat?.id,1,roomItem.id,'',room.id)
+                        const roomItem = this.weChatClient.roomList.find(item => item.room.id === room.id)
+                        if (roomItem) {
+                            this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, roomItem.id, '', room.id)
                         }
                         ctx.answerCbQuery()
                         return
@@ -993,10 +994,10 @@ export class TelegramBotClient {
                 if (data.type === 0) {
                     if (ctx.chat && ctx.chat.type.includes('group')) {
                         // 群组绑定
-                        const roomItem = this.weChatClient.roomList.find(item=>item.room.id === data.talker?.id)
+                        const roomItem = this.weChatClient.roomList.find(item => item.room.id === data.talker?.id)
                         const roomTopic = await roomItem?.room.topic()
-                        if (roomItem && data.talker){
-                            this.bindItemService.bindGroup(roomTopic ? roomTopic : '',ctx.chat?.id,1,roomItem.id,'',data.talker.id)
+                        if (roomItem && data.talker) {
+                            this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, roomItem.id, '', data.talker.id)
                         }
                         ctx.deleteMessage()
                         ctx.answerCbQuery()
@@ -1007,17 +1008,17 @@ export class TelegramBotClient {
                     if (ctx.chat && ctx.chat.type.includes('group')) {
                         const talker = data.talker as ContactInterface
                         // 用户绑定
-                        if (talker){
+                        if (talker) {
                             let list
-                            if (talker?.type() !== PUPPET.types.Contact.Official){
+                            if (talker?.type() !== PUPPET.types.Contact.Official) {
                                 list = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
-                            }else {
+                            } else {
                                 list = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
                             }
-                            if (list){
+                            if (list) {
                                 for (const listElement of list) {
-                                    if (listElement.contact.id === talker.id){
-                                        this.bindItemService.bindGroup(talker.payload?.name ? talker.payload?.name : '',ctx.chat?.id,0,listElement.id,talker.payload?.alias ? talker.payload?.alias : '',talker.id)
+                                    if (listElement.contact.id === talker.id) {
+                                        this.bindItemService.bindGroup(talker.payload?.name ? talker.payload?.name : '', ctx.chat?.id, 0, listElement.id, talker.payload?.alias ? talker.payload?.alias : '', talker.id)
                                         break
                                     }
                                 }
@@ -1076,17 +1077,17 @@ export class TelegramBotClient {
                 const id = ctx.match.input !== 'filehelper' ? '@' + ctx.match.input : 'filehelper'
                 const contact = await this._weChatClient.client.Contact.find({id: id})
                 // 用户绑定
-                if (contact){
+                if (contact) {
                     let list
-                    if (contact?.type() !== PUPPET.types.Contact.Official){
+                    if (contact?.type() !== PUPPET.types.Contact.Official) {
                         list = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
-                    }else {
+                    } else {
                         list = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
                     }
-                    if (list){
+                    if (list) {
                         for (const listElement of list) {
-                            if (listElement.contact.id === contact.id){
-                                this.bindItemService.bindGroup(contact.payload?.name ? contact.payload?.name : '',ctx.chat?.id,0,listElement.id,contact.payload?.alias ? contact.payload?.alias : '',contact.id)
+                            if (listElement.contact.id === contact.id) {
+                                this.bindItemService.bindGroup(contact.payload?.name ? contact.payload?.name : '', ctx.chat?.id, 0, listElement.id, contact.payload?.alias ? contact.payload?.alias : '', contact.id)
                                 break
                             }
                         }
@@ -1224,32 +1225,32 @@ export class TelegramBotClient {
             }
 
             // 如果是群组消息的情况
-            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
+            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
                 const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
-                if (bindItem){
-                    if (bindItem.type === 0){
+                if (bindItem) {
+                    if (bindItem.type === 0) {
                         let findItem: ContactItem | undefined = undefined
                         const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
-                        if (individual){
+                        if (individual) {
                             for (const contactItem of individual) {
-                                if (contactItem.id === bindItem.bind_id){
+                                if (contactItem.id === bindItem.bind_id) {
                                     findItem = contactItem
                                     break
                                 }
                             }
                         }
                         const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
-                        if (!findItem){
-                            if (official){
+                        if (!findItem) {
+                            if (official) {
                                 for (const contactItem of official) {
-                                    if (contactItem.id === bindItem.bind_id){
+                                    if (contactItem.id === bindItem.bind_id) {
                                         findItem = contactItem
                                         break
                                     }
                                 }
                             }
                         }
-                        if (findItem){
+                        if (findItem) {
                             findItem.contact.say(text).then((msg) => {
                                 if (msg) {
                                     CacheHelper.getInstances().addUndoMessageCache(
@@ -1270,9 +1271,9 @@ export class TelegramBotClient {
                                     ctx.replyWithHTML(`发送失败 <blockquote>${text}</blockquote>`)
                                 })
                         }
-                    }else {
-                        const room = this.weChatClient.roomList.find(value=>value.id === bindItem.bind_id)
-                        if (room){
+                    } else {
+                        const room = this.weChatClient.roomList.find(value => value.id === bindItem.bind_id)
+                        if (room) {
                             room.room.say(text)
                                 .then(msg => {
                                     if (msg) {
@@ -1417,14 +1418,14 @@ export class TelegramBotClient {
                         return
                     }
                     // 如果是群组消息的情况
-                    if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
+                    if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
                         const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
-                        if (bindItem){
-                            if (bindItem.type === 0){
+                        if (bindItem) {
+                            if (bindItem.type === 0) {
                                 const findItem: ContactInterface | undefined = undefined
                                 const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
                                 individual?.forEach(value => {
-                                    if (value.id === bindItem.bind_id){
+                                    if (value.id === bindItem.bind_id) {
                                         value.contact.say(fileBox).then(msg => {
                                             if (msg) {
                                                 CacheHelper.getInstances().addUndoMessageCache(
@@ -1439,9 +1440,9 @@ export class TelegramBotClient {
                                     }
                                 })
                                 const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
-                                if (!findItem){
+                                if (!findItem) {
                                     official?.forEach(value => {
-                                        if (value.id === bindItem.bind_id){
+                                        if (value.id === bindItem.bind_id) {
                                             value.contact.say(fileBox).then(msg => {
                                                 if (msg) {
                                                     CacheHelper.getInstances().addUndoMessageCache(
@@ -1456,9 +1457,9 @@ export class TelegramBotClient {
                                         }
                                     })
                                 }
-                            }else {
-                                const room = this.weChatClient.roomList.find(value=>value.id === bindItem.bind_id)
-                                if (room){
+                            } else {
+                                const room = this.weChatClient.roomList.find(value => value.id === bindItem.bind_id)
+                                if (room) {
                                     room.room.say(fileBox).then(msg => {
                                         if (msg) {
                                             CacheHelper.getInstances().addUndoMessageCache(
@@ -1526,13 +1527,17 @@ export class TelegramBotClient {
             }
         })
 
-        bot.on(message('audio'), ctx => this.handleFileMessage.call(this, ctx, 'audio'))
+        bot.on(message('audio'), ctx =>
+            this.handleFileMessage.call(this, ctx, 'video'))
 
-        bot.on(message('video'), ctx => this.handleFileMessage.call(this, ctx, 'video'))
+        bot.on(message('video'), ctx =>
+            this.handleFileMessage.call(this, ctx, 'video'))
 
-        bot.on(message('document'), ctx => this.handleFileMessage.call(this, ctx, 'document'))
+        bot.on(message('document'), ctx =>
+            this.handleFileMessage.call(this, ctx, 'document'))
 
-        bot.on(message('photo'), ctx => this.handleFileMessage.call(this, ctx, 'photo'))
+        bot.on(message('photo'), ctx =>
+            this.handleFileMessage.call(this, ctx, 'photo'))
 
         bot.on(message('sticker'), ctx => {
             if (!this._weChatClient.client.isLoggedIn) {
@@ -1588,14 +1593,14 @@ export class TelegramBotClient {
                             return
                         }
                         // 如果是群组消息的情况
-                        if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
+                        if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
                             const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
-                            if (bindItem){
-                                if (bindItem.type === 0){
+                            if (bindItem) {
+                                if (bindItem.type === 0) {
                                     const findItem: ContactInterface | undefined = undefined
                                     const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
                                     individual?.forEach(value => {
-                                        if (value.id === bindItem.bind_id){
+                                        if (value.id === bindItem.bind_id) {
                                             value.contact.say(fileBox).then(msg => {
                                                 if (msg) {
                                                     CacheHelper.getInstances().addUndoMessageCache(
@@ -1606,9 +1611,9 @@ export class TelegramBotClient {
                                         }
                                     })
                                     const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
-                                    if (!findItem){
+                                    if (!findItem) {
                                         official?.forEach(value => {
-                                            if (value.id === bindItem.bind_id){
+                                            if (value.id === bindItem.bind_id) {
                                                 value.contact.say(fileBox).then(msg => {
                                                     if (msg) {
                                                         CacheHelper.getInstances().addUndoMessageCache(
@@ -1619,9 +1624,9 @@ export class TelegramBotClient {
                                             }
                                         })
                                     }
-                                }else {
-                                    const room = this.weChatClient.roomList.find(value=>value.id === bindItem.bind_id)
-                                    if (room){
+                                } else {
+                                    const room = this.weChatClient.roomList.find(value => value.id === bindItem.bind_id)
+                                    if (room) {
                                         room.room.say(fileBox).then(msg => {
                                             if (msg) {
                                                 CacheHelper.getInstances().addUndoMessageCache(
@@ -1638,7 +1643,7 @@ export class TelegramBotClient {
                                     })
                                 }
                             }
-                        }else {
+                        } else {
                             if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
                                 this._currentSelectContact?.say(fileBox).then(msg => {
                                     if (msg) {
@@ -1702,17 +1707,18 @@ export class TelegramBotClient {
         // bot.action('UNKNOWN',
         //     ctx => this.pageContacts(ctx, contactMap?.get(0), unknownPage, currentSearchWord));
         bot.action('INDIVIDUAL', ctx => {
-            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Individual) || []].map(item=>item.contact), individualPage, currentSearchWord)
+            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Individual) || []].map(item => item.contact), individualPage, currentSearchWord)
             ctx.answerCbQuery()
         })
         bot.action('OFFICIAL', ctx => {
-            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Official) || []].map(item=>item.contact), officialPage, currentSearchWord)
+            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Official) || []].map(item => item.contact), officialPage, currentSearchWord)
             ctx.answerCbQuery()
         })
         // bot.action('CORPORATION',
         //     ctx => this.pageContacts(ctx, contactMap?.get(ContactImpl.Type.Corporation), corporationPage, currentSearchWord));
         this.botLaunch(bot)
     }
+
     private async botLaunch(bot: Telegraf, retryCount = 5) {
         try {
             await bot.launch()
@@ -1732,14 +1738,14 @@ export class TelegramBotClient {
         new ConverterHelper().webmToGif(saveFile, gifFile).then(async () => {
             const fileBox = FileBox.fromFile(gifFile)
             // 如果是群组消息的情况
-            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId){
+            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
                 const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
-                if (bindItem){
-                    if (bindItem.type === 0){
+                if (bindItem) {
+                    if (bindItem.type === 0) {
                         const findItem: ContactInterface | undefined = undefined
                         const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
                         individual?.forEach(value => {
-                            if (value.id === bindItem.bind_id){
+                            if (value.id === bindItem.bind_id) {
                                 value.contact.say(fileBox).then(msg => {
                                     if (msg && ctx.message) {
                                         CacheHelper.getInstances().addUndoMessageCache(
@@ -1750,9 +1756,9 @@ export class TelegramBotClient {
                             }
                         })
                         const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
-                        if (!findItem){
+                        if (!findItem) {
                             official?.forEach(value => {
-                                if (value.id === bindItem.bind_id){
+                                if (value.id === bindItem.bind_id) {
                                     value.contact.say(fileBox).then(msg => {
                                         if (msg && ctx.message) {
                                             CacheHelper.getInstances().addUndoMessageCache(
@@ -1763,9 +1769,9 @@ export class TelegramBotClient {
                                 }
                             })
                         }
-                    }else {
-                        const room = this.weChatClient.roomList.find(value=>value.id === bindItem.bind_id)
-                        if (room){
+                    } else {
+                        const room = this.weChatClient.roomList.find(value => value.id === bindItem.bind_id)
+                        if (room) {
                             room.room.say(fileBox).catch(() => ctx.reply('发送失败'))
                         }
                     }
@@ -1807,16 +1813,16 @@ export class TelegramBotClient {
         // console.log('发送文本消息', message)
         this.bot.telegram.sendMessage(message.chatId, SimpleMessageSender.send(message), {
             parse_mode: 'HTML'
-        }).then(res=>{
+        }).then(res => {
             if (message.id) {
                 this.messageMap.set(res.message_id, message.id)
             }
-        }).catch(e=>{
-            if (e.response.error_code === 403){
+        }).catch(e => {
+            if (e.response.error_code === 403) {
                 this.bindItemService.removeBindItemByChatId(parseInt(message.chatId + ''))
                 this.bot.telegram.sendMessage(this.chatId, SimpleMessageSender.send(message), {
                     parse_mode: 'HTML'
-                }).then(res=>{
+                }).then(res => {
                     if (message.id) {
                         this.messageMap.set(res.message_id, message.id)
                     }
@@ -1856,8 +1862,8 @@ export class TelegramBotClient {
         } else {
             const thatContactMap = that.weChatClient.contactMap
 
-            let source1: ContactInterface[] | undefined = [...thatContactMap?.get(1) || []].map(item=>item.contact)
-            let source2: ContactInterface[] | undefined = [...thatContactMap?.get(2) || []].map(item=>item.contact)
+            let source1: ContactInterface[] | undefined = [...thatContactMap?.get(1) || []].map(item => item.contact)
+            let source2: ContactInterface[] | undefined = [...thatContactMap?.get(2) || []].map(item => item.contact)
 
             source1 = await TelegramBotClient.filterByNameAndAlias(currentSearchWord, source1)
             source2 = await TelegramBotClient.filterByNameAndAlias(currentSearchWord, source2)
@@ -2180,7 +2186,14 @@ export class TelegramBotClient {
         })
     }
 
-    private async handleFileMessage(ctx: any, fileType: string) {
+    private async demo(ctx: any, fileType: string) {
+        ///
+        const fileId = ctx.message[fileType].file_id
+        const fileSize = ctx.message[fileType].file_size
+        console.log(fileId, fileSize)
+    }
+
+    private async handleFileMessage(ctx: any, fileType: string | 'audio' | 'video' | 'document' | 'photo') {
         if (!this._weChatClient.client.isLoggedIn) {
             ctx.reply('请先登陆微信')
             return
@@ -2188,16 +2201,33 @@ export class TelegramBotClient {
         if (ctx.message[fileType]) {
             let fileId = ctx.message[fileType].file_id
             let fileSize = ctx.message[fileType].file_size
-            if (!fileId){
+            const fileName = ctx.message[fileType].file_name
+            if (!fileId) {
                 fileId = ctx.message[fileType][ctx.message[fileType].length - 1].file_id
                 fileSize = ctx.message[fileType][ctx.message[fileType].length - 1].file_size
             }
             if (fileSize && fileSize > 20971520) {
                 if (this.tgClient) {
-                    // 配置了大文件发送则发送大文件 TODO 设置filename
-                    const buffer = await this.tgClient.downloadFile(ctx.message.message_id,ctx.chat.id) as Buffer
-                    const fileBox = FileBox.fromBuffer(buffer)
-                    await this.sendFile(ctx, fileBox)
+                    // 配置了大文件发送则发送大文件
+                    this.tgClient.downloadFile(ctx.message.message_id, ctx.chat.id).then(buff => {
+                        if (buff) {
+                            const fileBox = FileBox.fromBuffer(Buffer.from(buff), fileName)
+                            this.sendFile(ctx, fileBox)
+                        } else {
+                            ctx.reply('发送文件失败，获取文件为空！', {
+                                reply_parameters: {
+                                    message_id: ctx.message.message_id
+                                }
+                            })
+                        }
+                    }).catch(err => {
+                        console.error('use telegram api download file error: ', err)
+                        ctx.reply('发送文件失败!', {
+                            reply_parameters: {
+                                message_id: ctx.message.message_id
+                            }
+                        })
+                    })
                     return
                 }
                 ctx.reply('bot发送文件不能大于20M', {
@@ -2213,9 +2243,9 @@ export class TelegramBotClient {
                 const fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message[fileType].file_name)
                 await this.sendFile(ctx, fileBox)
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
+                // @ts-ignore
             }).catch(e => {
-                ctx.reply('文件发送失败', {
+                ctx.reply('文件发送失败！', {
                     reply_parameters: {
                         message_id: ctx.message.message_id
                     }

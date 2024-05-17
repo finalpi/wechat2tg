@@ -1,6 +1,6 @@
 import {config} from '../config'
 import {StoreSession} from 'telegram/sessions'
-import {Api, TelegramClient as GramClient} from 'telegram'
+import {TelegramClient as GramClient} from 'telegram'
 import {TelegramBotClient} from './TelegramBotClient'
 
 export class TelegramClient {
@@ -44,19 +44,10 @@ export class TelegramClient {
         })
     }
 
-    public async downloadFile(messageId: number,chatId: string|number) {
+    public async downloadFile(messageId: number, chatId: string | number) {
         const chat = await this._client.getInputEntity(chatId)
         const messages = await this._client.getMessages(chat, {ids: messageId})
-        const video = messages[0].video
-        if (video) {
-            const videoLocation = new Api.InputDocumentFileLocation({
-                id: video.id,
-                accessHash: video.accessHash,
-                fileReference: video.fileReference,
-                thumbSize: ''
-            })
-            return this._client.downloadFile(videoLocation)
-        }
+        return messages[0].downloadMedia()
     }
 
 }

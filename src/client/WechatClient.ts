@@ -25,7 +25,6 @@ import * as fs from 'fs'
 import {CustomFile} from 'telegram/client/uploads'
 import {RoomItem} from '../models/RoomItem'
 import {ContactItem} from '../models/ContactItem'
-import {BindItemService} from '../service/BindItemService'
 import TelegramError from 'telegraf/src/core/network/error'
 
 
