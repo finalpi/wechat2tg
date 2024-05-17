@@ -44,8 +44,8 @@ export class TelegramClient {
         })
     }
 
-    public async downloadFile(messageId: number) {
-        const chat = await this._client.getInputEntity(this.telegramBotClient.chatId)
+    public async downloadFile(messageId: number,chatId: string|number) {
+        const chat = await this._client.getInputEntity(chatId)
         const messages = await this._client.getMessages(chat, {ids: messageId})
         const video = messages[0].video
         if (video) {
