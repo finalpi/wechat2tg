@@ -38,6 +38,15 @@ export class TelegramBotClient {
         return this._tgClient
     }
 
+    private static instance: TelegramBotClient
+
+    static getInstance(): TelegramBotClient {
+        if (!TelegramBotClient.instance) {
+            TelegramBotClient.instance = new TelegramBotClient()
+        }
+        return TelegramBotClient.instance
+    }
+
     private _weChatClient: WeChatClient
     private readonly _tgClient: TelegramClient | undefined
     private readonly _bot: Telegraf
@@ -67,7 +76,7 @@ export class TelegramBotClient {
     private readonly _bindItemService: BindItemService
 
 
-    constructor() {
+    private constructor() {
         this._weChatClient = new WeChatClient(this)
         this._bot = new Telegraf(config.BOT_TOKEN)
         this._bindItemService = new BindItemService(this.db, this._bot)
@@ -104,7 +113,7 @@ export class TelegramBotClient {
         if (config.API_ID && config.API_HASH) {
             // 启动tg client
             if (!this._tgClient) {
-                this._tgClient = new TelegramClient(this)
+                this._tgClient = TelegramClient.getInstance()
             }
         }
     }

@@ -12,13 +12,22 @@ export class TelegramClient {
         this._client = value
     }
 
+    private static instance: TelegramClient
+
     private readonly apiId: number | undefined
     private readonly apiHash: string | undefined
     private _client: GramClient
     private storeSession = new StoreSession('storage')
     private telegramBotClient: TelegramBotClient
 
-    constructor(telegramBotClient: TelegramBotClient) {
+    static getInstance(): TelegramClient {
+        if (!TelegramClient.instance) {
+            TelegramClient.instance = new TelegramClient(TelegramBotClient.getInstance())
+        }
+        return TelegramClient.instance
+    }
+
+    private constructor(telegramBotClient: TelegramBotClient) {
         this.apiId = parseInt(config.API_ID)
         this.apiHash = config.API_HASH
         ///

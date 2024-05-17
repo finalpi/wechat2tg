@@ -5,10 +5,11 @@ import {ContactItem} from '../models/ContactItem'
 import {ContactImpl} from 'wechaty/impls'
 import {Telegraf} from 'telegraf'
 
-export class BindItemService{
+export class BindItemService {
     private db: Database
     private tgBotClient: Telegraf
-    constructor(db: Database,tgBotClient: Telegraf) {
+
+    constructor(db: Database, tgBotClient: Telegraf) {
         this.db = db
         this.tgBotClient = tgBotClient
         // 初始化表
@@ -21,6 +22,7 @@ export class BindItemService{
             })
         })
     }
+
     public getAllBindItems(): Promise<BindItem[]> {
         return new Promise((resolve, reject) => {
             this.db.all('SELECT * FROM tb_bind_item', (err, rows: BindItem[]) => {
@@ -38,117 +40,118 @@ export class BindItemService{
         const individual = contactMap?.get(ContactImpl.Type.Individual)
         const official = contactMap?.get(ContactImpl.Type.Official)
         for (const bindItem of allBindItem) {
-            if (bindItem.type === 0){
-                if (individual){
+            if (bindItem.type === 0) {
+                if (individual) {
                     let find
                     for (const contactItem of individual) {
-                        if (contactItem.contact.id === bindItem.wechat_id){
+                        if (contactItem.contact.id === bindItem.wechat_id) {
                             find = contactItem
                             break
                         }
                     }
-                    if (find){
+                    if (find) {
                         const name = find.contact.payload?.name
-                        this.bindGroup(name ? name : '',bindItem.chat_id,bindItem.type,find.id,find.contact.payload?.alias ? find.contact.payload.alias : '',find.contact.id)
+                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id)
                         continue
                     }
-                    if (bindItem.alias && bindItem.alias !== ''){
+                    if (bindItem.alias && bindItem.alias !== '') {
                         const aliasList = []
                         for (const contactItem of individual) {
-                            if (contactItem.contact.payload?.alias === bindItem.alias){
-                                if (!find){
+                            if (contactItem.contact.payload?.alias === bindItem.alias) {
+                                if (!find) {
                                     find = contactItem
                                 }
                                 aliasList.push(contactItem)
                             }
                         }
-                        if (find){
+                        if (find) {
                             // 处理同别名的情况
                             if (aliasList.length > 1) {
                                 for (const aliasListElement of aliasList) {
-                                    if (aliasListElement.contact.payload?.name === bindItem.name){
+                                    if (aliasListElement.contact.payload?.name === bindItem.name) {
                                         find = aliasListElement
                                         break
                                     }
                                 }
                             }
                             const name = find.contact.payload?.name
-                            this.bindGroup(name ? name : '',bindItem.chat_id,bindItem.type,find.id,find.contact.payload?.alias ? find.contact.payload.alias : '',find.contact.id)
+                            this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id)
                             continue
                         }
                     }
                     for (const contactItem of individual) {
-                        if (contactItem.contact.payload?.name === bindItem.name){
+                        if (contactItem.contact.payload?.name === bindItem.name) {
                             find = contactItem
                             break
                         }
                     }
-                    if (find){
+                    if (find) {
                         const name = find.contact.payload?.name
-                        this.bindGroup(name ? name : '',bindItem.chat_id,bindItem.type,find.id,find.contact.payload?.alias ? find.contact.payload.alias : '',find.contact.id)
+                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id)
                         continue
                     }
                 }
-                if (official){
+                if (official) {
                     let find
                     for (const contactItem of official) {
-                        if (contactItem.contact.id === bindItem.wechat_id){
+                        if (contactItem.contact.id === bindItem.wechat_id) {
                             find = contactItem
                             break
                         }
                     }
-                    if (find){
+                    if (find) {
                         continue
                     }
-                    if (bindItem.alias && bindItem.alias != ''){
+                    if (bindItem.alias && bindItem.alias != '') {
                         for (const contactItem of official) {
-                            if (contactItem.contact.payload?.alias === bindItem.alias){
+                            if (contactItem.contact.payload?.alias === bindItem.alias) {
                                 find = contactItem
                                 break
                             }
                         }
-                        if (find){
+                        if (find) {
                             const name = find.contact.payload?.name
-                            this.bindGroup(name ? name : '',bindItem.chat_id,bindItem.type,find.id,find.contact.payload?.alias ? find.contact.payload.alias : '',find.contact.id)
+                            this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id)
                             continue
                         }
                     }
                     for (const contactItem of official) {
-                        if (contactItem.contact.payload?.name === bindItem.name){
+                        if (contactItem.contact.payload?.name === bindItem.name) {
                             find = contactItem
                             break
                         }
                     }
-                    if (find){
+                    if (find) {
                         const name = find.contact.payload?.name
-                        this.bindGroup(name ? name : '',bindItem.chat_id,bindItem.type,find.id,find.contact.payload?.alias ? find.contact.payload.alias : '',find.contact.id)
+                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id)
                         continue
                     }
                 }
                 // 如果找不到则删除该元素
-                await this.tgBotClient.telegram.sendMessage(bindItem.chat_id,'找不到对应的绑定信息,请使用 /room 或者 /user 命令将联系人或者群组绑定')
+                await this.tgBotClient.telegram.sendMessage(bindItem.chat_id, '找不到对应的绑定信息,请使用 /room 或者 /user 命令将联系人或者群组绑定')
                 this.removeBindItemByChatId(bindItem.chat_id)
-            }else {
-                let room = roomList.find(item=>item.room.id === bindItem.wechat_id)
-                if (room){
+            } else {
+                let room = roomList.find(item => item.room.id === bindItem.wechat_id)
+                if (room) {
                     const topic = room.room.payload?.topic
-                    this.bindGroup(topic ? topic : '',bindItem.chat_id,bindItem.type,room.id,'',room.room.id)
+                    this.bindGroup(topic ? topic : '', bindItem.chat_id, bindItem.type, room.id, '', room.room.id)
                     continue
                 }
                 // room不存在根据名称重新绑定room
-                room = roomList.find(item=>item.room.payload?.topic === bindItem.name)
-                if (room){
+                room = roomList.find(item => item.room.payload?.topic === bindItem.name)
+                if (room) {
                     const topic = room.room.payload?.topic
-                    this.bindGroup(topic ? topic : '',bindItem.chat_id,bindItem.type,room.id,'',room.room.id)
+                    this.bindGroup(topic ? topic : '', bindItem.chat_id, bindItem.type, room.id, '', room.room.id)
                     continue
                 }
                 // 如果找不到则删除该元素
-                await this.tgBotClient.telegram.sendMessage(bindItem.chat_id,'找不到对应的绑定信息,请使用 /room 或者 /user 命令将联系人或者群组绑定')
+                await this.tgBotClient.telegram.sendMessage(bindItem.chat_id, '找不到对应的绑定信息,请使用 /room 或者 /user 命令将联系人或者群组绑定')
                 this.removeBindItemByChatId(bindItem.chat_id)
             }
         }
     }
-    public removeBindItemByChatId(chatId: number | string){
+
+    public removeBindItemByChatId(chatId: number | string) {
         this.db.serialize(() => {
             const stmt = this.db.prepare('DELETE FROM tb_bind_item WHERE chat_id = ?')
             stmt.run(chatId)
@@ -162,7 +165,7 @@ export class BindItemService{
      */
     public getBindItemByChatId(chatId: number): Promise<BindItem> {
         return new Promise((resolve, reject) => {
-            this.db.get('SELECT * FROM tb_bind_item WHERE chat_id= ?',[chatId] , (err, row: BindItem) => {
+            this.db.get('SELECT * FROM tb_bind_item WHERE chat_id= ?', [chatId], (err, row: BindItem) => {
                 if (err) {
                     reject(err)
                 } else {
@@ -172,23 +175,23 @@ export class BindItemService{
         })
     }
 
-    public bindGroup(name: string,chatId: number,type: number,bindId: string,alias: string,wechatId: string){
+    public bindGroup(name: string, chatId: number, type: number, bindId: string, alias: string, wechatId: string) {
         // 群组绑定
         this.db.serialize(() => {
             const stmt = this.db.prepare('DELETE FROM tb_bind_item WHERE wechat_id = ? OR chat_id = ?')
-            stmt.run(wechatId,chatId)
+            stmt.run(wechatId, chatId)
             stmt.finalize()
 
             const stmt1 = this.db.prepare('INSERT INTO tb_bind_item VALUES (?, ?, ?, ?, ?, ?)')
-            stmt1.run(name,chatId,type,bindId,alias,wechatId)
+            stmt1.run(name, chatId, type, bindId, alias, wechatId)
             stmt1.finalize()
         })
-        this.tgBotClient.telegram.sendMessage(chatId,`绑定成功:${name}`).then(ctx=>{
-            setTimeout(()=>{
-                this.tgBotClient.telegram.deleteMessage(chatId,ctx.message_id)
-            },10 * 1000)
-        }).catch(e=>{
-            if (e.response.error_code === 403){
+        this.tgBotClient.telegram.sendMessage(chatId, `绑定成功:${name}`).then(ctx => {
+            setTimeout(() => {
+                this.tgBotClient.telegram.deleteMessage(chatId, ctx.message_id)
+            }, 10 * 1000)
+        }).catch(e => {
+            if (e.response.error_code === 403) {
                 this.removeBindItemByChatId(chatId)
             }
         })
@@ -201,7 +204,7 @@ export class BindItemService{
      */
     public getBindItemByWechatId(wechatId: string): Promise<BindItem> {
         return new Promise((resolve, reject) => {
-            this.db.get('SELECT * FROM tb_bind_item WHERE wechat_id= ?',[wechatId] , (err, row: BindItem) => {
+            this.db.get('SELECT * FROM tb_bind_item WHERE wechat_id= ?', [wechatId], (err, row: BindItem) => {
                 if (err) {
                     reject(err)
                 } else {
