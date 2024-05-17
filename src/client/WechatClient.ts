@@ -909,7 +909,6 @@ export class WeChatClient {
                 count++
             }
         })
-        const bindItemService = new BindItemService(this._tgClient.db)
         filter.forEach(it => {
             const type = it.type()
             const id = UniqueIdGenerator.getInstance().generateId('contact')
@@ -939,7 +938,7 @@ export class WeChatClient {
                 this._roomList.push({room:it,id:id})
             }
         })
-        bindItemService.updateItem(this.roomList,this.contactMap)
+        this.tgClient.bindItemService.updateItem(this.roomList,this.contactMap)
     }
 
     private resetValue() {

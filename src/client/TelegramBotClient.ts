@@ -63,12 +63,13 @@ export class TelegramBotClient {
     private _currentSelectContact: ContactInterface | RoomInterface | undefined
     // 置顶消息
     private pinnedMessageId: number | undefined
-    private _bindItemService: BindItemService = new BindItemService(this.db)
+    private _bindItemService: BindItemService
 
 
     constructor() {
         this._weChatClient = new WeChatClient(this)
         this._bot = new Telegraf(config.BOT_TOKEN)
+        this._bindItemService = new BindItemService(this.db,this._bot)
         this._chatId = 0
         this._ownerId = 0
         this._chatId = 0

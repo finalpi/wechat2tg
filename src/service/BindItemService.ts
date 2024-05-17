@@ -3,11 +3,14 @@ import {Database} from 'sqlite3'
 import {RoomItem} from '../models/RoomItem'
 import {ContactItem} from '../models/ContactItem'
 import {ContactImpl} from 'wechaty/impls'
+import {Telegraf} from 'telegraf'
 
 export class BindItemService{
     private db: Database
-    constructor(db: Database) {
+    private tgBotClient: Telegraf
+    constructor(db: Database,tgBotClient: Telegraf) {
         this.db = db
+        this.tgBotClient = tgBotClient
         // 初始化表
         this.db.serialize(() => {
             this.db.get('SELECT name FROM sqlite_master WHERE type=\'table\' AND name=\'tb_bind_item\'', (err, row) => {
@@ -111,6 +114,7 @@ export class BindItemService{
                     }
                 }
                 // 如果找不到则删除该元素
+                await this.tgBotClient.telegram.sendMessage(bindItem.chat_id,'找不到对应的绑定信息,请重新绑定')
                 this.removeBindItemByChatId(bindItem.chat_id)
             }else {
                 let room = roomList.find(item=>item.room.id === bindItem.wechat_id)
@@ -127,6 +131,8 @@ export class BindItemService{
                     continue
                 }
                 // 如果找不到则删除该元素
+                this.tgBotClient.telegram.getMe().then(getme=>getme.can_join_groups)
+                await this.tgBotClient.telegram.sendMessage(bindItem.chat_id,'找不到对应的绑定信息,请重新绑定')
                 this.removeBindItemByChatId(bindItem.chat_id)
             }
         }
