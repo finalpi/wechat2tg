@@ -563,6 +563,15 @@ export class WeChatClient {
                             this._tgClient.bot.telegram.sendPhoto(
                                 bindItem ? bindItem.chat_id : this.tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {
                                 this._tgClient.saveMessage(msg.message_id, message.id)
+                            }).catch(e=>{
+                                if (e.response.error_code === 403){
+                                    this.tgClient.bindItemService.removeBindItemByChatId(bindItem.chat_id)
+                                    this._tgClient.bot.telegram.sendPhoto(
+                                        this.tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {
+                                        this._tgClient.saveMessage(msg.message_id, message.id)
+                                    })
+                                    return
+                                }
                             })
                         }).catch(() => {
                             sendMessageWhenNoAvatar(res.nickname)
@@ -621,6 +630,16 @@ export class WeChatClient {
                             }).then(msg => {
                             this._tgClient.saveMessage(msg.message_id, message.id)
                         }).catch(e => {
+                            if (e.response.error_code === 403){
+                                this.tgClient.bindItemService.removeBindItemByChatId(bindItem.chat_id)
+                                tgClient.bot.telegram.sendDocument(
+                                    this.tgClient.chatId, {source: buff, filename: fileName}, {
+                                        caption: identityStr
+                                    }).then(msg => {
+                                    this._tgClient.saveMessage(msg.message_id, message.id)
+                                })
+                                return
+                            }
                             this._tgClient.sendMessage({
                                 sender: showSender,
                                 body: '[文件]转发失败，请在微信上查收',
@@ -690,6 +709,17 @@ export class WeChatClient {
                                 }, {caption: identityStr}).then(msg => {
                                 this._tgClient.saveMessage(msg.message_id, message.id)
                             }).catch(e => {
+                                if (e.response.error_code === 403){
+                                    this.tgClient.bindItemService.removeBindItemByChatId(bindItem.chat_id)
+                                    tgClient.bot.telegram.sendPhoto(
+                                        this.tgClient.chatId, {
+                                            source: buff,
+                                            filename: fileName
+                                        }, {caption: identityStr}).then(msg => {
+                                        this._tgClient.saveMessage(msg.message_id, message.id)
+                                    })
+                                    return
+                                }
                                 this._tgClient.sendMessage({
                                     sender: showSender,
                                     body: '[图片]文件转发失败，请在微信上查收',
@@ -707,6 +737,17 @@ export class WeChatClient {
                                 }, {caption: identityStr}).then(msg => {
                                 this._tgClient.saveMessage(msg.message_id, message.id)
                             }).catch(e => {
+                                if (e.response.error_code === 403){
+                                    this.tgClient.bindItemService.removeBindItemByChatId(bindItem.chat_id)
+                                    tgClient.bot.telegram.sendDocument(
+                                        this.tgClient.chatId, {
+                                            source: buff,
+                                            filename: fileName
+                                        }, {caption: identityStr}).then(msg => {
+                                        this._tgClient.saveMessage(msg.message_id, message.id)
+                                    })
+                                    return
+                                }
                                 this._tgClient.sendMessage({
                                     sender: showSender,
                                     body: '[图片]文件转发失败，请在微信上查收',
@@ -741,6 +782,20 @@ export class WeChatClient {
                             bindItem ? bindItem.chat_id : this.tgClient.chatId, {source: buff, filename: fileName}, {caption: identityStr}).then(msg => {
                             this._tgClient.saveMessage(msg.message_id, message.id)
                         }).catch(res => {
+                            if (res.response.error_code === 403){
+                                this.tgClient.bindItemService.removeBindItemByChatId(bindItem.chat_id)
+                                if (fileName.endsWith('.sil')) {
+                                    fileName = fileName.replace('.sil', '.mp3')
+                                }
+                                // 如果用户不接收语音则发送文件
+                                tgClient.bot.telegram.sendDocument(this.tgClient.chatId, {
+                                    source: buff,
+                                    filename: fileName
+                                }, {caption: identityStr}).then(msg => {
+                                    this._tgClient.saveMessage(msg.message_id, message.id)
+                                })
+                                return
+                            }
                             if (fileName.endsWith('.sil')) {
                                 fileName = fileName.replace('.sil', '.mp3')
                             }
@@ -751,6 +806,16 @@ export class WeChatClient {
                             }, {caption: identityStr}).then(msg => {
                                 this._tgClient.saveMessage(msg.message_id, message.id)
                             }).catch(e => {
+                                if (e.response.error_code === 403){
+                                    this.tgClient.bindItemService.removeBindItemByChatId(bindItem.chat_id)
+                                    tgClient.bot.telegram.sendDocument(this.tgClient.chatId, {
+                                        source: buff,
+                                        filename: fileName
+                                    }, {caption: identityStr}).then(msg => {
+                                        this._tgClient.saveMessage(msg.message_id, message.id)
+                                    })
+                                    return
+                                }
                                 this._tgClient.sendMessage({
                                     sender: showSender,
                                     body: '[语音]文件转发失败,请在微信上查收',
@@ -812,6 +877,17 @@ export class WeChatClient {
                                 }, {caption: identityStr}).then(msg => {
                                 this._tgClient.saveMessage(msg.message_id, message.id)
                             }).catch(e => {
+                                if (e.response.error_code === 403){
+                                    this.tgClient.bindItemService.removeBindItemByChatId(bindItem.chat_id)
+                                    tgClient.bot.telegram.sendVideo(
+                                        this.tgClient.chatId, {
+                                            source: buff,
+                                            filename: fileName
+                                        }, {caption: identityStr}).then(msg => {
+                                        this._tgClient.saveMessage(msg.message_id, message.id)
+                                    })
+                                    return
+                                }
                                 this._tgClient.sendMessage({
                                     sender: showSender,
                                     body: '[视频]文件转发失败,请在微信上查收',
@@ -829,6 +905,17 @@ export class WeChatClient {
                                 }, {caption: identityStr}).then(msg => {
                                 this._tgClient.saveMessage(msg.message_id, message.id)
                             }).catch(e => {
+                                if (e.response.error_code === 403){
+                                    this.tgClient.bindItemService.removeBindItemByChatId(bindItem.chat_id)
+                                    tgClient.bot.telegram.sendDocument(
+                                        this.tgClient.chatId, {
+                                            source: buff,
+                                            filename: fileName
+                                        }, {caption: identityStr}).then(msg => {
+                                        this._tgClient.saveMessage(msg.message_id, message.id)
+                                    })
+                                    return
+                                }
                                 this._tgClient.sendMessage({
                                     sender: showSender,
                                     body: '[视频]文件转发失败,请在微信上查收',

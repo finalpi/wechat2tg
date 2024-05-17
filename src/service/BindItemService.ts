@@ -131,7 +131,6 @@ export class BindItemService{
                     continue
                 }
                 // 如果找不到则删除该元素
-                this.tgBotClient.telegram.getMe().then(getme=>getme.can_join_groups)
                 await this.tgBotClient.telegram.sendMessage(bindItem.chat_id,'找不到对应的绑定信息,请重新绑定')
                 this.removeBindItemByChatId(bindItem.chat_id)
             }
@@ -172,6 +171,16 @@ export class BindItemService{
             stmt1.run(name,chatId,type,bindId,alias,wechatId)
             stmt1.finalize()
         })
+        this.tgBotClient.telegram.sendMessage(chatId,`绑定成功:${name}`).then(ctx=>{
+            setTimeout(()=>{
+                this.tgBotClient.telegram.deleteMessage(chatId,ctx.message_id)
+            },10 * 1000)
+        }).catch(e=>{
+            if (e.response.error_code === 403){
+                this.removeBindItemByChatId(chatId)
+            }
+        })
+
     }
 
     /**

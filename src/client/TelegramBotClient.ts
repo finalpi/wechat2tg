@@ -2491,12 +2491,24 @@ export class TelegramBotClient {
 
     public async sendMessage(message: SimpleMessage) {
         // console.log('发送文本消息', message)
-        const res = await this.bot.telegram.sendMessage(message.chatId, SimpleMessageSender.send(message), {
+        this.bot.telegram.sendMessage(message.chatId, SimpleMessageSender.send(message), {
             parse_mode: 'HTML'
+        }).then(res=>{
+            if (message.id) {
+                this.messageMap.set(res.message_id, message.id)
+            }
+        }).catch(e=>{
+            if (e.response.error_code === 403){
+                this.bindItemService.removeBindItemByChatId(parseInt(message.chatId + ''))
+                this.bot.telegram.sendMessage(this.chatId, SimpleMessageSender.send(message), {
+                    parse_mode: 'HTML'
+                }).then(res=>{
+                    if (message.id) {
+                        this.messageMap.set(res.message_id, message.id)
+                    }
+                })
+            }
         })
-        if (message.id) {
-            this.messageMap.set(res.message_id, message.id)
-        }
     }
 
     public saveMessage(tgMessageId: number, wechatMessageId: string) {
