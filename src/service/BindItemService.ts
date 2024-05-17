@@ -45,9 +45,11 @@ export class BindItemService{
                         }
                     }
                     if (find){
+                        const name = find.contact.payload?.name
+                        this.bindGroup(name ? name : '',bindItem.chat_id,bindItem.type,find.id,find.contact.payload?.alias ? find.contact.payload.alias : '',find.contact.id)
                         continue
                     }
-                    if (bindItem.alias && bindItem.alias != ''){
+                    if (bindItem.alias && bindItem.alias !== ''){
                         for (const contactItem of individual) {
                             if (contactItem.contact.payload?.alias === bindItem.alias){
                                 find = contactItem
@@ -113,7 +115,8 @@ export class BindItemService{
             }else {
                 let room = roomList.find(item=>item.room.id === bindItem.wechat_id)
                 if (room){
-                    // room存在说明并未重新登录跳过
+                    const topic = room.room.payload?.topic
+                    this.bindGroup(topic ? topic : '',bindItem.chat_id,bindItem.type,room.id,'',room.room.id)
                     continue
                 }
                 // room不存在根据名称重新绑定room
