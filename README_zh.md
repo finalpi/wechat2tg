@@ -60,6 +60,9 @@ services:
       # 用户名密码可选
       # - PROXY_USERNAME=
       # - PROXY_PASSWORD=
+      # 发送大文件所需Telegram API配置(可选)
+      # - API_ID=
+      # - API_HASH=
     restart: unless-stopped
 
 ```
