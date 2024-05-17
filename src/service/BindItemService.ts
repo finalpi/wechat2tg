@@ -148,7 +148,7 @@ export class BindItemService{
             }
         }
     }
-    public removeBindItemByChatId(chatId: number){
+    public removeBindItemByChatId(chatId: number | string){
         this.db.serialize(() => {
             const stmt = this.db.prepare('DELETE FROM tb_bind_item WHERE chat_id = ?')
             stmt.run(chatId)

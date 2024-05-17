@@ -26,6 +26,7 @@ import {CustomFile} from 'telegram/client/uploads'
 import {RoomItem} from '../models/RoomItem'
 import {ContactItem} from '../models/ContactItem'
 import {BindItemService} from '../service/BindItemService'
+import TelegramError from 'telegraf/src/core/network/error'
 
 
 export class WeChatClient {
@@ -749,7 +750,7 @@ export class WeChatClient {
                             file: new CustomFile(fileName, buff.length, '', buff),
                             forceDocument: !this.tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION),
                             caption: identityStr,
-                        }).catch((e: Error) => {
+                        }).catch((e) => {
                             console.error('send file error:', e)
                             this._tgClient.sendMessage({
                                 ...tgMessage,
@@ -771,6 +772,7 @@ export class WeChatClient {
                         case PUPPET.types.Message.Image:
                         case PUPPET.types.Message.Audio:
                         case PUPPET.types.Message.Video:
+                        case PUPPET.types.Message.Attachment:
                             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                             // @ts-ignore
                             this.tgClient.bot.telegram[this.getSendTgFileMethodString(messageType)](
@@ -778,7 +780,13 @@ export class WeChatClient {
                                     caption: identityStr
                                 }).then((msg: { message_id: number }) => {
                                 this._tgClient.saveMessage(msg.message_id, message.id)
-                            }).catch((e: Error) => {
+                            }).catch((e: TelegramError) => {
+                                if (e.response.error_code === 403){
+                                    this.tgClient.bindItemService.removeBindItemByChatId(tgMessage.chatId)
+                                    tgMessage.chatId = this.tgClient.chatId
+                                    this.sendFileToTg(message,identityStr,tgMessage)
+                                    return
+                                }
                                 console.error('send file error:', e)
                                 this._tgClient.sendMessage({
                                     ...tgMessage,
@@ -794,6 +802,12 @@ export class WeChatClient {
                         }).then(msg => {
                         this._tgClient.saveMessage(msg.message_id, message.id)
                     }).catch(e => {
+                        if (e.response.error_code === 403){
+                            this.tgClient.bindItemService.removeBindItemByChatId(tgMessage.chatId)
+                            tgMessage.chatId = this.tgClient.chatId
+                            this.sendFileToTg(message,identityStr,tgMessage)
+                            return
+                        }
                         console.error('sendDocument error:', e)
                         this._tgClient.sendMessage({
                             ...tgMessage,
@@ -815,7 +829,7 @@ export class WeChatClient {
             case PUPPET.types.Message.Image:
                 return 'sendPhoto'
             case PUPPET.types.Message.Audio:
-                return 'sendAudio'
+                return 'sendVoice'
             case PUPPET.types.Message.Video:
                 return 'sendVideo'
             default:
