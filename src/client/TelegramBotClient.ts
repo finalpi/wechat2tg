@@ -2812,67 +2812,6 @@ export class TelegramBotClient {
         return buttons
     }
 
-    private async generateNotionListButtons(list: NotionListType[], page: number, keyPrefix: string) {
-        const size = TelegramBotClient.PAGE_SIZE
-        const lineSize = TelegramBotClient.LINES
-        const buttons: tg.InlineKeyboardButton[][] = []
-        const currentIndex = size * page
-        const nextIndex = size * (page + 1)
-        const slice = list.slice(currentIndex, nextIndex)
-
-        for (let i = 0; i < slice.length; i += lineSize) {
-            const row = []
-            for (let j = i; j < i + lineSize && j < slice.length; j++) {
-                row.push(Markup.button.callback(slice[j].name, keyPrefix + slice[j].id))
-            }
-            buttons.push(row)
-        }
-
-        const addList = Markup.button.callback('点我添加', 'listAdd-' + keyPrefix)
-
-        const nextButton = Markup.button.callback('获取列表', keyPrefix + (page + 1))
-
-        buttons.push([addList])
-
-        if (page === 0 && buttons.length !== 0 && nextIndex >= list.length) {
-            buttons.push([nextButton])
-        }
-
-        return buttons
-    }
-
-    public async calcShowMemberList(): Promise<void> {
-
-        if (!this.calcShowMemberListExecuted) {
-            // 从微信实例中获取缓存的联系人 转换成一样的数组
-            const contactMap = this._weChatClient.contactMap
-            const roomList = this._weChatClient.roomList
-            const res: MemberCacheType [] = []
-
-            const idGenerator = UniqueIdGenerator.getInstance()
-
-            contactMap?.forEach(it => {
-                it.forEach(contact => {
-                    res.push({
-                        id: contact.contact.id,
-                        show_name: contact.contact.payload?.alias ? `[${contact.contact.payload.alias}] ${contact.contact.name()}` : contact.contact.name(),
-                        shot_id: idGenerator.generateId('user'),
-                    })
-                })
-            })
-            for (const it of roomList) {
-                res.push({
-                    id: it.room.id,
-                    show_name: await it.room.topic(),
-                    shot_id: idGenerator.generateId('room'),
-                })
-            }
-
-            this.calcShowMemberListExecuted = true
-            this._weChatClient.memberCache = res
-        }
-    }
-
     private addToWhiteOrBlackList(text: string) {
         if (this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK) {
             const blackList = this.forwardSetting.getVariable(VariableType.SETTING_BLACK_LIST)
