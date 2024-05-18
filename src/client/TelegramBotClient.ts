@@ -48,7 +48,7 @@ export class TelegramBotClient {
     }
 
     private _weChatClient: WeChatClient
-    private readonly _tgClient: TelegramClient | undefined
+    private _tgClient: TelegramClient | undefined
     private readonly _bot: Telegraf
     private _chatId: number | string
     private _ownerId: number
@@ -110,12 +110,6 @@ export class TelegramBotClient {
         // this._messageMap
         this.onWeChatLogout = this.onWeChatLogout.bind(this)
         this.onWeChatStop = this.onWeChatStop.bind(this)
-        if (config.API_ID && config.API_HASH) {
-            // 启动tg client
-            if (!this._tgClient) {
-                this._tgClient = TelegramClient.getInstance()
-            }
-        }
     }
 
     public get messageMap(): Map<number, string> {
@@ -187,6 +181,12 @@ export class TelegramBotClient {
 
 
     public init() {
+        if (config.API_ID && config.API_HASH) {
+            // 启动tg client
+            if (!this._tgClient) {
+                this._tgClient = TelegramClient.getInstance()
+            }
+        }
         const bot = this._bot
 
         // 加载转发配置
