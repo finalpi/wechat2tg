@@ -2138,7 +2138,18 @@ export class TelegramBotClient {
                                 CacheHelper.getInstances().addUndoMessageCache(
                                     ctx.message.message_id, msg.id)
                             }
-                        }).catch(() => ctx.reply('发送失败'))
+                            if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                ctx.reply('发送成功!', {
+                                    reply_parameters: {
+                                        message_id: ctx.message.message_id
+                                    }
+                                })
+                            }
+                        }).catch(() => ctx.reply('发送失败',{
+                            reply_parameters: {
+                                message_id: ctx.message.message_id
+                            }
+                        }))
                     }
                 })
             }
@@ -2158,10 +2169,33 @@ export class TelegramBotClient {
                                     CacheHelper.getInstances().addUndoMessageCache(
                                         ctx.message.message_id, msg.id)
                                 }
-                            }).catch(() => ctx.reply('发送失败'))
+                                if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                    ctx.reply('发送成功!', {
+                                        reply_parameters: {
+                                            message_id: ctx.message.message_id
+                                        }
+                                    })
+                                }
+                            }).catch(() => ctx.reply('发送失败',{
+                                reply_parameters: {
+                                    message_id: ctx.message.message_id
+                                }
+                            }))
                             const text = ctx.message.caption
                             if (text) {
-                                value.contact?.say(text).catch(() => ctx.reply('发送失败'))
+                                value.contact?.say(text).then(msg=>{
+                                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                        ctx.reply('发送成功!', {
+                                            reply_parameters: {
+                                                message_id: ctx.message.message_id
+                                            }
+                                        })
+                                    }
+                                }).catch(() => ctx.reply('发送失败',{
+                                    reply_parameters: {
+                                        message_id: ctx.message.message_id
+                                    }
+                                }))
                             }
                             return
                         }
@@ -2175,10 +2209,33 @@ export class TelegramBotClient {
                                         CacheHelper.getInstances().addUndoMessageCache(
                                             ctx.message.message_id, msg.id)
                                     }
-                                }).catch(() => ctx.reply('发送失败'))
+                                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                        ctx.reply('发送成功!', {
+                                            reply_parameters: {
+                                                message_id: ctx.message.message_id
+                                            }
+                                        })
+                                    }
+                                }).catch(() => ctx.reply('发送失败',{
+                                    reply_parameters: {
+                                        message_id: ctx.message.message_id
+                                    }
+                                }))
                                 const text = ctx.message.caption
                                 if (text) {
-                                    value.contact?.say(text).catch(() => ctx.reply('发送失败'))
+                                    value.contact?.say(text).then(msg=>{
+                                        if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                            ctx.reply('发送成功!', {
+                                                reply_parameters: {
+                                                    message_id: ctx.message.message_id
+                                                }
+                                            })
+                                        }
+                                    }).catch(() => ctx.reply('发送失败',{
+                                        reply_parameters: {
+                                            message_id: ctx.message.message_id
+                                        }
+                                    }))
                                 }
                                 return
                             }
@@ -2192,10 +2249,29 @@ export class TelegramBotClient {
                                 CacheHelper.getInstances().addUndoMessageCache(
                                     ctx.message.message_id, msg.id)
                             }
+                            if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                ctx.reply('发送成功!', {
+                                    reply_parameters: {
+                                        message_id: ctx.message.message_id
+                                    }
+                                })
+                            }
                         }).catch(() => ctx.reply('发送失败'))
                         const text = ctx.message.caption
                         if (text) {
-                            room.room.say(text).catch(() => ctx.reply('发送失败'))
+                            room.room.say(text).then(msg=>{
+                                if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                    ctx.reply('发送成功!', {
+                                        reply_parameters: {
+                                            message_id: ctx.message.message_id
+                                        }
+                                    })
+                                }
+                            }).catch(() => ctx.reply('发送失败',{
+                                reply_parameters: {
+                                    message_id: ctx.message.message_id
+                                }
+                            }))
                         }
                     }
                 }
@@ -2215,7 +2291,18 @@ export class TelegramBotClient {
                     CacheHelper.getInstances().addUndoMessageCache(
                         ctx.message.message_id, msg.id)
                 }
-            }).catch(() => ctx.reply('发送失败'))
+                if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                    ctx.reply('发送成功!', {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
+                }
+            }).catch(() => ctx.reply('发送失败',{
+                reply_parameters: {
+                    message_id: ctx.message.message_id
+                }
+            }))
             const text = ctx.message.caption
             if (text) {
                 this._currentSelectContact?.say(text).then(msg => {
@@ -2223,13 +2310,31 @@ export class TelegramBotClient {
                         CacheHelper.getInstances().addUndoMessageCache(
                             ctx.message.message_id, msg.id)
                     }
-                }).catch(() => ctx.reply('发送失败'))
+                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                        ctx.reply('发送成功!', {
+                            reply_parameters: {
+                                message_id: ctx.message.message_id
+                            }
+                        })
+                    }
+                }).catch(() => ctx.reply('发送失败',{
+                    reply_parameters: {
+                        message_id: ctx.message.message_id
+                    }
+                }))
             }
         } else {
             this.selectRoom?.say(fileBox).then(msg => {
                 if (msg) {
                     CacheHelper.getInstances().addUndoMessageCache(
                         ctx.message.message_id, msg.id)
+                }
+                if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                    ctx.reply('发送成功!', {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
                 }
             }).catch(() => ctx.reply('发送失败'))
             const text = ctx.message.caption
@@ -2239,15 +2344,19 @@ export class TelegramBotClient {
                         CacheHelper.getInstances().addUndoMessageCache(
                             ctx.message.message_id, msg.id)
                     }
-                }).catch(() => ctx.reply('发送失败'))
+                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                        ctx.reply('发送成功!', {
+                            reply_parameters: {
+                                message_id: ctx.message.message_id
+                            }
+                        })
+                    }
+                }).catch(() => ctx.reply('发送失败',{
+                    reply_parameters: {
+                        message_id: ctx.message.message_id
+                    }
+                }))
             }
-        }
-        if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-            ctx.reply('发送成功!', {
-                reply_parameters: {
-                    message_id: ctx.message.message_id
-                }
-            })
         }
     }
 }
