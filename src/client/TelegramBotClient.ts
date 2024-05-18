@@ -2275,13 +2275,6 @@ export class TelegramBotClient {
                         }
                     }
                 }
-                if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                    ctx.reply('发送成功!', {
-                        reply_parameters: {
-                            message_id: ctx.message.message_id
-                        }
-                    })
-                }
             }
             return
         }
