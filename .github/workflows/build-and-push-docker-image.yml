@@ -1,9 +1,10 @@
 name: Build and Push Docker Image
 
 on:
+  workflow_dispatch:
   push:
-    branches:
-      - 'refactor/ts-single-dev'
+    tags:
+      - v*
 
 jobs:
   build-and-push:
@@ -32,13 +33,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
+      - name: Generate App Version
+        run: echo APP_VERSION=`git describe --tags --always` >> $GITHUB_ENV
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: finalpi/wechat2tg-dev:latest
-          platforms: linux/amd64
+          tags: |
+            finalpi/wechat2tg:latest
+            finalpi/wechat2tg:${{ env.APP_VERSION }}
+          platforms: linux/amd64,linux/arm64/v8,linux/arm/v7
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,mode=max,dest=/tmp/.buildx-cache
