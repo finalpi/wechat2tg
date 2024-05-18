@@ -533,31 +533,11 @@ export class TelegramBotClient {
                     return ctx.reply('机器人不是该群组的管理员')
                 }
                 if (bindItem.type === 0) {
-                    let findItem: ContactItem | undefined = undefined
-                    const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
-                    if (individual) {
-                        for (const contactItem of individual) {
-                            if (contactItem.id === bindItem.bind_id) {
-                                findItem = contactItem
-                                break
-                            }
-                        }
-                    }
-                    const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
-                    if (!findItem) {
-                        if (official) {
-                            for (const contactItem of official) {
-                                if (contactItem.id === bindItem.bind_id) {
-                                    findItem = contactItem
-                                    break
-                                }
-                            }
-                        }
-                    }
-                    if (findItem) {
+                    const contact = this.getContactByBindItem(bindItem)
+                    if (contact) {
                         await ctx.telegram.setChatTitle(ctx.chat.id, `${bindItem.alias}[${bindItem.name}]`)
                         // 获取头像
-                        findItem.contact.avatar().then(fbox => {
+                        contact.avatar().then(fbox => {
                             fbox.toBuffer().then(async buff => {
                                 await ctx.telegram.setChatPhoto(ctx.chat.id, {
                                     source: buff
@@ -598,11 +578,6 @@ export class TelegramBotClient {
                 ctx.reply('该命令仅支持在群组中使用')
             }
         })
-
-        // bot.command('restart', (ctx) => {
-        //     this._weChatClient.logout()
-        //     ctx.reply('重启中...')
-        // })
 
         bot.command('login', async ctx => {
             if (!this.wechatStartFlag) {
