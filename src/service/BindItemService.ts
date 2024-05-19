@@ -1,26 +1,18 @@
 import {BindItem} from '../models/BindItem'
-import {Database} from 'sqlite3'
 import {RoomItem} from '../models/RoomItem'
 import {ContactItem} from '../models/ContactItem'
 import {ContactImpl} from 'wechaty/impls'
 import {Telegraf} from 'telegraf'
+import AbstractSqlService from './BaseSqlService'
 
-export class BindItemService {
-    private db: Database
+export class BindItemService extends AbstractSqlService{
     private tgBotClient: Telegraf
 
-    constructor(db: Database, tgBotClient: Telegraf) {
-        this.db = db
+    constructor(tgBotClient: Telegraf) {
+        super()
         this.tgBotClient = tgBotClient
         // 初始化表
-        this.db.serialize(() => {
-            this.db.get('SELECT name FROM sqlite_master WHERE type=\'table\' AND name=\'tb_bind_item\'', (err, row) => {
-                if (!row) {
-                    // 如果表不存在，则创建表
-                    this.db.run('CREATE TABLE tb_bind_item (name TEXT, chat_id INT, type INT, bind_id TEXT, alias TEXT,wechat_id TEXT)')
-                }
-            })
-        })
+        this.createManualBindTable()
     }
 
     public getAllBindItems(): Promise<BindItem[]> {
