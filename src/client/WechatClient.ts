@@ -297,6 +297,7 @@ export class WeChatClient {
         console.log('reset ... ')
         // })
         this._client.logout()
+        this.resetValue()
     }
 
     public async logout() {
