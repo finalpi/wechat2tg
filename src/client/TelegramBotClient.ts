@@ -32,10 +32,6 @@ export class TelegramBotClient {
         return this._bindItemService
     }
 
-    get db(): Database {
-        return this._db
-    }
-
     get tgClient(): TelegramClient | undefined {
         return this._tgClient
     }
@@ -65,7 +61,6 @@ export class TelegramBotClient {
     private wechatStartFlag = false
     private searchList: any[] = []
     private botStartTime = new Date()
-    private _db = new sqlite3.Database('storage/database.sqlite')
 
     private forwardSetting: VariableContainer = new VariableContainer()
 
@@ -81,7 +76,7 @@ export class TelegramBotClient {
     private constructor() {
         this._weChatClient = new WeChatClient(this)
         this._bot = new Telegraf(config.BOT_TOKEN)
-        this._bindItemService = new BindItemService(this.db, this._bot)
+        this._bindItemService = new BindItemService( this._bot)
         this._chatId = 0
         this._ownerId = 0
         this._chatId = 0
@@ -220,7 +215,7 @@ export class TelegramBotClient {
         bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
 
         bot.start(async ctx => {
-            ctx.reply(
+            await ctx.reply(
                 '请输入 /login 登陆,或者输入 /help 查看帮助\n' +
                 '请注意执行/login 后你就是该机器的所有者'
                 , Markup.removeKeyboard())
@@ -609,12 +604,13 @@ export class TelegramBotClient {
 
         bot.command('room', async ctx => {
             if (!this._weChatClient.client.isLoggedIn) {
-                ctx.reply(Constants.STRING_1)
+                await ctx.reply(Constants.STRING_1)
                 return
             }
 
             if (!this._weChatClient.cacheMemberDone) {
-                ctx.reply(Constants.STRING_3)
+                await ctx.reply(Constants.STRING_3)
+                return
             }
 
             // 获取消息文本
@@ -631,7 +627,7 @@ export class TelegramBotClient {
                 if (filterRoom && filterRoom.length > 0) {
                     const buttons: tg.InlineKeyboardButton[][] = []
                     this.searchList = []
-                    await filterRoom.forEach(async item => {
+                    filterRoom.forEach(item => {
                         const id = UniqueIdGenerator.getInstance().generateId('search')
                         this.searchList.push({
                             id: id,
@@ -716,7 +712,8 @@ export class TelegramBotClient {
             }
 
             if (!this._weChatClient.cacheMemberDone) {
-                ctx.reply(Constants.STRING_3)
+                await ctx.reply(Constants.STRING_3)
+                return
             }
 
             // 获取消息文本
@@ -1194,7 +1191,7 @@ export class TelegramBotClient {
                 if (bindItem) {
                     if (bindItem.type === 0) {
                         const contact = this.getContactByBindItem(bindItem)
-                        if (contact){
+                        if (contact) {
                             contact.say(text).then((msg) => {
                                 if (msg) {
                                     CacheHelper.getInstances().addUndoMessageCache(
@@ -1487,7 +1484,7 @@ export class TelegramBotClient {
 
     public getRoomByBindItem(bindItem: BindItem) {
         const room = this.weChatClient.roomList.find(value => value.id === bindItem.bind_id)
-        if (room){
+        if (room) {
             return room.room
         }
         return null
@@ -1906,7 +1903,7 @@ export class TelegramBotClient {
             const row = []
             for (let j = i; j < i + lineSize && j < slice.length; j++) {
                 const keyboard = {
-                    text: '🌐' + await slice[j].room?.topic(),
+                    text: `🌐${await slice[j].room?.topic()}`,
                     data: 'room-index-' + j
                 }
                 currentSelectRoomMap.set(keyboard.data, rooms[j])
@@ -1988,13 +1985,6 @@ export class TelegramBotClient {
         })
     }
 
-    private async demo(ctx: any, fileType: string) {
-        ///
-        const fileId = ctx.message[fileType].file_id
-        const fileSize = ctx.message[fileType].file_size
-        console.log(fileId, fileSize)
-    }
-
     private async handleFileMessage(ctx: any, fileType: string | 'audio' | 'video' | 'document' | 'photo' | 'voice') {
         if (!this._weChatClient.client.isLoggedIn) {
             ctx.reply(Constants.STRING_1)
@@ -2043,12 +2033,12 @@ export class TelegramBotClient {
             // @ts-ignore
             ctx.telegram.getFileLink(fileId).then(async fileLink => {
                 let fileBox
-                if (fileType === 'voice'){
+                if (fileType === 'voice') {
                     const nowShangHaiZh = new Date().toLocaleString('zh', {
                         timeZone: 'Asia/ShangHai'
                     }).toString().replaceAll('/', '-')
                     fileBox = FileBox.fromUrl(fileLink.toString(), {name: `语音-${nowShangHaiZh.toLocaleLowerCase()}.mp3`})
-                }else {
+                } else {
                     fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message[fileType].file_name)
                 }
                 await this.sendFile(ctx, fileBox)
@@ -2122,7 +2112,7 @@ export class TelegramBotClient {
             if (bindItem) {
                 if (bindItem.type === 0) {
                     const contact = this.getContactByBindItem(bindItem)
-                    if (contact){
+                    if (contact) {
                         contact.say(fileBox).then(msg => {
                             if (msg) {
                                 CacheHelper.getInstances().addUndoMessageCache(
@@ -2142,7 +2132,7 @@ export class TelegramBotClient {
                         }))
                         const text = ctx.message.caption
                         if (text) {
-                            contact.say(text).then(msg=>{
+                            contact.say(text).then(msg => {
                                 if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
                                     ctx.reply(Constants.SEND_SUCCESS, {
                                         reply_parameters: {
@@ -2175,7 +2165,7 @@ export class TelegramBotClient {
                         }).catch(() => ctx.reply(Constants.SEND_FAIL))
                         const text = ctx.message.caption
                         if (text) {
-                            room.say(text).then(msg=>{
+                            room.say(text).then(msg => {
                                 if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
                                     ctx.reply(Constants.SEND_SUCCESS, {
                                         reply_parameters: {

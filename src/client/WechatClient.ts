@@ -35,9 +35,6 @@ export class WeChatClient {
         this._client = WechatyBuilder.build({
             name: './storage/wechat_bot',
             puppet: 'wechaty-puppet-wechat4u',
-            puppetOptions: {
-                uos: true
-            }
         })
         this._tgClient = tgClient
         this._contactMap = new Map<number, Set<ContactItem>>([
@@ -70,13 +67,13 @@ export class WeChatClient {
     private _selectedContact: ContactInterface [] = []
     private _selectedRoom: RoomInterface [] = []
     private _memberCache: MemberCacheType[] = []
-    private scanMsgId: number | undefined = undefined
+    private scanMsgId: number | undefined
 
     private _started = false
     private _cacheMemberDone = false
     private _cacheMemberSendMessage = false
     private _friendShipList: FriendshipItem[] = []
-    private loadMsg: number | undefined = undefined
+    private loadMsg: number | undefined
 
     public get contactMap(): Map<number, Set<ContactItem>> | undefined {
         return this._contactMap
@@ -434,7 +431,7 @@ export class WeChatClient {
         // 添加用户至最近联系人
         let count = 0
         while (!talker.isReady() && count < 5) {
-            talker.sync().catch(() => console.log('sync error'))
+            talker.sync().catch(() => console.debug('sync error'))
             count++
         }
 
@@ -652,13 +649,13 @@ export class WeChatClient {
         const contactList = await this._client.Contact.findAll()
         // 不知道是什么很多空的 过滤掉没名字和不是朋友的
         const filter = contactList.filter(it => it.name() && it.friend())
-        await contactList.forEach(async item => {
+        for (const item of contactList) {
             let count = 0
             while (item.payload?.alias === item.name() && count < 5) {
                 await item.sync()
                 count++
             }
-        })
+        }
         filter.forEach(it => {
             const type = it.type()
             const id = UniqueIdGenerator.getInstance().generateId('contact')
@@ -681,13 +678,13 @@ export class WeChatClient {
         // 缓存到客户端的实例
         // 一起获取群放到缓存
         const room = await this._client.Room.findAll()
-        await room.forEach(async it => {
+        for (const it of room) {
             const l = await it.memberAll()
             if (l.length > 0) {
                 const id = UniqueIdGenerator.getInstance().generateId('room')
                 this._roomList.push({room: it, id: id})
             }
-        })
+        }
         this.tgClient.bindItemService.updateItem(this.roomList, this.contactMap)
     }
 

@@ -17,7 +17,7 @@ export class TelegramClient {
     private readonly apiId: number | undefined
     private readonly apiHash: string | undefined
     private _client: GramClient
-    private storeSession = new StoreSession('storage')
+    private storeSession = new StoreSession('storage/tg-session')
     private telegramBotClient: TelegramBotClient
 
     static getInstance(): TelegramClient {
