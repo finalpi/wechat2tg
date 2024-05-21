@@ -266,8 +266,8 @@ export class TelegramBotClient {
                     }),
                 phoneCode: async () =>
                     new Promise((resolve) => {
-                        ctx.reply('请输入验证码').then(res=>{
-                            this.waitInputCommand = 'phoneCode'
+                        ctx.reply('请输入验证码前三位').then(res=>{
+                            this.waitInputCommand = 'phoneCode1'
                             const intervalId = setInterval(()=>{
                                 if (this.phoneCode){
                                     const phoneCode = this.phoneCode
@@ -1146,6 +1146,9 @@ export class TelegramBotClient {
             ctx.answerCbQuery()
         })
         let addBlackOrWhite: any[] = []
+
+        // todo 登录测试用变量后面需要删掉
+        let phonecode1 = ''
         // 发送消息 回复等...
         bot.on(message('text'), async ctx => {
             const text = ctx.message.text // 获取消息内容
@@ -1164,9 +1167,17 @@ export class TelegramBotClient {
                 return
             }
 
-            if (this.waitInputCommand === 'phoneCode') {
+            if (this.waitInputCommand === 'phoneCode1') {
+                ctx.reply('请输入后两位验证码')
+                this.waitInputCommand = 'phoneCode2'
+                phonecode1 = text
+                ctx.deleteMessage()
+                return
+            }
+
+            if (this.waitInputCommand === 'phoneCode2') {
                 this.waitInputCommand = undefined
-                this.phoneCode = text
+                this.phoneCode = phonecode1 + text
                 ctx.deleteMessage()
                 return
             }
