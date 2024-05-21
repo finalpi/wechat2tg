@@ -48,7 +48,6 @@ export class TelegramBotClient {
 
     private _weChatClient: WeChatClient
     private _tgClient: TelegramClient | undefined
-    private _tgUserClient: TelegramClient | undefined
     private readonly _bot: Telegraf
     private _chatId: number | string
     private _ownerId: number
@@ -63,6 +62,10 @@ export class TelegramBotClient {
     private wechatStartFlag = false
     private searchList: any[] = []
     private botStartTime = new Date()
+    private waitInputCommand:string | undefined = undefined
+    private phoneNumber: string | undefined = undefined
+    private password: string | undefined = undefined
+    private phoneCode: string | undefined = undefined
 
     private forwardSetting: VariableContainer = new VariableContainer()
 
@@ -226,8 +229,60 @@ export class TelegramBotClient {
         bot.command('tg', async ctx => {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
-            ctx.session ??= {tgLoginStage: 'phoneNumber'}
-            await ctx.reply('请输入电话号码 如+86')
+            // 登陆tg user client
+            const authParams: UserAuthParams = {
+                onError(err: Error): Promise<boolean> | void {
+                    console.error(err)
+                },
+                phoneNumber: async () =>
+                    new Promise( (resolve) => {
+                        ctx.reply('请输入电话号码 如+86').then(res=>{
+                            this.waitInputCommand = 'phoneNumber'
+                            const intervalId = setInterval(()=>{
+                                if (this.phoneNumber){
+                                    const phoneNumber = this.phoneNumber
+                                    this.phoneNumber = undefined
+                                    clearInterval(intervalId)
+                                    this._bot.telegram.deleteMessage(this.chatId,res.message_id)
+                                    resolve(phoneNumber)
+                                }
+                            },1000)
+                        })
+                    }),
+                password: async () =>
+                    new Promise((resolve) => {
+                        ctx.reply('请输入密码').then(res=>{
+                            this.waitInputCommand = 'password'
+                            const intervalId = setInterval(()=>{
+                                if (this.password){
+                                    const password = this.password
+                                    this.password = undefined
+                                    clearInterval(intervalId)
+                                    this._bot.telegram.deleteMessage(this.chatId,res.message_id)
+                                    resolve(password)
+                                }
+                            },1000)
+                        })
+                    }),
+                phoneCode: async () =>
+                    new Promise((resolve) => {
+                        ctx.reply('请输入验证码').then(res=>{
+                            this.waitInputCommand = 'phoneCode'
+                            const intervalId = setInterval(()=>{
+                                if (this.phoneCode){
+                                    const phoneCode = this.phoneCode
+                                    this.phoneCode = undefined
+                                    clearInterval(intervalId)
+                                    this._bot.telegram.deleteMessage(this.chatId,res.message_id)
+                                    resolve(phoneCode)
+                                }
+                            },1000)
+                        })
+                    }),
+            }
+            TelegramClient.createInstance(authParams).then(res=>{
+                this._tgClient = res
+            })
         })
 
         bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
@@ -1095,60 +1150,25 @@ export class TelegramBotClient {
         bot.on(message('text'), async ctx => {
             const text = ctx.message.text // 获取消息内容
 
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            if (ctx.session.tgLoginStage === 'phoneNumber') {
-                ctx.reply('请输入密码').then(async () => {
-                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                    // @ts-ignore
-                    ctx.session.tgLoginStage = 'password'
-                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                    // @ts-ignore
-                    ctx.session.phoneNumber = text
-
-                    // 登陆tg user client
-                    const authParams: UserAuthParams = {
-                        onError(err: Error): Promise<boolean> | void {
-                            console.error(err)
-                        },
-                        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                        // @ts-ignore
-                        phoneNumber: text,
-                        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                        // @ts-ignore
-                        password: this.handlePasswordInput,
-                        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                        // @ts-ignore
-                        phoneCode: this.handlePhoneCodeInput
-                    }
-                    console.log('authParams', authParams)
-                    this._tgUserClient = await TelegramClient.createInstance(authParams)
-                })
-
+            if (this.waitInputCommand === 'phoneNumber') {
+                this.waitInputCommand = undefined
+                this.phoneNumber = text
+                ctx.deleteMessage()
+                return
             }
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            else if (ctx.session.tgLoginStage === 'password') {
-                ctx.reply('请输入验证码').then(async () => {
-                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                    // @ts-ignore
-                    ctx.session.password = text
-                    this.eventEmitter.emit('tg_password_input', ctx)
-                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                    // @ts-ignore
-                    ctx.session.tgLoginStage = 'phoneCode'
-                })
+
+            if (this.waitInputCommand === 'password') {
+                this.waitInputCommand = undefined
+                this.password = text
+                ctx.deleteMessage()
+                return
             }
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            else if (ctx.session.tgLoginStage === 'phoneCode') {
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                ctx.session.tgLoginStage = ''
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                ctx.session.phoneCode = text
-                this.eventEmitter.emit('tg_phone_code_input', ctx)
+
+            if (this.waitInputCommand === 'phoneCode') {
+                this.waitInputCommand = undefined
+                this.phoneCode = text
+                ctx.deleteMessage()
+                return
             }
 
             if (listAdd) {
