@@ -1,4 +1,4 @@
-import {Context, Markup, NarrowedContext, Telegraf} from 'telegraf'
+import {Context, Markup, NarrowedContext, session, Telegraf} from 'telegraf'
 import {WeChatClient} from './WechatClient'
 import {config} from '../config'
 import {BotHelpText, SimpleMessage, SimpleMessageSender} from '../models/Message'
@@ -19,12 +19,13 @@ import {ContactImpl, ContactInterface, MessageInterface, RoomInterface} from 'we
 import {CacheHelper} from '../utils/CacheHelper'
 import * as PUPPET from 'wechaty-puppet'
 import {TelegramClient} from './TelegramClient'
-import * as sqlite3 from 'sqlite3'
-import {Database} from 'sqlite3'
 import {BindItemService} from '../service/BindItemService'
 import {RoomItem} from '../models/RoomItem'
 import {ContactItem} from '../models/ContactItem'
 import {BindItem} from '../models/BindItem'
+import {Api} from 'telegram'
+import {UserAuthParams} from 'telegram/client/auth'
+import {EventEmitter} from 'node:events'
 
 export class TelegramBotClient {
     get bindItemService(): BindItemService {
@@ -46,6 +47,7 @@ export class TelegramBotClient {
 
     private _weChatClient: WeChatClient
     private _tgClient: TelegramClient | undefined
+    private _tgUserClient: TelegramClient | undefined
     private readonly _bot: Telegraf
     private _chatId: number | string
     private _ownerId: number
@@ -63,6 +65,8 @@ export class TelegramBotClient {
 
     private forwardSetting: VariableContainer = new VariableContainer()
 
+    private eventEmitter: EventEmitter
+
     // key this message id value weChat message id
     private _messageMap = new Map<number, string>()
     // 当前回复用户
@@ -75,7 +79,7 @@ export class TelegramBotClient {
     private constructor() {
         this._weChatClient = new WeChatClient(this)
         this._bot = new Telegraf(config.BOT_TOKEN)
-        this._bindItemService = new BindItemService( this._bot)
+        this._bindItemService = new BindItemService(this._bot)
         this._chatId = 0
         this._ownerId = 0
         this._chatId = 0
@@ -106,6 +110,9 @@ export class TelegramBotClient {
         // this._messageMap
         this.onWeChatLogout = this.onWeChatLogout.bind(this)
         this.onWeChatStop = this.onWeChatStop.bind(this)
+        this.eventEmitter = new EventEmitter()
+        this.eventEmitter.on('tg_password_input', this.handlePasswordInput)
+        this.eventEmitter.on('tg_phone_code_input', this.handlePhoneCodeInput)
     }
 
     public get messageMap(): Map<number, string> {
@@ -177,13 +184,15 @@ export class TelegramBotClient {
 
 
     public init() {
-        if (config.API_ID && config.API_HASH) {
-            // 启动tg client
-            if (!this._tgClient) {
-                this._tgClient = TelegramClient.getInstance()
-            }
-        }
+        // if (config.API_ID && config.API_HASH) {
+        //     // 启动tg client
+        //     if (!this._tgClient) {
+        //         this._tgClient = TelegramClient.getInstance()
+        //     }
+        // }
         const bot = this._bot
+
+        bot.use(session())
 
         // 加载转发配置
         this.loadForwardSettings()
@@ -209,11 +218,20 @@ export class TelegramBotClient {
             {command: 'cgdata', description: '设置群组的头像和名称(需要管理员权限)'},
             {command: 'reset', description: '清空缓存重新登陆'},
             {command: 'stop', description: '停止微信客户端,需要重新登陆'},
+            {command: 'tg', description: 'demo 测试 tg user login'},
             // {command: 'logout', description: '退出登陆'},
             // {command: 'stop', description: '停止微信客户端'},
             // {command: 'quit', description: '退出程序!! 会停止程序,需要手动重启(未实现)'},
         ]
         bot.telegram.setMyCommands(commands)
+
+
+        bot.command('tg', async ctx => {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            ctx.session ??= {tgLoginStage: 'phoneNumber'}
+            await ctx.reply('请输入电话号码 如+86')
+        })
 
         bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
 
@@ -1093,6 +1111,63 @@ export class TelegramBotClient {
         // 发送消息 回复等...
         bot.on(message('text'), async ctx => {
             const text = ctx.message.text // 获取消息内容
+
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            if (ctx.session.tgLoginStage === 'phoneNumber') {
+                ctx.reply('请输入密码').then(async () => {
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-ignore
+                    ctx.session.tgLoginStage = 'password'
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-ignore
+                    ctx.session.phoneNumber = text
+
+                    // 登陆tg user client
+                    const authParams: UserAuthParams = {
+                        onError(err: Error): Promise<boolean> | void {
+                            console.error(err)
+                        },
+                        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                        // @ts-ignore
+                        phoneNumber: text,
+                        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                        // @ts-ignore
+                        password: this.handlePasswordInput,
+                        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                        // @ts-ignore
+                        phoneCode: this.handlePhoneCodeInput
+                    }
+                    console.log('authParams', authParams)
+                    this._tgUserClient = await TelegramClient.createInstance(authParams)
+                })
+
+            }
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            else if (ctx.session.tgLoginStage === 'password') {
+                ctx.reply('请输入验证码').then(async () => {
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-ignore
+                    ctx.session.password = text
+                    this.eventEmitter.emit('tg_password_input', ctx)
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-ignore
+                    ctx.session.tgLoginStage = 'phoneCode'
+                })
+            }
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            else if (ctx.session.tgLoginStage === 'phoneCode') {
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                ctx.session.tgLoginStage = ''
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                ctx.session.phoneCode = text
+                this.eventEmitter.emit('tg_phone_code_input', ctx)
+            }
+
             if (listAdd) {
                 // 黑白名单添加
                 listAdd = false
@@ -2288,5 +2363,23 @@ export class TelegramBotClient {
                 }))
             }
         }
+    }
+
+    private async handlePasswordInput(ctx: any): Promise<string> {
+        return new Promise((resolve) => {
+            console.log('return password')
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            resolve(ctx.session.password as string)
+        })
+    }
+
+    private async handlePhoneCodeInput(ctx: any): Promise<string> {
+        return new Promise((resolve) => {
+            console.log('return phoneCode')
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            resolve(ctx.session.phoneCode as string)
+        })
     }
 }

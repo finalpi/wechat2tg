@@ -2,21 +2,18 @@ import {config} from '../config'
 import {StoreSession} from 'telegram/sessions'
 import {TelegramClient as GramClient} from 'telegram'
 import {TelegramBotClient} from './TelegramBotClient'
+import * as authMethods from 'telegram/client/auth'
 
 export class TelegramClient {
     get client() {
         return this._client
     }
 
-    set client(value) {
-        this._client = value
-    }
-
     private static instance: TelegramClient
 
     private readonly apiId: number | undefined
     private readonly apiHash: string | undefined
-    private _client: GramClient
+    private readonly _client: GramClient
     private storeSession = new StoreSession('storage/tg-session')
     private telegramBotClient: TelegramBotClient
 
@@ -25,6 +22,16 @@ export class TelegramClient {
             TelegramClient.instance = new TelegramClient(TelegramBotClient.getInstance())
         }
         return TelegramClient.instance
+    }
+
+    public static async createInstance(authParams: authMethods.UserAuthParams | authMethods.BotAuthParams) {
+        const bot = new TelegramClient(TelegramBotClient.getInstance())
+        await bot.client.start(authParams).then(() => {
+            console.log('login... user')
+        }).catch((e) => {
+            console.error('login... user error', e)
+        })
+        return bot
     }
 
     private constructor(telegramBotClient: TelegramBotClient) {
@@ -48,9 +55,6 @@ export class TelegramClient {
 
 
         this.telegramBotClient = telegramBotClient
-        this._client.start({
-            botAuthToken: config.BOT_TOKEN,
-        })
     }
 
     public async downloadFile(messageId: number, chatId: string | number) {
