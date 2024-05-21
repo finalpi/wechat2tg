@@ -62,10 +62,10 @@ export class TelegramBotClient {
     private wechatStartFlag = false
     private searchList: any[] = []
     private botStartTime = new Date()
-    private waitInputCommand:string | undefined = undefined
+    private waitInputCommand: string | undefined = undefined
     private phoneNumber: string | undefined = undefined
     private password: string | undefined = undefined
-    private phoneCode: string | undefined = undefined
+    private phoneCode: string | undefined = ''
 
     private forwardSetting: VariableContainer = new VariableContainer()
 
@@ -188,12 +188,12 @@ export class TelegramBotClient {
 
 
     public init() {
-        // if (config.API_ID && config.API_HASH) {
-        //     // 启动tg client
-        //     if (!this._tgClient) {
-        //         this._tgClient = TelegramClient.getInstance()
-        //     }
-        // }
+        if (config.API_ID && config.API_HASH) {
+            // 启动tg client
+            if (!this._tgClient) {
+                this._tgClient = TelegramClient.getInstance()
+            }
+        }
         const bot = this._bot
 
         bot.use(session())
@@ -227,60 +227,84 @@ export class TelegramBotClient {
 
 
         bot.command('tg', async ctx => {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
             // 登陆tg user client
             const authParams: UserAuthParams = {
                 onError(err: Error): Promise<boolean> | void {
                     console.error(err)
                 },
                 phoneNumber: async () =>
-                    new Promise( (resolve) => {
-                        ctx.reply('请输入电话号码 如+86').then(res=>{
+                    new Promise((resolve) => {
+                        ctx.reply('请输入你的手机号码（需要带国家区号，例如：+86）').then(res => {
                             this.waitInputCommand = 'phoneNumber'
-                            const intervalId = setInterval(()=>{
-                                if (this.phoneNumber){
+                            const intervalId = setInterval(() => {
+                                if (this.phoneNumber) {
                                     const phoneNumber = this.phoneNumber
                                     this.phoneNumber = undefined
                                     clearInterval(intervalId)
-                                    this._bot.telegram.deleteMessage(this.chatId,res.message_id)
+                                    this._bot.telegram.deleteMessage(this.chatId, res.message_id)
                                     resolve(phoneNumber)
                                 }
-                            },1000)
+                            }, 1000)
                         })
                     }),
-                password: async () =>
+                password: async (hint?: string) =>
                     new Promise((resolve) => {
-                        ctx.reply('请输入密码').then(res=>{
+                        ctx.reply(`请输入你的二步验证密码${hint ? '\n密码提示：' + hint : ''}`).then(res => {
                             this.waitInputCommand = 'password'
-                            const intervalId = setInterval(()=>{
-                                if (this.password){
+                            const intervalId = setInterval(() => {
+                                if (this.password) {
                                     const password = this.password
                                     this.password = undefined
                                     clearInterval(intervalId)
-                                    this._bot.telegram.deleteMessage(this.chatId,res.message_id)
+                                    this._bot.telegram.deleteMessage(this.chatId, res.message_id)
                                     resolve(password)
                                 }
-                            },1000)
+                            }, 1000)
                         })
                     }),
-                phoneCode: async () =>
+                phoneCode: async (isCodeViaApp?) =>
                     new Promise((resolve) => {
-                        ctx.reply('请输入验证码前三位').then(res=>{
-                            this.waitInputCommand = 'phoneCode1'
-                            const intervalId = setInterval(()=>{
-                                if (this.phoneCode){
+                        ctx.reply(`请输入你${isCodeViaApp ? ' Telegram APP 中' : '手机上'}收到的验证码\n`, {
+                            reply_markup: {
+                                inline_keyboard: [
+                                    [
+                                        {text: '1', callback_data: 'num-1'},
+                                        {text: '2', callback_data: 'num-2'},
+                                        {text: '3', callback_data: 'num-3'}
+                                    ],
+                                    [
+                                        {text: '4', callback_data: 'num-4'},
+                                        {text: '5', callback_data: 'num-5'},
+                                        {text: '6', callback_data: 'num-6'}
+                                    ],
+                                    [
+                                        {text: '7', callback_data: 'num-7'},
+                                        {text: '8', callback_data: 'num-8'},
+                                        {text: '9', callback_data: 'num-9'}
+                                    ],
+                                    [
+                                        {text: '0', callback_data: 'num-0'}
+                                    ]
+                                ]
+                            }
+                        }).then(res => {
+                            const intervalId = setInterval(() => {
+                                if (this.phoneCode && this.phoneCode.length === 5) {
                                     const phoneCode = this.phoneCode
-                                    this.phoneCode = undefined
+                                    this.phoneCode = ''
                                     clearInterval(intervalId)
-                                    this._bot.telegram.deleteMessage(this.chatId,res.message_id)
+                                    this._bot.telegram.deleteMessage(this.chatId, res.message_id)
                                     resolve(phoneCode)
                                 }
-                            },1000)
+                            }, 1000)
                         })
                     }),
             }
-            TelegramClient.createInstance(authParams).then(res=>{
+            TelegramClient.createInstance(authParams).then(res => {
+                // 已经存在
+                // if (this.tgClient) {
+                //
+                // }
                 this._tgClient = res
             })
         })
@@ -373,6 +397,12 @@ export class TelegramBotClient {
             ctx.reply('程序设置:', {
                 reply_markup: this.getSettingButton()
             })
+        })
+
+        // 数字键盘点击
+        bot.action(/num-(\d)/, ctx => {
+            this.phoneCode = this.phoneCode + ctx.match[1]
+            ctx.answerCbQuery(this.phoneCode)
         })
 
         // 好友请求处理
@@ -1146,9 +1176,6 @@ export class TelegramBotClient {
             ctx.answerCbQuery()
         })
         let addBlackOrWhite: any[] = []
-
-        // todo 登录测试用变量后面需要删掉
-        let phonecode1 = ''
         // 发送消息 回复等...
         bot.on(message('text'), async ctx => {
             const text = ctx.message.text // 获取消息内容
@@ -1156,32 +1183,15 @@ export class TelegramBotClient {
             if (this.waitInputCommand === 'phoneNumber') {
                 this.waitInputCommand = undefined
                 this.phoneNumber = text
-                ctx.deleteMessage()
                 return
             }
 
             if (this.waitInputCommand === 'password') {
                 this.waitInputCommand = undefined
                 this.password = text
-                ctx.deleteMessage()
+                await ctx.deleteMessage()
                 return
             }
-
-            if (this.waitInputCommand === 'phoneCode1') {
-                ctx.reply('请输入后两位验证码')
-                this.waitInputCommand = 'phoneCode2'
-                phonecode1 = text
-                ctx.deleteMessage()
-                return
-            }
-
-            if (this.waitInputCommand === 'phoneCode2') {
-                this.waitInputCommand = undefined
-                this.phoneCode = phonecode1 + text
-                ctx.deleteMessage()
-                return
-            }
-
             if (listAdd) {
                 // 黑白名单添加
                 listAdd = false
@@ -2202,7 +2212,7 @@ export class TelegramBotClient {
                                     }
                                 })
                             }
-                        }).catch(() => ctx.reply(Constants.SEND_FAIL,{
+                        }).catch(() => ctx.reply(Constants.SEND_FAIL, {
                             reply_parameters: {
                                 message_id: ctx.message.message_id
                             }
@@ -2231,7 +2241,7 @@ export class TelegramBotClient {
                                     }
                                 })
                             }
-                        }).catch(() => ctx.reply(Constants.SEND_FAIL,{
+                        }).catch(() => ctx.reply(Constants.SEND_FAIL, {
                             reply_parameters: {
                                 message_id: ctx.message.message_id
                             }
@@ -2246,7 +2256,7 @@ export class TelegramBotClient {
                                         }
                                     })
                                 }
-                            }).catch(() => ctx.reply(Constants.SEND_FAIL,{
+                            }).catch(() => ctx.reply(Constants.SEND_FAIL, {
                                 reply_parameters: {
                                     message_id: ctx.message.message_id
                                 }
@@ -2279,7 +2289,7 @@ export class TelegramBotClient {
                                         }
                                     })
                                 }
-                            }).catch(() => ctx.reply(Constants.SEND_FAIL,{
+                            }).catch(() => ctx.reply(Constants.SEND_FAIL, {
                                 reply_parameters: {
                                     message_id: ctx.message.message_id
                                 }
@@ -2303,7 +2313,7 @@ export class TelegramBotClient {
                         }
                     })
                 }
-            }).catch(() => ctx.reply(Constants.SEND_FAIL,{
+            }).catch(() => ctx.reply(Constants.SEND_FAIL, {
                 reply_parameters: {
                     message_id: ctx.message.message_id
                 }
@@ -2322,7 +2332,7 @@ export class TelegramBotClient {
                             }
                         })
                     }
-                }).catch(() => ctx.reply(Constants.SEND_FAIL,{
+                }).catch(() => ctx.reply(Constants.SEND_FAIL, {
                     reply_parameters: {
                         message_id: ctx.message.message_id
                     }
@@ -2356,7 +2366,7 @@ export class TelegramBotClient {
                             }
                         })
                     }
-                }).catch(() => ctx.reply(Constants.SEND_FAIL,{
+                }).catch(() => ctx.reply(Constants.SEND_FAIL, {
                     reply_parameters: {
                         message_id: ctx.message.message_id
                     }
