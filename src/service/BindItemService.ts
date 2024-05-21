@@ -4,11 +4,16 @@ import {ContactItem} from '../models/ContactItem'
 import {ContactImpl} from 'wechaty/impls'
 import {Telegraf} from 'telegraf'
 import AbstractSqlService from './BaseSqlService'
+import * as fs from 'fs'
 
 export class BindItemService extends AbstractSqlService{
     private tgBotClient: Telegraf
 
     constructor(tgBotClient: Telegraf) {
+        if (!fs.existsSync('storage/db')) {
+            // 创建目录
+            fs.mkdirSync('storage/db', { recursive: true })
+        }
         super()
         this.tgBotClient = tgBotClient
         // 初始化表
