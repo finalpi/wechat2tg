@@ -665,7 +665,7 @@ export class TelegramBotClient {
                         const id = UniqueIdGenerator.getInstance().generateId('search')
                         this.searchList.push({
                             id: id,
-                            contact: item,
+                            contact: item.room,
                             type: 1
                         })
                     })
