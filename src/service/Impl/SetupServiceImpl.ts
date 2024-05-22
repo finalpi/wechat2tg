@@ -1,6 +1,5 @@
 import {log} from 'wechaty'
 import {ISetupService} from '../SetupService'
-import {TelegramClient} from '../../client/TelegramClient'
 import {Api} from 'telegram'
 import {TelegramBotClient} from '../../client/TelegramBotClient'
 import bigInt from 'big-integer'
@@ -14,7 +13,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
     private readonly tgClient: TelegramUserClient = TelegramUserClient.getInstance()
     private readonly tgBotClient: TelegramBotClient = TelegramBotClient.getInstance()
 
-    private readonly DEFAULT_FILTER_ID: int = 114
+    private readonly DEFAULT_FILTER_ID: int = 514
 
     constructor() {
         super()
