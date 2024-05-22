@@ -242,82 +242,20 @@ export class TelegramBotClient {
         bot.telegram.setMyCommands(commands)
 
         bot.command('autocg', async ctx => {
-            // 登陆tg user client
-            const authParams: UserAuthParams = {
-                onError(err: Error): Promise<boolean> | void {
-                    console.error(err)
-                },
-                phoneNumber: async () =>
-                    new Promise((resolve) => {
-                        ctx.reply('请输入你的手机号码（需要带国家区号，例如：+86）').then(res => {
-                            this.waitInputCommand = 'phoneNumber'
-                            const intervalId = setInterval(() => {
-                                if (this.phoneNumber) {
-                                    const phoneNumber = this.phoneNumber
-                                    this.phoneNumber = undefined
-                                    clearInterval(intervalId)
-                                    this._bot.telegram.deleteMessage(this.chatId, res.message_id)
-                                    resolve(phoneNumber)
-                                }
-                            }, 1000)
-                        })
-                    }),
-                password: async (hint?: string) =>
-                    new Promise((resolve) => {
-                        ctx.reply(`请输入你的二步验证密码${hint ? '\n密码提示：' + hint : ''}`).then(res => {
-                            this.waitInputCommand = 'password'
-                            const intervalId = setInterval(() => {
-                                if (this.password) {
-                                    const password = this.password
-                                    this.password = undefined
-                                    clearInterval(intervalId)
-                                    this._bot.telegram.deleteMessage(this.chatId, res.message_id)
-                                    resolve(password)
-                                }
-                            }, 1000)
-                        })
-                    }),
-                phoneCode: async (isCodeViaApp?) =>
-                    new Promise((resolve) => {
-                        ctx.reply(`请输入你${isCodeViaApp ? ' Telegram APP 中' : '手机上'}收到的验证码:_ _ _ _ _\n`, {
-                            reply_markup: {
-                                inline_keyboard: [
-                                    [
-                                        {text: '1', callback_data: 'num-1'},
-                                        {text: '2', callback_data: 'num-2'},
-                                        {text: '3', callback_data: 'num-3'}
-                                    ],
-                                    [
-                                        {text: '4', callback_data: 'num-4'},
-                                        {text: '5', callback_data: 'num-5'},
-                                        {text: '6', callback_data: 'num-6'}
-                                    ],
-                                    [
-                                        {text: '7', callback_data: 'num-7'},
-                                        {text: '8', callback_data: 'num-8'},
-                                        {text: '9', callback_data: 'num-9'}
-                                    ],
-                                    [
-                                        {text: '0', callback_data: 'num-0'}
-                                    ]
-                                ]
-                            }
-                        }).then(res => {
-                            const intervalId = setInterval(() => {
-                                if (this.phoneCode && this.phoneCode.length === 5) {
-                                    const phoneCode = this.phoneCode
-                                    this.phoneCode = ''
-                                    clearInterval(intervalId)
-                                    this._bot.telegram.deleteMessage(this.chatId, res.message_id)
-                                    resolve(phoneCode)
-                                }
-                            }, 1000)
-                        })
-                    }),
+            if (!config.API_ID || !config.API_HASH) {
+                ctx.reply('请先配置API_ID和API_HASH')
+                return
             }
-            this._tgUserClient?.start(authParams)
-            // TODO: 测试自动创建文件夹
-            await new SetupServiceImpl().createFolder()
+            const b = this.forwardSetting.getVariable(VariableType.SETTING_AUTO_GROUP)
+            ctx.reply(`自动创建群组模式(${b ? '开启' : '关闭'}):`,{
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            {text: '点击切换', callback_data: VariableType.SETTING_AUTO_GROUP},
+                        ]
+                    ]
+                }
+            })
         })
 
         bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
@@ -462,6 +400,32 @@ export class TelegramBotClient {
                 ctx.deleteMessage().then(() => ctx.reply('添加成功!'))
             }
             ctx.answerCbQuery()
+        })
+
+        // 开启自动群组
+        bot.action(VariableType.SETTING_AUTO_GROUP, async ctx => {
+            const b = !this.forwardSetting.getVariable(VariableType.SETTING_AUTO_GROUP)
+            const answerText = b ? '开启' : '关闭'
+            this.forwardSetting.setVariable(VariableType.SETTING_AUTO_GROUP, b)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
+            // 点击后修改上面按钮
+            ctx.editMessageText(`自动创建群组模式(${b ? '开启' : '关闭'}):`,{
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            {text: '点击切换', callback_data: VariableType.SETTING_AUTO_GROUP},
+                        ]
+                    ]
+                }
+            })
+            if (b){
+                // 登陆tg user client
+                if (!this.tgUserClientLogin){
+                    await this.loginUserClient()
+                }
+            }
+            return ctx.answerCbQuery(answerText)
         })
 
         // 通知模式
@@ -1641,6 +1605,82 @@ export class TelegramBotClient {
             ctx.answerCbQuery()
         })
         this.botLaunch(bot)
+    }
+
+    public async loginUserClient() {
+        const authParams: UserAuthParams = {
+            onError(err: Error): Promise<boolean> | void {
+                console.error(err)
+            },
+            phoneNumber: async () =>
+                new Promise((resolve) => {
+                    this.bot.telegram.sendMessage(this.chatId,'请输入你的手机号码（需要带国家区号，例如：+8613355558888）').then(res => {
+                        this.waitInputCommand = 'phoneNumber'
+                        const intervalId = setInterval(() => {
+                            if (this.phoneNumber) {
+                                const phoneNumber = this.phoneNumber
+                                this.phoneNumber = undefined
+                                clearInterval(intervalId)
+                                this._bot.telegram.deleteMessage(this.chatId, res.message_id)
+                                resolve(phoneNumber)
+                            }
+                        }, 1000)
+                    })
+                }),
+            password: async (hint?: string) =>
+                new Promise((resolve) => {
+                    this.bot.telegram.sendMessage(this.chatId,`请输入你的二步验证密码${hint ? '\n密码提示：' + hint : ''}`).then(res => {
+                        this.waitInputCommand = 'password'
+                        const intervalId = setInterval(() => {
+                            if (this.password) {
+                                const password = this.password
+                                this.password = undefined
+                                clearInterval(intervalId)
+                                this._bot.telegram.deleteMessage(this.chatId, res.message_id)
+                                resolve(password)
+                            }
+                        }, 1000)
+                    })
+                }),
+            phoneCode: async (isCodeViaApp?) =>
+                new Promise((resolve) => {
+                    this.bot.telegram.sendMessage(this.chatId,`请输入你${isCodeViaApp ? ' Telegram APP 中' : '手机上'}收到的验证码:_ _ _ _ _\n`, {
+                        reply_markup: {
+                            inline_keyboard: [
+                                [
+                                    {text: '1', callback_data: 'num-1'},
+                                    {text: '2', callback_data: 'num-2'},
+                                    {text: '3', callback_data: 'num-3'}
+                                ],
+                                [
+                                    {text: '4', callback_data: 'num-4'},
+                                    {text: '5', callback_data: 'num-5'},
+                                    {text: '6', callback_data: 'num-6'}
+                                ],
+                                [
+                                    {text: '7', callback_data: 'num-7'},
+                                    {text: '8', callback_data: 'num-8'},
+                                    {text: '9', callback_data: 'num-9'}
+                                ],
+                                [
+                                    {text: '0', callback_data: 'num-0'}
+                                ]
+                            ]
+                        }
+                    }).then(res => {
+                        const intervalId = setInterval(() => {
+                            if (this.phoneCode && this.phoneCode.length === 5) {
+                                const phoneCode = this.phoneCode
+                                this.phoneCode = ''
+                                clearInterval(intervalId)
+                                this._bot.telegram.deleteMessage(this.chatId, res.message_id)
+                                resolve(phoneCode)
+                            }
+                        }, 1000)
+                    })
+                }),
+        }
+        this._tgUserClient?.start(authParams)
     }
 
     public getRoomByBindItem(bindItem: BindItem) {

@@ -8,6 +8,7 @@ import {TelegramClient as GramClient} from 'telegram/client/TelegramClient'
 import {BigInteger} from 'big-integer'
 import {CreateGroupInterface} from '../models/CreateGroupInterface'
 import {CustomFile} from 'telegram/client/uploads'
+import {SetupServiceImpl} from "../service/Impl/SetupServiceImpl";
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -48,7 +49,13 @@ export class TelegramUserClient extends TelegramClient {
         if (this._client?.disconnected) {
             await this._client?.start(authParams).then(() => {
                 this.telegramBotClient.tgUserClientLogin = true
-                this.telegramBotClient.bot.telegram.sendMessage(this.telegramBotClient.chatId, '登录成功!')
+                // TODO: 测试自动创建文件夹
+                new SetupServiceImpl().createFolder()
+                this.telegramBotClient.bot.telegram.sendMessage(this.telegramBotClient.chatId, 'TG登录成功!').then(msg=>{
+                    setTimeout(()=>{
+                        this.telegramBotClient.bot.telegram.deleteMessage(this.telegramBotClient.chatId,msg.message_id)
+                    },10000)
+                })
             }).catch((e) => {
                 this.telegramBotClient.tgUserClientLogin = false
                 console.error('login... user error', e)

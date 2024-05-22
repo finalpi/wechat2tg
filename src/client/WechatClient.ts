@@ -268,6 +268,11 @@ export class WeChatClient {
                     setTimeout(() => {
                         if (this.loadMsg) {
                             this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId, this.loadMsg)
+                            const b = this.tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)
+                            if (b && !this.tgClient.tgUserClientLogin){
+                                // 启动bot
+                                this.tgClient.loginUserClient()
+                            }
                         }
                     }, 10 * 1000)
                 })
@@ -305,7 +310,10 @@ export class WeChatClient {
 
     private login() {
         if (this._client.isLoggedIn) {
-            this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登录成功!').then(() => {
+            this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '微信登录成功!').then(msg => {
+                setTimeout(()=>{
+                    this.tgClient.bot.telegram.deleteMessage(this.tgClient.chatId,msg.message_id)
+                },10000)
                 // this._client.Contact.findAll()
                 // this._client.Room.findAll()
                 // this._client.Room.find({id: ''})
