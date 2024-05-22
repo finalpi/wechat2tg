@@ -377,10 +377,56 @@ export class WeChatClient {
         let bindItem = undefined
         if (roomEntity) {
             bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(roomEntity.id)
+            if (!bindItem && this._tgClient.tgUserClientLogin){
+                // 找到bindId
+                let bindId
+                for (const roomItem of this._roomList) {
+                    if (roomItem.room.id === roomEntity.id){
+                        bindId = roomItem.id
+                        break
+                    }
+                }
+                await this._tgClient.tgUserClient?.createGroup({
+                    type: 1,
+                    room: roomEntity,
+                    bindId: bindId
+                })
+                bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(roomEntity.id)
+            }
         } else {
             bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
+            if (!bindItem && this._tgClient.tgUserClientLogin){
+                // 找到bindId
+                let bindId
+                if (talker?.type() === PUPPET.types.Contact.Official){
+                    const official = this.contactMap?.get(ContactImpl.Type.Official)
+                    if (official){
+                        for (const contactItem of official) {
+                            if (contactItem.contact.id === talker.id){
+                                bindId = contactItem.id
+                                break
+                            }
+                        }
+                    }
+                }else {
+                    const individual = this.contactMap?.get(ContactImpl.Type.Individual)
+                    if (individual){
+                        for (const contactItem of individual) {
+                            if (contactItem.contact.id === talker.id){
+                                bindId = contactItem.id
+                                break
+                            }
+                        }
+                    }
+                }
+                await this._tgClient.tgUserClient?.createGroup({
+                    type: 0,
+                    contact: talker,
+                    bindId: bindId
+                })
+                bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
+            }
         }
-
         // todo: 优化
         // const mediaCaption=
         let identityStr = roomEntity ? `🌐${roomTopic} --- 👤${showSender} : ` : `👤${showSender} : `

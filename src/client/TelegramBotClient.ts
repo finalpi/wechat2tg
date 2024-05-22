@@ -30,6 +30,9 @@ import {Constants} from '../constants/Constants'
 import {TelegramUserClient} from './TelegramUserClient'
 
 export class TelegramBotClient {
+    get tgUserClient(): TelegramUserClient | undefined {
+        return this._tgUserClient;
+    }
     get tgUserClientLogin(): boolean {
         return this._tgUserClientLogin
     }
@@ -57,7 +60,7 @@ export class TelegramBotClient {
     private _weChatClient: WeChatClient
     private _tgClient: TelegramClient | undefined
     private _tgUserClient: TelegramUserClient | undefined
-    private _tgUserClientLogin:boolean = false
+    private _tgUserClientLogin = false
     private readonly _bot: Telegraf
     private _chatId: number | string
     private _ownerId: number
@@ -236,10 +239,6 @@ export class TelegramBotClient {
         ]
         bot.telegram.setMyCommands(commands)
 
-        bot.command('tes1',ctx=>{
-            this._tgUserClient?.createGroup()
-        })
-
         bot.command('tg', async ctx => {
             // 登陆tg user client
             const authParams: UserAuthParams = {
@@ -328,7 +327,6 @@ export class TelegramBotClient {
 
         bot.on(message('group_chat_created'), ctx => {
             if (this._tgUserClientLogin){
-                this._tgUserClient?.setAdmin(ctx.chat.id)
                 return
             }
             ctx.reply(Constants.STRING_2)

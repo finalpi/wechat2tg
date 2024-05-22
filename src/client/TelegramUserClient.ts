@@ -5,8 +5,9 @@ import {StoreSession} from 'telegram/sessions'
 import {Api} from 'telegram'
 import {config} from '../config'
 import {TelegramClient as GramClient} from 'telegram/client/TelegramClient'
-import long = Api.long
-import bigInt from 'big-integer'
+import bigInt, {BigInteger} from 'big-integer'
+import {MessageInterface} from 'wechaty/dist/esm/src/mods/impls'
+import {CreateGroupInterface} from '../models/CreateGroupInterface'
 
 
 export class TelegramUserClient extends TelegramClient{
@@ -54,24 +55,49 @@ export class TelegramUserClient extends TelegramClient{
         return this._client
     }
 
-    public createGroup(){
+    public async createGroup(createGroupInterface: CreateGroupInterface){
         if (this.telegramBotClient.bot.botInfo?.id){
-            this.client?.invoke(
+            let name
+            if (createGroupInterface.type === 0){
+                if (createGroupInterface.contact?.payload){
+                    name = `${createGroupInterface.contact?.payload.alias}[${createGroupInterface.contact?.payload.name}]`
+                }
+            }else {
+                if (createGroupInterface.room?.payload){
+                    name = createGroupInterface.room.payload.topic
+                }
+            }
+            const result = await this.client?.invoke(
                 new Api.messages.CreateChat({
                     users: [this.telegramBotClient.chatId,this.telegramBotClient.bot.botInfo?.id],
-                    title: 'tes1',
+                    title: name,
                     ttlPeriod: 0
                 })
             )
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            const id = result?.updates.chats[0].id
+            // 设置管理员
+            this.setAdmin(id)
+            // TODO 设置头像
+            // 添加绑定
+            if (createGroupInterface.type === 0){
+                this.telegramBotClient.bindItemService.bindGroup(createGroupInterface.contact?.payload?.name ? createGroupInterface.contact?.payload.name : '',this.idConvert(id),createGroupInterface.type,createGroupInterface.bindId ? createGroupInterface.bindId : '',createGroupInterface.contact?.payload?.alias ? createGroupInterface.contact?.payload?.alias : '',createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '')
+            }
         }
     }
 
-    public setAdmin(chatId:number){
+    private idConvert(chatId:BigInteger){
+        // id转换,将telegramapi的chatid转为telegrambot的id
+        return 0 - Number(chatId)
+    }
+
+    public setAdmin(chatId:BigInteger){
         // 设置管理员
         if (this.telegramBotClient.bot.botInfo?.id){
             this.client?.invoke(
                 new Api.messages.EditChatAdmin({
-                    chatId: bigInt(chatId),
+                    chatId: chatId,
                     userId: this.telegramBotClient.bot.botInfo?.id,
                     isAdmin: true
                 })
