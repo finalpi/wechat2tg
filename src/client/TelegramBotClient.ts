@@ -23,12 +23,20 @@ import {BindItemService} from '../service/BindItemService'
 import {RoomItem} from '../models/RoomItem'
 import {ContactItem} from '../models/ContactItem'
 import {BindItem} from '../models/BindItem'
-import {Api} from 'telegram'
-import {UserAuthParams} from 'telegram/client/auth'
+import {Api, password} from 'telegram'
+import {start, UserAuthParams} from 'telegram/client/auth'
 import {EventEmitter} from 'node:events'
 import {Constants} from '../constants/Constants'
+import {TelegramUserClient} from './TelegramUserClient'
 
 export class TelegramBotClient {
+    get tgUserClientLogin(): boolean {
+        return this._tgUserClientLogin
+    }
+
+    set tgUserClientLogin(value: boolean) {
+        this._tgUserClientLogin = value
+    }
     get bindItemService(): BindItemService {
         return this._bindItemService
     }
@@ -48,6 +56,8 @@ export class TelegramBotClient {
 
     private _weChatClient: WeChatClient
     private _tgClient: TelegramClient | undefined
+    private _tgUserClient: TelegramUserClient | undefined
+    private _tgUserClientLogin:boolean = false
     private readonly _bot: Telegraf
     private _chatId: number | string
     private _ownerId: number
@@ -192,6 +202,7 @@ export class TelegramBotClient {
             // 启动tg client
             if (!this._tgClient) {
                 this._tgClient = TelegramClient.getInstance()
+                this._tgUserClient = TelegramUserClient.getInstance()
             }
         }
         const bot = this._bot
@@ -225,6 +236,9 @@ export class TelegramBotClient {
         ]
         bot.telegram.setMyCommands(commands)
 
+        bot.command('tes1',ctx=>{
+            this._tgUserClient?.createGroup()
+        })
 
         bot.command('tg', async ctx => {
             // 登陆tg user client
@@ -264,7 +278,7 @@ export class TelegramBotClient {
                     }),
                 phoneCode: async (isCodeViaApp?) =>
                     new Promise((resolve) => {
-                        ctx.reply(`请输入你${isCodeViaApp ? ' Telegram APP 中' : '手机上'}收到的验证码\n`, {
+                        ctx.reply(`请输入你${isCodeViaApp ? ' Telegram APP 中' : '手机上'}收到的验证码:_ _ _ _ _\n`, {
                             reply_markup: {
                                 inline_keyboard: [
                                     [
@@ -300,13 +314,7 @@ export class TelegramBotClient {
                         })
                     }),
             }
-            TelegramClient.createInstance(authParams).then(res => {
-                // 已经存在
-                // if (this.tgClient) {
-                //
-                // }
-                this._tgClient = res
-            })
+            this._tgUserClient?.start(authParams)
         })
 
         bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
@@ -319,6 +327,10 @@ export class TelegramBotClient {
         })
 
         bot.on(message('group_chat_created'), ctx => {
+            if (this._tgUserClientLogin){
+                this._tgUserClient?.setAdmin(ctx.chat.id)
+                return
+            }
             ctx.reply(Constants.STRING_2)
         })
 
@@ -402,7 +414,37 @@ export class TelegramBotClient {
         // 数字键盘点击
         bot.action(/num-(\d)/, ctx => {
             this.phoneCode = this.phoneCode + ctx.match[1]
-            ctx.answerCbQuery(this.phoneCode)
+            let inputCode = this.phoneCode
+            if (this.phoneCode.length < 5){
+                for (let i = 0;i < 5 - this.phoneCode.length;i++){
+                    inputCode = inputCode + '_ '
+                }
+            }
+            ctx.editMessageText(`请输入你收到的验证码:${inputCode}`, {
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            {text: '1', callback_data: 'num-1'},
+                            {text: '2', callback_data: 'num-2'},
+                            {text: '3', callback_data: 'num-3'}
+                        ],
+                        [
+                            {text: '4', callback_data: 'num-4'},
+                            {text: '5', callback_data: 'num-5'},
+                            {text: '6', callback_data: 'num-6'}
+                        ],
+                        [
+                            {text: '7', callback_data: 'num-7'},
+                            {text: '8', callback_data: 'num-8'},
+                            {text: '9', callback_data: 'num-9'}
+                        ],
+                        [
+                            {text: '0', callback_data: 'num-0'}
+                        ]
+                    ]
+                }
+            })
+            ctx.answerCbQuery()
         })
 
         // 好友请求处理
@@ -1183,6 +1225,7 @@ export class TelegramBotClient {
             if (this.waitInputCommand === 'phoneNumber') {
                 this.waitInputCommand = undefined
                 this.phoneNumber = text
+                await ctx.deleteMessage()
                 return
             }
 

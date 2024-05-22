@@ -741,7 +741,7 @@ export class WeChatClient {
                 // 配置了 tg api 尝试发送大文件
                 if (this.tgClient.tgClient && buff.length > 1024 * 1024 * 50) {
                     if (buff.length > -1) {
-                        this.tgClient.tgClient.client.sendFile(this.tgClient.chatId, {
+                        this.tgClient.tgClient.client?.sendFile(this.tgClient.chatId, {
                             workers: 3,
                             file: new CustomFile(fileName, buff.length, '', buff),
                             forceDocument: !this.tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION),
