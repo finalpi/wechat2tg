@@ -63,7 +63,7 @@ export class TelegramUserClient extends TelegramClient{
                     name = `${createGroupInterface.contact?.payload.alias}[${createGroupInterface.contact?.payload.name}]`
                 }
             }else {
-                name = await createGroupInterface.room?.topic
+                name = await createGroupInterface.room?.topic()
             }
             const result = await this.client?.invoke(
                 new Api.messages.CreateChat({
@@ -82,7 +82,7 @@ export class TelegramUserClient extends TelegramClient{
             if (createGroupInterface.type === 0){
                 this.telegramBotClient.bindItemService.bindGroup(createGroupInterface.contact?.payload?.name ? createGroupInterface.contact?.payload.name : '',this.idConvert(id),createGroupInterface.type,createGroupInterface.bindId ? createGroupInterface.bindId : '',createGroupInterface.contact?.payload?.alias ? createGroupInterface.contact?.payload?.alias : '',createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '')
             }else {
-                const topic = await createGroupInterface.room?.topic
+                const topic = await createGroupInterface.room?.topic()
                 this.telegramBotClient.bindItemService.bindGroup(topic ? topic : '',this.idConvert(id),createGroupInterface.type,createGroupInterface.bindId ? createGroupInterface.bindId : '','',createGroupInterface.room?.id ? createGroupInterface.room?.id : '')
             }
         }
