@@ -386,12 +386,11 @@ export class WeChatClient {
                         break
                     }
                 }
-                await this._tgClient.tgUserClient?.createGroup({
+                bindItem = await this._tgClient.tgUserClient?.createGroup({
                     type: 1,
                     room: roomEntity,
                     bindId: bindId
                 })
-                bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(roomEntity.id)
             }
         } else {
             bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
@@ -419,12 +418,11 @@ export class WeChatClient {
                         }
                     }
                 }
-                await this._tgClient.tgUserClient?.createGroup({
+                bindItem = await this._tgClient.tgUserClient?.createGroup({
                     type: 0,
                     contact: talker,
                     bindId: bindId
                 })
-                bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
             }
         }
         // todo: 优化
@@ -602,7 +600,7 @@ export class WeChatClient {
                                 bindItem ? bindItem.chat_id : this.tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {
                                 this._tgClient.saveMessage(msg.message_id, message.id)
                             }).catch(e=>{
-                                if (e.response.error_code === 403){
+                                if (e.response.error_code === 403 && bindItem){
                                     this.tgClient.bindItemService.removeBindItemByChatId(bindItem.chat_id)
                                     this._tgClient.bot.telegram.sendPhoto(
                                         this.tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {

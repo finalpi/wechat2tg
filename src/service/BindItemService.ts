@@ -185,6 +185,7 @@ export class BindItemService extends AbstractSqlService {
             stmt1.run(name, chatId, type, bindId, alias, wechatId)
             stmt1.finalize()
         })
+
         this.tgBotClient.telegram.sendMessage(chatId, `绑定成功:${name}`).then(ctx => {
             setTimeout(() => {
                 this.tgBotClient.telegram.deleteMessage(chatId, ctx.message_id)
@@ -195,6 +196,18 @@ export class BindItemService extends AbstractSqlService {
             }
         })
 
+        // 创建对象
+        const bindItem: BindItem = {
+            name: name,
+            chat_id: chatId,
+            type: type,
+            bind_id: bindId,
+            alias: alias,
+            wechat_id: wechatId
+        }
+
+        // 返回对象
+        return bindItem
     }
 
     public bindGroupBetterArgs(concat: ContactInterface | RoomInterface, chatId: number, bindId: string) {

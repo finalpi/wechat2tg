@@ -60,6 +60,7 @@ export class TelegramUserClient extends TelegramClient {
     }
 
     public async createGroup(createGroupInterface: CreateGroupInterface) {
+        let bindItem
         if (this.telegramBotClient.bot.botInfo?.id) {
             let name
             let avatar
@@ -109,7 +110,7 @@ export class TelegramUserClient extends TelegramClient {
 
             // 添加绑定
             if (createGroupInterface.type === 0) {
-                this.telegramBotClient.bindItemService.bindGroup(
+                bindItem = this.telegramBotClient.bindItemService.bindGroup(
                     createGroupInterface.contact?.payload?.name ? createGroupInterface.contact?.payload.name : '',
                     this.idConvert(id), createGroupInterface.type,
                     createGroupInterface.bindId ? createGroupInterface.bindId : '',
@@ -119,7 +120,7 @@ export class TelegramUserClient extends TelegramClient {
                 const topic = await createGroupInterface.room?.topic()
                 this.telegramBotClient.bindItemService.bindGroup(topic ? topic : '', this.idConvert(id), createGroupInterface.type, createGroupInterface.bindId ? createGroupInterface.bindId : '', '', createGroupInterface.room?.id ? createGroupInterface.room?.id : '')
                 if (createGroupInterface.type === 0) {
-                    this.telegramBotClient.bindItemService.bindGroup(
+                    bindItem = this.telegramBotClient.bindItemService.bindGroup(
                         createGroupInterface.contact?.payload?.name ?
                             createGroupInterface.contact?.payload.name : '',
                         this.idConvert(id),
@@ -130,6 +131,7 @@ export class TelegramUserClient extends TelegramClient {
                 }
             }
         }
+        return bindItem
     }
 
     private idConvert(chatId: BigInteger) {
