@@ -45,13 +45,17 @@ export class TelegramUserClient extends TelegramClient {
     }
 
     public async start(authParams: authMethods.UserAuthParams | authMethods.BotAuthParams) {
-        await this._client?.start(authParams).then(() => {
-            this.telegramBotClient.tgUserClientLogin = true
-            this.telegramBotClient.bot.telegram.sendMessage(this.telegramBotClient.chatId, '登录成功!')
-        }).catch((e) => {
-            this.telegramBotClient.tgUserClientLogin = false
-            console.error('login... user error', e)
-        })
+        if (this._client?.disconnected) {
+            await this._client?.start(authParams).then(() => {
+                this.telegramBotClient.tgUserClientLogin = true
+                this.telegramBotClient.bot.telegram.sendMessage(this.telegramBotClient.chatId, '登录成功!')
+            }).catch((e) => {
+                this.telegramBotClient.tgUserClientLogin = false
+                console.error('login... user error', e)
+            })
+        } else {
+            this._client?.connect()
+        }
         return this._client
     }
 

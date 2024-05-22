@@ -34,8 +34,8 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
             const dialogFilter = new Api.DialogFilter({
                 id: this.DEFAULT_FILTER_ID,
                 title: 'WX',
-                pinnedPeers: [new Api.InputPeerChat({chatId: bigInt(this.tgBotClient.chatId.toString())})],
-                includePeers: [new Api.InputPeerChat({chatId: bigInt(this.tgBotClient.chatId.toString())})],
+                pinnedPeers: [new Api.InputPeerChat({chatId: bigInt(this.tgBotClient.bot.botInfo?.id?.toString() || '0')})],
+                includePeers: [new Api.InputPeerChat({chatId: bigInt(this.tgBotClient.bot.botInfo?.id?.toString() || '0')})],
                 excludePeers: [],
                 emoticon: '💬',
             })
