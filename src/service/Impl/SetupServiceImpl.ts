@@ -14,7 +14,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
     private readonly tgClient: TelegramUserClient = TelegramUserClient.getInstance()
     private readonly tgBotClient: TelegramBotClient = TelegramBotClient.getInstance()
 
-    private readonly DEFAULT_FILTER_ID: int = 215
+    private readonly DEFAULT_FILTER_ID: int = 114
 
     constructor() {
         super()
@@ -34,8 +34,8 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
             const dialogFilter = new Api.DialogFilter({
                 id: this.DEFAULT_FILTER_ID,
                 title: 'WX',
-                pinnedPeers: [new Api.InputPeerChat({chatId: bigInt(this.tgBotClient.bot.botInfo?.id?.toString() || '0')})],
-                includePeers: [new Api.InputPeerChat({chatId: bigInt(this.tgBotClient.bot.botInfo?.id?.toString() || '0')})],
+                pinnedPeers: [new Api.InputPeerChat({chatId: bigInt(this.tgBotClient.chatId.toString())})],
+                includePeers: [new Api.InputPeerChat({chatId: bigInt(this.tgBotClient.chatId.toString())})],
                 excludePeers: [],
                 emoticon: '💬',
             })
