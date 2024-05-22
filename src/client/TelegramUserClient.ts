@@ -71,6 +71,7 @@ export class TelegramUserClient extends TelegramClient {
                     avatar = createGroupInterface.room?.avatar()
                 }
             }
+            console.debug('createGroup id  ', this.telegramBotClient.chatId, this.telegramBotClient.bot.botInfo?.id)
             const result = await this.client?.invoke(
                 new Api.messages.CreateChat({
                     users: [this.telegramBotClient.chatId, this.telegramBotClient.bot.botInfo?.id],

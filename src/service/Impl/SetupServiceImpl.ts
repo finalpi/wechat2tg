@@ -8,9 +8,10 @@ import int = Api.int
 import AbstractSqlService from '../BaseSqlService'
 import {ContactInterface, RoomInterface} from 'wechaty/dist/esm/src/mods/impls'
 import DynamicService from '../DynamicService'
+import {TelegramUserClient} from '../../client/TelegramUserClient'
 
 export class SetupServiceImpl extends AbstractSqlService implements ISetupService {
-    private readonly tgClient: TelegramClient = TelegramClient.getInstance()
+    private readonly tgClient: TelegramUserClient = TelegramUserClient.getInstance()
     private readonly tgBotClient: TelegramBotClient = TelegramBotClient.getInstance()
 
     private readonly DEFAULT_FILTER_ID: int = 215
@@ -19,11 +20,12 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
         super()
         // 初始化表
         this.createAutoBindTable()
+        this.tgClient.client?.connect()
     }
 
 
     async createFolder(): Promise<void> {
-        const result = await this.tgClient.client.invoke(new Api.messages.GetDialogFilters())
+        const result = await this.tgClient.client?.invoke(new Api.messages.GetDialogFilters())
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         const filter = result.filters.find(it => it.id && it.id === this.DEFAULT_FILTER_ID)
@@ -37,7 +39,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
                 excludePeers: [],
                 emoticon: '💬',
             })
-            this.tgClient.client.invoke(new Api.messages.UpdateDialogFilter({
+            this.tgClient.client?.invoke(new Api.messages.UpdateDialogFilter({
                 id: this.DEFAULT_FILTER_ID,
                 filter: dialogFilter,
             })).catch(e => {
