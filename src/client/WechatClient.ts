@@ -395,7 +395,7 @@ export class WeChatClient {
             }
         } else {
             bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
-            if (!bindItem && this._tgClient.tgUserClientLogin){
+            if (!bindItem && this._tgClient.tgUserClientLogin && !message.self()){
                 // 找到bindId
                 let bindId
                 if (talker?.type() === PUPPET.types.Contact.Official){
