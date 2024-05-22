@@ -23,16 +23,16 @@ import {BindItemService} from '../service/BindItemService'
 import {RoomItem} from '../models/RoomItem'
 import {ContactItem} from '../models/ContactItem'
 import {BindItem} from '../models/BindItem'
-import {Api, password} from 'telegram'
-import {start, UserAuthParams} from 'telegram/client/auth'
+import {UserAuthParams} from 'telegram/client/auth'
 import {EventEmitter} from 'node:events'
 import {Constants} from '../constants/Constants'
 import {TelegramUserClient} from './TelegramUserClient'
 
 export class TelegramBotClient {
     get tgUserClient(): TelegramUserClient | undefined {
-        return this._tgUserClient;
+        return this._tgUserClient
     }
+
     get tgUserClientLogin(): boolean {
         return this._tgUserClientLogin
     }
@@ -40,6 +40,7 @@ export class TelegramBotClient {
     set tgUserClientLogin(value: boolean) {
         this._tgUserClientLogin = value
     }
+
     get bindItemService(): BindItemService {
         return this._bindItemService
     }
@@ -231,15 +232,15 @@ export class TelegramBotClient {
             {command: 'unbind', description: '解绑群组'},
             {command: 'cgdata', description: '设置群组的头像和名称(需要管理员权限)'},
             {command: 'reset', description: '清空缓存重新登陆'},
-            {command: 'stop', description: '停止微信客户端,需要重新登陆'},
-            {command: 'tg', description: 'demo 测试 tg user login'},
+            {command: 'stop', description: '停止微信客户端, 需要重新登陆'},
+            {command: 'autocg', description: '自动创建群组模式, 需要配置Api并且登陆Telegram User Client'},
             // {command: 'logout', description: '退出登陆'},
             // {command: 'stop', description: '停止微信客户端'},
             // {command: 'quit', description: '退出程序!! 会停止程序,需要手动重启(未实现)'},
         ]
         bot.telegram.setMyCommands(commands)
 
-        bot.command('tg', async ctx => {
+        bot.command('autocg', async ctx => {
             // 登陆tg user client
             const authParams: UserAuthParams = {
                 onError(err: Error): Promise<boolean> | void {
@@ -326,7 +327,7 @@ export class TelegramBotClient {
         })
 
         bot.on(message('group_chat_created'), ctx => {
-            if (this._tgUserClientLogin){
+            if (this._tgUserClientLogin) {
                 return
             }
             ctx.reply(Constants.STRING_2)
@@ -413,8 +414,8 @@ export class TelegramBotClient {
         bot.action(/num-(\d)/, ctx => {
             this.phoneCode = this.phoneCode + ctx.match[1]
             let inputCode = this.phoneCode
-            if (this.phoneCode.length < 5){
-                for (let i = 0;i < 5 - this.phoneCode.length;i++){
+            if (this.phoneCode.length < 5) {
+                for (let i = 0; i < 5 - this.phoneCode.length; i++) {
                     inputCode = inputCode + '_ '
                 }
             }

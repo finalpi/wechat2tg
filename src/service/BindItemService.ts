@@ -5,14 +5,16 @@ import {ContactImpl} from 'wechaty/impls'
 import {Telegraf} from 'telegraf'
 import AbstractSqlService from './BaseSqlService'
 import * as fs from 'fs'
+import {ContactInterface, RoomInterface} from 'wechaty/dist/esm/src/mods/impls'
+import DynamicService from './DynamicService'
 
-export class BindItemService extends AbstractSqlService{
+export class BindItemService extends AbstractSqlService {
     private tgBotClient: Telegraf
 
     constructor(tgBotClient: Telegraf) {
         if (!fs.existsSync('storage/db')) {
             // 创建目录
-            fs.mkdirSync('storage/db', { recursive: true })
+            fs.mkdirSync('storage/db', {recursive: true})
         }
         super()
         this.tgBotClient = tgBotClient
@@ -173,6 +175,45 @@ export class BindItemService extends AbstractSqlService{
     }
 
     public bindGroup(name: string, chatId: number, type: number, bindId: string, alias: string, wechatId: string) {
+        // 群组绑定
+        this.db.serialize(() => {
+            const stmt = this.db.prepare('DELETE FROM tb_bind_item WHERE wechat_id = ? OR chat_id = ?')
+            stmt.run(wechatId, chatId)
+            stmt.finalize()
+
+            const stmt1 = this.db.prepare('INSERT INTO tb_bind_item VALUES (?, ?, ?, ?, ?, ?)')
+            stmt1.run(name, chatId, type, bindId, alias, wechatId)
+            stmt1.finalize()
+        })
+        this.tgBotClient.telegram.sendMessage(chatId, `绑定成功:${name}`).then(ctx => {
+            setTimeout(() => {
+                this.tgBotClient.telegram.deleteMessage(chatId, ctx.message_id)
+            }, 10 * 1000)
+        }).catch(e => {
+            if (e.response.error_code === 403) {
+                this.removeBindItemByChatId(chatId)
+            }
+        })
+
+    }
+
+    public bindGroupBetterArgs(concat: ContactInterface | RoomInterface, chatId: number, bindId: string) {
+        let name = ''
+        let type: number
+        let alias: string
+        let wechatId: string
+        if (DynamicService.isContact(concat)) {
+            name = concat.payload?.name ? concat.payload.name : ''
+            type = 0
+            alias = concat.payload?.alias ? concat.payload.alias : ''
+            wechatId = concat.id
+        }
+        if (DynamicService.isRoom(concat)) {
+            name = concat.payload?.topic ? concat.payload.topic : ''
+            type = 1
+            alias = ''
+            wechatId = concat.id
+        }
         // 群组绑定
         this.db.serialize(() => {
             const stmt = this.db.prepare('DELETE FROM tb_bind_item WHERE wechat_id = ? OR chat_id = ?')
