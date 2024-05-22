@@ -8,9 +8,11 @@ import AbstractSqlService from '../BaseSqlService'
 import {ContactInterface, RoomInterface} from 'wechaty/dist/esm/src/mods/impls'
 import DynamicService from '../DynamicService'
 import {TelegramUserClient} from '../../client/TelegramUserClient'
+import {TelegramClient} from '../../client/TelegramClient'
 
 export class SetupServiceImpl extends AbstractSqlService implements ISetupService {
-    private readonly tgClient: TelegramUserClient = TelegramUserClient.getInstance()
+    private readonly userClient: TelegramUserClient = TelegramUserClient.getInstance()
+    private readonly tgClient: TelegramClient = TelegramClient.getInstance()
     private readonly tgBotClient: TelegramBotClient = TelegramBotClient.getInstance()
 
     private readonly DEFAULT_FILTER_ID: int = 514
@@ -19,26 +21,29 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
         super()
         // 初始化表
         this.createAutoBindTable()
-        this.tgClient.client?.connect()
+        this.userClient.client?.connect()
     }
 
 
     async createFolder(): Promise<void> {
-        const result = await this.tgClient.client?.invoke(new Api.messages.GetDialogFilters())
+        const result = await this.userClient.client?.invoke(new Api.messages.GetDialogFilters())
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         const filter = result.filters.find(it => it.id && it.id === this.DEFAULT_FILTER_ID)
         if (!filter) {
             log.info('创建 TG 文件夹')
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            const me: Api.InputPeerUser = await this.tgClient?.client?.getMe()
             const dialogFilter = new Api.DialogFilter({
                 id: this.DEFAULT_FILTER_ID,
                 title: 'WX',
-                pinnedPeers: [new Api.InputPeerChat({chatId: bigInt(this.tgBotClient.chatId.toString())})],
-                includePeers: [new Api.InputPeerChat({chatId: bigInt(this.tgBotClient.chatId.toString())})],
+                pinnedPeers: [me],
+                includePeers: [],
                 excludePeers: [],
                 emoticon: '💬',
             })
-            this.tgClient.client?.invoke(new Api.messages.UpdateDialogFilter({
+            this.userClient.client?.invoke(new Api.messages.UpdateDialogFilter({
                 id: this.DEFAULT_FILTER_ID,
                 filter: dialogFilter,
             })).catch(e => {
@@ -56,7 +61,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
     setupGroup(contact: ContactInterface | RoomInterface): Promise<void> {
         const contactHash = DynamicService.hash(contact)
         // 创建群组
-        // this.tgClient.client.invoke(new Api.)
+        // this.userClient.client.invoke(new Api.)
 
     }
 }
