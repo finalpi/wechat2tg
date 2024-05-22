@@ -27,6 +27,7 @@ import {UserAuthParams} from 'telegram/client/auth'
 import {EventEmitter} from 'node:events'
 import {Constants} from '../constants/Constants'
 import {TelegramUserClient} from './TelegramUserClient'
+import {SetupServiceImpl} from '../service/Impl/SetupServiceImpl'
 
 export class TelegramBotClient {
     get tgUserClient(): TelegramUserClient | undefined {
@@ -315,6 +316,8 @@ export class TelegramBotClient {
                     }),
             }
             this._tgUserClient?.start(authParams)
+            // TODO: 测试自动创建文件夹
+            await new SetupServiceImpl().createFolder()
         })
 
         bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
