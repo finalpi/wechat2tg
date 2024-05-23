@@ -64,6 +64,10 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
                     id: id,
                     filter: dialogFilter,
                 })).catch(e => {
+                    if (e.errorMessage.includes('DIALOG_FILTERS_TOO_MUCH')){
+                        // 已经到达文件夹创建的上限,不再创建新的文件夹
+                        return
+                    }
                     log.error('创建 TG 文件夹失败', e)
                     this.tgBotClient.sendMessage({
                         chatId: this.tgBotClient.chatId,
