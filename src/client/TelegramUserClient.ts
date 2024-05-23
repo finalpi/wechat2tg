@@ -105,6 +105,8 @@ export class TelegramUserClient extends TelegramClient {
             const id = result?.updates.chats[0].id
             // 设置管理员
             this.setAdmin(id)
+            const setupServiceImpl = new SetupServiceImpl()
+            await setupServiceImpl.addToFolder(TelegramUserClient.idConvert(id))
             avatar?.then((fBox) => {
                 fBox.toBuffer().then(async (buff) => {
                     const toUpload = new CustomFile(fBox.name, buff.length, '', buff)
