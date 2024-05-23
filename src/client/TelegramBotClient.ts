@@ -589,9 +589,9 @@ export class TelegramBotClient {
             const buttons = []
             const pageList = page.getList(pageNum)
             for (let i = 0; i < pageList.length; i += 2) {
-                const buttonRow = [Markup.button.callback(`🌐${pageList[i].name}`, `whiteListRemove-${pageList[i].id}`)]
+                const buttonRow = [Markup.button.callback(`🌐${pageList[i].name}`, `blackListRemove-${pageList[i].id}`)]
                 if (i + 1 < pageList.length) {
-                    buttonRow.push(Markup.button.callback(`🌐${pageList[i + 1].name}`, `whiteListRemove-${pageList[i + 1].id}`))
+                    buttonRow.push(Markup.button.callback(`🌐${pageList[i + 1].name}`, `blackListRemove-${pageList[i + 1].id}`))
                 }
                 buttons.push(buttonRow)
             }
