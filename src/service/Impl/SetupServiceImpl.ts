@@ -7,16 +7,14 @@ import {ContactInterface, RoomInterface} from 'wechaty/dist/esm/src/mods/impls'
 import DynamicService from '../DynamicService'
 import {TelegramUserClient} from '../../client/TelegramUserClient'
 import {TelegramClient} from '../../client/TelegramClient'
-import DialogFilter = Api.DialogFilter
-import int = Api.int
 
 export class SetupServiceImpl extends AbstractSqlService implements ISetupService {
     private readonly userClient: TelegramUserClient = TelegramUserClient.getInstance()
     private readonly tgClient: TelegramClient = TelegramClient.getInstance()
     private readonly tgBotClient: TelegramBotClient = TelegramBotClient.getInstance()
-    private readonly folderName = 'wechat'
+    private readonly folderName = 'WeChat'
 
-    private readonly DEFAULT_FILTER_ID = 5100689
+    private readonly DEFAULT_FILTER_ID = 115
 
     constructor() {
         super()

@@ -560,9 +560,8 @@ export class TelegramBotClient {
                 return item.id !== id + ''
             }))
             this.forwardSetting.writeToFile()
-            ctx.deleteMessage().then(() => {
-                ctx.answerCbQuery('移除成功')
-            })
+            ctx.answerCbQuery('移除成功')
+
         })
 
         // 黑名单设置
@@ -609,9 +608,8 @@ export class TelegramBotClient {
                 return item.id !== id + ''
             }))
             this.forwardSetting.writeToFile()
-            ctx.deleteMessage().then(() => {
-                ctx.answerCbQuery('移除成功')
-            })
+            ctx.answerCbQuery('移除成功')
+
         })
 
         let listAdd = false
