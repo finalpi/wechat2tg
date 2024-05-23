@@ -203,17 +203,6 @@ export class TelegramBotClient {
 
 
     public init() {
-        if (config.API_ID && config.API_HASH) {
-            // 启动tg client
-            if (!this._tgClient) {
-                this._tgClient = TelegramClient.getInstance()
-                this._tgUserClient = TelegramUserClient.getInstance()
-            }
-        } else {
-            this.forwardSetting.setVariable(VariableType.SETTING_AUTO_GROUP, false)
-            // 修改后持成文件
-            this.forwardSetting.writeToFile()
-        }
         const bot = this._bot
 
         bot.use(session())
@@ -238,11 +227,23 @@ export class TelegramBotClient {
             {command: 'cgdata', description: '设置群组的头像和名称(需要管理员权限)'},
             {command: 'reset', description: '清空缓存重新登陆'},
             {command: 'stop', description: '停止微信客户端, 需要重新登陆'},
-            {command: 'autocg', description: '自动创建群组模式, 需要配置Api并且登陆Telegram User Client'},
             // {command: 'logout', description: '退出登陆'},
             // {command: 'stop', description: '停止微信客户端'},
             // {command: 'quit', description: '退出程序!! 会停止程序,需要手动重启(未实现)'},
         ]
+        if (config.API_ID && config.API_HASH) {
+            // 启动tg client
+            if (!this._tgClient) {
+                this._tgClient = TelegramClient.getInstance()
+                this._tgUserClient = TelegramUserClient.getInstance()
+            }
+            // 设置command
+            commands.push({command: 'autocg', description: '自动创建群组模式, 需要配置Api并且登陆Telegram User Client'})
+        } else {
+            this.forwardSetting.setVariable(VariableType.SETTING_AUTO_GROUP, false)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
+        }
         bot.telegram.setMyCommands(commands)
 
         bot.command('autocg', async ctx => {
