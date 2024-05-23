@@ -269,7 +269,7 @@ export class WeChatClient {
                         if (this.loadMsg) {
                             this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId, this.loadMsg)
                             const b = this.tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)
-                            if (b && !this.tgClient.tgUserClientLogin){
+                            if (b && !this.tgClient.tgUserClientLogin) {
                                 // 启动bot
                                 this.tgClient.loginUserClient()
                             }
@@ -311,9 +311,9 @@ export class WeChatClient {
     private login() {
         if (this._client.isLoggedIn) {
             this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '微信登录成功!').then(msg => {
-                setTimeout(()=>{
-                    this.tgClient.bot.telegram.deleteMessage(this.tgClient.chatId,msg.message_id)
-                },10000)
+                setTimeout(() => {
+                    this.tgClient.bot.telegram.deleteMessage(this.tgClient.chatId, msg.message_id)
+                }, 10000)
                 // this._client.Contact.findAll()
                 // this._client.Room.findAll()
                 // this._client.Room.find({id: ''})
@@ -397,11 +397,11 @@ export class WeChatClient {
                 }
             }
             bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(roomEntity.id)
-            if (!bindItem && this._tgClient.tgUserClientLogin){
+            if (!bindItem && this._tgClient.tgUserClientLogin) {
                 // 找到bindId
                 let bindId
                 for (const roomItem of this._roomList) {
-                    if (roomItem.room.id === roomEntity.id){
+                    if (roomItem.room.id === roomEntity.id) {
                         bindId = roomItem.id
                         break
                     }
@@ -414,37 +414,37 @@ export class WeChatClient {
             }
         } else {
             bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
-            if (!bindItem && this._tgClient.tgUserClientLogin && !message.self()){
+            if (!bindItem && this._tgClient.tgUserClientLogin && !message.self()) {
                 // 找到bindId
                 let bindId
-                if (talker?.type() === PUPPET.types.Contact.Official){
+                if (talker?.type() === PUPPET.types.Contact.Official) {
                     const official = this.contactMap?.get(ContactImpl.Type.Official)
-                    if (official){
+                    if (official) {
                         for (const contactItem of official) {
-                            if (contactItem.contact.id === talker.id){
+                            if (contactItem.contact.id === talker.id) {
                                 bindId = contactItem.id
                                 break
                             }
                         }
                     }
-                }else {
+                } else {
                     const individual = this.contactMap?.get(ContactImpl.Type.Individual)
-                    if (individual){
+                    if (individual) {
                         for (const contactItem of individual) {
-                            if (contactItem.contact.id === talker.id){
+                            if (contactItem.contact.id === talker.id) {
                                 bindId = contactItem.id
                                 break
                             }
                         }
                     }
                 }
-                if (talker?.type() === PUPPET.types.Contact.Official && !this._tgClient.setting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT)){
+                if (talker?.type() === PUPPET.types.Contact.Official && !this._tgClient.setting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT)) {
                     bindItem = await this._tgClient.tgUserClient?.createGroup({
                         type: 0,
                         contact: talker,
                         bindId: bindId
                     })
-                }else if (talker?.type() !== PUPPET.types.Contact.Official) {
+                } else if (talker?.type() !== PUPPET.types.Contact.Official) {
                     bindItem = await this._tgClient.tgUserClient?.createGroup({
                         type: 0,
                         contact: talker,
@@ -542,6 +542,10 @@ export class WeChatClient {
                 }
             }
         }
+        //
+        if (bindItem) {
+            await this._tgClient.bot.telegram.getChat(bindItem.chat_id)
+        }
 
         const sendMessageWhenNoAvatar = (name?: string) => {
             this._tgClient.sendMessage({
@@ -610,8 +614,8 @@ export class WeChatClient {
                             this._tgClient.bot.telegram.sendPhoto(
                                 bindItem ? bindItem.chat_id : this.tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {
                                 this._tgClient.saveMessage(msg.message_id, message.id)
-                            }).catch(e=>{
-                                if (e.response.error_code === 403 && bindItem){
+                            }).catch(e => {
+                                if (e.response.error_code === 403 && bindItem) {
                                     this.tgClient.bindItemService.removeBindItemByChatId(bindItem.chat_id)
                                     this._tgClient.bot.telegram.sendPhoto(
                                         this.tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {
@@ -832,10 +836,10 @@ export class WeChatClient {
                                 }).then((msg: { message_id: number }) => {
                                 this._tgClient.saveMessage(msg.message_id, message.id)
                             }).catch((e: TelegramError) => {
-                                if (e.response.error_code === 403){
+                                if (e.response.error_code === 403) {
                                     this.tgClient.bindItemService.removeBindItemByChatId(tgMessage.chatId)
                                     tgMessage.chatId = this.tgClient.chatId
-                                    this.sendFileToTg(message,identityStr,tgMessage)
+                                    this.sendFileToTg(message, identityStr, tgMessage)
                                     return
                                 }
                                 console.error('send file error:', e)
@@ -853,10 +857,10 @@ export class WeChatClient {
                         }).then(msg => {
                         this._tgClient.saveMessage(msg.message_id, message.id)
                     }).catch(e => {
-                        if (e.response.error_code === 403){
+                        if (e.response.error_code === 403) {
                             this.tgClient.bindItemService.removeBindItemByChatId(tgMessage.chatId)
                             tgMessage.chatId = this.tgClient.chatId
-                            this.sendFileToTg(message,identityStr,tgMessage)
+                            this.sendFileToTg(message, identityStr, tgMessage)
                             return
                         }
                         console.error('sendDocument error:', e)

@@ -1435,8 +1435,21 @@ export class TelegramBotClient {
                 if (!fs.existsSync('save-files')) {
                     fs.mkdirSync('save-files')
                 }
-                const saveFile = `save-files/${uniqueId}` // 不用后缀
-                const gifFile = `save-files/${uniqueId}.gif`
+                const href = fileLink.href
+                const fileName = `${uniqueId}-${href.substring(href.lastIndexOf('/') + 1, href.length)}`
+                const saveFile = `save-files/${fileName}`
+                const gifFile = `save-files/${fileName.slice(0, fileName.lastIndexOf('.'))}.gif`
+
+                let lottie_config = {
+                    width: 1000,
+                    height: 1000
+                }
+                if (saveFile.endsWith('.tgs')) {
+                    lottie_config = {
+                        width: ctx.message.sticker.width,
+                        height: ctx.message.sticker.height
+                    }
+                }
 
                 // 保存后不删除下次发送使用
 
@@ -1559,17 +1572,17 @@ export class TelegramBotClient {
                             }
                         }
                     } else { // 文件不存在转换
-                        this.sendGif(saveFile, gifFile, ctx)
+                        await this.sendGif(saveFile, gifFile, ctx, lottie_config)
                     }
                 } else {
                     // 尝试使用代理下载tg文件
                     if (config.HOST !== '') {
                         FileUtils.downloadWithProxy(fileLink.toString(), saveFile).then(() => {
-                            this.sendGif(saveFile, gifFile, ctx)
+                            this.sendGif(saveFile, gifFile, ctx, lottie_config)
                         }).catch(() => ctx.reply('发送失败, 原始文件保存失败'))
                     } else {
                         FileBox.fromUrl(fileLink.toString()).toFile(saveFile).then(() => {
-                            this.sendGif(saveFile, gifFile, ctx)
+                            this.sendGif(saveFile, gifFile, ctx, lottie_config)
                         }).catch(() => ctx.reply('发送失败, 原始文件保存失败'))
                     }
                 }
@@ -1755,8 +1768,17 @@ export class TelegramBotClient {
         }
     }
 
-    private async sendGif(saveFile: string, gifFile: string, ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
-        new ConverterHelper().webmToGif(saveFile, gifFile).then(async () => {
+    private async sendGif(saveFile: string, gifFile: string, ctx: NarrowedContext<Context<tg.Update>, tg.Update>,
+                          lottie_config?: {
+                              width: number,
+                              height: number
+                          }) {
+        try {
+            if (saveFile.endsWith('.tgs')) {
+                await new ConverterHelper().tgsToGif(saveFile, gifFile, lottie_config)
+            } else {
+                await new ConverterHelper().webmToGif(saveFile, gifFile)
+            }
             const fileBox = FileBox.fromFile(gifFile)
             // 如果是群组消息的情况
             if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
@@ -1817,13 +1839,17 @@ export class TelegramBotClient {
                 this.selectRoom?.say(fileBox).catch(() => ctx.reply(Constants.SEND_FAIL))
             }
             if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                ctx.reply(Constants.SEND_SUCCESS, {
+                await ctx.reply(Constants.SEND_SUCCESS, {
                     reply_parameters: {
                         message_id: ctx.message?.message_id ? ctx.message?.message_id : 0
                     }
                 })
             }
-        }).catch(() => ctx.reply(Constants.SEND_FAIL))
+        } catch (e) {
+            console.error(e)
+            await ctx.reply(Constants.SEND_FAIL)
+        }
+
     }
 
     public onMessage() {
