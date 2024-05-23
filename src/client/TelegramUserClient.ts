@@ -52,10 +52,15 @@ export class TelegramUserClient extends TelegramClient {
 
     public async start(authParams: authMethods.UserAuthParams | authMethods.BotAuthParams) {
         if (this._client?.disconnected) {
-            await this._client?.start(authParams).then(() => {
+            await this._client?.start(authParams).then(async () => {
                 this.telegramBotClient.tgUserClientLogin = true
                 // TODO: 测试自动创建文件夹
-                new SetupServiceImpl().createFolder()
+                const setupServiceImpl = new SetupServiceImpl()
+                await setupServiceImpl.createFolder()
+                const bindItems = await TelegramBotClient.getInstance().bindItemService.getAllBindItems()
+                for (const bindItem of bindItems) {
+                    await setupServiceImpl.addToFolder(bindItem.chat_id)
+                }
                 this.telegramBotClient.bot.telegram.sendMessage(this.telegramBotClient.chatId, 'TG登录成功!').then(msg => {
                     setTimeout(() => {
                         this.telegramBotClient.bot.telegram.deleteMessage(this.telegramBotClient.chatId, msg.message_id)
@@ -124,14 +129,14 @@ export class TelegramUserClient extends TelegramClient {
             if (createGroupInterface.type === 0) {
                 bindItem = this.telegramBotClient.bindItemService.bindGroup(
                     createGroupInterface.contact?.payload?.name ? createGroupInterface.contact?.payload.name : '',
-                    this.idConvert(id), createGroupInterface.type,
+                    TelegramUserClient.idConvert(id), createGroupInterface.type,
                     createGroupInterface.bindId ? createGroupInterface.bindId : '',
                     createGroupInterface.contact?.payload?.alias ? createGroupInterface.contact?.payload?.alias : '',
                     createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '',
                     createGroupInterface.contact?.payload?.avatar ? createGroupInterface.contact?.payload?.avatar : '')
             } else {
                 const topic = await createGroupInterface.room?.topic()
-                bindItem = this.telegramBotClient.bindItemService.bindGroup(topic ? topic : '', this.idConvert(id),
+                bindItem = this.telegramBotClient.bindItemService.bindGroup(topic ? topic : '', TelegramUserClient.idConvert(id),
                     createGroupInterface.type,
                     createGroupInterface.bindId ? createGroupInterface.bindId : '',
                     '',
@@ -142,7 +147,7 @@ export class TelegramUserClient extends TelegramClient {
         return bindItem
     }
 
-    private idConvert(chatId: BigInteger) {
+    public static idConvert(chatId: BigInteger) {
         // id转换,将telegram api的chat id转为telegram bot的id
         return 0 - Number(chatId)
     }

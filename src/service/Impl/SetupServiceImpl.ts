@@ -14,6 +14,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
     private readonly userClient: TelegramUserClient = TelegramUserClient.getInstance()
     private readonly tgClient: TelegramClient = TelegramClient.getInstance()
     private readonly tgBotClient: TelegramBotClient = TelegramBotClient.getInstance()
+    private readonly folderName = 'wechat'
 
     private readonly DEFAULT_FILTER_ID = 5100689
 
@@ -26,17 +27,13 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
 
 
     async createFolder(): Promise<void> {
-        const folderName = 'wechat'
         const result = await this.userClient.client?.invoke(new Api.messages.GetDialogFilters())
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        const filter = result.filters.find(it => it.className === 'DialogFilter' && it.id === this.DEFAULT_FILTER_ID)
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         const values = result.filters.map(it => {return it.className === 'DialogFilter' ? it.id : 0})
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
-        const value = result?.filters.find(it => it.title === folderName)
+        const value = result?.filters.find(it => it.title === this.folderName)
         let id
         if (value){
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -46,7 +43,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
             id = Math.max(...values) + 1 || this.DEFAULT_FILTER_ID
         }
         console.log('filter id', id)
-        if (!filter) {
+        if (!value) {
             log.info('创建 TG 文件夹')
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
@@ -55,9 +52,9 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
             if (botEntity){
                 const dialogFilter = new Api.DialogFilter({
                     id: id,
-                    title: folderName,
+                    title: this.folderName,
                     pinnedPeers: [botEntity],
-                    includePeers: [botEntity],
+                    includePeers: [],
                     excludePeers: [],
                 })
                 await this.userClient.client?.invoke(new Api.messages.UpdateDialogFilter({
@@ -78,6 +75,36 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
         }
     }
 
+    async addToFolder(chatId: number): Promise<void> {
+        const result = await this.userClient.client?.invoke(new Api.messages.GetDialogFilters())
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        const dialogFilter: Api.TypeDialogFilter = result?.filters.find(it => it.title === this.folderName)
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        const id = dialogFilter.id
+        const entity = await this.userClient.client?.getInputEntity(chatId)
+        if (entity && dialogFilter){
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            const exist = dialogFilter.includePeers.find(it=>it.chatId === entity.chatId)
+            if (!exist){
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                dialogFilter.includePeers.push(entity)
+                await this.userClient.client?.invoke(new Api.messages.UpdateDialogFilter({
+                    id: id,
+                    filter: dialogFilter,
+                })).catch(e => {
+                    this.tgBotClient.sendMessage({
+                        chatId: this.tgBotClient.chatId,
+                        body: '添加群组进文件夹失败',
+                    })
+                })
+            }
+        }
+    }
+
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore TODO: WIP
     setupGroup(contact: ContactInterface | RoomInterface): Promise<void> {
@@ -85,5 +112,9 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
         // 创建群组
         // this.userClient.client.invoke(new Api.)
 
+    }
+
+    private idConvert(chatId: number){
+        return 0 - chatId
     }
 }
