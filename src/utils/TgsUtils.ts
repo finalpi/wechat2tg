@@ -3,6 +3,7 @@ import * as fs from 'node:fs'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import converter from 'lottie-converter'
+import os from 'node:os'
 
 export default class TgsUtils {
     // 需要系统安装 7z
@@ -16,7 +17,10 @@ export default class TgsUtils {
             const output = outputFile.substring(0, outputFile.lastIndexOf('/'))
             const resultStream = extractFull(inputFile,
                 output,
-                {$bin: TgsUtils.PATH_TO_7ZIP})
+                {
+                    cpuAffinity: os.cpus().length.toString(),
+                    $bin: TgsUtils.PATH_TO_7ZIP
+                })
 
             resultStream.on('end', async () => {
                 try {
