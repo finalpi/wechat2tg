@@ -166,7 +166,8 @@ export class BindItemService extends AbstractSqlService {
         const administrators = await this.tgBotClient.telegram.getChatAdministrators(bindItem.chat_id)
 
         // 检查机器人是否在管理员列表中
-        const botId = this.tgBotClient.botInfo?.id
+        const me = await this.tgBotClient.telegram.getMe()
+        const botId = me.id
         const isAdmin = administrators.some(admin => admin.user.id === botId)
         if (isAdmin) {
             if (newBindItem.name !== bindItem.name || newBindItem.alias !== bindItem.alias) {
@@ -217,13 +218,14 @@ export class BindItemService extends AbstractSqlService {
 
     public bindGroup(name: string, chatId: number, type: number, bindId: string, alias: string, wechatId: string, avatar: string) {
         // 群组绑定
+        avatar = this.getseq(avatar)
         this.db.serialize(() => {
             this.db.get('SELECT * FROM tb_bind_item WHERE chat_id= ?', [chatId], (err, row: BindItem) => {
                 if (err) {
                     console.log(err)
                 }
                 if(row){
-                    this.updateGroupData(row,{
+                   this.updateGroupData(row,{
                         name: name,
                         chat_id: chatId,
                         type: type,
@@ -266,6 +268,14 @@ export class BindItemService extends AbstractSqlService {
 
         // 返回对象
         return bindItem
+    }
+
+    private getseq(avatar: string) {
+        const match = avatar.match(/seq=([^&]+)/)
+        if (match) {
+            avatar = match[1]
+        }
+        return avatar
     }
 
     public bindGroupBetterArgs(concat: ContactInterface | RoomInterface, chatId: number, bindId: string) {
