@@ -384,6 +384,18 @@ export class WeChatClient {
         const roomTopic = await roomEntity?.topic() || ''
         let bindItem = undefined
         if (roomEntity) {
+            // 黑白名单过滤
+            const blackFind = this._tgClient.setting.getVariable(VariableType.SETTING_BLACK_LIST).find(item => item.name === roomTopic)
+            const whiteFind = this._tgClient.setting.getVariable(VariableType.SETTING_WHITE_LIST).find(item => item.name === roomTopic)
+            if (this._tgClient.setting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK) {
+                if (blackFind) {
+                    return
+                }
+            } else {
+                if (!whiteFind && !await message.mentionSelf()) {
+                    return
+                }
+            }
             bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(roomEntity.id)
             if (!bindItem && this._tgClient.tgUserClientLogin){
                 // 找到bindId
@@ -490,21 +502,6 @@ export class WeChatClient {
         while (!talker.isReady() && count < 5) {
             talker.sync().catch(() => console.debug('sync error'))
             count++
-        }
-
-        // 黑白名单过滤
-        if (roomEntity) {
-            const blackFind = this._tgClient.setting.getVariable(VariableType.SETTING_BLACK_LIST).find(item => item.name === roomTopic)
-            const whiteFind = this._tgClient.setting.getVariable(VariableType.SETTING_WHITE_LIST).find(item => item.name === roomTopic)
-            if (this._tgClient.setting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK) {
-                if (blackFind) {
-                    return
-                }
-            } else {
-                if (!whiteFind && !await message.mentionSelf()) {
-                    return
-                }
-            }
         }
         // 自动设置回复人
         const type = talker.type()
