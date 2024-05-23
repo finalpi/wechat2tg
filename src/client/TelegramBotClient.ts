@@ -248,6 +248,10 @@ export class TelegramBotClient {
                 ctx.reply('请先配置API_ID和API_HASH')
                 return
             }
+            if (!this._weChatClient.client.isLoggedIn) {
+                await ctx.reply(Constants.STRING_1)
+                return
+            }
             const b = this.forwardSetting.getVariable(VariableType.SETTING_AUTO_GROUP)
             ctx.reply(`自动创建群组模式(${b ? '开启' : '关闭'}):`, {
                 reply_markup: {
