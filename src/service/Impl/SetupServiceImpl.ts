@@ -26,6 +26,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
 
 
     async createFolder(): Promise<void> {
+        const folderName = 'wechat'
         const result = await this.userClient.client?.invoke(new Api.messages.GetDialogFilters())
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
@@ -33,30 +34,43 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         const values = result.filters.map(it => {return it.className === 'DialogFilter' ? it.id : 0})
-        const id = Math.max(...values) + 1 || this.DEFAULT_FILTER_ID
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        const value = result?.filters.find(it => it.title === folderName)
+        let id
+        if (value){
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            id = value.id
+        }else {
+            id = Math.max(...values) + 1 || this.DEFAULT_FILTER_ID
+        }
         console.log('filter id', id)
         if (!filter) {
             log.info('创建 TG 文件夹')
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
-            const me: Api.InputPeerUser = await this.tgClient?.client?.getMe()
-            const dialogFilter = new Api.DialogFilter({
-                id: id,
-                title: 'Wx2Tg',
-                pinnedPeers: [me],
-                includePeers: [],
-                excludePeers: [],
-            })
-            await this.userClient.client?.invoke(new Api.messages.UpdateDialogFilter({
-                id: id,
-                filter: dialogFilter,
-            })).catch(e => {
-                log.error('创建 TG 文件夹失败', e)
-                this.tgBotClient.sendMessage({
-                    chatId: this.tgBotClient.chatId,
-                    body: '创建 TG 文件夹失败',
+            const me = await this.tgBotClient.bot.telegram.getMe()
+            const botEntity = await this.userClient.client?.getInputEntity(me.id)
+            if (botEntity){
+                const dialogFilter = new Api.DialogFilter({
+                    id: id,
+                    title: folderName,
+                    pinnedPeers: [botEntity],
+                    includePeers: [botEntity],
+                    excludePeers: [],
                 })
-            })
+                await this.userClient.client?.invoke(new Api.messages.UpdateDialogFilter({
+                    id: id,
+                    filter: dialogFilter,
+                })).catch(e => {
+                    log.error('创建 TG 文件夹失败', e)
+                    this.tgBotClient.sendMessage({
+                        chatId: this.tgBotClient.chatId,
+                        body: '创建 TG 文件夹失败',
+                    })
+                })
+            }
         }
     }
 
