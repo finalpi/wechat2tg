@@ -89,7 +89,6 @@ export class TelegramUserClient extends TelegramClient {
             } else {
                 if (createGroupInterface.room?.payload) {
                     name = createGroupInterface.room.payload.topic
-                    avatar = createGroupInterface.room?.avatar()
                 }
             }
             console.debug('createGroup id  ', this.telegramBotClient.chatId, this.telegramBotClient.bot.botInfo?.id)
