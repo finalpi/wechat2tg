@@ -80,7 +80,7 @@ export class TelegramBotClient {
     private waitInputCommand: string | undefined = undefined
     private phoneNumber: string | undefined = undefined
     private password: string | undefined = undefined
-    private phoneCode: string | undefined = ''
+    private phoneCode: string = ''
 
     private forwardSetting: VariableContainer = new VariableContainer()
 
@@ -209,7 +209,7 @@ export class TelegramBotClient {
                 this._tgClient = TelegramClient.getInstance()
                 this._tgUserClient = TelegramUserClient.getInstance()
             }
-        }else {
+        } else {
             this.forwardSetting.setVariable(VariableType.SETTING_AUTO_GROUP, false)
             // 修改后持成文件
             this.forwardSetting.writeToFile()
@@ -251,7 +251,7 @@ export class TelegramBotClient {
                 return
             }
             const b = this.forwardSetting.getVariable(VariableType.SETTING_AUTO_GROUP)
-            ctx.reply(`自动创建群组模式(${b ? '开启' : '关闭'}):`,{
+            ctx.reply(`自动创建群组模式(${b ? '开启' : '关闭'}):`, {
                 reply_markup: {
                     inline_keyboard: [
                         [
@@ -356,8 +356,13 @@ export class TelegramBotClient {
         })
 
         // 数字键盘点击
-        bot.action(/num-(\d)/, ctx => {
-            this.phoneCode = this.phoneCode + ctx.match[1]
+        bot.action(/num-(\d+)/, ctx => {
+            const match = ctx.match[1]
+            if (match !== '100') {
+                this.phoneCode = this.phoneCode + match
+            } else {
+                this.phoneCode = this.phoneCode.substring(0, this.phoneCode.length - 1)
+            }
             let inputCode = this.phoneCode
             if (this.phoneCode.length < 5) {
                 for (let i = 0; i < 5 - this.phoneCode.length; i++) {
@@ -370,20 +375,21 @@ export class TelegramBotClient {
                         [
                             {text: '1', callback_data: 'num-1'},
                             {text: '2', callback_data: 'num-2'},
-                            {text: '3', callback_data: 'num-3'}
+                            {text: '3', callback_data: 'num-3'},
                         ],
                         [
                             {text: '4', callback_data: 'num-4'},
                             {text: '5', callback_data: 'num-5'},
-                            {text: '6', callback_data: 'num-6'}
+                            {text: '6', callback_data: 'num-6'},
                         ],
                         [
                             {text: '7', callback_data: 'num-7'},
                             {text: '8', callback_data: 'num-8'},
-                            {text: '9', callback_data: 'num-9'}
+                            {text: '9', callback_data: 'num-9'},
                         ],
                         [
-                            {text: '0', callback_data: 'num-0'}
+                            {text: '0', callback_data: 'num-0'},
+                            {text: 'Del', callback_data: 'num-100'},
                         ]
                     ]
                 }
@@ -414,7 +420,7 @@ export class TelegramBotClient {
             // 修改后持成文件
             this.forwardSetting.writeToFile()
             // 点击后修改上面按钮
-            ctx.editMessageText(`自动创建群组模式(${b ? '开启' : '关闭'}):`,{
+            ctx.editMessageText(`自动创建群组模式(${b ? '开启' : '关闭'}):`, {
                 reply_markup: {
                     inline_keyboard: [
                         [
@@ -423,9 +429,9 @@ export class TelegramBotClient {
                     ]
                 }
             })
-            if (b){
+            if (b) {
                 // 登陆tg user client
-                if (!this.tgUserClientLogin){
+                if (!this.tgUserClientLogin) {
                     await this.loginUserClient()
                 }
             }
@@ -790,7 +796,7 @@ export class TelegramBotClient {
             const roomTopic = await room?.room?.topic()
             if (ctx.chat && ctx.chat.type.includes('group') && room) {
                 // 群组绑定
-                this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, room.id, '', room.room.id,'')
+                this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, room.id, '', room.room.id, '')
                 ctx.deleteMessage()
                 ctx.answerCbQuery()
                 return
@@ -996,7 +1002,7 @@ export class TelegramBotClient {
                         if (contactList) {
                             for (const contactListElement of contactList) {
                                 if (contactListElement.contact.id === element.contact.id) {
-                                    this.bindItemService.bindGroup(element.contact.payload?.name ? element.contact.payload?.name : '', ctx.chat?.id, 0, contactListElement.id, element.contact.payload?.alias ? element.contact.payload?.alias : '', element.contact.id,element.contact.payload?.avatar ? element.contact.payload?.avatar : '')
+                                    this.bindItemService.bindGroup(element.contact.payload?.name ? element.contact.payload?.name : '', ctx.chat?.id, 0, contactListElement.id, element.contact.payload?.alias ? element.contact.payload?.alias : '', element.contact.id, element.contact.payload?.avatar ? element.contact.payload?.avatar : '')
                                     break
                                 }
                             }
@@ -1018,7 +1024,7 @@ export class TelegramBotClient {
                         if (contactList) {
                             for (const contactListElement of contactList) {
                                 if (contactListElement.contact.id === talker.id) {
-                                    this.bindItemService.bindGroup(talker.payload?.name ? talker.payload?.name : '', ctx.chat?.id, 0, contactListElement.id, talker.payload?.alias ? talker.payload?.alias : '', talker.id,talker.payload?.avatar ? talker.payload?.avatar : '')
+                                    this.bindItemService.bindGroup(talker.payload?.name ? talker.payload?.name : '', ctx.chat?.id, 0, contactListElement.id, talker.payload?.alias ? talker.payload?.alias : '', talker.id, talker.payload?.avatar ? talker.payload?.avatar : '')
                                     break
                                 }
                             }
@@ -1039,7 +1045,7 @@ export class TelegramBotClient {
                         // 群组绑定
                         const roomItem = this.weChatClient.roomList.find(item => item.room.id === room.id)
                         if (roomItem) {
-                            this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, roomItem.id, '', room.id,'')
+                            this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, roomItem.id, '', room.id, '')
                         }
                         ctx.answerCbQuery()
                         return
@@ -1079,7 +1085,7 @@ export class TelegramBotClient {
                         const roomItem = this.weChatClient.roomList.find(item => item.room.id === data.talker?.id)
                         const roomTopic = await roomItem?.room.topic()
                         if (roomItem && data.talker) {
-                            this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, roomItem.id, '', data.talker.id,'')
+                            this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, roomItem.id, '', data.talker.id, '')
                         }
                         ctx.deleteMessage()
                         ctx.answerCbQuery()
@@ -1100,7 +1106,7 @@ export class TelegramBotClient {
                             if (list) {
                                 for (const listElement of list) {
                                     if (listElement.contact.id === talker.id) {
-                                        this.bindItemService.bindGroup(talker.payload?.name ? talker.payload?.name : '', ctx.chat?.id, 0, listElement.id, talker.payload?.alias ? talker.payload?.alias : '', talker.id,talker.payload?.avatar ? talker.payload?.avatar : '')
+                                        this.bindItemService.bindGroup(talker.payload?.name ? talker.payload?.name : '', ctx.chat?.id, 0, listElement.id, talker.payload?.alias ? talker.payload?.alias : '', talker.id, talker.payload?.avatar ? talker.payload?.avatar : '')
                                         break
                                     }
                                 }
@@ -1168,7 +1174,7 @@ export class TelegramBotClient {
                     if (list) {
                         for (const listElement of list) {
                             if (listElement.contact.id === contact.id) {
-                                this.bindItemService.bindGroup(contact.payload?.name ? contact.payload?.name : '', ctx.chat?.id, 0, listElement.id, contact.payload?.alias ? contact.payload?.alias : '', contact.id,contact.payload?.avatar ? contact.payload?.avatar : '')
+                                this.bindItemService.bindGroup(contact.payload?.name ? contact.payload?.name : '', ctx.chat?.id, 0, listElement.id, contact.payload?.alias ? contact.payload?.alias : '', contact.id, contact.payload?.avatar ? contact.payload?.avatar : '')
                                 break
                             }
                         }
@@ -1618,7 +1624,7 @@ export class TelegramBotClient {
             },
             phoneNumber: async () =>
                 new Promise((resolve) => {
-                    this.bot.telegram.sendMessage(this.chatId,'请输入你的手机号码（需要带国家区号，例如：+8613355558888）').then(res => {
+                    this.bot.telegram.sendMessage(this.chatId, '请输入你的手机号码（需要带国家区号，例如：+8613355558888）').then(res => {
                         this.waitInputCommand = 'phoneNumber'
                         const intervalId = setInterval(() => {
                             if (this.phoneNumber) {
@@ -1633,7 +1639,7 @@ export class TelegramBotClient {
                 }),
             password: async (hint?: string) =>
                 new Promise((resolve) => {
-                    this.bot.telegram.sendMessage(this.chatId,`请输入你的二步验证密码${hint ? '\n密码提示：' + hint : ''}`).then(res => {
+                    this.bot.telegram.sendMessage(this.chatId, `请输入你的二步验证密码${hint ? '\n密码提示：' + hint : ''}`).then(res => {
                         this.waitInputCommand = 'password'
                         const intervalId = setInterval(() => {
                             if (this.password) {
@@ -1648,7 +1654,7 @@ export class TelegramBotClient {
                 }),
             phoneCode: async (isCodeViaApp?) =>
                 new Promise((resolve) => {
-                    this.bot.telegram.sendMessage(this.chatId,`请输入你${isCodeViaApp ? ' Telegram APP 中' : '手机上'}收到的验证码:_ _ _ _ _\n`, {
+                    this.bot.telegram.sendMessage(this.chatId, `请输入你${isCodeViaApp ? ' Telegram APP 中' : '手机上'}收到的验证码:_ _ _ _ _\n`, {
                         reply_markup: {
                             inline_keyboard: [
                                 [
@@ -1667,7 +1673,8 @@ export class TelegramBotClient {
                                     {text: '9', callback_data: 'num-9'}
                                 ],
                                 [
-                                    {text: '0', callback_data: 'num-0'}
+                                    {text: '0', callback_data: 'num-0'},
+                                    {text: 'Del', callback_data: 'num--1'},
                                 ]
                             ]
                         }
