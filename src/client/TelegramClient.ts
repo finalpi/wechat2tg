@@ -3,6 +3,7 @@ import {StoreSession} from 'telegram/sessions'
 import {TelegramClient as GramClient} from 'telegram'
 import {TelegramBotClient} from './TelegramBotClient'
 import * as authMethods from 'telegram/client/auth'
+import os from 'node:os'
 
 export class TelegramClient {
     get client() {
@@ -31,22 +32,24 @@ export class TelegramClient {
         this.init()
         this.telegramBotClient = telegramBotClient
     }
-    protected init(){
-        if (this.apiId && this.apiHash){
-            if (config.HOST) {
-                this._client = new GramClient(this.storeSession, this.apiId, this.apiHash, {
-                    connectionRetries: 5,
-                    proxy: {
-                        ip: config.HOST,
-                        port: parseInt(config.PORT),
-                        socksType: 5,
-                    },
-                })
-            } else {
-                this._client = new GramClient(this.storeSession, this.apiId, this.apiHash, {
-                    connectionRetries: 5,
-                })
-            }
+
+    protected init() {
+        if (this.apiId && this.apiHash) {
+
+            this._client = new GramClient(this.storeSession, this.apiId, this.apiHash, {
+                connectionRetries: 5,
+                deviceModel: `${config.APP_NAME} On ${os.hostname()}`,
+                appVersion: 'rainbowcat',
+                proxy: config.HOST ? {
+                    ip: config.HOST,
+                    port: parseInt(config.PORT),
+                    socksType: 5,
+                    password: config.PASSWORD,
+                    username: config.USERNAME,
+                } : undefined,
+                autoReconnect: true,
+            })
+
             this._client.start({
                 botAuthToken: config.BOT_TOKEN,
             })
@@ -56,7 +59,7 @@ export class TelegramClient {
     public async downloadFile(messageId: number, chatId: string | number) {
         const chat = await this._client?.getInputEntity(chatId)
         const messages = await this._client?.getMessages(chat, {ids: messageId})
-        if (messages){
+        if (messages) {
             return messages[0].downloadMedia()
         }
     }

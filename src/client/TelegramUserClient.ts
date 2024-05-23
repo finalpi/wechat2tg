@@ -9,6 +9,8 @@ import {BigInteger} from 'big-integer'
 import {CreateGroupInterface} from '../models/CreateGroupInterface'
 import {CustomFile} from 'telegram/client/uploads'
 import {SetupServiceImpl} from '../service/Impl/SetupServiceImpl'
+import * as os from 'node:os'
+import {LogLevel} from 'telegram/extensions/Logger'
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -28,20 +30,23 @@ export class TelegramUserClient extends TelegramClient {
     protected init() {
         // 子类重写init方法
         if (this.apiId && this.apiHash) {
-            if (config.HOST) {
-                this._client = new GramClient(new StoreSession('storage/tg-user-session'), this.apiId, this.apiHash, {
-                    connectionRetries: 5,
-                    proxy: {
-                        ip: config.HOST,
-                        port: parseInt(config.PORT),
-                        socksType: 5,
-                    },
-                })
-            } else {
-                this._client = new GramClient(new StoreSession('storage/tg-user-session'), this.apiId, this.apiHash, {
-                    connectionRetries: 5,
-                })
-            }
+
+            this._client = new GramClient(new StoreSession('storage/tg-user-session'), this.apiId, this.apiHash, {
+                connectionRetries: 5,
+                deviceModel: `${config.APP_NAME} On ${os.hostname()}`,
+                appVersion: 'rainbowcat',
+                proxy: config.HOST ? {
+                    ip: config.HOST,
+                    port: parseInt(config.PORT),
+                    socksType: 5,
+                    password: config.PASSWORD,
+                    username: config.USERNAME,
+                } : undefined,
+                autoReconnect: true,
+            })
+
+            // this._client.logger.setLevel(LogLevel.DEBUG)
+
         }
     }
 
@@ -51,10 +56,10 @@ export class TelegramUserClient extends TelegramClient {
                 this.telegramBotClient.tgUserClientLogin = true
                 // TODO: 测试自动创建文件夹
                 new SetupServiceImpl().createFolder()
-                this.telegramBotClient.bot.telegram.sendMessage(this.telegramBotClient.chatId, 'TG登录成功!').then(msg=>{
-                    setTimeout(()=>{
-                        this.telegramBotClient.bot.telegram.deleteMessage(this.telegramBotClient.chatId,msg.message_id)
-                    },10000)
+                this.telegramBotClient.bot.telegram.sendMessage(this.telegramBotClient.chatId, 'TG登录成功!').then(msg => {
+                    setTimeout(() => {
+                        this.telegramBotClient.bot.telegram.deleteMessage(this.telegramBotClient.chatId, msg.message_id)
+                    }, 10000)
                 })
             }).catch((e) => {
                 this.telegramBotClient.tgUserClientLogin = false
@@ -125,7 +130,17 @@ export class TelegramUserClient extends TelegramClient {
                     createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '',createGroupInterface.contact?.payload?.avatar ? createGroupInterface.contact?.payload?.avatar : '')
             } else {
                 const topic = await createGroupInterface.room?.topic()
-                this.telegramBotClient.bindItemService.bindGroup(topic ? topic : '', this.idConvert(id), createGroupInterface.type, createGroupInterface.bindId ? createGroupInterface.bindId : '', '', createGroupInterface.room?.id ? createGroupInterface.room?.id : '','')
+                this.telegramBotClient.bindItemService.bindGroup(topic ? topic : '', this.idConvert(id), createGroupInterface.type, createGroupInterface.bindId ? createGroupInterface.bindId : '', '', createGroupInterface.room?.id ? createGroupInterface.room?.id : '')
+                if (createGroupInterface.type === 0) {
+                    bindItem = this.telegramBotClient.bindItemService.bindGroup(
+                        createGroupInterface.contact?.payload?.name ?
+                            createGroupInterface.contact?.payload.name : '',
+                        this.idConvert(id),
+                        createGroupInterface.type,
+                        createGroupInterface.bindId ? createGroupInterface.bindId : '',
+                        createGroupInterface.contact?.payload?.alias ? createGroupInterface.contact?.payload?.alias : '',
+                        createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '')
+                }
             }
         }
         return bindItem
