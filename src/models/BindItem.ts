@@ -9,4 +9,6 @@ export interface BindItem {
     alias: string
     // 微信的动态id
     wechat_id: string
+    // 头像
+    avatar: string
 }

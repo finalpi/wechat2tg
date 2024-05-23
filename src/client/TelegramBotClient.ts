@@ -209,6 +209,10 @@ export class TelegramBotClient {
                 this._tgClient = TelegramClient.getInstance()
                 this._tgUserClient = TelegramUserClient.getInstance()
             }
+        }else {
+            this.forwardSetting.setVariable(VariableType.SETTING_AUTO_GROUP, false)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
         }
         const bot = this._bot
 
@@ -786,7 +790,7 @@ export class TelegramBotClient {
             const roomTopic = await room?.room?.topic()
             if (ctx.chat && ctx.chat.type.includes('group') && room) {
                 // 群组绑定
-                this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, room.id, '', room.room.id)
+                this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, room.id, '', room.room.id,'')
                 ctx.deleteMessage()
                 ctx.answerCbQuery()
                 return
@@ -992,7 +996,7 @@ export class TelegramBotClient {
                         if (contactList) {
                             for (const contactListElement of contactList) {
                                 if (contactListElement.contact.id === element.contact.id) {
-                                    this.bindItemService.bindGroup(element.contact.payload?.name ? element.contact.payload?.name : '', ctx.chat?.id, 0, contactListElement.id, element.contact.payload?.alias ? element.contact.payload?.alias : '', element.contact.id)
+                                    this.bindItemService.bindGroup(element.contact.payload?.name ? element.contact.payload?.name : '', ctx.chat?.id, 0, contactListElement.id, element.contact.payload?.alias ? element.contact.payload?.alias : '', element.contact.id,element.contact.payload?.avatar ? element.contact.payload?.avatar : '')
                                     break
                                 }
                             }
@@ -1014,7 +1018,7 @@ export class TelegramBotClient {
                         if (contactList) {
                             for (const contactListElement of contactList) {
                                 if (contactListElement.contact.id === talker.id) {
-                                    this.bindItemService.bindGroup(talker.payload?.name ? talker.payload?.name : '', ctx.chat?.id, 0, contactListElement.id, talker.payload?.alias ? talker.payload?.alias : '', talker.id)
+                                    this.bindItemService.bindGroup(talker.payload?.name ? talker.payload?.name : '', ctx.chat?.id, 0, contactListElement.id, talker.payload?.alias ? talker.payload?.alias : '', talker.id,talker.payload?.avatar ? talker.payload?.avatar : '')
                                     break
                                 }
                             }
@@ -1035,7 +1039,7 @@ export class TelegramBotClient {
                         // 群组绑定
                         const roomItem = this.weChatClient.roomList.find(item => item.room.id === room.id)
                         if (roomItem) {
-                            this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, roomItem.id, '', room.id)
+                            this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, roomItem.id, '', room.id,'')
                         }
                         ctx.answerCbQuery()
                         return
@@ -1075,7 +1079,7 @@ export class TelegramBotClient {
                         const roomItem = this.weChatClient.roomList.find(item => item.room.id === data.talker?.id)
                         const roomTopic = await roomItem?.room.topic()
                         if (roomItem && data.talker) {
-                            this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, roomItem.id, '', data.talker.id)
+                            this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, roomItem.id, '', data.talker.id,'')
                         }
                         ctx.deleteMessage()
                         ctx.answerCbQuery()
@@ -1096,7 +1100,7 @@ export class TelegramBotClient {
                             if (list) {
                                 for (const listElement of list) {
                                     if (listElement.contact.id === talker.id) {
-                                        this.bindItemService.bindGroup(talker.payload?.name ? talker.payload?.name : '', ctx.chat?.id, 0, listElement.id, talker.payload?.alias ? talker.payload?.alias : '', talker.id)
+                                        this.bindItemService.bindGroup(talker.payload?.name ? talker.payload?.name : '', ctx.chat?.id, 0, listElement.id, talker.payload?.alias ? talker.payload?.alias : '', talker.id,talker.payload?.avatar ? talker.payload?.avatar : '')
                                         break
                                     }
                                 }
@@ -1164,7 +1168,7 @@ export class TelegramBotClient {
                     if (list) {
                         for (const listElement of list) {
                             if (listElement.contact.id === contact.id) {
-                                this.bindItemService.bindGroup(contact.payload?.name ? contact.payload?.name : '', ctx.chat?.id, 0, listElement.id, contact.payload?.alias ? contact.payload?.alias : '', contact.id)
+                                this.bindItemService.bindGroup(contact.payload?.name ? contact.payload?.name : '', ctx.chat?.id, 0, listElement.id, contact.payload?.alias ? contact.payload?.alias : '', contact.id,contact.payload?.avatar ? contact.payload?.avatar : '')
                                 break
                             }
                         }

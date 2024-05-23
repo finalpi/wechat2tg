@@ -6,9 +6,20 @@ abstract class AbstractSqlService {
 
     protected createManualBindTable() {
         this.db.serialize(() => {
-            this.db.get('SELECT name FROM sqlite_master WHERE type=\'table\' AND name=\'tb_bind_item\'', (err, row) => {
+            this.db.get('SELECT * FROM sqlite_master WHERE type=\'table\' AND name=\'tb_bind_item\'', (err, row) => {
                 if (!row) {
-                    this.db.run('CREATE TABLE tb_bind_item (name TEXT, chat_id INT, type INT, bind_id TEXT, alias TEXT,wechat_id TEXT)')
+                    this.db.run('CREATE TABLE tb_bind_item (name TEXT, chat_id INT, type INT, bind_id TEXT, alias TEXT,wechat_id TEXT, avatar TEXT)')
+                }else {
+                    const createTableSQL = (row as { sql: string }).sql
+                    if (!createTableSQL.includes('avatar')) {
+                        this.db.run('ALTER TABLE tb_bind_item ADD COLUMN avatar TEXT', (err) => {
+                            if (err) {
+                                console.error('Failed to add column:', err)
+                            } else {
+                                console.log('Column avatar added successfully.')
+                            }
+                        })
+                    }
                 }
             })
         })

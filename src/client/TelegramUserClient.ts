@@ -8,7 +8,7 @@ import {TelegramClient as GramClient} from 'telegram/client/TelegramClient'
 import {BigInteger} from 'big-integer'
 import {CreateGroupInterface} from '../models/CreateGroupInterface'
 import {CustomFile} from 'telegram/client/uploads'
-import {SetupServiceImpl} from "../service/Impl/SetupServiceImpl";
+import {SetupServiceImpl} from '../service/Impl/SetupServiceImpl'
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -122,20 +122,10 @@ export class TelegramUserClient extends TelegramClient {
                     this.idConvert(id), createGroupInterface.type,
                     createGroupInterface.bindId ? createGroupInterface.bindId : '',
                     createGroupInterface.contact?.payload?.alias ? createGroupInterface.contact?.payload?.alias : '',
-                    createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '')
+                    createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '',createGroupInterface.contact?.payload?.avatar ? createGroupInterface.contact?.payload?.avatar : '')
             } else {
                 const topic = await createGroupInterface.room?.topic()
-                this.telegramBotClient.bindItemService.bindGroup(topic ? topic : '', this.idConvert(id), createGroupInterface.type, createGroupInterface.bindId ? createGroupInterface.bindId : '', '', createGroupInterface.room?.id ? createGroupInterface.room?.id : '')
-                if (createGroupInterface.type === 0) {
-                    bindItem = this.telegramBotClient.bindItemService.bindGroup(
-                        createGroupInterface.contact?.payload?.name ?
-                            createGroupInterface.contact?.payload.name : '',
-                        this.idConvert(id),
-                        createGroupInterface.type,
-                        createGroupInterface.bindId ? createGroupInterface.bindId : '',
-                        createGroupInterface.contact?.payload?.alias ? createGroupInterface.contact?.payload?.alias : '',
-                        createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '')
-                }
+                this.telegramBotClient.bindItemService.bindGroup(topic ? topic : '', this.idConvert(id), createGroupInterface.type, createGroupInterface.bindId ? createGroupInterface.bindId : '', '', createGroupInterface.room?.id ? createGroupInterface.room?.id : '','')
             }
         }
         return bindItem
