@@ -8,8 +8,8 @@ import {
     FriendshipInterface,
     MessageInterface,
     RoomInterface,
-    WechatyInterface,
-    RoomInvitationInterface
+    RoomInvitationInterface,
+    WechatyInterface
 } from 'wechaty/impls'
 import {TelegramBotClient} from './TelegramBotClient'
 import {EmojiConverter} from '../utils/EmojiUtils'
@@ -426,15 +426,21 @@ export class WeChatClient {
                         }
                     }
                 }
-                bindItem = await this._tgClient.tgUserClient?.createGroup({
-                    type: 0,
-                    contact: talker,
-                    bindId: bindId
-                })
+                if (talker?.type() === PUPPET.types.Contact.Official && this._tgClient.setting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT)){
+                    bindItem = await this._tgClient.tgUserClient?.createGroup({
+                        type: 0,
+                        contact: talker,
+                        bindId: bindId
+                    })
+                }else if (talker?.type() !== PUPPET.types.Contact.Official) {
+                    bindItem = await this._tgClient.tgUserClient?.createGroup({
+                        type: 0,
+                        contact: talker,
+                        bindId: bindId
+                    })
+                }
             }
         }
-        // todo: 优化
-        // const mediaCaption=
         let identityStr = roomEntity ? `🌐${roomTopic} --- 👤${showSender} : ` : `👤${showSender} : `
         if (talker?.type() === PUPPET.types.Contact.Official) {
             identityStr = `📣${showSender} : `

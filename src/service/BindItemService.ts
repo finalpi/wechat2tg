@@ -5,7 +5,7 @@ import {ContactImpl} from 'wechaty/impls'
 import {Telegraf} from 'telegraf'
 import AbstractSqlService from './BaseSqlService'
 import * as fs from 'fs'
-import {ContactInterface, RoomInterface} from 'wechaty/dist/esm/src/mods/impls'
+import {ContactInterface, RoomInterface, WechatyInterface} from 'wechaty/dist/esm/src/mods/impls'
 import DynamicService from './DynamicService'
 
 export class BindItemService extends AbstractSqlService {
@@ -50,7 +50,7 @@ export class BindItemService extends AbstractSqlService {
                     }
                     if (find) {
                         const name = find.contact.payload?.name
-                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id)
+                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id,find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
                         continue
                     }
                     if (bindItem.alias && bindItem.alias !== '') {
@@ -74,7 +74,7 @@ export class BindItemService extends AbstractSqlService {
                                 }
                             }
                             const name = find.contact.payload?.name
-                            this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id)
+                            this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id,find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
                             continue
                         }
                     }
@@ -86,7 +86,7 @@ export class BindItemService extends AbstractSqlService {
                     }
                     if (find) {
                         const name = find.contact.payload?.name
-                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id)
+                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id,find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
                         continue
                     }
                 }
@@ -110,7 +110,7 @@ export class BindItemService extends AbstractSqlService {
                         }
                         if (find) {
                             const name = find.contact.payload?.name
-                            this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id)
+                            this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id,find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
                             continue
                         }
                     }
@@ -122,7 +122,7 @@ export class BindItemService extends AbstractSqlService {
                     }
                     if (find) {
                         const name = find.contact.payload?.name
-                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id)
+                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id,find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
                         continue
                     }
                 }
@@ -138,14 +138,14 @@ export class BindItemService extends AbstractSqlService {
                 let room = roomList.find(item => item.room.id === bindItem.wechat_id)
                 if (room) {
                     const topic = room.room.payload?.topic
-                    this.bindGroup(topic ? topic : '', bindItem.chat_id, bindItem.type, room.id, '', room.room.id)
+                    this.bindGroup(topic ? topic : '', bindItem.chat_id, bindItem.type, room.id, '', room.room.id,'')
                     continue
                 }
                 // room不存在根据名称重新绑定room
                 room = roomList.find(item => item.room.payload?.topic === bindItem.name)
                 if (room) {
                     const topic = room.room.payload?.topic
-                    this.bindGroup(topic ? topic : '', bindItem.chat_id, bindItem.type, room.id, '', room.room.id)
+                    this.bindGroup(topic ? topic : '', bindItem.chat_id, bindItem.type, room.id, '', room.room.id,'')
                     continue
                 }
                 // 如果找不到则删除该元素
@@ -156,6 +156,37 @@ export class BindItemService extends AbstractSqlService {
                     }
                 })
                 this.removeBindItemByChatId(bindItem.chat_id)
+            }
+        }
+    }
+
+    public async updateGroupData(bindItem: BindItem, newBindItem: BindItem) {
+        // 如果item别名或者头像变化则更新
+        // 获取群组管理员列表
+        const administrators = await this.tgBotClient.telegram.getChatAdministrators(bindItem.chat_id)
+
+        // 检查机器人是否在管理员列表中
+        const botId = this.tgBotClient.botInfo?.id
+        const isAdmin = administrators.some(admin => admin.user.id === botId)
+        if (isAdmin) {
+            if (newBindItem.name !== bindItem.name || newBindItem.alias !== bindItem.alias) {
+                // 更新群组名称
+                await this.tgBotClient.telegram.setChatTitle(bindItem.chat_id, `${newBindItem.alias}[${newBindItem.name}]`)
+            }
+            if (bindItem.avatar !== newBindItem.avatar) {
+                // 更新头像
+                const contact = await ContactImpl.find({
+                    id: newBindItem.wechat_id
+                })
+                if (contact){
+                    contact.avatar().then(fbox => {
+                        fbox.toBuffer().then(async buff => {
+                            await this.tgBotClient.telegram.setChatPhoto(bindItem.chat_id, {
+                                source: buff
+                            })
+                        })
+                    })
+                }
             }
         }
     }
@@ -184,15 +215,31 @@ export class BindItemService extends AbstractSqlService {
         })
     }
 
-    public bindGroup(name: string, chatId: number, type: number, bindId: string, alias: string, wechatId: string) {
+    public bindGroup(name: string, chatId: number, type: number, bindId: string, alias: string, wechatId: string, avatar: string) {
         // 群组绑定
         this.db.serialize(() => {
+            this.db.get('SELECT * FROM tb_bind_item WHERE chat_id= ?', [chatId], (err, row: BindItem) => {
+                if (err) {
+                    console.log(err)
+                }
+                if(row){
+                    this.updateGroupData(row,{
+                        name: name,
+                        chat_id: chatId,
+                        type: type,
+                        bind_id: bindId,
+                        alias: alias,
+                        wechat_id: wechatId,
+                        avatar: avatar
+                    })
+                }
+            })
             const stmt = this.db.prepare('DELETE FROM tb_bind_item WHERE wechat_id = ? OR chat_id = ?')
             stmt.run(wechatId, chatId)
             stmt.finalize()
 
-            const stmt1 = this.db.prepare('INSERT INTO tb_bind_item VALUES (?, ?, ?, ?, ?, ?)')
-            stmt1.run(name, chatId, type, bindId, alias, wechatId)
+            const stmt1 = this.db.prepare('INSERT INTO tb_bind_item VALUES (?, ?, ?, ?, ?, ?, ?)')
+            stmt1.run(name, chatId, type, bindId, alias, wechatId, avatar)
             stmt1.finalize()
         })
 
@@ -213,7 +260,8 @@ export class BindItemService extends AbstractSqlService {
             type: type,
             bind_id: bindId,
             alias: alias,
-            wechat_id: wechatId
+            wechat_id: wechatId,
+            avatar: avatar
         }
 
         // 返回对象
