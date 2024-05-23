@@ -131,7 +131,7 @@ export class TelegramUserClient extends TelegramClient {
                     createGroupInterface.contact?.payload?.avatar ? createGroupInterface.contact?.payload?.avatar : '')
             } else {
                 const topic = await createGroupInterface.room?.topic()
-                this.telegramBotClient.bindItemService.bindGroup(topic ? topic : '', this.idConvert(id),
+                bindItem = this.telegramBotClient.bindItemService.bindGroup(topic ? topic : '', this.idConvert(id),
                     createGroupInterface.type,
                     createGroupInterface.bindId ? createGroupInterface.bindId : '',
                     '',
