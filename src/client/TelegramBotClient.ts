@@ -8,7 +8,7 @@ import * as tg from 'telegraf/src/core/types/typegram'
 import {message} from 'telegraf/filters'
 import {FileBox} from 'file-box'
 import * as fs from 'node:fs'
-import {NotionMode, StorageSettings, VariableContainer, VariableType} from '../models/Settings'
+import {NotionListType, NotionMode, StorageSettings, VariableContainer, VariableType} from '../models/Settings'
 import {ConverterHelper} from '../utils/FfmpegUtils'
 import {SelectedEntity} from '../models/TgCache'
 import {TalkerEntity} from '../models/TalkerCache'
@@ -27,7 +27,6 @@ import {UserAuthParams} from 'telegram/client/auth'
 import {EventEmitter} from 'node:events'
 import {Constants} from '../constants/Constants'
 import {TelegramUserClient} from './TelegramUserClient'
-import {SetupServiceImpl} from '../service/Impl/SetupServiceImpl'
 
 export class TelegramBotClient {
     get tgUserClient(): TelegramUserClient | undefined {
@@ -80,7 +79,7 @@ export class TelegramBotClient {
     private waitInputCommand: string | undefined = undefined
     private phoneNumber: string | undefined = undefined
     private password: string | undefined = undefined
-    private phoneCode: string = ''
+    private phoneCode = ''
 
     private forwardSetting: VariableContainer = new VariableContainer()
 
@@ -130,8 +129,6 @@ export class TelegramBotClient {
         this.onWeChatLogout = this.onWeChatLogout.bind(this)
         this.onWeChatStop = this.onWeChatStop.bind(this)
         this.eventEmitter = new EventEmitter()
-        this.eventEmitter.on('tg_password_input', this.handlePasswordInput)
-        this.eventEmitter.on('tg_phone_code_input', this.handlePhoneCodeInput)
     }
 
     public get messageMap(): Map<number, string> {
@@ -536,18 +533,7 @@ export class TelegramBotClient {
                 ctx.answerCbQuery()
                 return
             }
-            const page = new Page(list, pageNum, TelegramBotClient.PAGE_SIZE)
-            const buttons = []
-            const pageList = page.getList(pageNum)
-            for (let i = 0; i < pageList.length; i += 2) {
-                const buttonRow = [Markup.button.callback(`🌐${pageList[i].name}`, `whiteListRemove-${pageList[i].id}`)]
-                if (i + 1 < pageList.length) {
-                    buttonRow.push(Markup.button.callback(`🌐${pageList[i + 1].name}`, `whiteListRemove-${pageList[i + 1].id}`))
-                }
-                buttons.push(buttonRow)
-            }
-            buttons.push([Markup.button.callback('上一页', `whiteList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `whiteList-${pageNum + 1}`, !page.hasNext())])
-            ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
+            this.replyWhiteBtn(list, pageNum, ctx)
             ctx.answerCbQuery()
         })
 
@@ -555,12 +541,13 @@ export class TelegramBotClient {
         bot.action(/whiteListRemove-(\d+)/, ctx => {
             const id = parseInt(ctx.match[1])
             // 获取黑名单或者白名单的列表
-            const list = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST)
-            this.forwardSetting.setVariable(VariableType.SETTING_WHITE_LIST, list.filter(item => {
+            const list = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST).filter(item => {
                 return item.id !== id + ''
-            }))
+            })
+            this.forwardSetting.setVariable(VariableType.SETTING_WHITE_LIST, list)
             this.forwardSetting.writeToFile()
             ctx.answerCbQuery('移除成功')
+            this.replyWhiteBtn(list, 1, ctx)
 
         })
 
@@ -584,18 +571,7 @@ export class TelegramBotClient {
                 ctx.answerCbQuery()
                 return
             }
-            const page = new Page(list, pageNum, TelegramBotClient.PAGE_SIZE)
-            const buttons = []
-            const pageList = page.getList(pageNum)
-            for (let i = 0; i < pageList.length; i += 2) {
-                const buttonRow = [Markup.button.callback(`🌐${pageList[i].name}`, `blackListRemove-${pageList[i].id}`)]
-                if (i + 1 < pageList.length) {
-                    buttonRow.push(Markup.button.callback(`🌐${pageList[i + 1].name}`, `blackListRemove-${pageList[i + 1].id}`))
-                }
-                buttons.push(buttonRow)
-            }
-            buttons.push([Markup.button.callback('上一页', `blackList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `blackList-${pageNum + 1}`, !page.hasNext())])
-            ctx.editMessageText('黑名单列表(点击移除):', Markup.inlineKeyboard(buttons))
+            this.replyEditBlackBtn(list, pageNum, ctx)
             ctx.answerCbQuery()
         })
 
@@ -603,12 +579,13 @@ export class TelegramBotClient {
         bot.action(/blackListRemove-(\d+)/, ctx => {
             const id = parseInt(ctx.match[1])
             // 获取黑名单或者白名单的列表
-            const list = this.forwardSetting.getVariable(VariableType.SETTING_BLACK_LIST)
-            this.forwardSetting.setVariable(VariableType.SETTING_BLACK_LIST, list.filter(item => {
+            const list = this.forwardSetting.getVariable(VariableType.SETTING_BLACK_LIST).filter(item => {
                 return item.id !== id + ''
-            }))
+            })
+            this.forwardSetting.setVariable(VariableType.SETTING_BLACK_LIST, list)
             this.forwardSetting.writeToFile()
             ctx.answerCbQuery('移除成功')
+            this.replyEditBlackBtn(list, 1, ctx)
 
         })
 
@@ -1616,6 +1593,36 @@ export class TelegramBotClient {
         this.botLaunch(bot)
     }
 
+    private replyWhiteBtn(list: NotionListType[], pageNum: number, ctx: any) {
+        const page = new Page(list, pageNum, TelegramBotClient.PAGE_SIZE)
+        const buttons = []
+        const pageList = page.getList(pageNum)
+        for (let i = 0; i < pageList.length; i += 2) {
+            const buttonRow = [Markup.button.callback(`🌐${pageList[i].name}`, `whiteListRemove-${pageList[i].id}`)]
+            if (i + 1 < pageList.length) {
+                buttonRow.push(Markup.button.callback(`🌐${pageList[i + 1].name}`, `whiteListRemove-${pageList[i + 1].id}`))
+            }
+            buttons.push(buttonRow)
+        }
+        buttons.push([Markup.button.callback('上一页', `whiteList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `whiteList-${pageNum + 1}`, !page.hasNext())])
+        ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
+    }
+
+    private replyEditBlackBtn(list: NotionListType[], pageNum: number, ctx: any) {
+        const page = new Page(list, pageNum, TelegramBotClient.PAGE_SIZE)
+        const buttons = []
+        const pageList = page.getList(pageNum)
+        for (let i = 0; i < pageList.length; i += 2) {
+            const buttonRow = [Markup.button.callback(`🌐${pageList[i].name}`, `blackListRemove-${pageList[i].id}`)]
+            if (i + 1 < pageList.length) {
+                buttonRow.push(Markup.button.callback(`🌐${pageList[i + 1].name}`, `blackListRemove-${pageList[i + 1].id}`))
+            }
+            buttons.push(buttonRow)
+        }
+        buttons.push([Markup.button.callback('上一页', `blackList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `blackList-${pageNum + 1}`, !page.hasNext())])
+        ctx.editMessageText('黑名单列表(点击移除):', Markup.inlineKeyboard(buttons))
+    }
+
     public async loginUserClient() {
         const authParams: UserAuthParams = {
             onError(err: Error): Promise<boolean> | void {
@@ -2470,21 +2477,4 @@ export class TelegramBotClient {
         }
     }
 
-    private async handlePasswordInput(ctx: any): Promise<string> {
-        return new Promise((resolve) => {
-            console.log('return password')
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            resolve(ctx.session.password as string)
-        })
-    }
-
-    private async handlePhoneCodeInput(ctx: any): Promise<string> {
-        return new Promise((resolve) => {
-            console.log('return phoneCode')
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            resolve(ctx.session.phoneCode as string)
-        })
-    }
 }
