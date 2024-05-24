@@ -50,7 +50,7 @@ export class BindItemService extends AbstractSqlService {
                     }
                     if (find) {
                         const name = find.contact.payload?.name
-                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id,find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
+                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id, find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
                         continue
                     }
                     if (bindItem.alias && bindItem.alias !== '') {
@@ -74,7 +74,7 @@ export class BindItemService extends AbstractSqlService {
                                 }
                             }
                             const name = find.contact.payload?.name
-                            this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id,find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
+                            this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id, find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
                             continue
                         }
                     }
@@ -86,7 +86,7 @@ export class BindItemService extends AbstractSqlService {
                     }
                     if (find) {
                         const name = find.contact.payload?.name
-                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id,find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
+                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id, find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
                         continue
                     }
                 }
@@ -99,6 +99,8 @@ export class BindItemService extends AbstractSqlService {
                         }
                     }
                     if (find) {
+                        const name = find.contact.payload?.name
+                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id, find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
                         continue
                     }
                     if (bindItem.alias && bindItem.alias != '') {
@@ -110,7 +112,7 @@ export class BindItemService extends AbstractSqlService {
                         }
                         if (find) {
                             const name = find.contact.payload?.name
-                            this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id,find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
+                            this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id, find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
                             continue
                         }
                     }
@@ -122,7 +124,7 @@ export class BindItemService extends AbstractSqlService {
                     }
                     if (find) {
                         const name = find.contact.payload?.name
-                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id,find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
+                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id, find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
                         continue
                     }
                 }
@@ -138,14 +140,14 @@ export class BindItemService extends AbstractSqlService {
                 let room = roomList.find(item => item.room.id === bindItem.wechat_id)
                 if (room) {
                     const topic = room.room.payload?.topic
-                    this.bindGroup(topic ? topic : '', bindItem.chat_id, bindItem.type, room.id, '', room.room.id,'')
+                    this.bindGroup(topic ? topic : '', bindItem.chat_id, bindItem.type, room.id, '', room.room.id, '')
                     continue
                 }
                 // room不存在根据名称重新绑定room
                 room = roomList.find(item => item.room.payload?.topic === bindItem.name)
                 if (room) {
                     const topic = room.room.payload?.topic
-                    this.bindGroup(topic ? topic : '', bindItem.chat_id, bindItem.type, room.id, '', room.room.id,'')
+                    this.bindGroup(topic ? topic : '', bindItem.chat_id, bindItem.type, room.id, '', room.room.id, '')
                     continue
                 }
                 // 如果找不到则删除该元素
@@ -225,7 +227,7 @@ export class BindItemService extends AbstractSqlService {
                     console.log(err)
                 }
                 if(row){
-                   this.updateGroupData(row,{
+                   this.updateGroupData(row, {
                         name: name,
                         chat_id: chatId,
                         type: type,
