@@ -13,4 +13,6 @@ export const config = {
 	PASSWORD: process.env.PROXY_PASSWORD?.toString() || '' , // 代理服务器密码
 	API_ID: process.env.API_ID?.toString() || '' ,
 	API_HASH: process.env.API_HASH?.toString() || '' ,
+	DB_SQLITE_PATH: process.env.DB_SQLITE_PATH?.toString() || 'storage/db/wechat2Tg.db' ,
+	APP_NAME: process.env.APP_NAME?.toString() || 'wechat2Tg' ,
 }

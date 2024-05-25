@@ -21,5 +21,6 @@ module.exports = {
 		'space-infix-ops': 'error',
 		'no-trailing-spaces': 'error',
 		'semi': ['error', 'never'],
+		'comma-spacing': ['error', { 'before': false, 'after': true }]
 	}
 }

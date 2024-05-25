@@ -1,4 +1,6 @@
 import ffmpegStatic from 'ffmpeg-static'
+import * as fs from 'node:fs'
+import TgsUtils from './TgsUtils'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ffmpeg = require('fluent-ffmpeg')
 
@@ -27,4 +29,18 @@ export class ConverterHelper {
         })
     }
 
+    async tgsToGif(inputFile: string | Buffer, outputFile: string, lottie_config?: {
+        width?: number,
+        height?: number
+    }): Promise<void> {
+        if (typeof inputFile === 'string') {
+            return new TgsUtils().tgsToGif(inputFile, outputFile, lottie_config)
+                .then(() => {
+                    // 这里删除临时文件
+                    const tmpFile = outputFile.substring(0, outputFile.lastIndexOf('.'))
+                    fs.unlinkSync(tmpFile)
+                })
+        }
+        throw new Error('Input file must be a string')
+    }
 }
