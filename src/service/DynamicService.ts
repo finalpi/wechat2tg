@@ -1,6 +1,7 @@
 import {ContactInterface, RoomInterface} from 'wechaty/dist/esm/src/mods/impls'
 import {Md5} from 'ts-md5'
 import {ContactGender, ContactType} from 'wechaty-puppet/src/schemas/contact'
+import {BindItem, ChatMapping} from '../models/BindItem'
 
 class DynamicService {
 
@@ -59,6 +60,29 @@ class DynamicService {
 
     public static isRoom(contact: ContactInterface | RoomInterface): contact is RoomInterface {
         return (contact as RoomInterface).id !== undefined
+    }
+
+    public static isSameContact(contact: ContactInterface, bindItem: ChatMapping): boolean {
+        // 我的联系人信息 统计有的字段数量
+        // avatar,302
+        // name,302
+        // id,302
+        // gender,300
+        // province,247
+        // signature,237
+        // city,230
+        // alias,91
+        // weixin,0
+        // address,0
+
+        // 同时满足以下条件时，认为是同一个联系人
+        // id相同
+        // 没有id相同时候，个人账号去除动态id后的信息 hash 相同
+        // 没有 hash 相同时候
+        // 头像 (id?) 相同
+        // 没有头像相同时候，name 相同并且 province gender signature city alias 至少两个相同
+        // 以上条件都不满足时，认为不是同一个联系人
+        return true
     }
 
 }
