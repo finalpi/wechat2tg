@@ -8,8 +8,8 @@ import {
     FriendshipInterface,
     MessageInterface,
     RoomInterface,
-    WechatyInterface,
-    RoomInvitationInterface
+    RoomInvitationInterface,
+    WechatyInterface
 } from 'wechaty/impls'
 import {TelegramBotClient} from './TelegramBotClient'
 import {EmojiConverter} from '../utils/EmojiUtils'
@@ -35,9 +35,6 @@ export class WeChatClient {
         this._client = WechatyBuilder.build({
             name: './storage/wechat_bot',
             puppet: 'wechaty-puppet-wechat4u',
-            puppetOptions: {
-                uos: true
-            }
         })
         this._tgClient = tgClient
         this._contactMap = new Map<number, Set<ContactItem>>([
@@ -70,13 +67,13 @@ export class WeChatClient {
     private _selectedContact: ContactInterface [] = []
     private _selectedRoom: RoomInterface [] = []
     private _memberCache: MemberCacheType[] = []
-    private scanMsgId: number | undefined = undefined
+    private scanMsgId: number | undefined
 
     private _started = false
     private _cacheMemberDone = false
     private _cacheMemberSendMessage = false
     private _friendShipList: FriendshipItem[] = []
-    private loadMsg: number | undefined = undefined
+    private loadMsg: number | undefined
 
     public get contactMap(): Map<number, Set<ContactItem>> | undefined {
         return this._contactMap
@@ -271,6 +268,11 @@ export class WeChatClient {
                     setTimeout(() => {
                         if (this.loadMsg) {
                             this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId, this.loadMsg)
+                            const b = this.tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)
+                            if (b && !this.tgClient.tgUserClientLogin) {
+                                // 启动bot
+                                this.tgClient.loginUserClient()
+                            }
                         }
                     }, 10 * 1000)
                 })
@@ -308,7 +310,10 @@ export class WeChatClient {
 
     private login() {
         if (this._client.isLoggedIn) {
-            this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登录成功!').then(() => {
+            this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '微信登录成功!').then(msg => {
+                setTimeout(() => {
+                    this.tgClient.bot.telegram.deleteMessage(this.tgClient.chatId, msg.message_id)
+                }, 10000)
                 // this._client.Contact.findAll()
                 // this._client.Room.findAll()
                 // this._client.Room.find({id: ''})
@@ -379,13 +384,97 @@ export class WeChatClient {
         const roomTopic = await roomEntity?.topic() || ''
         let bindItem = undefined
         if (roomEntity) {
+            // 黑白名单过滤
+            const blackFind = this._tgClient.setting.getVariable(VariableType.SETTING_BLACK_LIST).find(item => item.name === roomTopic)
+            const whiteFind = this._tgClient.setting.getVariable(VariableType.SETTING_WHITE_LIST).find(item => item.name === roomTopic)
+            if (this._tgClient.setting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK) {
+                if (blackFind) {
+                    return
+                }
+            } else {
+                if (!whiteFind && !await message.mentionSelf()) {
+                    return
+                }
+            }
+            // 找到bindId
+            let bindId
+            for (const roomItem of this._roomList) {
+                if (roomItem.room.id === roomEntity.id) {
+                    bindId = roomItem.id
+                    break
+                }
+            }
+            if (!bindId) {
+                // 找不到该群组,直接将群组加进缓存生成新id
+                bindId = UniqueIdGenerator.getInstance().generateId('room')
+                this._roomList.push({
+                    id: bindId,
+                    room: roomEntity
+                })
+            }
             bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(roomEntity.id)
+            if (!bindItem && this._tgClient.tgUserClientLogin) {
+                bindItem = await this._tgClient.tgUserClient?.createGroup({
+                    type: 1,
+                    room: roomEntity,
+                    bindId: bindId
+                })
+            }
         } else {
             bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
+            // 找到bindId
+            let bindId
+            if (talker?.type() === PUPPET.types.Contact.Official) {
+                const official = this.contactMap?.get(ContactImpl.Type.Official)
+                if (official) {
+                    for (const contactItem of official) {
+                        if (contactItem.contact.id === talker.id) {
+                            bindId = contactItem.id
+                            break
+                        }
+                    }
+                }
+                if (!bindId){
+                    bindId = UniqueIdGenerator.getInstance().generateId('contact')
+                    official?.add({
+                        id: bindId,
+                        contact: talker
+                    })
+                }
+            } else {
+                const individual = this.contactMap?.get(ContactImpl.Type.Individual)
+                if (individual) {
+                    for (const contactItem of individual) {
+                        if (contactItem.contact.id === talker.id) {
+                            bindId = contactItem.id
+                            break
+                        }
+                    }
+                }
+                if (!bindId){
+                    bindId = UniqueIdGenerator.getInstance().generateId('contact')
+                    individual?.add({
+                        id: bindId,
+                        contact: talker
+                    })
+                }
+            }
+            if (!bindItem && this._tgClient.tgUserClientLogin && !message.self()) {
+                if (talker?.type() === PUPPET.types.Contact.Official && !this._tgClient.setting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT)) {
+                    bindItem = await this._tgClient.tgUserClient?.createGroup({
+                        type: 0,
+                        contact: talker,
+                        bindId: bindId
+                    })
+                } else if (talker?.type() !== PUPPET.types.Contact.Official) {
+                    bindItem = await this._tgClient.tgUserClient?.createGroup({
+                        type: 0,
+                        contact: talker,
+                        bindId: bindId
+                    })
+                }
+            }
         }
-
-        // todo: 优化
-        // const mediaCaption=
         let identityStr = roomEntity ? `🌐${roomTopic} --- 👤${showSender} : ` : `👤${showSender} : `
         if (talker?.type() === PUPPET.types.Contact.Official) {
             identityStr = `📣${showSender} : `
@@ -433,23 +522,8 @@ export class WeChatClient {
         // 添加用户至最近联系人
         let count = 0
         while (!talker.isReady() && count < 5) {
-            talker.sync().catch(() => console.log('sync error'))
+            talker.sync().catch(() => console.debug('sync error'))
             count++
-        }
-
-        // 黑白名单过滤
-        if (roomEntity) {
-            const blackFind = this._tgClient.setting.getVariable(VariableType.SETTING_BLACK_LIST).find(item => item.name === roomTopic)
-            const whiteFind = this._tgClient.setting.getVariable(VariableType.SETTING_WHITE_LIST).find(item => item.name === roomTopic)
-            if (this._tgClient.setting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK) {
-                if (blackFind) {
-                    return
-                }
-            } else {
-                if (!whiteFind && !await message.mentionSelf()) {
-                    return
-                }
-            }
         }
         // 自动设置回复人
         const type = talker.type()
@@ -489,6 +563,10 @@ export class WeChatClient {
                     }
                 }
             }
+        }
+        //
+        if (bindItem) {
+            await this._tgClient.bot.telegram.getChat(bindItem.chat_id)
         }
 
         const sendMessageWhenNoAvatar = (name?: string) => {
@@ -558,8 +636,8 @@ export class WeChatClient {
                             this._tgClient.bot.telegram.sendPhoto(
                                 bindItem ? bindItem.chat_id : this.tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {
                                 this._tgClient.saveMessage(msg.message_id, message.id)
-                            }).catch(e=>{
-                                if (e.response.error_code === 403){
+                            }).catch(e => {
+                                if (e.response.error_code === 403 && bindItem) {
                                     this.tgClient.bindItemService.removeBindItemByChatId(bindItem.chat_id)
                                     this._tgClient.bot.telegram.sendPhoto(
                                         this.tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {
@@ -651,13 +729,13 @@ export class WeChatClient {
         const contactList = await this._client.Contact.findAll()
         // 不知道是什么很多空的 过滤掉没名字和不是朋友的
         const filter = contactList.filter(it => it.name() && it.friend())
-        await contactList.forEach(async item => {
+        for (const item of contactList) {
             let count = 0
             while (item.payload?.alias === item.name() && count < 5) {
                 await item.sync()
                 count++
             }
-        })
+        }
         filter.forEach(it => {
             const type = it.type()
             const id = UniqueIdGenerator.getInstance().generateId('contact')
@@ -680,13 +758,13 @@ export class WeChatClient {
         // 缓存到客户端的实例
         // 一起获取群放到缓存
         const room = await this._client.Room.findAll()
-        await room.forEach(async it => {
+        for (const it of room) {
             const l = await it.memberAll()
             if (l.length > 0) {
                 const id = UniqueIdGenerator.getInstance().generateId('room')
                 this._roomList.push({room: it, id: id})
             }
-        })
+        }
         this.tgClient.bindItemService.updateItem(this.roomList, this.contactMap)
     }
 
@@ -744,7 +822,7 @@ export class WeChatClient {
                 // 配置了 tg api 尝试发送大文件
                 if (this.tgClient.tgClient && buff.length > 1024 * 1024 * 50) {
                     if (buff.length > -1) {
-                        this.tgClient.tgClient.client.sendFile(this.tgClient.chatId, {
+                        this.tgClient.tgClient.client?.sendFile(this.tgClient.chatId, {
                             workers: 3,
                             file: new CustomFile(fileName, buff.length, '', buff),
                             forceDocument: !this.tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION),
@@ -780,10 +858,10 @@ export class WeChatClient {
                                 }).then((msg: { message_id: number }) => {
                                 this._tgClient.saveMessage(msg.message_id, message.id)
                             }).catch((e: TelegramError) => {
-                                if (e.response.error_code === 403){
+                                if (e.response.error_code === 403) {
                                     this.tgClient.bindItemService.removeBindItemByChatId(tgMessage.chatId)
                                     tgMessage.chatId = this.tgClient.chatId
-                                    this.sendFileToTg(message,identityStr,tgMessage)
+                                    this.sendFileToTg(message, identityStr, tgMessage)
                                     return
                                 }
                                 console.error('send file error:', e)
@@ -801,10 +879,10 @@ export class WeChatClient {
                         }).then(msg => {
                         this._tgClient.saveMessage(msg.message_id, message.id)
                     }).catch(e => {
-                        if (e.response.error_code === 403){
+                        if (e.response.error_code === 403) {
                             this.tgClient.bindItemService.removeBindItemByChatId(tgMessage.chatId)
                             tgMessage.chatId = this.tgClient.chatId
-                            this.sendFileToTg(message,identityStr,tgMessage)
+                            this.sendFileToTg(message, identityStr, tgMessage)
                             return
                         }
                         console.error('sendDocument error:', e)

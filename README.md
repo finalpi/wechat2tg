@@ -61,7 +61,7 @@ services:
       # 用户名密码可选
       # - PROXY_USERNAME=
       # - PROXY_PASSWORD=
-      # 发送大文件所需Telegram API配置(可选)
+      # Telegram API配置(可选:发送大文件,自动创建group分组所需)
       #- API_ID=
       #- API_HASH=
     restart: unless-stopped
@@ -124,7 +124,7 @@ How to obtain `API_ID` and `API_HASH`:
 
 3. Finally, click "Create application."
 
-### Grouping Messages
+### Manual grouping of messages
 
 **Note:** Because wechaty-puppet-wechat4u changes the ID each time it logs in again, it is not possible to obtain a unique key for each contact and group. The method to determine whether it is the same contact or group is by the contact's remark and nickname. This method may incorrectly bind to contacts and groups upon the next login if the remarks or nicknames are not unique, or if the name of the contact or group changes, which might cause binding failure. In such cases, re-binding is required.
 
@@ -137,6 +137,12 @@ How to obtain `API_ID` and `API_HASH`:
 `/unbind`: Unbind the contacts or groups currently bound to the group.
 
 `/cgdata`: Set the group avatar and nickname to the WeChat contact or group (requires admin privileges).
+
+### Automatic Grouping of Messages
+
+1. Configure `API_ID` and `API_HASH`
+2. Turn off the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot, click `Bot Settings` -> `Group Privacy` -> `Turn off`. When you see the message `Privacy mode is disabled for xxx`, it means the privacy mode has been successfully turned off.
+3. Use the `/autocg` command to enable automatic grouping mode. Follow the prompts to log in to Telegram.
 
 ## License
 MIT
