@@ -60,7 +60,7 @@ services:
       # 用户名密码可选
       # - PROXY_USERNAME=
       # - PROXY_PASSWORD=
-      # 发送大文件所需Telegram API配置(可选)
+      # Telegram API配置(可选:发送大文件,自动创建group分组所需)
       # - API_ID=
       # - API_HASH=
     restart: unless-stopped
@@ -125,7 +125,7 @@ PROXY_PASSWORD=
 
 3. 最后点击“Create application”
 
-### 对消息进行分组
+### 手动对消息进行分组
 
 **注意:** 因为`wechaty-puppet-wechat4u`每次重新登录的时候,id都会变化,所以没办法获取每个联系人和群组的唯一key,判断是否是同一个联系人和群组的方式是通过联系人的备注和昵称进行判断的,此方法在备注或者昵称不唯一的情况下,在下一次重新登录的时候,可能会错误的绑定到联系人和群组,或者当联系人或者群组的名称发生变化的时候,有可能会出现绑定失败的情况,此情况需要重新绑定.
 
@@ -137,6 +137,12 @@ PROXY_PASSWORD=
 `/unbind`:解绑当前group绑定的联系人或者群组
 
 `/cgdata`:设置group的头像和昵称为微信联系人或群组(需要管理员权限)
+
+### 自动对消息分组
+
+1. 配置`API_ID`和`API_HASH`
+2. 关闭掉机器人的隐私模式,打开BotFather,输入`/mybots`,选择你的bot,点击`Bot Settings`-`Group Privacy`-`Turn off`,出现`Privacy mode is disabled for xxx`就说明关闭成功了.
+3. 用`/autocg`命令开启自动分组模式,按提示登录Telegram即可
 
 ## License
 
