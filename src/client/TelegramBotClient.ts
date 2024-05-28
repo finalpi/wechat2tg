@@ -2224,8 +2224,8 @@ export class TelegramBotClient {
         }
     }
 
-    public reset() {
-        this._weChatClient.stop()
+    public async reset() {
+        await this._weChatClient.stop()
         this._weChatClient = new WeChatClient(this)
         this._weChatClient.start().then(() => {
             // 标记为已执行
