@@ -17,8 +17,7 @@ ENV PROXY_HOST=""
 ENV PROXY_PORT=""
 ENV PROXY_USERNAME=""
 ENV PROXY_PASSWORD=""
-RUN npm install -g npm@10.7.0
-RUN npm install
+RUN yarn install
 
 COPY . .
 
