@@ -413,7 +413,7 @@ export class WeChatClient {
                 })
             }
             bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(roomEntity.id)
-            if (!bindItem && this._tgClient.tgUserClientLogin) {
+            if (!bindItem && this._tgClient.tgUserClientLogin && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)) {
                 bindItem = await this._tgClient.tgUserClient?.createGroup({
                     type: 1,
                     room: roomEntity,
@@ -459,7 +459,7 @@ export class WeChatClient {
                     })
                 }
             }
-            if (!bindItem && this._tgClient.tgUserClientLogin && !message.self()) {
+            if (!bindItem && this._tgClient.tgUserClientLogin && !message.self() && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)) {
                 if (talker?.type() === PUPPET.types.Contact.Official && !this._tgClient.setting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT)) {
                     bindItem = await this._tgClient.tgUserClient?.createGroup({
                         type: 0,
