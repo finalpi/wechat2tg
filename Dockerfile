@@ -17,8 +17,8 @@ ENV PROXY_HOST=""
 ENV PROXY_PORT=""
 ENV PROXY_USERNAME=""
 ENV PROXY_PASSWORD=""
-RUN npm install -g npm@10.7.0 && npm cache clean --force
-RUN npm install || (cat /root/.npm/_logs/*-debug.log && exit 1)
+RUN npm install -g yarn
+RUN yarn install
 
 COPY . .
 
