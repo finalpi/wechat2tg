@@ -616,10 +616,10 @@ export class WeChatClient {
                     // 表情转换
                     const emojiConverter = new EmojiConverter()
                     const convertedText = emojiConverter.convert(messageTxt)
-                    // 这里说明表情换过了 TODO
-                    if (convertedText.length !== messageTxt.length) {
-                        ///
-                    }
+                    // 这里说明表情换过了 TODO: 会员表情转换
+                    // if (convertedText.length !== messageTxt.length) {
+                    //     ///
+                    // }
                     this._tgClient.sendMessage({
                         sender: showSender,
                         body: convertedText,
@@ -808,11 +808,6 @@ export class WeChatClient {
 
     private async sendFileToTg(message: MessageInterface, identityStr: string, tgMessage: SimpleMessage) {
         const messageType = message.type()
-        // if (messageType === PUPPET.types.Message.Emoticon) {
-        //     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        //     // @ts-ignore
-        //     message.payload.type = PUPPET.types.Message.Image
-        // }
         message.toFileBox().then(fBox => {
             // 配置了tg api尝试发送大文件
             if (this.sentMessageWhenFileToLage(fBox, {
@@ -826,7 +821,7 @@ export class WeChatClient {
             if (fileName.endsWith('.sil')) {
                 fileName = fileName.replace('.sil', '.mp3')
             }
-            fBox.toBuffer().then(buff => {
+            fBox.toBuffer().then(async buff => {
                 // 配置了 tg api 尝试发送大文件
                 if (this.tgClient.tgClient && buff.length > 1024 * 1024 * 50) {
                     if (buff.length > -1) {
