@@ -382,17 +382,20 @@ export class WeChatClient {
 
         // const topic = await roomEntity?.topic();
         const roomTopic = await roomEntity?.topic() || ''
+        // @ 所有人或者自己的消息转发
+
         let bindItem = undefined
         if (roomEntity) {
             // 黑白名单过滤
             const blackFind = this._tgClient.setting.getVariable(VariableType.SETTING_BLACK_LIST).find(item => item.name === roomTopic)
             const whiteFind = this._tgClient.setting.getVariable(VariableType.SETTING_WHITE_LIST).find(item => item.name === roomTopic)
+            const mentionSelf = await message.mentionSelf()
             if (this._tgClient.setting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK) {
-                if (blackFind) {
+                if (blackFind && !mentionSelf) {
                     return
                 }
-            } else {
-                if (!whiteFind && !await message.mentionSelf()) {
+            } else { // 白名单模式
+                if (!whiteFind && !mentionSelf) {
                     return
                 }
             }
@@ -675,15 +678,6 @@ export class WeChatClient {
                     chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId
                 })
                 break
-            // this._tgClient.sendMessage({
-            //     sender: showSender,
-            //     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-            //     body: '[动画表情]',
-            //     room: roomTopic,
-            //     id: message.id,
-            //     chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId
-            // })
-            // break
             case PUPPET.types.Message.MiniProgram: // 处理小程序消息的逻辑
                 sendMessageBody.body = '收到一条小程序消息'
                 this._tgClient.sendMessage(sendMessageBody)
