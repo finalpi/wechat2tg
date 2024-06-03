@@ -40,7 +40,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
         }else {
             id = Math.max(...values) + 1 || this.DEFAULT_FILTER_ID
         }
-        if (!id) {
+        if (id === 1) {
             id = 100
         }
         console.log('filter id', id)
