@@ -382,17 +382,20 @@ export class WeChatClient {
 
         // const topic = await roomEntity?.topic();
         const roomTopic = await roomEntity?.topic() || ''
+        // @ 所有人或者自己的消息转发
+
         let bindItem = undefined
         if (roomEntity) {
             // 黑白名单过滤
             const blackFind = this._tgClient.setting.getVariable(VariableType.SETTING_BLACK_LIST).find(item => item.name === roomTopic)
             const whiteFind = this._tgClient.setting.getVariable(VariableType.SETTING_WHITE_LIST).find(item => item.name === roomTopic)
+            const mentionSelf = await message.mentionSelf()
             if (this._tgClient.setting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK) {
-                if (blackFind) {
+                if (blackFind && !mentionSelf) {
                     return
                 }
-            } else {
-                if (!whiteFind && !await message.mentionSelf()) {
+            } else { // 白名单模式
+                if (!whiteFind && !mentionSelf) {
                     return
                 }
             }
@@ -434,7 +437,7 @@ export class WeChatClient {
                         }
                     }
                 }
-                if (!bindId){
+                if (!bindId) {
                     bindId = UniqueIdGenerator.getInstance().generateId('contact')
                     official?.add({
                         id: bindId,
@@ -451,7 +454,7 @@ export class WeChatClient {
                         }
                     }
                 }
-                if (!bindId){
+                if (!bindId) {
                     bindId = UniqueIdGenerator.getInstance().generateId('contact')
                     individual?.add({
                         id: bindId,
@@ -616,6 +619,10 @@ export class WeChatClient {
                     // 表情转换
                     const emojiConverter = new EmojiConverter()
                     const convertedText = emojiConverter.convert(messageTxt)
+                    // 这里说明表情换过了 TODO: 会员表情转换
+                    // if (convertedText.length !== messageTxt.length) {
+                    //     ///
+                    // }
                     this._tgClient.sendMessage({
                         sender: showSender,
                         body: convertedText,
@@ -660,22 +667,13 @@ export class WeChatClient {
             case PUPPET.types.Message.Attachment:
             case PUPPET.types.Message.Image:
             case PUPPET.types.Message.Audio:
+            case PUPPET.types.Message.Emoticon: // 处理表情消息的逻辑
             case PUPPET.types.Message.Video:
                 await this.sendFileToTg(message, identityStr, {
                     sender: showSender,
                     body: '',
                     room: roomTopic,
                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                    id: message.id,
-                    chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId
-                })
-                break
-            case PUPPET.types.Message.Emoticon: // 处理表情消息的逻辑
-                this._tgClient.sendMessage({
-                    sender: showSender,
-                    type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
-                    body: '[动画表情]',
-                    room: roomTopic,
                     id: message.id,
                     chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId
                 })
@@ -803,10 +801,9 @@ export class WeChatClient {
     }
 
     private async sendFileToTg(message: MessageInterface, identityStr: string, tgMessage: SimpleMessage) {
+        const messageType = message.type()
         message.toFileBox().then(fBox => {
             // 配置了tg api尝试发送大文件
-
-            const messageType = message.type()
             if (this.sentMessageWhenFileToLage(fBox, {
                 ...tgMessage,
                 body: `[${this.getMessageName(messageType)}]过大,请在微信上查收`
@@ -818,7 +815,7 @@ export class WeChatClient {
             if (fileName.endsWith('.sil')) {
                 fileName = fileName.replace('.sil', '.mp3')
             }
-            fBox.toBuffer().then(buff => {
+            fBox.toBuffer().then(async buff => {
                 // 配置了 tg api 尝试发送大文件
                 if (this.tgClient.tgClient && buff.length > 1024 * 1024 * 50) {
                     if (buff.length > -1) {
@@ -849,6 +846,7 @@ export class WeChatClient {
                         case PUPPET.types.Message.Image:
                         case PUPPET.types.Message.Audio:
                         case PUPPET.types.Message.Video:
+                        case PUPPET.types.Message.Emoticon:
                         case PUPPET.types.Message.Attachment:
                             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                             // @ts-ignore
