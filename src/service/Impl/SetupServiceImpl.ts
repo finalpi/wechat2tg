@@ -40,6 +40,9 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
         }else {
             id = Math.max(...values) + 1 || this.DEFAULT_FILTER_ID
         }
+        if (!id) {
+            id = 100
+        }
         console.log('filter id', id)
         if (!value) {
             log.info('创建 TG 文件夹')
