@@ -41,12 +41,10 @@ export class ConverterHelper {
                     fs.rm(tmpFilePath, {force: true, recursive: true},
                         (err) => {
                             if (err) throw err
-                            console.log(`${tmpFilePath} was rm`)
                         })
                     // 删除tgs文件
                     fs.unlink(inputFile, (err) => {
                         if (err) throw err
-                        console.log(`${inputFile} was deleted`)
                     })
                 })
         }
