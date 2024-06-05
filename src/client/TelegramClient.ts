@@ -37,8 +37,8 @@ export class TelegramClient {
         if (this.apiId && this.apiHash) {
 
             this._client = new GramClient(this.storeSession, this.apiId, this.apiHash, {
-                connectionRetries: 5,
-                deviceModel: `${config.APP_NAME} On ${os.hostname()}`,
+                connectionRetries: 20,
+                deviceModel: `${config.APP_NAME} Bot On ${os.hostname()}`,
                 appVersion: 'rainbowcat',
                 proxy: config.HOST ? {
                     ip: config.HOST,
@@ -48,6 +48,7 @@ export class TelegramClient {
                     username: config.USERNAME,
                 } : undefined,
                 autoReconnect: true,
+                maxConcurrentDownloads: 5,
             })
 
             this._client.start({
