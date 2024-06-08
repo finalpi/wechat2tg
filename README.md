@@ -97,6 +97,10 @@ Automatic contact switch: Automatically switches back to replying to a user or g
 
 Receive official account messages: Whether to accept messages from official accounts
 
+## Special Response Instructions
+Messages sent within 2 minutes can be recalled. The recall method is to reply to your own sent message with the content "&rm".
+Media messages need to wait until they are successfully sent before they can be recalled.
+
 ## Configuration Explanation
 `BOT_TOKEN` (required): Telegram bot token, created via BotFather
 
@@ -115,6 +119,8 @@ PROXY_PASSWORD=
 ### Receiving and Sending Large Files
 
 Due to Telegram Bot API limitations, files larger than 20MB cannot be sent, and files larger than 50MB cannot be received. If you need to send or receive larger files, please configure your `API_ID` and `API_HASH`.
+
+**!! Testing found that sending files over 25MB via the web protocol causes the server to return an error upon slicing upload.**
 
 How to obtain `API_ID` and `API_HASH`:
 

@@ -492,8 +492,8 @@ export class WeChatClient {
         }
 
         if (message.self()) {
-            // 过滤掉自己所发送的消息
-            if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF)) {
+            // 过滤掉自己所发送的消息 和没有绑定的群组才转发
+            if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF) && !bindItem) {
                 // 不转发文件
                 if (messageType === PUPPET.types.Message.Attachment
                     || messageType === PUPPET.types.Message.Audio
