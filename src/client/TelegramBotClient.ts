@@ -1235,7 +1235,7 @@ export class TelegramBotClient {
             const replyMessageId = ctx.update.message['reply_to_message']?.message_id
             // 如果是回复的消息 优先回复该发送的消息
             if (replyMessageId) {
-                // 假设回复消息是撤回命令 撤回web协议获取不到消息id 放弃
+                // 假设回复消息是撤回命令 撤回web协议获取不到消息id 放弃 更新上游代码可获取了
                 if (text === '&rm') {
                     const undoMessageCache = CacheHelper.getInstances().getUndoMessageCache(replyMessageId)
                     if (undoMessageCache) {
@@ -1244,12 +1244,13 @@ export class TelegramBotClient {
                             .then(message => {
                                 message?.recall().then(() => {
                                     ctx.reply('撤回成功')
+                                    CacheHelper.getInstances().deleteUndoMessageCache(replyMessageId)
                                 }).catch(() => {
                                     ctx.reply('撤回失败')
                                 })
                             })
                     } else {
-                        ctx.reply('当前消息不能撤回或者已经过期')
+                        ctx.reply('该消息已经撤回或超时')
                     }
                     return
                 }
