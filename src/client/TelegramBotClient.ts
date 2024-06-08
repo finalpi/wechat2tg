@@ -27,8 +27,9 @@ import {UserAuthParams} from 'telegram/client/auth'
 import {EventEmitter} from 'node:events'
 import {Constants} from '../constants/Constants'
 import {TelegramUserClient} from './TelegramUserClient'
+import BaseClient from '../base/BaseClient'
 
-export class TelegramBotClient {
+export class TelegramBotClient extends BaseClient {
     get tgUserClient(): TelegramUserClient | undefined {
         return this._tgUserClient
     }
@@ -95,6 +96,7 @@ export class TelegramBotClient {
 
 
     private constructor() {
+        super()
         this._weChatClient = new WeChatClient(this)
         this._bot = new Telegraf(config.BOT_TOKEN)
         this._bindItemService = new BindItemService(this._bot)
@@ -343,9 +345,9 @@ export class TelegramBotClient {
                     this.loginCommandExecuted = true
 
 
-                    console.log('自动启动微信bot')
+                    this.logDebug('自动启动微信bot')
                 }).catch(() => {
-                    console.error('自动启动失败')
+                    this.logError('自动启动失败')
                 })
             }
         }
@@ -401,7 +403,7 @@ export class TelegramBotClient {
 
         // 好友请求处理
         bot.action(/friendship-accept/, async ctx => {
-            console.log('接受到 好友请求', ctx.match.input)
+            this.logDebug('接受到 好友请求', ctx.match.input)
             const friend = this._weChatClient.friendShipList.find(item => item.id === ctx.match.input)?.friendship
             if (!friend) {
                 ctx.deleteMessage().then(() => ctx.reply('好友申请已过期!'))
@@ -771,7 +773,7 @@ export class TelegramBotClient {
         })
 
         bot.action(/room-index-\d+/, async (ctx) => {
-            // console.log(ctx.match.input)
+            // this.logDebug(ctx.match.input)
             const room = currentSelectRoomMap.get(ctx.match.input)
             const roomTopic = await room?.room?.topic()
             if (ctx.chat && ctx.chat.type.includes('group') && room) {
@@ -1138,7 +1140,7 @@ export class TelegramBotClient {
         })
 
         bot.action(/^[0-9a-z]+/, async (ctx) => {
-            console.log('点击了用户', ctx.match.input)
+            this.logDebug('点击了用户', ctx.match.input)
             ctx.deleteMessage()
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 const id = ctx.match.input !== 'filehelper' ? '@' + ctx.match.input : 'filehelper'
@@ -1242,10 +1244,16 @@ export class TelegramBotClient {
                         // 撤回消息
                         this.weChatClient.client.Message.find({id: undoMessageCache.wechat_message_id})
                             .then(message => {
-                                message?.recall().then(() => {
-                                    ctx.reply('撤回成功')
-                                    CacheHelper.getInstances().deleteUndoMessageCache(replyMessageId)
-                                }).catch(() => {
+                                message?.recall().then((res) => {
+                                    if (res) {
+                                        ctx.reply('撤回成功')
+                                        CacheHelper.getInstances().deleteUndoMessageCache(replyMessageId)
+                                    } else {
+                                        ctx.reply('撤回失败')
+                                    }
+
+                                }).catch((e) => {
+                                    this.logError('撤回失败', e)
                                     ctx.reply('撤回失败')
                                 })
                             })
@@ -1522,9 +1530,10 @@ export class TelegramBotClient {
     }
 
     public async loginUserClient() {
+        const logger = this._log
         const authParams: UserAuthParams = {
             onError(err: Error): Promise<boolean> | void {
-                console.error(err)
+                logger.error('UserClient error:', err)
             },
             phoneNumber: async () =>
                 new Promise((resolve) => {
@@ -1637,14 +1646,14 @@ export class TelegramBotClient {
     private async botLaunch(bot: Telegraf, retryCount = 5) {
         try {
             await bot.launch()
-            console.log('Telegram Bot started')
+            this.logDebug('Telegram Bot started')
         } catch (error) {
-            console.error('Telegram Bot start failed', error)
+            this.logError('Telegram Bot start failed', error)
             if (retryCount > 0) {
-                console.log(`Retrying launch... (${retryCount} attempts left)`)
+                this.logDebug(`Retrying launch... (${retryCount} attempts left)`)
                 await this.botLaunch(bot, retryCount - 1)
             } else {
-                console.error('Maximum retry attempts reached. Unable to start bot.')
+                this.logError('Maximum retry attempts reached. Unable to start bot.')
             }
         }
     }
@@ -1714,7 +1723,7 @@ export class TelegramBotClient {
                                             ctx.message.message_id, msg.id)
                                     }
                                 }).catch((e) => {
-                                    console.error('这里发送失败', e)
+                                    this.logError('这里发送失败', e)
                                     ctx.reply(Constants.SEND_FAIL)
                                 })
                                 return
@@ -1730,7 +1739,7 @@ export class TelegramBotClient {
                                                 ctx.message.message_id, msg.id)
                                         }
                                     }).catch((e) => {
-                                        console.error('这里发送失败', e)
+                                        this.logError('这里发送失败', e)
                                         ctx.reply(Constants.SEND_FAIL)
                                     })
                                     return
@@ -1746,7 +1755,7 @@ export class TelegramBotClient {
                                         ctx.message.message_id, msg.id)
                                 }
                             }).catch((e) => {
-                                console.error('这里发送失败', e)
+                                this.logDebug('这里发送失败', e)
                                 ctx.reply(Constants.SEND_FAIL)
                             })
                         }
@@ -1788,13 +1797,13 @@ export class TelegramBotClient {
                             })
                         }
                     }).catch((e) => {
-                        console.error('这里发送失败', e)
+                        this.logDebug('这里发送失败', e)
                         ctx.reply(Constants.SEND_FAIL)
                     })
                 }
             }
         } catch (e) {
-            console.error(e)
+            this.logError('发送失败', e)
             await ctx.reply(Constants.SEND_FAIL)
         }
 
@@ -1805,7 +1814,6 @@ export class TelegramBotClient {
     }
 
     public async sendMessage(message: SimpleMessage) {
-        // console.log('发送文本消息', message)
         this.bot.telegram.sendMessage(message.chatId, SimpleMessageSender.send(message), {
             parse_mode: 'HTML'
         }).then(res => {
@@ -1984,7 +1992,7 @@ export class TelegramBotClient {
             }
 
         } catch (error) {
-            console.error('Error loading owner data:', error)
+            this.logError('Error loading owner data:', error)
         }
     }
 
@@ -1999,7 +2007,7 @@ export class TelegramBotClient {
             variableContainer.parseFromFile()
             this.forwardSetting = variableContainer
         } catch (error) {
-            console.error('Error loading owner data:', error)
+            this.logError('Error loading owner data:', error)
 
         }
 
@@ -2209,7 +2217,7 @@ export class TelegramBotClient {
                             })
                         }
                     }).catch(err => {
-                        console.error('use telegram api download file error: ', err)
+                        this.logError('use telegram api download file error: ', err)
                         ctx.reply('发送文件失败!', {
                             reply_parameters: {
                                 message_id: ctx.message.message_id

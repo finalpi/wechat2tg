@@ -4,8 +4,9 @@ import {TelegramClient as GramClient} from 'telegram'
 import {TelegramBotClient} from './TelegramBotClient'
 import * as authMethods from 'telegram/client/auth'
 import os from 'node:os'
+import BaseClient from '../base/BaseClient'
 
-export class TelegramClient {
+export class TelegramClient extends BaseClient {
     get client() {
         return this._client
     }
@@ -26,6 +27,7 @@ export class TelegramClient {
     }
 
     protected constructor(telegramBotClient: TelegramBotClient) {
+        super()
         this.apiId = parseInt(config.API_ID)
         this.apiHash = config.API_HASH
 

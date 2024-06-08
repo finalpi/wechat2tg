@@ -26,12 +26,14 @@ import {CustomFile} from 'telegram/client/uploads'
 import {RoomItem} from '../models/RoomItem'
 import {ContactItem} from '../models/ContactItem'
 import TelegramError from 'telegraf/src/core/network/error'
+import BaseClient from '../base/BaseClient'
 
 
-export class WeChatClient {
+export class WeChatClient extends BaseClient {
 
 
     constructor(private readonly tgClient: TelegramBotClient) {
+        super()
         this._client = WechatyBuilder.build({
             name: './storage/wechat_bot',
             puppet: 'wechaty-puppet-wechat4u',
@@ -56,6 +58,7 @@ export class WeChatClient {
         this.roomJoin = this.roomJoin.bind(this)
         this.roomLeave = this.roomLeave.bind(this)
         this.roomInvite = this.roomInvite.bind(this)
+        this.error = this.error.bind(this)
     }
 
     private readonly _client: WechatyInterface
@@ -152,10 +155,10 @@ export class WeChatClient {
         if (!this._started) {
             await this._client.start().then(() => {
                 this._started = true
-                console.log('Wechat client start!')
+                this.logInfo('Wechat client start!')
             })
         } else {
-            console.log('Wechat client already started!')
+            this.logInfo('Wechat client already started!')
             return new Error('Wechat client already started!')
         }
     }
@@ -166,8 +169,8 @@ export class WeChatClient {
             .on('scan', this.scan)
             .on('message', this.message)
             .on('logout', this.logout)
-            .on('stop', () => console.log('on stop...'))
-            .on('post', () => console.log('on post...'))
+            .on('stop', () => this.logInfo('on stop...'))
+            .on('post', () => this.logInfo('on post...'))
             .on('room-join', this.roomJoin)
             .on('room-topic', this.roomTopic)
             .on('room-leave', this.roomLeave)
@@ -187,7 +190,7 @@ export class WeChatClient {
     }
 
     private error(error: Error) {
-        console.error('error:', error)
+        this.logDebug('error:', error)
     }
 
     private friendship(friendship: FriendshipInterface) {
@@ -259,7 +262,7 @@ export class WeChatClient {
     }
 
     private onReady() {
-        console.log('Wechat client ready!')
+        this.logDebug('Wechat client ready!')
         this.cacheMember().then(() => {
             this.cacheMemberDone = true
             if (!this.cacheMemberSendMessage) {
@@ -277,7 +280,7 @@ export class WeChatClient {
                     }, 10 * 1000)
                 })
             }
-            console.log('cache member done!')
+            this.logDebug('cache member done!')
         })
     }
 
@@ -290,13 +293,13 @@ export class WeChatClient {
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         this._client.restart().then(() => {
-            console.log('restart ... ')
+            this.logDebug('restart ... ')
         })
     }
 
     public reset() {
         // this._client.reset().then(() => {
-        console.log('reset ... ')
+        this.logInfo('reset ... ')
         // })
         this._client.logout()
     }
@@ -341,11 +344,11 @@ export class WeChatClient {
 
     // scan qrcode login
     private scan(qrcode: string, status: ScanStatus) {
-        console.log('---------on scan---------')
+        this.logDebug('---------on scan---------')
         if (status === ScanStatus.Waiting || status === ScanStatus.Timeout) {
             const qrcodeImageUrl = encodeURIComponent(qrcode)
 
-            console.info('StarterBot', 'onScan: %s(%s) - %s', ScanStatus[status], status, qrcodeImageUrl)
+            this.logDebug('StarterBot', 'onScan: %s(%s) - %s', ScanStatus[status], status, qrcodeImageUrl)
 
             // console.log(this._bot)
             const tgBot = this._tgClient.bot
@@ -362,7 +365,7 @@ export class WeChatClient {
             // }
 
         } else {
-            console.info('StarterBot', 'onScan: %s(%s)', ScanStatus[status], status)
+            this.logDebug('StarterBot', 'onScan: %s(%s)', ScanStatus[status], status)
         }
     }
 
@@ -525,7 +528,7 @@ export class WeChatClient {
         // 添加用户至最近联系人
         let count = 0
         while (!talker.isReady() && count < 5) {
-            talker.sync().catch(() => console.debug('sync error'))
+            talker.sync().catch(() => this.logDebug('sync error'))
             count++
         }
         // 自动设置回复人
@@ -773,9 +776,9 @@ export class WeChatClient {
                 // 文件存在，删除文件
                 fs.unlink(filePath, (err) => {
                     if (err) {
-                        console.error('Error deleting file:', err)
+                        this.logError('Error deleting file:', err)
                     } else {
-                        console.log('File deleted successfully')
+                        this.logDebug('File deleted successfully')
                     }
                     this.contactMap?.get(ContactImpl.Type.Individual)?.clear()
                     this.contactMap?.get(ContactImpl.Type.Official)?.clear()
@@ -825,7 +828,7 @@ export class WeChatClient {
                             forceDocument: !this.tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION),
                             caption: identityStr,
                         }).catch((e) => {
-                            console.error('send file error:', e)
+                            this.logError('send file error:', e)
                             this._tgClient.sendMessage({
                                 ...tgMessage,
                                 body: `[${this.getMessageName(messageType)}]转发失败, 请在微信上查收`
@@ -862,7 +865,7 @@ export class WeChatClient {
                                     this.sendFileToTg(message, identityStr, tgMessage)
                                     return
                                 }
-                                console.error('send file error:', e)
+                               this.logError('send file error:', e)
                                 this._tgClient.sendMessage({
                                     ...tgMessage,
                                     body: `[${this.getMessageName(messageType)}]转发失败, 请在微信上查收`
@@ -883,7 +886,7 @@ export class WeChatClient {
                             this.sendFileToTg(message, identityStr, tgMessage)
                             return
                         }
-                        console.error('sendDocument error:', e)
+                       this.logError('sendDocument error:', e)
                         this._tgClient.sendMessage({
                             ...tgMessage,
                             body: `[${this.getMessageName(messageType)}]转发失败, 请在微信上查收`
