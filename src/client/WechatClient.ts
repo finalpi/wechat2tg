@@ -356,23 +356,18 @@ export class WeChatClient extends BaseClient {
         this.readyCount = 0
         if (status === ScanStatus.Waiting || status === ScanStatus.Timeout) {
             const qrcodeImageUrl = encodeURIComponent(qrcode)
-
             this.logDebug('StarterBot', 'onScan: %s(%s) - %s', ScanStatus[status], status, qrcodeImageUrl)
-
-            // console.log(this._bot)
             const tgBot = this._tgClient.bot
-            // tgBot.telegram.sendMessage(this._tgClient.chatId, '请扫码登陆')
-            // console.log('chat id is : {}', this._tgClient.chatId)
-            // if (!this._started) {
-            QRCode.toBuffer(qrcode).then(buff =>
-                tgBot.telegram.sendPhoto(this._tgClient.chatId, {source: buff}, {caption: '请扫码登陆:'})).then(msg => {
+            QRCode.toBuffer(qrcode).then(buff => {
                 if (this.scanMsgId) {
-                    tgBot.telegram.deleteMessage(this._tgClient.chatId, this.scanMsgId)
+                    tgBot.telegram.editMessageMedia(this._tgClient.chatId,this.scanMsgId,undefined,{type: 'photo',
+                        media: {source:buff},caption: '请扫码登陆:'})
+                }else {
+                    tgBot.telegram.sendPhoto(this._tgClient.chatId,{source: buff}, {caption: '请扫码登陆:'}).then(msg => {
+                        this.scanMsgId = msg.message_id
+                    })
                 }
-                this.scanMsgId = msg.message_id
             })
-            // }
-
         } else {
             this.logDebug('StarterBot', 'onScan: %s(%s)', ScanStatus[status], status)
         }
@@ -631,10 +626,6 @@ export class WeChatClient extends BaseClient {
                     // 表情转换
                     const emojiConverter = new EmojiConverter()
                     const convertedText = emojiConverter.convert(messageTxt)
-                    // 这里说明表情换过了 TODO: 会员表情转换
-                    // if (convertedText.length !== messageTxt.length) {
-                    //     ///
-                    // }
                     this._tgClient.sendMessage({
                         sender: showSender,
                         body: convertedText,
