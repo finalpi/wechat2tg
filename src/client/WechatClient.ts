@@ -77,6 +77,7 @@ export class WeChatClient extends BaseClient {
     private _cacheMemberSendMessage = false
     private _friendShipList: FriendshipItem[] = []
     private loadMsg: number | undefined
+    private readyCount = 0
 
     public get contactMap(): Map<number, Set<ContactItem>> | undefined {
         return this._contactMap
@@ -263,6 +264,12 @@ export class WeChatClient extends BaseClient {
 
     private onReady() {
         this.logDebug('Wechat client ready!')
+        this.readyCount++
+        if(this.readyCount >= 3) {
+            // 尝试重启
+            this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登录状态过期,重启bot')
+            this.resetValue()
+        }
         this.cacheMember().then(() => {
             this.cacheMemberDone = true
             if (!this.cacheMemberSendMessage) {
@@ -345,6 +352,7 @@ export class WeChatClient extends BaseClient {
     // scan qrcode login
     private scan(qrcode: string, status: ScanStatus) {
         this.logDebug('---------on scan---------')
+        this.readyCount = 0
         if (status === ScanStatus.Waiting || status === ScanStatus.Timeout) {
             const qrcodeImageUrl = encodeURIComponent(qrcode)
 
@@ -770,27 +778,22 @@ export class WeChatClient extends BaseClient {
     }
 
     private resetValue() {
+        this.readyCount = 0
         const filePath = 'storage/wechat_bot.memory-card.json'
-        fs.access(filePath, fs.constants.F_OK, (err) => {
+        fs.access(filePath, fs.constants.F_OK, async (err) => {
             if (!err) {
                 // 文件存在，删除文件
-                fs.unlink(filePath, (err) => {
-                    if (err) {
-                        this.logError('Error deleting file:', err)
-                    } else {
-                        this.logDebug('File deleted successfully')
-                    }
-                    this.contactMap?.get(ContactImpl.Type.Individual)?.clear()
-                    this.contactMap?.get(ContactImpl.Type.Official)?.clear()
-                    this.cacheMemberDone = false
-                    this.cacheMemberSendMessage = false
-                    this._roomList = []
-                    this.tgClient.selectedMember = []
-                    this.tgClient.flagPinMessageType = ''
-                    this.tgClient.findPinMessage()
-                    this.tgClient.reset()
-                })
+                await fs.promises.unlink(filePath)
             }
+            this.contactMap?.get(ContactImpl.Type.Individual)?.clear()
+            this.contactMap?.get(ContactImpl.Type.Official)?.clear()
+            this.cacheMemberDone = false
+            this.cacheMemberSendMessage = false
+            this._roomList = []
+            this.tgClient.selectedMember = []
+            this.tgClient.flagPinMessageType = ''
+            this.tgClient.findPinMessage()
+            this.tgClient.reset()
         })
     }
 
