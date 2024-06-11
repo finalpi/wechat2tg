@@ -14,7 +14,7 @@ export default class TgsUtils {
         height?: number,
     }) {
         return new Promise<void>((resolve, reject) => {
-            const output = outputFile.substring(0, outputFile.lastIndexOf('/'))
+            const output = outputFile.substring(0, outputFile.lastIndexOf('.'))
             const resultStream = extractFull(inputFile,
                 output,
                 {
@@ -24,16 +24,22 @@ export default class TgsUtils {
 
             resultStream.on('end', async () => {
                 try {
-                    const tmpFile = outputFile.substring(0, outputFile.lastIndexOf('.'))
+                    const tmpFilePath = outputFile.substring(0, outputFile.lastIndexOf('.'))
 
-                    const file = fs.readFileSync(tmpFile)
-                    const converted = await converter({
-                        file: file,
-                        format: 'gif',
-                        ...lottieConfig,
-                    })
+                    const files = fs.readdirSync(tmpFilePath)
+                    if (files.length === 1) {
+                        const file = fs.readFileSync(tmpFilePath + '/' + files[0])
+                        const converted = await converter({
+                            file: file,
+                            format: 'gif',
+                            ...lottieConfig,
+                        })
 
-                    fs.writeFileSync(outputFile, converted, 'base64')
+                        fs.writeFileSync(outputFile, converted, 'base64')
+                    } else {
+                        // 文件不止一个
+                        reject('Tgs file is more than one file')
+                    }
                     resolve()
                 } catch (error) {
                     reject(error)

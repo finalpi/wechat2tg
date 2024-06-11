@@ -96,6 +96,10 @@ docker-compose up -d
 
 **接受公众号消息**:是否接受公众号消息
 
+## 特殊回复说明
+2分钟内发送的消息能撤回 撤回方式是回复自己发送的消息 内容为&rm
+媒体消息需要等待发送成功才能撤回
+
 ## 配置项说明
 
 `BOT_TOKEN`(必填):telegram bot的token,通过[BotFather](https://t.me/BotFather)创建
@@ -116,6 +120,8 @@ PROXY_PASSWORD=
 ### 大文件的接受和发送
 
 因为Telegram Bot API的限制,不能发送超过20MB的文件,或者接收超过50MB的文件,如果你需要收发大文件的消息内容,请配置你的`API_ID`和`API_HASH`
+
+**!!测试发现web协议发送超过25MB文件，切片上传服务器直接返回错误**
 
 `API_ID`和`API_HASH`的获取方法:
 

@@ -32,8 +32,8 @@ export class TelegramUserClient extends TelegramClient {
         if (this.apiId && this.apiHash) {
 
             this._client = new GramClient(new StoreSession('storage/tg-user-session'), this.apiId, this.apiHash, {
-                connectionRetries: 5,
-                deviceModel: `${config.APP_NAME} On ${os.hostname()}`,
+                connectionRetries: 20,
+                deviceModel: `${config.APP_NAME} User On ${os.hostname()}`,
                 appVersion: 'rainbowcat',
                 proxy: config.HOST ? {
                     ip: config.HOST,
@@ -43,6 +43,7 @@ export class TelegramUserClient extends TelegramClient {
                     username: config.USERNAME,
                 } : undefined,
                 autoReconnect: true,
+                maxConcurrentDownloads: 5,
             })
 
             // this._client.logger.setLevel(LogLevel.DEBUG)
@@ -68,7 +69,7 @@ export class TelegramUserClient extends TelegramClient {
                 })
             }).catch((e) => {
                 this.telegramBotClient.tgUserClientLogin = false
-                console.error('login... user error', e)
+                this.logError('login... user error', e)
             })
         } else {
             this._client?.connect()
@@ -91,7 +92,11 @@ export class TelegramUserClient extends TelegramClient {
                     name = createGroupInterface.room.payload.topic
                 }
             }
-            console.debug('createGroup id  ', this.telegramBotClient.chatId, this.telegramBotClient.bot.botInfo?.id)
+            // TODO: ROOM NOT READY
+            if (!name) {
+                name = '微信内-未命名群'
+            }
+            this.logDebug('createGroup id  ', this.telegramBotClient.chatId, this.telegramBotClient.bot.botInfo?.id)
             const result = await this.client?.invoke(
                 new Api.messages.CreateChat({
                     users: [this.telegramBotClient.chatId, this.telegramBotClient.bot.botInfo?.id],

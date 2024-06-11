@@ -65,5 +65,6 @@ export class BotHelpText {
 5\\. 当前回复的用户或者群会被pin
 6\\. 回复转发的消息能直接直接转发到对应的人或者群（暂时不支持回复回复的消息，而且不改变当前正在回复的用户）
 7\\. 由于使用的web协议的微信协议所以可能会**封号**（目前我没遇到过），使用前请三思 
+8\\. 更多功能请查看 github 仓库（ For more features, please check the GitHub repository README.
 `
 }

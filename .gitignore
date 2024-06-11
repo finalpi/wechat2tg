@@ -6,3 +6,4 @@ avatar/*
 .env
 dist
 storage/**
+logs

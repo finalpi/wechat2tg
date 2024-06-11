@@ -247,7 +247,7 @@ export class BindItemService extends AbstractSqlService {
             stmt1.finalize()
         })
 
-        this.tgBotClient.telegram.sendMessage(chatId, `绑定成功:${name}`).then(ctx => {
+        this.tgBotClient.telegram.sendMessage(chatId, `绑定成功:${name}`,{disable_notification: true}).then(ctx => {
             setTimeout(() => {
                 this.tgBotClient.telegram.deleteMessage(chatId, ctx.message_id)
             }, 10 * 1000)
@@ -307,7 +307,7 @@ export class BindItemService extends AbstractSqlService {
             stmt1.run(name, chatId, type, bindId, alias, wechatId)
             stmt1.finalize()
         })
-        this.tgBotClient.telegram.sendMessage(chatId, `绑定成功:${name}`).then(ctx => {
+        this.tgBotClient.telegram.sendMessage(chatId, `绑定成功:${name}`,{disable_notification: true}).then(ctx => {
             setTimeout(() => {
                 this.tgBotClient.telegram.deleteMessage(chatId, ctx.message_id)
             }, 10 * 1000)

@@ -27,8 +27,9 @@ import {UserAuthParams} from 'telegram/client/auth'
 import {EventEmitter} from 'node:events'
 import {Constants} from '../constants/Constants'
 import {TelegramUserClient} from './TelegramUserClient'
+import BaseClient from '../base/BaseClient'
 
-export class TelegramBotClient {
+export class TelegramBotClient extends BaseClient {
     get tgUserClient(): TelegramUserClient | undefined {
         return this._tgUserClient
     }
@@ -95,6 +96,7 @@ export class TelegramBotClient {
 
 
     private constructor() {
+        super()
         this._weChatClient = new WeChatClient(this)
         this._bot = new Telegraf(config.BOT_TOKEN)
         this._bindItemService = new BindItemService(this._bot)
@@ -343,9 +345,9 @@ export class TelegramBotClient {
                     this.loginCommandExecuted = true
 
 
-                    console.log('自动启动微信bot')
+                    this.logDebug('自动启动微信bot')
                 }).catch(() => {
-                    console.error('自动启动失败')
+                    this.logError('自动启动失败')
                 })
             }
         }
@@ -401,7 +403,7 @@ export class TelegramBotClient {
 
         // 好友请求处理
         bot.action(/friendship-accept/, async ctx => {
-            console.log('接受到 好友请求', ctx.match.input)
+            this.logDebug('接受到 好友请求', ctx.match.input)
             const friend = this._weChatClient.friendShipList.find(item => item.id === ctx.match.input)?.friendship
             if (!friend) {
                 ctx.deleteMessage().then(() => ctx.reply('好友申请已过期!'))
@@ -771,7 +773,7 @@ export class TelegramBotClient {
         })
 
         bot.action(/room-index-\d+/, async (ctx) => {
-            // console.log(ctx.match.input)
+            // this.logDebug(ctx.match.input)
             const room = currentSelectRoomMap.get(ctx.match.input)
             const roomTopic = await room?.room?.topic()
             if (ctx.chat && ctx.chat.type.includes('group') && room) {
@@ -1138,7 +1140,7 @@ export class TelegramBotClient {
         })
 
         bot.action(/^[0-9a-z]+/, async (ctx) => {
-            console.log('点击了用户', ctx.match.input)
+            this.logDebug('点击了用户', ctx.match.input)
             ctx.deleteMessage()
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 const id = ctx.match.input !== 'filehelper' ? '@' + ctx.match.input : 'filehelper'
@@ -1235,21 +1237,28 @@ export class TelegramBotClient {
             const replyMessageId = ctx.update.message['reply_to_message']?.message_id
             // 如果是回复的消息 优先回复该发送的消息
             if (replyMessageId) {
-                // 假设回复消息是撤回命令 撤回web协议获取不到消息id 放弃
+                // 假设回复消息是撤回命令 撤回web协议获取不到消息id 放弃 更新上游代码可获取了
                 if (text === '&rm') {
                     const undoMessageCache = CacheHelper.getInstances().getUndoMessageCache(replyMessageId)
                     if (undoMessageCache) {
                         // 撤回消息
                         this.weChatClient.client.Message.find({id: undoMessageCache.wechat_message_id})
                             .then(message => {
-                                message?.recall().then(() => {
-                                    ctx.reply('撤回成功')
-                                }).catch(() => {
+                                message?.recall().then((res) => {
+                                    if (res) {
+                                        ctx.reply('撤回成功')
+                                        CacheHelper.getInstances().deleteUndoMessageCache(replyMessageId)
+                                    } else {
+                                        ctx.reply('撤回失败')
+                                    }
+
+                                }).catch((e) => {
+                                    this.logError('撤回失败', e)
                                     ctx.reply('撤回失败')
                                 })
                             })
                     } else {
-                        ctx.reply('当前消息不能撤回或者已经过期')
+                        ctx.reply('该消息已经撤回或超时')
                     }
                     return
                 }
@@ -1451,129 +1460,9 @@ export class TelegramBotClient {
                     }
                 }
 
-                // 保存后不删除下次发送使用
-
-                // 文件存在
-                if (fs.existsSync(saveFile)) {
-                    if (fs.existsSync(gifFile)) {
-                        const fileBox = FileBox.fromFile(gifFile)
-                        const replyMessageId = ctx.update.message['reply_to_message']?.message_id
-                        // 如果是回复的消息 优先回复该发送的消息
-                        if (replyMessageId) {
-                            // try get weChat cache message id
-                            const weChatMessageId = this._messageMap.get(replyMessageId)
-                            if (weChatMessageId) {
-                                // 添加或者移除名单
-
-                                this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
-                                    message?.say(fileBox).then(msg => {
-                                        // 保存到undo消息缓存
-                                        if (msg) {
-                                            CacheHelper.getInstances().addUndoMessageCache(ctx.message.message_id, msg.id)
-                                        }
-                                        if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                                            ctx.reply(Constants.SEND_SUCCESS, {
-                                                reply_parameters: {
-                                                    message_id: ctx.message.message_id
-                                                }
-                                            })
-                                        }
-                                    }).catch(() => {
-                                        ctx.reply('发送失败!', {
-                                            reply_parameters: {
-                                                message_id: ctx.message.message_id
-                                            }
-                                        })
-                                    })
-                                })
-                            }
-                            return
-                        }
-                        // 如果是群组消息的情况
-                        if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
-                            const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
-                            if (bindItem) {
-                                if (bindItem.type === 0) {
-                                    const findItem: ContactInterface | undefined = undefined
-                                    const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
-                                    individual?.forEach(value => {
-                                        if (value.id === bindItem.bind_id) {
-                                            value.contact.say(fileBox).then(msg => {
-                                                if (msg) {
-                                                    CacheHelper.getInstances().addUndoMessageCache(
-                                                        ctx.message.message_id, msg.id)
-                                                }
-                                            }).catch(() => ctx.reply(Constants.SEND_FAIL))
-                                            return
-                                        }
-                                    })
-                                    const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
-                                    if (!findItem) {
-                                        official?.forEach(value => {
-                                            if (value.id === bindItem.bind_id) {
-                                                value.contact.say(fileBox).then(msg => {
-                                                    if (msg) {
-                                                        CacheHelper.getInstances().addUndoMessageCache(
-                                                            ctx.message.message_id, msg.id)
-                                                    }
-                                                }).catch(() => ctx.reply(Constants.SEND_FAIL))
-                                                return
-                                            }
-                                        })
-                                    }
-                                } else {
-                                    const room = this.weChatClient.roomList.find(value => value.id === bindItem.bind_id)
-                                    if (room) {
-                                        room.room.say(fileBox).then(msg => {
-                                            if (msg) {
-                                                CacheHelper.getInstances().addUndoMessageCache(
-                                                    ctx.message.message_id, msg.id)
-                                            }
-                                        }).catch(() => ctx.reply(Constants.SEND_FAIL))
-                                    }
-                                }
-                                if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                                    ctx.reply(Constants.SEND_SUCCESS, {
-                                        reply_parameters: {
-                                            message_id: ctx.message.message_id
-                                        }
-                                    })
-                                }
-                            }
-                        } else {
-                            if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
-                                this._currentSelectContact?.say(fileBox).then(msg => {
-                                    if (msg) {
-                                        CacheHelper.getInstances().addUndoMessageCache(
-                                            ctx.message.message_id, msg.id)
-                                    }
-                                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                                        ctx.reply(Constants.SEND_SUCCESS, {
-                                            reply_parameters: {
-                                                message_id: ctx.message.message_id
-                                            }
-                                        })
-                                    }
-                                }).catch(() => ctx.reply(Constants.SEND_FAIL))
-                            } else {
-                                this.selectRoom?.say(fileBox).then(msg => {
-                                    if (msg) {
-                                        CacheHelper.getInstances().addUndoMessageCache(
-                                            ctx.message.message_id, msg.id)
-                                    }
-                                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                                        ctx.reply(Constants.SEND_SUCCESS, {
-                                            reply_parameters: {
-                                                message_id: ctx.message.message_id
-                                            }
-                                        })
-                                    }
-                                }).catch(() => ctx.reply(Constants.SEND_FAIL))
-                            }
-                        }
-                    } else { // 文件不存在转换
-                        await this.sendGif(saveFile, gifFile, ctx, lottie_config)
-                    }
+                // gif 文件存在
+                if (fs.existsSync(gifFile)) {
+                    await this.sendGif(saveFile, gifFile, ctx, lottie_config)
                 } else {
                     // 尝试使用代理下载tg文件
                     if (config.HOST !== '') {
@@ -1641,9 +1530,10 @@ export class TelegramBotClient {
     }
 
     public async loginUserClient() {
+        const logger = this._log
         const authParams: UserAuthParams = {
             onError(err: Error): Promise<boolean> | void {
-                console.error(err)
+                logger.error('UserClient error:', err)
             },
             phoneNumber: async () =>
                 new Promise((resolve) => {
@@ -1756,30 +1646,68 @@ export class TelegramBotClient {
     private async botLaunch(bot: Telegraf, retryCount = 5) {
         try {
             await bot.launch()
-            console.log('Telegram Bot started')
+            this.logDebug('Telegram Bot started')
         } catch (error) {
-            console.error('Telegram Bot start failed', error)
+            this.logError('Telegram Bot start failed', error)
             if (retryCount > 0) {
-                console.log(`Retrying launch... (${retryCount} attempts left)`)
+                this.logDebug(`Retrying launch... (${retryCount} attempts left)`)
                 await this.botLaunch(bot, retryCount - 1)
             } else {
-                console.error('Maximum retry attempts reached. Unable to start bot.')
+                this.logError('Maximum retry attempts reached. Unable to start bot.')
             }
         }
     }
 
-    private async sendGif(saveFile: string, gifFile: string, ctx: NarrowedContext<Context<tg.Update>, tg.Update>,
+    private async sendGif(saveFile: string, gifFile: string, ctx: any,
                           lottie_config?: {
                               width: number,
                               height: number
                           }) {
         try {
-            if (saveFile.endsWith('.tgs')) {
-                await new ConverterHelper().tgsToGif(saveFile, gifFile, lottie_config)
-            } else {
-                await new ConverterHelper().webmToGif(saveFile, gifFile)
+            if (!fs.existsSync(gifFile)) {
+                if (saveFile.endsWith('.tgs')) {
+                    await new ConverterHelper().tgsToGif(saveFile, gifFile, lottie_config)
+                } else {
+                    await new ConverterHelper().webmToGif(saveFile, gifFile)
+                }
+            }
+            if (!fs.existsSync(gifFile)) {
+                await ctx.reply(Constants.SEND_FAIL + '文件转换失败')
+                return
             }
             const fileBox = FileBox.fromFile(gifFile)
+            const replyMessageId = ctx.update.message['reply_to_message']?.message_id
+            // 如果是回复的消息 优先回复该发送的消息
+            if (replyMessageId) {
+                // try get weChat cache message id
+                const weChatMessageId = this._messageMap.get(replyMessageId)
+                if (weChatMessageId) {
+                    // 添加或者移除名单
+
+                    this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
+                        message?.say(fileBox).then(msg => {
+                            // 保存到undo消息缓存
+                            if (msg) {
+                                CacheHelper.getInstances().addUndoMessageCache(ctx.message.message_id, msg.id)
+                            }
+                            if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                ctx.reply(Constants.SEND_SUCCESS, {
+                                    reply_parameters: {
+                                        message_id: ctx.message.message_id
+                                    }
+                                })
+                            }
+                        }).catch(() => {
+                            ctx.reply('发送失败!', {
+                                reply_parameters: {
+                                    message_id: ctx.message.message_id
+                                }
+                            })
+                        })
+                    })
+                }
+                return
+            }
             // 如果是群组消息的情况
             if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
                 const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
@@ -1790,11 +1718,14 @@ export class TelegramBotClient {
                         individual?.forEach(value => {
                             if (value.id === bindItem.bind_id) {
                                 value.contact.say(fileBox).then(msg => {
-                                    if (msg && ctx.message) {
+                                    if (msg) {
                                         CacheHelper.getInstances().addUndoMessageCache(
                                             ctx.message.message_id, msg.id)
                                     }
-                                }).catch(() => ctx.reply(Constants.SEND_FAIL))
+                                }).catch((e) => {
+                                    this.logError('这里发送失败', e)
+                                    ctx.reply(Constants.SEND_FAIL)
+                                })
                                 return
                             }
                         })
@@ -1803,11 +1734,14 @@ export class TelegramBotClient {
                             official?.forEach(value => {
                                 if (value.id === bindItem.bind_id) {
                                     value.contact.say(fileBox).then(msg => {
-                                        if (msg && ctx.message) {
+                                        if (msg) {
                                             CacheHelper.getInstances().addUndoMessageCache(
                                                 ctx.message.message_id, msg.id)
                                         }
-                                    }).catch(() => ctx.reply(Constants.SEND_FAIL))
+                                    }).catch((e) => {
+                                        this.logError('这里发送失败', e)
+                                        ctx.reply(Constants.SEND_FAIL)
+                                    })
                                     return
                                 }
                             })
@@ -1815,7 +1749,15 @@ export class TelegramBotClient {
                     } else {
                         const room = this.weChatClient.roomList.find(value => value.id === bindItem.bind_id)
                         if (room) {
-                            room.room.say(fileBox).catch(() => ctx.reply(Constants.SEND_FAIL))
+                            room.room.say(fileBox).then(msg => {
+                                if (msg) {
+                                    CacheHelper.getInstances().addUndoMessageCache(
+                                        ctx.message.message_id, msg.id)
+                                }
+                            }).catch((e) => {
+                                this.logDebug('这里发送失败', e)
+                                ctx.reply(Constants.SEND_FAIL)
+                            })
                         }
                     }
                     if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
@@ -1826,27 +1768,42 @@ export class TelegramBotClient {
                         })
                     }
                 }
-                return
-            }
-            if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
-                this._currentSelectContact?.say(fileBox).then(msg => {
-                    if (msg && ctx.message) {
-                        CacheHelper.getInstances().addUndoMessageCache(
-                            ctx.message.message_id, msg.id)
-                    }
-                }).catch(() => ctx.reply(Constants.SEND_FAIL))
             } else {
-                this.selectRoom?.say(fileBox).catch(() => ctx.reply(Constants.SEND_FAIL))
-            }
-            if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                await ctx.reply(Constants.SEND_SUCCESS, {
-                    reply_parameters: {
-                        message_id: ctx.message?.message_id ? ctx.message?.message_id : 0
-                    }
-                })
+                if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
+                    this._currentSelectContact?.say(fileBox).then(msg => {
+                        if (msg) {
+                            CacheHelper.getInstances().addUndoMessageCache(
+                                ctx.message.message_id, msg.id)
+                        }
+                        if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                            ctx.reply(Constants.SEND_SUCCESS, {
+                                reply_parameters: {
+                                    message_id: ctx.message.message_id
+                                }
+                            })
+                        }
+                    }).catch(() => ctx.reply(Constants.SEND_FAIL))
+                } else {
+                    this.selectRoom?.say(fileBox).then(msg => {
+                        if (msg) {
+                            CacheHelper.getInstances().addUndoMessageCache(
+                                ctx.message.message_id, msg.id)
+                        }
+                        if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                            ctx.reply(Constants.SEND_SUCCESS, {
+                                reply_parameters: {
+                                    message_id: ctx.message.message_id
+                                }
+                            })
+                        }
+                    }).catch((e) => {
+                        this.logDebug('这里发送失败', e)
+                        ctx.reply(Constants.SEND_FAIL)
+                    })
+                }
             }
         } catch (e) {
-            console.error(e)
+            this.logError('发送失败', e)
             await ctx.reply(Constants.SEND_FAIL)
         }
 
@@ -1857,7 +1814,6 @@ export class TelegramBotClient {
     }
 
     public async sendMessage(message: SimpleMessage) {
-        // console.log('发送文本消息', message)
         this.bot.telegram.sendMessage(message.chatId, SimpleMessageSender.send(message), {
             parse_mode: 'HTML'
         }).then(res => {
@@ -2036,7 +1992,7 @@ export class TelegramBotClient {
             }
 
         } catch (error) {
-            console.error('Error loading owner data:', error)
+            this.logError('Error loading owner data:', error)
         }
     }
 
@@ -2051,7 +2007,7 @@ export class TelegramBotClient {
             variableContainer.parseFromFile()
             this.forwardSetting = variableContainer
         } catch (error) {
-            console.error('Error loading owner data:', error)
+            this.logError('Error loading owner data:', error)
 
         }
 
@@ -2135,7 +2091,8 @@ export class TelegramBotClient {
     public onWeChatStop(ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
         this.wechatStartFlag = false
         this._weChatClient.stop().then(() => {
-            ctx.reply('停止成功').then(() => this.loginCommandExecuted = false)
+            ctx.reply('停止成功,使用 /login 启动bot').then(() => this.loginCommandExecuted = false)
+            this._weChatClient = new WeChatClient(this)
         }).catch(() => ctx.reply('停止失败'))
     }
 
@@ -2227,6 +2184,7 @@ export class TelegramBotClient {
     public async reset() {
         await this._weChatClient.stop()
         this._weChatClient = new WeChatClient(this)
+        this.wechatStartFlag = true
         this._weChatClient.start().then(() => {
             // 标记为已执行
             this.loginCommandExecuted = true
@@ -2261,7 +2219,7 @@ export class TelegramBotClient {
                             })
                         }
                     }).catch(err => {
-                        console.error('use telegram api download file error: ', err)
+                        this.logError('use telegram api download file error: ', err)
                         ctx.reply('发送文件失败!', {
                             reply_parameters: {
                                 message_id: ctx.message.message_id

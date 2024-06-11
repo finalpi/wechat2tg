@@ -27,6 +27,10 @@ export class CacheHelper {
         return this.undoMessageCaches.get(tg_message_id)
     }
 
+    public deleteUndoMessageCache(tg_message_id: number | string): void {
+        this.undoMessageCaches.delete(tg_message_id)
+    }
+
     public addUndoMessageCache(tg_message_id: number | string, wechat_message_id: string): void {
         const time = Date.now()
         this.undoMessageCaches.set(tg_message_id, {time, wechat_message_id})
