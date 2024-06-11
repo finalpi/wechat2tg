@@ -11,7 +11,7 @@ ENV PROXY_HOST=""
 ENV PROXY_PORT=""
 ENV PROXY_USERNAME=""
 ENV PROXY_PASSWORD=""
-RUN npm i
+RUN npm i -g node-gyp && npm i
 
 COPY . .
 
