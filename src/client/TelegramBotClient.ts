@@ -2184,13 +2184,11 @@ export class TelegramBotClient extends BaseClient {
     public async reset() {
         await this._weChatClient.stop()
         this._weChatClient = new WeChatClient(this)
-        if (!this.wechatStartFlag) {
-            this.wechatStartFlag = true
-            this._weChatClient.start().then(() => {
-                // 标记为已执行
-                this.loginCommandExecuted = true
-            })
-        }
+        this.wechatStartFlag = true
+        this._weChatClient.start().then(() => {
+            // 标记为已执行
+            this.loginCommandExecuted = true
+        })
     }
 
     private async handleFileMessage(ctx: any, fileType: string | 'audio' | 'video' | 'document' | 'photo' | 'voice') {
