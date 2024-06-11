@@ -269,6 +269,7 @@ export class WeChatClient extends BaseClient {
             // 尝试重启
             this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, '登录状态过期,重启bot')
             this.resetValue()
+            return
         }
         this.cacheMember().then(() => {
             this.cacheMemberDone = true
