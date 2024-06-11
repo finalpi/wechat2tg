@@ -2091,7 +2091,7 @@ export class TelegramBotClient extends BaseClient {
     public onWeChatStop(ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
         this.wechatStartFlag = false
         this._weChatClient.stop().then(() => {
-            ctx.reply('停止成功').then(() => this.loginCommandExecuted = false)
+            ctx.reply('停止成功,使用 /login 启动bot').then(() => this.loginCommandExecuted = false)
             this._weChatClient = new WeChatClient(this)
         }).catch(() => ctx.reply('停止失败'))
     }
