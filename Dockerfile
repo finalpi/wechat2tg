@@ -1,6 +1,8 @@
 FROM node:18-slim
 
-RUN apt-get update && apt-get install -y p7zip-full python3 && mkdir -p /app/storage /app/save-files
+RUN apt-get update &&  \
+    apt-get install -y p7zip-full python3 make gcc g++ &&  \
+    mkdir -p /app/storage /app/save-files
 
 WORKDIR /app
 COPY package*.json tsconfig.json ./
