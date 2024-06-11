@@ -2092,6 +2092,7 @@ export class TelegramBotClient extends BaseClient {
         this.wechatStartFlag = false
         this._weChatClient.stop().then(() => {
             ctx.reply('停止成功').then(() => this.loginCommandExecuted = false)
+            this._weChatClient = new WeChatClient(this)
         }).catch(() => ctx.reply('停止失败'))
     }
 
@@ -2183,10 +2184,13 @@ export class TelegramBotClient extends BaseClient {
     public async reset() {
         await this._weChatClient.stop()
         this._weChatClient = new WeChatClient(this)
-        this._weChatClient.start().then(() => {
-            // 标记为已执行
-            this.loginCommandExecuted = true
-        })
+        if (!this.wechatStartFlag) {
+            this.wechatStartFlag = true
+            this._weChatClient.start().then(() => {
+                // 标记为已执行
+                this.loginCommandExecuted = true
+            })
+        }
     }
 
     private async handleFileMessage(ctx: any, fileType: string | 'audio' | 'video' | 'document' | 'photo' | 'voice') {

@@ -5,10 +5,10 @@
   "main": "app.ts",
   "esModuleInterop": true,
   "scripts": {
-    "dev": "NODE_ENV=development ts-node src/app.ts",
+    "dev": "ts-node src/app.ts NODE_ENV=production",
     "bot-test": "ts-node-dev src/test/tgKeyboardTest.ts",
     "build": "tsc",
-    "start": "NODE_ENV=production tsc && node dist/app.js"
+    "start": "tsc && node dist/app.js NODE_ENV=production"
   },
   "keywords": [],
   "author": "",
