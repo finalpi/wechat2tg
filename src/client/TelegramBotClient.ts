@@ -1246,15 +1246,27 @@ export class TelegramBotClient extends BaseClient {
                             .then(message => {
                                 message?.recall().then((res) => {
                                     if (res) {
-                                        ctx.reply('撤回成功')
+                                        ctx.reply('撤回成功',{
+                                            reply_parameters: {
+                                                message_id: replyMessageId
+                                            }
+                                        })
                                         CacheHelper.getInstances().deleteUndoMessageCache(replyMessageId)
                                     } else {
-                                        ctx.reply('撤回失败')
+                                        ctx.reply('撤回失败', {
+                                            reply_parameters: {
+                                                message_id: replyMessageId
+                                            }
+                                        })
                                     }
 
                                 }).catch((e) => {
                                     this.logError('撤回失败', e)
-                                    ctx.reply('撤回失败')
+                                    ctx.reply('撤回失败', {
+                                        reply_parameters: {
+                                            message_id: replyMessageId
+                                        }
+                                    })
                                 })
                             })
                     } else {
