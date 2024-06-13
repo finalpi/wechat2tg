@@ -39,11 +39,13 @@ export class SimpleMessageSender implements MessageSender {
     }
 
     private escapeHTML(str: string) {
-        return str.replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
+        str = str.replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;')
+        // 删除后续的分隔线
+        str = str.replace(/\n- - - - - - - - - - - - - - -\n/, '')
+        return str.replace(/「(.*?)」/, '<blockquote>$1</blockquote>')
     }
 
     static send(simpleMessage: SimpleMessage) {
