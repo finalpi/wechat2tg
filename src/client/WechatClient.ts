@@ -745,7 +745,7 @@ export class WeChatClient extends BaseClient {
                 const msgid = msgidMatch[1]
                 const item = await MessageService.getInstance().findMessageByWechatMessageId(msgid)
                 if (item) {
-                    this._tgClient.bot.telegram.sendMessage(item.chat_id,`${sendMessageBody.sender}撤回了一条消息`,{
+                    this._tgClient.bot.telegram.sendMessage(item.chat_id,'撤回了一条消息',{
                         reply_parameters: {
                             message_id: item.telegram_message_id
                         }
