@@ -25,6 +25,16 @@ abstract class AbstractSqlService {
         })
     }
 
+    protected createMessageTable() {
+        this.db.serialize(() => {
+            this.db.get('SELECT * FROM sqlite_master WHERE type=\'table\' AND name=\'tb_message\'', (err, row) => {
+                if (!row) {
+                    this.db.run('CREATE TABLE tb_message (wechat_message_id TEXT, chat_id INT, telegram_message_id TEXT, type INT, msg_text TEXT,send_by TEXT, create_time TEXT)')
+                }
+            })
+        })
+    }
+
     protected createAutoBindTable() {
         this.db.serialize(() => {
             this.db.get('SELECT name FROM sqlite_master WHERE type=\'table\' AND name=\'dynamic_chat_mapping\'', (err, row) => {

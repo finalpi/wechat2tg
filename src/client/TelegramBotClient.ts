@@ -28,6 +28,7 @@ import {EventEmitter} from 'node:events'
 import {Constants} from '../constants/Constants'
 import {TelegramUserClient} from './TelegramUserClient'
 import BaseClient from '../base/BaseClient'
+import {MessageService} from '../service/MessageService'
 
 export class TelegramBotClient extends BaseClient {
     get tgUserClient(): TelegramUserClient | undefined {
@@ -1270,11 +1271,16 @@ export class TelegramBotClient extends BaseClient {
                                 })
                             })
                     } else {
-                        ctx.reply('该消息已经撤回或超时')
+                        ctx.reply('该消息已经撤回或超时', {
+                            reply_parameters: {
+                                message_id: replyMessageId
+                            }
+                        })
                     }
                     return
                 }
-                const weChatMessageId = this._messageMap.get(replyMessageId)
+                const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId)
+                const weChatMessageId = messageItem.wechat_message_id
                 // 设置别名
                 if (text.startsWith('&alias') && weChatMessageId) {
                     this.weChatClient.client.Message.find({id: weChatMessageId}).then(msg => {
@@ -1692,7 +1698,8 @@ export class TelegramBotClient extends BaseClient {
             // 如果是回复的消息 优先回复该发送的消息
             if (replyMessageId) {
                 // try get weChat cache message id
-                const weChatMessageId = this._messageMap.get(replyMessageId)
+                const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId)
+                const weChatMessageId = messageItem.wechat_message_id
                 if (weChatMessageId) {
                     // 添加或者移除名单
 
@@ -1829,8 +1836,16 @@ export class TelegramBotClient extends BaseClient {
         this.bot.telegram.sendMessage(message.chatId, SimpleMessageSender.send(message), {
             parse_mode: 'HTML'
         }).then(res => {
-            if (message.id) {
-                this.messageMap.set(res.message_id, message.id)
+            if (message.message && message.id) {
+                MessageService.getInstance().addMessage({
+                    wechat_message_id: message.id,
+                    chat_id: message.chatId ? message.chatId + '' : '',
+                    telegram_message_id: res.message_id,
+                    type: message.message.type(),
+                    msg_text: message.body + '',
+                    send_by: message.sender ? message.sender : '',
+                    create_time: new Date().getTime()
+                })
             }
         }).catch(e => {
             if (e.response.error_code === 403) {
@@ -2277,7 +2292,8 @@ export class TelegramBotClient extends BaseClient {
         // 如果是回复的消息 优先回复该发送的消息
         if (replyMessageId) {
             // try get weChat cache message id
-            const weChatMessageId = this._messageMap.get(replyMessageId)
+            const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId)
+            const weChatMessageId = messageItem.wechat_message_id
             if (weChatMessageId) {
                 // 添加或者移除名单
                 this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {

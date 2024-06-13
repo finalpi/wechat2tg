@@ -27,6 +27,7 @@ import {RoomItem} from '../models/RoomItem'
 import {ContactItem} from '../models/ContactItem'
 import TelegramError from 'telegraf/src/core/network/error'
 import BaseClient from '../base/BaseClient'
+import {MessageService} from '../service/MessageService'
 
 
 export class WeChatClient extends BaseClient {
@@ -376,21 +377,12 @@ export class WeChatClient extends BaseClient {
     private async message(message: MessageInterface) {
         const talker = message.talker()
         const [roomEntity] = await Promise.all([message.room()])
-
-        // console.info('message:', message)
-        // attachment handle
         const messageType = message.type()
-
-        // console.info('on message ... ', message)
-
 
         const alias = await talker.alias()
         let showSender: string = alias ? `[${alias}] ${talker.name()}` : talker.name()
 
-        // const topic = await roomEntity?.topic();
         const roomTopic = await roomEntity?.topic() || ''
-        // @ 所有人或者自己的消息转发
-
         let bindItem = undefined
         if (roomEntity) {
             // 黑白名单过滤
@@ -495,7 +487,8 @@ export class WeChatClient extends BaseClient {
             room: roomTopic,
             type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
             id: message.id,
-            chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId
+            chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId,
+            message: message
         }
 
         if (message.self()) {
@@ -586,7 +579,8 @@ export class WeChatClient extends BaseClient {
                 type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                 room: roomTopic,
                 id: message.id,
-                chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId
+                chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId,
+                message: message
             })
         }
 
@@ -619,7 +613,8 @@ export class WeChatClient extends BaseClient {
                             type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                             id: message.id,
                             not_escape_html: true,
-                            chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId
+                            chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId,
+                            message: message
                         })
                         return
                     }
@@ -632,7 +627,8 @@ export class WeChatClient extends BaseClient {
                         room: roomTopic,
                         type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                         id: message.id,
-                        chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId
+                        chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId,
+                        message: message
                     })
                 }
             }
@@ -645,13 +641,29 @@ export class WeChatClient extends BaseClient {
                         FileBox.fromUrl(res.bigheadimgurl).toBuffer().then(avatarBuff => {
                             this._tgClient.bot.telegram.sendPhoto(
                                 bindItem ? bindItem.chat_id : this.tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {
-                                this._tgClient.saveMessage(msg.message_id, message.id)
+                                MessageService.getInstance().addMessage({
+                                    wechat_message_id: message.id,
+                                    chat_id: bindItem ? bindItem.chat_id + '' : this.tgClient.chatId + '',
+                                    telegram_message_id: msg.message_id,
+                                    type: message.type(),
+                                    msg_text: shareContactCaption + '',
+                                    send_by: identityStr,
+                                    create_time: new Date().getTime()
+                                })
                             }).catch(e => {
                                 if (e.response.error_code === 403 && bindItem) {
                                     this.tgClient.bindItemService.removeBindItemByChatId(bindItem.chat_id)
                                     this._tgClient.bot.telegram.sendPhoto(
                                         this.tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {
-                                        this._tgClient.saveMessage(msg.message_id, message.id)
+                                        MessageService.getInstance().addMessage({
+                                            wechat_message_id: message.id,
+                                            chat_id: this.tgClient.chatId + '',
+                                            telegram_message_id: msg.message_id,
+                                            type: message.type(),
+                                            msg_text: shareContactCaption + '',
+                                            send_by: identityStr,
+                                            create_time: new Date().getTime()
+                                        })
                                     })
                                     return
                                 }
@@ -678,7 +690,8 @@ export class WeChatClient extends BaseClient {
                     room: roomTopic,
                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                     id: message.id,
-                    chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId
+                    chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId,
+                    message: message
                 })
                 break
             case PUPPET.types.Message.MiniProgram: // 处理小程序消息的逻辑
@@ -698,8 +711,7 @@ export class WeChatClient extends BaseClient {
                 this._tgClient.sendMessage(sendMessageBody)
                 break
             case PUPPET.types.Message.Recalled: // 处理撤回消息的逻辑
-                sendMessageBody.body = '撤回了一条消息'
-                this._tgClient.sendMessage(sendMessageBody)
+                this.recallMessage(sendMessageBody)
                 break
             case PUPPET.types.Message.GroupNote:
                 // 处理群公告消息的逻辑
@@ -724,6 +736,26 @@ export class WeChatClient extends BaseClient {
         // }
         // talker.avatar().then(fb => fb.toFile(avatarPath + '/avatar.jpg', true))
 
+    }
+
+    private async recallMessage(sendMessageBody: SimpleMessage) {
+        if (sendMessageBody.message){
+            const msgidMatch = sendMessageBody.message.text().match(/<msgid>(.*?)<\/msgid>/)
+            if (msgidMatch) {
+                const msgid = msgidMatch[1]
+                const item = await MessageService.getInstance().findMessageByWechatMessageId(msgid)
+                if (item) {
+                    this._tgClient.bot.telegram.sendMessage(item.chat_id,`${sendMessageBody.sender}撤回了一条消息`,{
+                        reply_parameters: {
+                            message_id: item.telegram_message_id
+                        }
+                    })
+                }else {
+                    sendMessageBody.body = '撤回了一条消息'
+                    this._tgClient.sendMessage(sendMessageBody)
+                }
+            }
+        }
     }
 
     private async cacheMember() {
@@ -852,7 +884,17 @@ export class WeChatClient extends BaseClient {
                                 tgMessage.chatId, {source: buff, filename: fileName}, {
                                     caption: identityStr
                                 }).then((msg: { message_id: number }) => {
-                                this._tgClient.saveMessage(msg.message_id, message.id)
+                                if (tgMessage.message && tgMessage.id) {
+                                    MessageService.getInstance().addMessage({
+                                        wechat_message_id: tgMessage.id,
+                                        chat_id: tgMessage.chatId ? tgMessage.chatId + '' : '',
+                                        telegram_message_id: msg.message_id,
+                                        type: tgMessage.message.type(),
+                                        msg_text: tgMessage.body + '',
+                                        send_by: tgMessage.sender ? tgMessage.sender : '',
+                                        create_time: new Date().getTime()
+                                    })
+                                }
                             }).catch((e: TelegramError) => {
                                 if (e.response.error_code === 403) {
                                     this.tgClient.bindItemService.removeBindItemByChatId(tgMessage.chatId)
@@ -873,7 +915,17 @@ export class WeChatClient extends BaseClient {
                         tgMessage.chatId, {source: buff, filename: fileName}, {
                             caption: identityStr
                         }).then(msg => {
-                        this._tgClient.saveMessage(msg.message_id, message.id)
+                        if (tgMessage.message && tgMessage.id) {
+                            MessageService.getInstance().addMessage({
+                                wechat_message_id: tgMessage.id,
+                                chat_id: tgMessage.chatId ? tgMessage.chatId + '' : '',
+                                telegram_message_id: msg.message_id,
+                                type: tgMessage.message.type(),
+                                msg_text: tgMessage.body + '',
+                                send_by: tgMessage.sender ? tgMessage.sender : '',
+                                create_time: new Date().getTime()
+                            })
+                        }
                     }).catch(e => {
                         if (e.response.error_code === 403) {
                             this.tgClient.bindItemService.removeBindItemByChatId(tgMessage.chatId)

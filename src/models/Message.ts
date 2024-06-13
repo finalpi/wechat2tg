@@ -1,4 +1,5 @@
 import {FmtString} from 'telegraf/format'
+import {MessageInterface} from 'wechaty/impls'
 
 export interface SimpleMessage {
     id?: string;
@@ -7,7 +8,8 @@ export interface SimpleMessage {
     type?: number;
     body: string | FmtString;
     not_escape_html?: boolean;
-    chatId: number | string
+    chatId: number | string,
+    message?: MessageInterface
 }
 
 export interface MessageSender {
