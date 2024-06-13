@@ -1306,6 +1306,14 @@ export class TelegramBotClient extends BaseClient {
                 if (weChatMessageId) {
                     // 添加或者移除名单
                     this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
+                        if (!message){
+                            ctx.reply(Constants.SEND_FAIL, {
+                                reply_parameters: {
+                                    message_id: ctx.message.message_id
+                                }
+                            })
+                            return
+                        }
                         message?.say(ctx.message.text).then(msg => {
                             // 保存到undo消息缓存
                             if (msg) {
@@ -1704,6 +1712,14 @@ export class TelegramBotClient extends BaseClient {
                     // 添加或者移除名单
 
                     this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
+                        if (!message){
+                            ctx.reply(Constants.SEND_FAIL, {
+                                reply_parameters: {
+                                    message_id: ctx.message.message_id
+                                }
+                            })
+                            return
+                        }
                         message?.say(fileBox).then(msg => {
                             // 保存到undo消息缓存
                             if (msg) {
@@ -2297,6 +2313,14 @@ export class TelegramBotClient extends BaseClient {
             if (weChatMessageId) {
                 // 添加或者移除名单
                 this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
+                    if (!message){
+                        ctx.reply(Constants.SEND_FAIL, {
+                            reply_parameters: {
+                                message_id: ctx.message.message_id
+                            }
+                        })
+                        return
+                    }
                     message?.say(fileBox).then(msg => {
                         // 保存到undo消息缓存
                         if (msg) {
