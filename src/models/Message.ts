@@ -41,11 +41,11 @@ export class SimpleMessageSender implements MessageSender {
     private escapeHTML(str: string) {
         str = str.replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;')
-        // 删除后续的分隔线
-        str = str.replace(/\n- - - - - - - - - - - - - - -\n/, '')
-        return str.replace(/「(.*?)」/, '<blockquote>$1</blockquote>')
+        const splitLineNumber = str.search(/\n- - - - - - - - - - - - - - -\n/)
+        if (splitLineNumber !== -1) {
+            str = `<blockquote>${str.slice(1, splitLineNumber - 1)}</blockquote>${str.slice(splitLineNumber + 31)}`
+        }
+        return str
     }
 
     static send(simpleMessage: SimpleMessage) {
