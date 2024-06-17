@@ -55,6 +55,7 @@ export class WeChatClient extends BaseClient {
         this.logout = this.logout.bind(this)
         this.login = this.login.bind(this)
         this.onReady = this.onReady.bind(this)
+        this.onStop = this.onStop.bind(this)
         this.roomTopic = this.roomTopic.bind(this)
         this.roomJoin = this.roomJoin.bind(this)
         this.roomLeave = this.roomLeave.bind(this)
@@ -171,7 +172,7 @@ export class WeChatClient extends BaseClient {
             .on('scan', this.scan)
             .on('message', this.message)
             .on('logout', this.logout)
-            .on('stop', () => this.logInfo('on stop...'))
+            .on('stop', this.onStop)
             .on('post', () => this.logInfo('on post...'))
             .on('room-join', this.roomJoin)
             .on('room-topic', this.roomTopic)
@@ -261,6 +262,11 @@ export class WeChatClient extends BaseClient {
                 this._roomList[this._roomList.indexOf(item)].room.sync()
             }
         }
+    }
+
+    private onStop(){
+        this.logInfo('on stop...')
+        this.tgClient.reset()
     }
 
     private onReady() {
