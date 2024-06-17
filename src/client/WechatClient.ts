@@ -300,6 +300,7 @@ export class WeChatClient extends BaseClient {
     }
 
     public async stop() {
+        this.clearCache()
         this._started = false
         await this._client.stop().then(() => this._started = false)
         this.logInfo('stop ... ')
@@ -813,24 +814,30 @@ export class WeChatClient extends BaseClient {
 
     public resetValue() {
         this.readyCount = 0
-        const filePath = 'storage/wechat_bot.memory-card.json'
-        fs.access(filePath, fs.constants.F_OK, async (err) => {
-            if (!err) {
-                // 文件存在，删除文件
-                await fs.promises.unlink(filePath)
-            }
-            this.contactMap?.get(ContactImpl.Type.Individual)?.clear()
-            this.contactMap?.get(ContactImpl.Type.Official)?.clear()
-            this.cacheMemberDone = false
-            this.cacheMemberSendMessage = false
-            this._roomList = []
-            this.tgClient.selectedMember = []
-            this.tgClient.flagPinMessageType = ''
-            this.tgClient.findPinMessage()
-            if (this.scanMsgId){
-                this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId,this.scanMsgId)
-            }
-            this.tgClient.reset()
+        this.clearCache().then(()=>this.tgClient.reset())
+    }
+
+    private clearCache() {
+        return new Promise(resolve => {
+            const filePath = 'storage/wechat_bot.memory-card.json'
+            fs.access(filePath, fs.constants.F_OK, async (err) => {
+                if (!err) {
+                    // 文件存在，删除文件
+                    await fs.promises.unlink(filePath)
+                }
+                this.contactMap?.get(ContactImpl.Type.Individual)?.clear()
+                this.contactMap?.get(ContactImpl.Type.Official)?.clear()
+                this.cacheMemberDone = false
+                this.cacheMemberSendMessage = false
+                this._roomList = []
+                this.tgClient.selectedMember = []
+                this.tgClient.flagPinMessageType = ''
+                this.tgClient.findPinMessage()
+                if (this.scanMsgId) {
+                    this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId, this.scanMsgId)
+                }
+                resolve(true)
+            })
         })
     }
 
