@@ -322,6 +322,14 @@ export class WeChatClient extends BaseClient {
     public async logout() {
         // this._client.logout()
         this.logInfo('logout ....')
+        this.contactMap?.get(ContactImpl.Type.Individual)?.clear()
+        this.contactMap?.get(ContactImpl.Type.Official)?.clear()
+        this.cacheMemberDone = false
+        this.cacheMemberSendMessage = false
+        this._roomList = []
+        this.tgClient.selectedMember = []
+        this.tgClient.flagPinMessageType = ''
+        this.tgClient.findPinMessage()
         // this._client.reset().then()
 
         // this.resetValue()
