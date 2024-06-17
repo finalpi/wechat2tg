@@ -78,6 +78,11 @@ export class TelegramUserClient extends TelegramClient {
     }
 
     public async createGroup(createGroupInterface: CreateGroupInterface) {
+        // 如果之前存在改实例则重新绑定
+        const row = await this.telegramBotClient.bindItemService.reBind(createGroupInterface)
+        if (row){
+            return row
+        }
         let bindItem
         if (this.telegramBotClient.bot.botInfo?.id) {
             let name

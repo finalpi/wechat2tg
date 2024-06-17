@@ -20,6 +20,15 @@ abstract class AbstractSqlService {
                             }
                         })
                     }
+                    if (!createTableSQL.includes('has_bound')) {
+                        this.db.run('ALTER TABLE tb_bind_item ADD COLUMN has_bound TEXT', (err) => {
+                            if (err) {
+                                console.error('Failed to add column:', err)
+                            } else {
+                                console.log('Column avatar added successfully.')
+                            }
+                        })
+                    }
                 }
             })
         })

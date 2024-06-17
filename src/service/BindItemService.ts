@@ -7,6 +7,7 @@ import AbstractSqlService from './BaseSqlService'
 import * as fs from 'fs'
 import {ContactInterface, RoomInterface, WechatyInterface} from 'wechaty/dist/esm/src/mods/impls'
 import DynamicService from './DynamicService'
+import {CreateGroupInterface} from '../models/CreateGroupInterface'
 
 export class BindItemService extends AbstractSqlService {
     private tgBotClient: Telegraf
@@ -135,7 +136,7 @@ export class BindItemService extends AbstractSqlService {
                         return
                     }
                 })
-                this.removeBindItemByChatId(bindItem.chat_id)
+                this.bindErr(bindItem.chat_id)
             } else {
                 let room = roomList.find(item => item.room.id === bindItem.wechat_id)
                 if (room) {
@@ -157,9 +158,15 @@ export class BindItemService extends AbstractSqlService {
                         return
                     }
                 })
-                this.removeBindItemByChatId(bindItem.chat_id)
+                this.bindErr(bindItem.chat_id)
             }
         }
+    }
+
+    public bindErr(chatId: number){
+        const stmt = this.db.prepare('UPDATE tb_bind_item SET has_bound=0 WHERE chat_id=?')
+        stmt.run(chatId)
+        stmt.finalize()
     }
 
     public async updateGroupData(bindItem: BindItem, newBindItem: BindItem) {
@@ -208,11 +215,67 @@ export class BindItemService extends AbstractSqlService {
      */
     public getBindItemByChatId(chatId: number): Promise<BindItem> {
         return new Promise((resolve, reject) => {
-            this.db.get('SELECT * FROM tb_bind_item WHERE chat_id= ?', [chatId], (err, row: BindItem) => {
+            this.db.get('SELECT * FROM tb_bind_item WHERE chat_id= ? AND has_bound=1', [chatId], (err, row: BindItem) => {
                 if (err) {
                     reject(err)
                 } else {
                     resolve(row)
+                }
+            })
+        })
+    }
+
+
+    public reBind(createGroupInterface: CreateGroupInterface): Promise<BindItem | undefined>{
+        return new Promise(resolve => {
+            let alias = ''
+            let name = ''
+            let wechatId = ''
+            let avatar = ''
+            if (createGroupInterface.type === 0){
+                alias = createGroupInterface.contact?.payload?.alias ? createGroupInterface.contact?.payload?.alias : ''
+                name = createGroupInterface.contact?.payload?.name ? createGroupInterface.contact?.payload?.name : ''
+                wechatId = createGroupInterface.contact?.id ? createGroupInterface.contact?.id : ''
+                avatar = createGroupInterface.contact?.payload?.avatar ? createGroupInterface.contact?.payload?.avatar : ''
+            }else {
+                name = createGroupInterface.contact?.payload?.name ? createGroupInterface.contact?.payload?.name : ''
+                wechatId = createGroupInterface.room?.id ? createGroupInterface.room?.id : ''
+            }
+            this.db.serialize(() => {
+                if (alias !== ''){
+                    this.db.get('SELECT * FROM tb_bind_item WHERE type= ? AND alias=? AND has_bound=0', [createGroupInterface.type,alias], (err, row: BindItem) => {
+                        if (err) {
+                            console.log(err)
+                        }
+                        if(row){
+                            this.bindGroup(name,row.chat_id,createGroupInterface.type,createGroupInterface.bindId ? createGroupInterface.bindId : '',alias,wechatId,avatar)
+                            resolve(row)
+                        }else {
+                            this.db.get('SELECT * FROM tb_bind_item WHERE type= ? AND name=? AND has_bound=0', [createGroupInterface.type,name], (err, row: BindItem) => {
+                                if (err) {
+                                    console.log(err)
+                                }
+                                if(row){
+                                    this.bindGroup(name,row.chat_id,createGroupInterface.type,createGroupInterface.bindId ? createGroupInterface.bindId : '',alias,wechatId,avatar)
+                                    resolve(row)
+                                }else {
+                                    resolve(undefined)
+                                }
+                            })
+                        }
+                    })
+                }else {
+                    this.db.get('SELECT * FROM tb_bind_item WHERE type= ? AND name=? AND has_bound=0', [createGroupInterface.type,name], (err, row: BindItem) => {
+                        if (err) {
+                            console.log(err)
+                        }
+                        if(row){
+                            this.bindGroup(name,row.chat_id,createGroupInterface.type,createGroupInterface.bindId ? createGroupInterface.bindId : '',alias,wechatId,avatar)
+                            resolve(row)
+                        }else {
+                            resolve(undefined)
+                        }
+                    })
                 }
             })
         })
@@ -234,7 +297,8 @@ export class BindItemService extends AbstractSqlService {
                         bind_id: bindId,
                         alias: alias,
                         wechat_id: wechatId,
-                        avatar: avatar
+                        avatar: avatar,
+                        has_bound: 1
                     })
                 }
             })
@@ -242,7 +306,7 @@ export class BindItemService extends AbstractSqlService {
             stmt.run(wechatId, chatId)
             stmt.finalize()
 
-            const stmt1 = this.db.prepare('INSERT INTO tb_bind_item VALUES (?, ?, ?, ?, ?, ?, ?)')
+            const stmt1 = this.db.prepare('INSERT INTO tb_bind_item VALUES (?, ?, ?, ?, ?, ?, ?, 1)')
             stmt1.run(name, chatId, type, bindId, alias, wechatId, avatar)
             stmt1.finalize()
         })
@@ -265,7 +329,8 @@ export class BindItemService extends AbstractSqlService {
             bind_id: bindId,
             alias: alias,
             wechat_id: wechatId,
-            avatar: avatar
+            avatar: avatar,
+            has_bound: 1
         }
 
         // 返回对象
@@ -303,7 +368,7 @@ export class BindItemService extends AbstractSqlService {
             stmt.run(wechatId, chatId)
             stmt.finalize()
 
-            const stmt1 = this.db.prepare('INSERT INTO tb_bind_item VALUES (?, ?, ?, ?, ?, ?)')
+            const stmt1 = this.db.prepare('INSERT INTO tb_bind_item VALUES (?, ?, ?, ?, ?, ?, 1)')
             stmt1.run(name, chatId, type, bindId, alias, wechatId)
             stmt1.finalize()
         })
@@ -325,7 +390,7 @@ export class BindItemService extends AbstractSqlService {
      */
     public getBindItemByWechatId(wechatId: string): Promise<BindItem> {
         return new Promise((resolve, reject) => {
-            this.db.get('SELECT * FROM tb_bind_item WHERE wechat_id= ?', [wechatId], (err, row: BindItem) => {
+            this.db.get('SELECT * FROM tb_bind_item WHERE wechat_id= ? AND has_bound=1', [wechatId], (err, row: BindItem) => {
                 if (err) {
                     reject(err)
                 } else {

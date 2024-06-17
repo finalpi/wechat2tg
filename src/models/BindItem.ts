@@ -11,6 +11,8 @@ export interface BindItem {
     wechat_id: string
     // 头像
     avatar: string
+    // 是否绑定成功:0-否,1-是
+    has_bound: 0 | 1
 }
 
 export type ChatMapping = {
