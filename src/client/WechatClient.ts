@@ -300,6 +300,7 @@ export class WeChatClient extends BaseClient {
     }
 
     public async stop() {
+        this._started = false
         await this._client.stop().then(() => this._started = false)
         this.logInfo('stop ... ')
     }
@@ -322,17 +323,11 @@ export class WeChatClient extends BaseClient {
     public async logout() {
         // this._client.logout()
         this.logInfo('logout ....')
-        this.contactMap?.get(ContactImpl.Type.Individual)?.clear()
-        this.contactMap?.get(ContactImpl.Type.Official)?.clear()
-        this.cacheMemberDone = false
-        this.cacheMemberSendMessage = false
-        this._roomList = []
-        this.tgClient.selectedMember = []
-        this.tgClient.flagPinMessageType = ''
-        this.tgClient.findPinMessage()
         // this._client.reset().then()
-
-        // this.resetValue()
+        if (this._started){
+            // 被挤下线,需要重新登录
+            this.resetValue()
+        }
     }
 
     private login() {
@@ -832,6 +827,9 @@ export class WeChatClient extends BaseClient {
             this.tgClient.selectedMember = []
             this.tgClient.flagPinMessageType = ''
             this.tgClient.findPinMessage()
+            if (this.scanMsgId){
+                this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId,this.scanMsgId)
+            }
             this.tgClient.reset()
         })
     }
