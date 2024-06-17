@@ -2161,7 +2161,7 @@ export class TelegramBotClient extends BaseClient {
                     text: `🌐${await slice[j].room?.topic()}`,
                     data: 'room-index-' + j
                 }
-                currentSelectRoomMap.set(keyboard.data, rooms[j])
+                currentSelectRoomMap.set(keyboard.data, slice[j])
                 row.push(Markup.button.callback(keyboard.text, keyboard.data))
             }
             buttons.push(row)
