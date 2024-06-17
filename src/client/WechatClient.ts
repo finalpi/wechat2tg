@@ -193,7 +193,7 @@ export class WeChatClient extends BaseClient {
     }
 
     private error(error: Error) {
-        this.logDebug('error:', error)
+        this.logError('error:', error)
     }
 
     private friendship(friendship: FriendshipInterface) {
@@ -266,7 +266,7 @@ export class WeChatClient extends BaseClient {
 
     private onStop(){
         this.logInfo('on stop...')
-        this.tgClient.reset()
+        this.tgClient.stop()
     }
 
     private onReady() {
@@ -301,7 +301,7 @@ export class WeChatClient extends BaseClient {
 
     public async stop() {
         await this._client.stop().then(() => this._started = false)
-        // console.log('stop ... ')
+        this.logInfo('stop ... ')
     }
 
     public restart() {
@@ -320,10 +320,11 @@ export class WeChatClient extends BaseClient {
     }
 
     public async logout() {
-        // this._client.logout();
+        // this._client.logout()
+        this.logInfo('logout ....')
         // this._client.reset().then()
 
-        this.resetValue()
+        // this.resetValue()
     }
 
     private login() {
@@ -807,7 +808,7 @@ export class WeChatClient extends BaseClient {
         this.tgClient.bindItemService.updateItem(this.roomList, this.contactMap)
     }
 
-    private resetValue() {
+    public resetValue() {
         this.readyCount = 0
         const filePath = 'storage/wechat_bot.memory-card.json'
         fs.access(filePath, fs.constants.F_OK, async (err) => {

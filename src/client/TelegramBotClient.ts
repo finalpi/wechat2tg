@@ -608,7 +608,7 @@ export class TelegramBotClient extends BaseClient {
 
 
         bot.command('reset', (ctx) => {
-            this._weChatClient.reset()
+            this._weChatClient.resetValue()
             ctx.reply('重置成功')
         })
 
@@ -2232,6 +2232,11 @@ export class TelegramBotClient extends BaseClient {
             // 标记为已执行
             this.loginCommandExecuted = true
         })
+    }
+
+    public async stop() {
+        await this._weChatClient.stop()
+        this._weChatClient = new WeChatClient(this)
     }
 
     private async handleFileMessage(ctx: any, fileType: string | 'audio' | 'video' | 'document' | 'photo' | 'voice') {
