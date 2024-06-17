@@ -300,7 +300,7 @@ export class WeChatClient extends BaseClient {
     }
 
     public async stop() {
-        this.clearCache()
+        await this.clearCache()
         this._started = false
         await this._client.stop().then(() => this._started = false)
         this.logInfo('stop ... ')
@@ -426,7 +426,7 @@ export class WeChatClient extends BaseClient {
                 })
             }
             bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(roomEntity.id)
-            if (!bindItem && this._tgClient.tgUserClientLogin && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)) {
+            if (!bindItem && this.cacheMemberDone && this._tgClient.tgUserClientLogin && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)) {
                 bindItem = await this._tgClient.tgUserClient?.createGroup({
                     type: 1,
                     room: roomEntity,
@@ -472,7 +472,7 @@ export class WeChatClient extends BaseClient {
                     })
                 }
             }
-            if (!bindItem && this._tgClient.tgUserClientLogin && !message.self() && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)) {
+            if (!bindItem && this.cacheMemberDone && this._tgClient.tgUserClientLogin && !message.self() && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)) {
                 if (talker?.type() === PUPPET.types.Contact.Official && !this._tgClient.setting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT)) {
                     bindItem = await this._tgClient.tgUserClient?.createGroup({
                         type: 0,
@@ -814,7 +814,7 @@ export class WeChatClient extends BaseClient {
 
     public resetValue() {
         this.readyCount = 0
-        this.clearCache().then(()=>this.tgClient.reset())
+        this.tgClient.reset()
     }
 
     private clearCache() {

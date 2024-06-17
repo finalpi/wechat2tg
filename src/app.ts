@@ -8,6 +8,3 @@ process.on('uncaughtException', (err) => {
 
 const bot = TelegramBotClient.getInstance()
 bot.init()
-
-
-new WeChatClient(bot)

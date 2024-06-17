@@ -2234,11 +2234,13 @@ export class TelegramBotClient extends BaseClient {
     public async reset() {
         await this._weChatClient.stop()
         this._weChatClient = new WeChatClient(this)
-        this.wechatStartFlag = true
-        this._weChatClient.start().then(() => {
-            // 标记为已执行
-            this.loginCommandExecuted = true
-        })
+        setTimeout(()=>{
+            this.wechatStartFlag = true
+            this._weChatClient.start().then(() => {
+                // 标记为已执行
+                this.loginCommandExecuted = true
+            })
+        },2000)
     }
 
     public async stop() {
