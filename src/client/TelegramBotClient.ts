@@ -251,7 +251,7 @@ export class TelegramBotClient extends BaseClient {
                 ctx.reply('请先配置API_ID和API_HASH')
                 return
             }
-            if (!this._weChatClient.client.isLoggedIn) {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
                 await ctx.reply(Constants.STRING_1)
                 return
             }
@@ -707,7 +707,7 @@ export class TelegramBotClient extends BaseClient {
         let searchRooms: RoomItem [] = []
 
         bot.command('room', async ctx => {
-            if (this.wechatStartFlag && !this._weChatClient.client.isLoggedIn) {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
                 await ctx.reply(Constants.STRING_1)
                 return
             }
@@ -805,7 +805,7 @@ export class TelegramBotClient extends BaseClient {
         bot.command('user', async ctx => {
 
             // wait all contact loaded
-            if (this.wechatStartFlag && !this._weChatClient.client.isLoggedIn) {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
                 ctx.reply(Constants.STRING_1)
                 return
             }
@@ -1041,7 +1041,7 @@ export class TelegramBotClient extends BaseClient {
         })
 
         bot.command('recent', async ctx => {
-            if (this.wechatStartFlag && !this._weChatClient.client.isLoggedIn) {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
                 ctx.reply(Constants.STRING_1)
                 return
             }
@@ -1230,7 +1230,7 @@ export class TelegramBotClient extends BaseClient {
                 return
             }
 
-            if (this.wechatStartFlag && !this._weChatClient.client.isLoggedIn) {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
                 ctx.reply(Constants.STRING_1)
                 return
             }
@@ -1459,7 +1459,7 @@ export class TelegramBotClient extends BaseClient {
             this.handleFileMessage.call(this, ctx, 'photo'))
 
         bot.on(message('sticker'), ctx => {
-            if (this.wechatStartFlag && !this._weChatClient.client.isLoggedIn) {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
                 ctx.reply(Constants.STRING_1)
                 return
             }
@@ -2247,7 +2247,7 @@ export class TelegramBotClient extends BaseClient {
     }
 
     private async handleFileMessage(ctx: any, fileType: string | 'audio' | 'video' | 'document' | 'photo' | 'voice') {
-        if (this.wechatStartFlag && !this._weChatClient.client.isLoggedIn) {
+        if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
             ctx.reply(Constants.STRING_1)
             return
         }
