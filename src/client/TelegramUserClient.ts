@@ -80,10 +80,10 @@ export class TelegramUserClient extends TelegramClient {
     /**
      * 获取用户名
      */
-    public async getUsername(){
+    public async getUserId(){
         const me = await this._client?.getMe()
-        const userName = me?.username
-        return userName
+        const id = me?.id
+        return id
     }
 
     public async createGroup(createGroupInterface: CreateGroupInterface) {

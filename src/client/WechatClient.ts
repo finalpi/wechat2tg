@@ -616,9 +616,13 @@ export class WeChatClient extends BaseClient {
 
                 if (messageTxt) {
                     if(mentionSelf && this._tgClient.tgUserClientLogin) {
-                        const tgUsername = await this._tgClient.tgUserClient?.getUsername()
-                        if (tgUsername && tgUsername !== '') {
-                            messageTxt = `[@${tgUsername}]${messageTxt}`
+                        const tgId = await this._tgClient.tgUserClient?.getUserId()
+                        if (tgId) {
+                            const me = this.client.currentUser
+                            if (me.payload){
+                                messageTxt = messageTxt.replaceAll(`@${me.payload.name}`,`<a href="tg://user?id=${tgId}">@${me.payload.name}</a>`)
+                                messageTxt = messageTxt.replaceAll('@所有人',`<a href="tg://user?id=${tgId}">@${me.payload.name}</a>`)
+                            }
                         }
                     }
                     // console.log('showSender is :', showSender, 'talker id is :', talker.id, 'message text is ', messageTxt,)

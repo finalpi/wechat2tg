@@ -39,13 +39,27 @@ export class SimpleMessageSender implements MessageSender {
     }
 
     private escapeHTML(str: string) {
-        str = str.replace(/</g, '&lt;')
+        // 查找所有 <a> 标签并将它们替换成占位符
+        const aTagPattern = /<a href="tg:\/\/user\?id=\d+">.*?<\/a>/g
+        const aTags = str.match(aTagPattern) || []
+        let placeholderStr = str.replace(aTagPattern, (match, offset) => `__PLACEHOLDER_${offset}__`)
+
+        // 转义其他 HTML 字符
+        placeholderStr = placeholderStr.replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
-        const splitLineNumber = str.search(/\n- - - - - - - - - - - - - - -\n/)
+
+        // 将占位符替换回原始的 <a> 标签
+        aTags.forEach((aTag, offset) => {
+            placeholderStr = placeholderStr.replace(`__PLACEHOLDER_${offset}__`, aTag)
+        })
+
+        // 查找和处理分隔线
+        const splitLineNumber = placeholderStr.search(/\n- - - - - - - - - - - - - - -\n/)
         if (splitLineNumber !== -1) {
-            str = `<blockquote>${str.slice(1, splitLineNumber - 1)}</blockquote>${str.slice(splitLineNumber + 31)}`
+            placeholderStr = `<blockquote>${placeholderStr.slice(1, splitLineNumber - 1)}</blockquote>${placeholderStr.slice(splitLineNumber + 31)}`
         }
-        return str
+
+        return placeholderStr
     }
 
     static send(simpleMessage: SimpleMessage) {
