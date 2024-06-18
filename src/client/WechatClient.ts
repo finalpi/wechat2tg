@@ -621,7 +621,7 @@ export class WeChatClient extends BaseClient {
                             const me = this.client.currentUser
                             if (me.payload){
                                 messageTxt = messageTxt.replaceAll(`@${me.payload.name}`,`<a href="tg://user?id=${tgId}">@${me.payload.name}</a>`)
-                                messageTxt = messageTxt.replaceAll('@所有人',`<a href="tg://user?id=${tgId}">@${me.payload.name}</a>`)
+                                messageTxt = messageTxt.replaceAll('@所有人',`<a href="tg://user?id=${tgId}">@所有人</a>`)
                             }
                         }
                     }
