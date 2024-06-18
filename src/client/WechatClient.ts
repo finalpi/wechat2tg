@@ -395,11 +395,11 @@ export class WeChatClient extends BaseClient {
 
         const roomTopic = await roomEntity?.topic() || ''
         let bindItem = undefined
+        const mentionSelf = await message.mentionSelf()
         if (roomEntity) {
             // 黑白名单过滤
             const blackFind = this._tgClient.setting.getVariable(VariableType.SETTING_BLACK_LIST).find(item => item.name === roomTopic)
             const whiteFind = this._tgClient.setting.getVariable(VariableType.SETTING_WHITE_LIST).find(item => item.name === roomTopic)
-            const mentionSelf = await message.mentionSelf()
             if (this._tgClient.setting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK) {
                 if (blackFind && !mentionSelf) {
                     return
@@ -610,9 +610,15 @@ export class WeChatClient extends BaseClient {
                 break
             case PUPPET.types.Message.Text: {
 
-                const messageTxt = message.text()
+                let messageTxt = message.text()
 
                 if (messageTxt) {
+                    if(mentionSelf && this._tgClient.tgUserClientLogin) {
+                        const tgUsername = await this._tgClient.tgUserClient?.getUsername()
+                        if (tgUsername && tgUsername !== '') {
+                            messageTxt = `[@${tgUsername}]${messageTxt}`
+                        }
+                    }
                     // console.log('showSender is :', showSender, 'talker id is :', talker.id, 'message text is ', messageTxt,)
                     // 地址 只有个人发送的才会有这个连接的文本出现
                     if (messageTxt.endsWith('pictype=location')) {

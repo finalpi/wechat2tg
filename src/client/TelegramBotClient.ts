@@ -555,7 +555,6 @@ export class TelegramBotClient extends BaseClient {
             this.forwardSetting.writeToFile()
             ctx.answerCbQuery('移除成功')
             this.replyWhiteBtn(list, 1, ctx)
-
         })
 
         // 黑名单设置
@@ -1849,6 +1848,10 @@ export class TelegramBotClient extends BaseClient {
     }
 
     public async sendMessage(message: SimpleMessage) {
+        if (message.chatId !== this.chatId){
+            // 说明是群组消息,不加群组前缀
+            message.room = undefined
+        }
         this.bot.telegram.sendMessage(message.chatId, SimpleMessageSender.send(message), {
             parse_mode: 'HTML'
         }).then(res => {
