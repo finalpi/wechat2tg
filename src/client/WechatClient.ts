@@ -491,6 +491,8 @@ export class WeChatClient extends BaseClient {
         let identityStr = roomEntity ? `🌐${roomTopic} --- 👤${showSender} : ` : `👤${showSender} : `
         if (talker?.type() === PUPPET.types.Contact.Official) {
             identityStr = `📣${showSender} : `
+        }else if (bindItem) {
+            identityStr = `👤${showSender} : `
         }
         const sendMessageBody: SimpleMessage = {
             sender: showSender,
