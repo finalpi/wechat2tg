@@ -20,6 +20,25 @@ abstract class AbstractSqlService {
                             }
                         })
                     }
+                    if (!createTableSQL.includes('has_bound')) {
+                        this.db.run('ALTER TABLE tb_bind_item ADD COLUMN has_bound TEXT', (err) => {
+                            if (err) {
+                                console.error('Failed to add column:', err)
+                            } else {
+                                console.log('Column avatar added successfully.')
+                            }
+                        })
+                    }
+                }
+            })
+        })
+    }
+
+    protected createMessageTable() {
+        this.db.serialize(() => {
+            this.db.get('SELECT * FROM sqlite_master WHERE type=\'table\' AND name=\'tb_message\'', (err, row) => {
+                if (!row) {
+                    this.db.run('CREATE TABLE tb_message (wechat_message_id TEXT, chat_id INT, telegram_message_id TEXT, type INT, msg_text TEXT,send_by TEXT, create_time TEXT)')
                 }
             })
         })

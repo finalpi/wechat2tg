@@ -28,6 +28,7 @@ import {EventEmitter} from 'node:events'
 import {Constants} from '../constants/Constants'
 import {TelegramUserClient} from './TelegramUserClient'
 import BaseClient from '../base/BaseClient'
+import {MessageService} from '../service/MessageService'
 
 export class TelegramBotClient extends BaseClient {
     get tgUserClient(): TelegramUserClient | undefined {
@@ -250,7 +251,7 @@ export class TelegramBotClient extends BaseClient {
                 ctx.reply('请先配置API_ID和API_HASH')
                 return
             }
-            if (!this._weChatClient.client.isLoggedIn) {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
                 await ctx.reply(Constants.STRING_1)
                 return
             }
@@ -554,7 +555,6 @@ export class TelegramBotClient extends BaseClient {
             this.forwardSetting.writeToFile()
             ctx.answerCbQuery('移除成功')
             this.replyWhiteBtn(list, 1, ctx)
-
         })
 
         // 黑名单设置
@@ -607,7 +607,7 @@ export class TelegramBotClient extends BaseClient {
 
 
         bot.command('reset', (ctx) => {
-            this._weChatClient.reset()
+            this._weChatClient.resetValue()
             ctx.reply('重置成功')
         })
 
@@ -706,7 +706,7 @@ export class TelegramBotClient extends BaseClient {
         let searchRooms: RoomItem [] = []
 
         bot.command('room', async ctx => {
-            if (!this._weChatClient.client.isLoggedIn) {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
                 await ctx.reply(Constants.STRING_1)
                 return
             }
@@ -804,7 +804,7 @@ export class TelegramBotClient extends BaseClient {
         bot.command('user', async ctx => {
 
             // wait all contact loaded
-            if (!this._weChatClient.client.isLoggedIn) {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
                 ctx.reply(Constants.STRING_1)
                 return
             }
@@ -1040,7 +1040,7 @@ export class TelegramBotClient extends BaseClient {
         })
 
         bot.command('recent', async ctx => {
-            if (!this._weChatClient.client.isLoggedIn) {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
                 ctx.reply(Constants.STRING_1)
                 return
             }
@@ -1229,7 +1229,7 @@ export class TelegramBotClient extends BaseClient {
                 return
             }
 
-            if (!this._weChatClient.client.isLoggedIn) {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
                 ctx.reply(Constants.STRING_1)
                 return
             }
@@ -1246,23 +1246,40 @@ export class TelegramBotClient extends BaseClient {
                             .then(message => {
                                 message?.recall().then((res) => {
                                     if (res) {
-                                        ctx.reply('撤回成功')
+                                        ctx.reply('撤回成功',{
+                                            reply_parameters: {
+                                                message_id: replyMessageId
+                                            }
+                                        })
                                         CacheHelper.getInstances().deleteUndoMessageCache(replyMessageId)
                                     } else {
-                                        ctx.reply('撤回失败')
+                                        ctx.reply('撤回失败', {
+                                            reply_parameters: {
+                                                message_id: replyMessageId
+                                            }
+                                        })
                                     }
 
                                 }).catch((e) => {
                                     this.logError('撤回失败', e)
-                                    ctx.reply('撤回失败')
+                                    ctx.reply('撤回失败', {
+                                        reply_parameters: {
+                                            message_id: replyMessageId
+                                        }
+                                    })
                                 })
                             })
                     } else {
-                        ctx.reply('该消息已经撤回或超时')
+                        ctx.reply('该消息已经撤回或超时', {
+                            reply_parameters: {
+                                message_id: replyMessageId
+                            }
+                        })
                     }
                     return
                 }
-                const weChatMessageId = this._messageMap.get(replyMessageId)
+                const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId)
+                const weChatMessageId = messageItem.wechat_message_id
                 // 设置别名
                 if (text.startsWith('&alias') && weChatMessageId) {
                     this.weChatClient.client.Message.find({id: weChatMessageId}).then(msg => {
@@ -1288,6 +1305,14 @@ export class TelegramBotClient extends BaseClient {
                 if (weChatMessageId) {
                     // 添加或者移除名单
                     this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
+                        if (!message){
+                            ctx.reply(Constants.SEND_FAIL, {
+                                reply_parameters: {
+                                    message_id: ctx.message.message_id
+                                }
+                            })
+                            return
+                        }
                         message?.say(ctx.message.text).then(msg => {
                             // 保存到undo消息缓存
                             if (msg) {
@@ -1433,7 +1458,7 @@ export class TelegramBotClient extends BaseClient {
             this.handleFileMessage.call(this, ctx, 'photo'))
 
         bot.on(message('sticker'), ctx => {
-            if (!this._weChatClient.client.isLoggedIn) {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
                 ctx.reply(Constants.STRING_1)
                 return
             }
@@ -1680,11 +1705,20 @@ export class TelegramBotClient extends BaseClient {
             // 如果是回复的消息 优先回复该发送的消息
             if (replyMessageId) {
                 // try get weChat cache message id
-                const weChatMessageId = this._messageMap.get(replyMessageId)
+                const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId)
+                const weChatMessageId = messageItem.wechat_message_id
                 if (weChatMessageId) {
                     // 添加或者移除名单
 
                     this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
+                        if (!message){
+                            ctx.reply(Constants.SEND_FAIL, {
+                                reply_parameters: {
+                                    message_id: ctx.message.message_id
+                                }
+                            })
+                            return
+                        }
                         message?.say(fileBox).then(msg => {
                             // 保存到undo消息缓存
                             if (msg) {
@@ -1814,11 +1848,23 @@ export class TelegramBotClient extends BaseClient {
     }
 
     public async sendMessage(message: SimpleMessage) {
+        if (message.chatId !== this.chatId){
+            // 说明是群组消息,不加群组前缀
+            message.room = undefined
+        }
         this.bot.telegram.sendMessage(message.chatId, SimpleMessageSender.send(message), {
             parse_mode: 'HTML'
         }).then(res => {
-            if (message.id) {
-                this.messageMap.set(res.message_id, message.id)
+            if (message.message && message.id) {
+                MessageService.getInstance().addMessage({
+                    wechat_message_id: message.id,
+                    chat_id: message.chatId ? message.chatId + '' : '',
+                    telegram_message_id: res.message_id,
+                    type: message.message.type(),
+                    msg_text: message.body + '',
+                    send_by: message.sender ? message.sender : '',
+                    create_time: new Date().getTime()
+                })
             }
         }).catch(e => {
             if (e.response.error_code === 403) {
@@ -2092,7 +2138,14 @@ export class TelegramBotClient extends BaseClient {
         this.wechatStartFlag = false
         this._weChatClient.stop().then(() => {
             ctx.reply('停止成功,使用 /login 启动bot').then(() => this.loginCommandExecuted = false)
-            this._weChatClient = new WeChatClient(this)
+            const filePath = 'storage/wechat_bot.memory-card.json'
+            fs.access(filePath, fs.constants.F_OK, async (err) => {
+                if (!err) {
+                    // 文件存在，删除文件
+                    await fs.promises.unlink(filePath)
+                }
+                this._weChatClient = new WeChatClient(this)
+            })
         }).catch(() => ctx.reply('停止失败'))
     }
 
@@ -2111,7 +2164,7 @@ export class TelegramBotClient extends BaseClient {
                     text: `🌐${await slice[j].room?.topic()}`,
                     data: 'room-index-' + j
                 }
-                currentSelectRoomMap.set(keyboard.data, rooms[j])
+                currentSelectRoomMap.set(keyboard.data, slice[j])
                 row.push(Markup.button.callback(keyboard.text, keyboard.data))
             }
             buttons.push(row)
@@ -2184,15 +2237,22 @@ export class TelegramBotClient extends BaseClient {
     public async reset() {
         await this._weChatClient.stop()
         this._weChatClient = new WeChatClient(this)
-        this.wechatStartFlag = true
-        this._weChatClient.start().then(() => {
-            // 标记为已执行
-            this.loginCommandExecuted = true
-        })
+        setTimeout(()=>{
+            this.wechatStartFlag = true
+            this._weChatClient.start().then(() => {
+                // 标记为已执行
+                this.loginCommandExecuted = true
+            })
+        },2000)
+    }
+
+    public async stop() {
+        await this._weChatClient.stop()
+        this._weChatClient = new WeChatClient(this)
     }
 
     private async handleFileMessage(ctx: any, fileType: string | 'audio' | 'video' | 'document' | 'photo' | 'voice') {
-        if (!this._weChatClient.client.isLoggedIn) {
+        if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
             ctx.reply(Constants.STRING_1)
             return
         }
@@ -2265,10 +2325,19 @@ export class TelegramBotClient extends BaseClient {
         // 如果是回复的消息 优先回复该发送的消息
         if (replyMessageId) {
             // try get weChat cache message id
-            const weChatMessageId = this._messageMap.get(replyMessageId)
+            const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId)
+            const weChatMessageId = messageItem.wechat_message_id
             if (weChatMessageId) {
                 // 添加或者移除名单
                 this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
+                    if (!message){
+                        ctx.reply(Constants.SEND_FAIL, {
+                            reply_parameters: {
+                                message_id: ctx.message.message_id
+                            }
+                        })
+                        return
+                    }
                     message?.say(fileBox).then(msg => {
                         // 保存到undo消息缓存
                         if (msg) {

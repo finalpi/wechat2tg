@@ -20,6 +20,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
         super()
         // 初始化表
         this.createAutoBindTable()
+        this.createMessageTable()
         this.userClient.client?.connect()
     }
 
@@ -99,7 +100,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
                 })).catch(e => {
                     this.tgBotClient.sendMessage({
                         chatId: this.tgBotClient.chatId,
-                        body: '添加群组进文件夹失败',
+                        body: '添加群组进文件夹失败'
                     })
                 })
             }

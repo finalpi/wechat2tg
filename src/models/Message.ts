@@ -1,4 +1,5 @@
 import {FmtString} from 'telegraf/format'
+import {MessageInterface} from 'wechaty/impls'
 
 export interface SimpleMessage {
     id?: string;
@@ -7,7 +8,8 @@ export interface SimpleMessage {
     type?: number;
     body: string | FmtString;
     not_escape_html?: boolean;
-    chatId: number | string
+    chatId: number | string,
+    message?: MessageInterface
 }
 
 export interface MessageSender {
@@ -37,11 +39,27 @@ export class SimpleMessageSender implements MessageSender {
     }
 
     private escapeHTML(str: string) {
-        return str.replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;')
+        // 查找所有 <a> 标签并将它们替换成占位符
+        // const aTagPattern = /<a href="tg:\/\/user\?id=\d+">.*?<\/a>/g
+        // const aTags = str.match(aTagPattern) || []
+        // let placeholderStr = str.replace(aTagPattern, (match, offset) => `__PLACEHOLDER_${offset}__`)
+        let placeholderStr = str
+        // 转义其他 HTML 字符
+        // placeholderStr = placeholderStr.replace(/</g, '&lt;')
+        //     .replace(/>/g, '&gt;')
+
+        // 将占位符替换回原始的 <a> 标签
+        // aTags.forEach((aTag, offset) => {
+        //     placeholderStr = placeholderStr.replace(`__PLACEHOLDER_${offset}__`, aTag)
+        // })
+
+        // 查找和处理分隔线
+        const splitLineNumber = placeholderStr.search(/\n- - - - - - - - - - - - - - -\n/)
+        if (splitLineNumber !== -1) {
+            placeholderStr = `<blockquote>${placeholderStr.slice(1, splitLineNumber - 1)}</blockquote>${placeholderStr.slice(splitLineNumber + 31)}`
+        }
+
+        return placeholderStr
     }
 
     static send(simpleMessage: SimpleMessage) {
@@ -65,6 +83,6 @@ export class BotHelpText {
 5\\. 当前回复的用户或者群会被pin
 6\\. 回复转发的消息能直接直接转发到对应的人或者群（暂时不支持回复回复的消息，而且不改变当前正在回复的用户）
 7\\. 由于使用的web协议的微信协议所以可能会**封号**（目前我没遇到过），使用前请三思 
-8\\. 更多功能请查看 github 仓库（ For more features, please check the GitHub repository README.
+8\\. 更多功能请查看 github 仓库（For more features, please check the GitHub repository README）
 `
 }

@@ -77,7 +77,21 @@ export class TelegramUserClient extends TelegramClient {
         return this._client
     }
 
+    /**
+     * 获取用户名
+     */
+    public async getUserId(){
+        const me = await this._client?.getMe()
+        const id = me?.id
+        return id
+    }
+
     public async createGroup(createGroupInterface: CreateGroupInterface) {
+        // 如果之前存在改实例则重新绑定
+        const row = await this.telegramBotClient.bindItemService.reBind(createGroupInterface)
+        if (row){
+            return row
+        }
         let bindItem
         if (this.telegramBotClient.bot.botInfo?.id) {
             let name
