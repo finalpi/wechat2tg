@@ -40,18 +40,18 @@ export class SimpleMessageSender implements MessageSender {
 
     private escapeHTML(str: string) {
         // 查找所有 <a> 标签并将它们替换成占位符
-        const aTagPattern = /<a href="tg:\/\/user\?id=\d+">.*?<\/a>/g
-        const aTags = str.match(aTagPattern) || []
-        let placeholderStr = str.replace(aTagPattern, (match, offset) => `__PLACEHOLDER_${offset}__`)
-
+        // const aTagPattern = /<a href="tg:\/\/user\?id=\d+">.*?<\/a>/g
+        // const aTags = str.match(aTagPattern) || []
+        // let placeholderStr = str.replace(aTagPattern, (match, offset) => `__PLACEHOLDER_${offset}__`)
+        let placeholderStr = str
         // 转义其他 HTML 字符
-        placeholderStr = placeholderStr.replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
+        // placeholderStr = placeholderStr.replace(/</g, '&lt;')
+        //     .replace(/>/g, '&gt;')
 
         // 将占位符替换回原始的 <a> 标签
-        aTags.forEach((aTag, offset) => {
-            placeholderStr = placeholderStr.replace(`__PLACEHOLDER_${offset}__`, aTag)
-        })
+        // aTags.forEach((aTag, offset) => {
+        //     placeholderStr = placeholderStr.replace(`__PLACEHOLDER_${offset}__`, aTag)
+        // })
 
         // 查找和处理分隔线
         const splitLineNumber = placeholderStr.search(/\n- - - - - - - - - - - - - - -\n/)
