@@ -397,7 +397,7 @@ export class WeChatClient extends BaseClient {
 
         const roomTopic = await roomEntity?.topic() || ''
         let bindItem = undefined
-        const mentionSelf = await message.mentionSelf()
+        const mentionSelf = this.mentionSelf(message.text())
         if (roomEntity) {
             // 黑白名单过滤
             const blackFind = this._tgClient.setting.getVariable(VariableType.SETTING_BLACK_LIST).find(item => item.name === roomTopic)
@@ -765,6 +765,17 @@ export class WeChatClient extends BaseClient {
         // }
         // talker.avatar().then(fb => fb.toFile(avatarPath + '/avatar.jpg', true))
 
+    }
+
+    private mentionSelf(text: string) {
+        if (text.includes('@所有人')) {
+            return true
+        }
+        const me = this.client.currentUser
+        if (text.includes(`@${me.payload?.name}`)) {
+            return true
+        }
+        return false
     }
 
     private async recallMessage(sendMessageBody: SimpleMessage) {
