@@ -2307,10 +2307,8 @@ export class TelegramBotClient extends BaseClient {
                 } else {
                     fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message[fileType].file_name)
                 }
-                await this.sendFile(ctx, fileBox)
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-            }).catch(e => {
+                this.sendFile(ctx, fileBox)
+            }).catch(() => {
                 ctx.reply('文件发送失败！', {
                     reply_parameters: {
                         message_id: ctx.message.message_id
