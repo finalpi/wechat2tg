@@ -713,7 +713,7 @@ export class WeChatClient extends BaseClient {
             case PUPPET.types.Message.Audio:
             case PUPPET.types.Message.Emoticon: // 处理表情消息的逻辑
             case PUPPET.types.Message.Video:
-                await this.sendFileToTg(message, identityStr, {
+                this.sendFileToTg(message, identityStr, {
                     sender: showSender,
                     body: '',
                     room: roomTopic,
