@@ -1788,18 +1788,18 @@ export class TelegramBotClient extends BaseClient {
                                     CacheHelper.getInstances().addUndoMessageCache(
                                         ctx.message.message_id, msg.id)
                                 }
+                                if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                    ctx.reply(Constants.SEND_SUCCESS, {
+                                        reply_parameters: {
+                                            message_id: ctx.message.message_id
+                                        }
+                                    })
+                                }
                             }).catch((e) => {
                                 this.logDebug('这里发送失败', e)
                                 ctx.reply(Constants.SEND_FAIL)
                             })
                         }
-                    }
-                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                        ctx.reply(Constants.SEND_SUCCESS, {
-                            reply_parameters: {
-                                message_id: ctx.message.message_id
-                            }
-                        })
                     }
                 }
             } else {
