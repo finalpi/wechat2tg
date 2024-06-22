@@ -1386,6 +1386,12 @@ export class TelegramBotClient extends BaseClient {
                                 })
                         }
                     }
+                }else {
+                    await ctx.reply('发送消息失败,未绑定联系人或群组,请使用 /room 或者 /user 命令将联系人或者群组绑定', {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
                 }
                 return
             }
@@ -1831,6 +1837,12 @@ export class TelegramBotClient extends BaseClient {
                             })
                         }
                     }
+                }else {
+                    await ctx.reply('发送消息失败,未绑定联系人或群组,请使用 /room 或者 /user 命令将联系人或者群组绑定', {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
                 }
             } else {
                 if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
@@ -2500,6 +2512,12 @@ export class TelegramBotClient extends BaseClient {
                         }
                     }
                 }
+            }else {
+                await ctx.reply('发送消息失败,未绑定联系人或群组,请使用 /room 或者 /user 命令将联系人或者群组绑定', {
+                    reply_parameters: {
+                        message_id: ctx.message.message_id
+                    }
+                })
             }
             return
         }
