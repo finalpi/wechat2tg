@@ -713,6 +713,18 @@ export class WeChatClient extends BaseClient {
             case PUPPET.types.Message.Audio:
             case PUPPET.types.Message.Emoticon: // 处理表情消息的逻辑
             case PUPPET.types.Message.Video:
+                if (messageType === PUPPET.types.Message.Attachment && !message.payload?.filename){
+                    this._tgClient.sendMessage({
+                        sender: showSender,
+                        body: '[合并转发消息]请在手机上查看',
+                        room: roomTopic,
+                        type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                        id: message.id,
+                        chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId,
+                        message: message
+                    })
+                    break
+                }
                 this.sendFileToTg(message, identityStr, {
                     sender: showSender,
                     body: '',
