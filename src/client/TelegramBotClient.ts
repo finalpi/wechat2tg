@@ -100,7 +100,7 @@ export class TelegramBotClient extends BaseClient {
         super()
         this._weChatClient = new WeChatClient(this)
         this._bot = new Telegraf(config.BOT_TOKEN)
-        this._bindItemService = new BindItemService(this._bot)
+        this._bindItemService = new BindItemService(this._bot, this._weChatClient.client)
         this._chatId = 0
         this._ownerId = 0
         this._chatId = 0
