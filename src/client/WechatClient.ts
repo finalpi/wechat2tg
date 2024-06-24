@@ -300,9 +300,9 @@ export class WeChatClient extends BaseClient {
     }
 
     public async stop() {
-        await this.clearCache()
         this._started = false
         await this._client.stop().then(() => this._started = false)
+        await this.clearCache()
         this.logInfo('stop ... ')
     }
 
@@ -713,7 +713,19 @@ export class WeChatClient extends BaseClient {
             case PUPPET.types.Message.Audio:
             case PUPPET.types.Message.Emoticon: // 处理表情消息的逻辑
             case PUPPET.types.Message.Video:
-                await this.sendFileToTg(message, identityStr, {
+                if (messageType === PUPPET.types.Message.Attachment && !message.payload?.filename){
+                    this._tgClient.sendMessage({
+                        sender: showSender,
+                        body: '[合并转发消息]请在手机上查看',
+                        room: roomTopic,
+                        type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
+                        id: message.id,
+                        chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId,
+                        message: message
+                    })
+                    break
+                }
+                this.sendFileToTg(message, identityStr, {
                     sender: showSender,
                     body: '',
                     room: roomTopic,

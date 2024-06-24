@@ -11,14 +11,16 @@ import {CreateGroupInterface} from '../models/CreateGroupInterface'
 
 export class BindItemService extends AbstractSqlService {
     private tgBotClient: Telegraf
+    private wechatyInterface: WechatyInterface
 
-    constructor(tgBotClient: Telegraf) {
+    constructor(tgBotClient: Telegraf, wechatyInterface: WechatyInterface) {
         if (!fs.existsSync('storage/db')) {
             // 创建目录
             fs.mkdirSync('storage/db', {recursive: true})
         }
         super()
         this.tgBotClient = tgBotClient
+        this.wechatyInterface = wechatyInterface
         // 初始化表
         this.createManualBindTable()
     }
@@ -185,7 +187,7 @@ export class BindItemService extends AbstractSqlService {
             }
             if (bindItem.avatar !== newBindItem.avatar) {
                 // 更新头像
-                const contact = await ContactImpl.find({
+                const contact = await this.wechatyInterface.Contact.find({
                     id: newBindItem.wechat_id
                 })
                 if (contact){

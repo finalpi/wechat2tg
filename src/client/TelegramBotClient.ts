@@ -100,7 +100,7 @@ export class TelegramBotClient extends BaseClient {
         super()
         this._weChatClient = new WeChatClient(this)
         this._bot = new Telegraf(config.BOT_TOKEN)
-        this._bindItemService = new BindItemService(this._bot)
+        this._bindItemService = new BindItemService(this._bot, this._weChatClient.client)
         this._chatId = 0
         this._ownerId = 0
         this._chatId = 0
@@ -1386,6 +1386,12 @@ export class TelegramBotClient extends BaseClient {
                                 })
                         }
                     }
+                }else {
+                    await ctx.reply('发送消息失败,未绑定联系人或群组,请使用 /room 或者 /user 命令将联系人或者群组绑定', {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
                 }
                 return
             }
@@ -1697,7 +1703,11 @@ export class TelegramBotClient extends BaseClient {
                 }
             }
             if (!fs.existsSync(gifFile)) {
-                await ctx.reply(Constants.SEND_FAIL + '文件转换失败')
+                await ctx.reply(Constants.SEND_FAIL + '文件转换失败', {
+                    reply_parameters: {
+                        message_id: ctx.message.message_id
+                    }
+                })
                 return
             }
             const fileBox = FileBox.fromFile(gifFile)
@@ -1756,9 +1766,20 @@ export class TelegramBotClient extends BaseClient {
                                         CacheHelper.getInstances().addUndoMessageCache(
                                             ctx.message.message_id, msg.id)
                                     }
+                                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                        ctx.reply(Constants.SEND_SUCCESS, {
+                                            reply_parameters: {
+                                                message_id: ctx.message.message_id
+                                            }
+                                        })
+                                    }
                                 }).catch((e) => {
                                     this.logError('这里发送失败', e)
-                                    ctx.reply(Constants.SEND_FAIL)
+                                    ctx.reply(Constants.SEND_FAIL, {
+                                        reply_parameters: {
+                                            message_id: ctx.message.message_id
+                                        }
+                                    })
                                 })
                                 return
                             }
@@ -1772,9 +1793,20 @@ export class TelegramBotClient extends BaseClient {
                                             CacheHelper.getInstances().addUndoMessageCache(
                                                 ctx.message.message_id, msg.id)
                                         }
+                                        if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                            ctx.reply(Constants.SEND_SUCCESS, {
+                                                reply_parameters: {
+                                                    message_id: ctx.message.message_id
+                                                }
+                                            })
+                                        }
                                     }).catch((e) => {
                                         this.logError('这里发送失败', e)
-                                        ctx.reply(Constants.SEND_FAIL)
+                                        ctx.reply(Constants.SEND_FAIL, {
+                                            reply_parameters: {
+                                                message_id: ctx.message.message_id
+                                            }
+                                        })
                                     })
                                     return
                                 }
@@ -1788,19 +1820,29 @@ export class TelegramBotClient extends BaseClient {
                                     CacheHelper.getInstances().addUndoMessageCache(
                                         ctx.message.message_id, msg.id)
                                 }
+                                if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                                    ctx.reply(Constants.SEND_SUCCESS, {
+                                        reply_parameters: {
+                                            message_id: ctx.message.message_id
+                                        }
+                                    })
+                                }
                             }).catch((e) => {
                                 this.logDebug('这里发送失败', e)
-                                ctx.reply(Constants.SEND_FAIL)
+                                ctx.reply(Constants.SEND_FAIL, {
+                                    reply_parameters: {
+                                        message_id: ctx.message.message_id
+                                    }
+                                })
                             })
                         }
                     }
-                    if (this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
-                        ctx.reply(Constants.SEND_SUCCESS, {
-                            reply_parameters: {
-                                message_id: ctx.message.message_id
-                            }
-                        })
-                    }
+                }else {
+                    await ctx.reply('发送消息失败,未绑定联系人或群组,请使用 /room 或者 /user 命令将联系人或者群组绑定', {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
                 }
             } else {
                 if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
@@ -1816,7 +1858,11 @@ export class TelegramBotClient extends BaseClient {
                                 }
                             })
                         }
-                    }).catch(() => ctx.reply(Constants.SEND_FAIL))
+                    }).catch(() => ctx.reply(Constants.SEND_FAIL, {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    }))
                 } else {
                     this.selectRoom?.say(fileBox).then(msg => {
                         if (msg) {
@@ -1832,13 +1878,21 @@ export class TelegramBotClient extends BaseClient {
                         }
                     }).catch((e) => {
                         this.logDebug('这里发送失败', e)
-                        ctx.reply(Constants.SEND_FAIL)
+                        ctx.reply(Constants.SEND_FAIL, {
+                            reply_parameters: {
+                                message_id: ctx.message.message_id
+                            }
+                        })
                     })
                 }
             }
         } catch (e) {
             this.logError('发送失败', e)
-            await ctx.reply(Constants.SEND_FAIL)
+            await ctx.reply(Constants.SEND_FAIL, {
+                reply_parameters: {
+                    message_id: ctx.message.message_id
+                }
+            })
         }
 
     }
@@ -2307,10 +2361,8 @@ export class TelegramBotClient extends BaseClient {
                 } else {
                     fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message[fileType].file_name)
                 }
-                await this.sendFile(ctx, fileBox)
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-            }).catch(e => {
+                this.sendFile(ctx, fileBox)
+            }).catch(() => {
                 ctx.reply('文件发送失败！', {
                     reply_parameters: {
                         message_id: ctx.message.message_id
@@ -2437,7 +2489,11 @@ export class TelegramBotClient extends BaseClient {
                                     }
                                 })
                             }
-                        }).catch(() => ctx.reply(Constants.SEND_FAIL))
+                        }).catch(() => ctx.reply(Constants.SEND_FAIL, {
+                            reply_parameters: {
+                                message_id: ctx.message.message_id
+                            }
+                        }))
                         const text = ctx.message.caption
                         if (text) {
                             room.say(text).then(msg => {
@@ -2456,6 +2512,12 @@ export class TelegramBotClient extends BaseClient {
                         }
                     }
                 }
+            }else {
+                await ctx.reply('发送消息失败,未绑定联系人或群组,请使用 /room 或者 /user 命令将联系人或者群组绑定', {
+                    reply_parameters: {
+                        message_id: ctx.message.message_id
+                    }
+                })
             }
             return
         }
@@ -2510,7 +2572,11 @@ export class TelegramBotClient extends BaseClient {
                         }
                     })
                 }
-            }).catch(() => ctx.reply(Constants.SEND_FAIL))
+            }).catch(() => ctx.reply(Constants.SEND_FAIL, {
+                reply_parameters: {
+                    message_id: ctx.message.message_id
+                }
+            }))
             const text = ctx.message.caption
             if (text) {
                 this.selectRoom?.say(text).then(msg => {
