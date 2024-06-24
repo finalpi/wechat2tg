@@ -2463,6 +2463,9 @@ export class TelegramBotClient extends BaseClient {
                     const contact = this.getContactByBindItem(bindItem)
                     if (contact) {
                         contact.say(fileBox).then(msg => {
+                            if (fileBox.type === FileBoxType.File && fileLink) {
+                                this.deleteFile(fileLink)
+                            }
                             if (msg) {
                                 CacheHelper.getInstances().addUndoMessageCache(
                                     ctx.message.message_id, msg.id)
@@ -2500,6 +2503,9 @@ export class TelegramBotClient extends BaseClient {
                     const room = this.getRoomByBindItem(bindItem)
                     if (room) {
                         room.say(fileBox).then(msg => {
+                            if (fileBox.type === FileBoxType.File && fileLink) {
+                                this.deleteFile(fileLink)
+                            }
                             if (msg) {
                                 CacheHelper.getInstances().addUndoMessageCache(
                                     ctx.message.message_id, msg.id)
@@ -2545,6 +2551,9 @@ export class TelegramBotClient extends BaseClient {
         }
         if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
             this._currentSelectContact?.say(fileBox).then(msg => {
+                if (fileBox.type === FileBoxType.File && fileLink) {
+                    this.deleteFile(fileLink)
+                }
                 if (msg) {
                     CacheHelper.getInstances().addUndoMessageCache(
                         ctx.message.message_id, msg.id)
@@ -2583,6 +2592,9 @@ export class TelegramBotClient extends BaseClient {
             }
         } else {
             this.selectRoom?.say(fileBox).then(msg => {
+                if (fileBox.type === FileBoxType.File && fileLink) {
+                    this.deleteFile(fileLink)
+                }
                 if (msg) {
                     CacheHelper.getInstances().addUndoMessageCache(
                         ctx.message.message_id, msg.id)
