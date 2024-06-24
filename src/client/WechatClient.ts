@@ -300,9 +300,9 @@ export class WeChatClient extends BaseClient {
     }
 
     public async stop() {
-        await this.clearCache()
         this._started = false
         await this._client.stop().then(() => this._started = false)
+        await this.clearCache()
         this.logInfo('stop ... ')
     }
 
