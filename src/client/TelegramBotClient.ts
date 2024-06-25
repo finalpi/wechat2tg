@@ -1194,12 +1194,14 @@ export class TelegramBotClient extends BaseClient {
                 // 假设回复消息是撤回命令 撤回web协议获取不到消息id 放弃 更新上游代码可获取了
                 if (text === '&rm') {
                     this.undoMessage(replyMessageId, ctx)
+                    return
                 }
                 const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId)
-                const weChatMessageId = messageItem.wechat_message_id
+                const weChatMessageId = messageItem?.wechat_message_id
                 // 设置别名
                 if (text.startsWith('&alias') && weChatMessageId) {
                     this.setAlias(weChatMessageId, text, ctx)
+                    return
                 }
 
                 if (weChatMessageId) {
@@ -1226,12 +1228,12 @@ export class TelegramBotClient extends BaseClient {
                     if (bindItem.type === 0) {
                         const contact = this.getContactByBindItem(bindItem)
                         if (contact) {
-                            WechatUtil.say(contact,text,ctx.message.text)
+                            WechatUtil.say(contact,text,ctx)
                         }
                     } else {
                         const room = this.getRoomByBindItem(bindItem)
                         if (room) {
-                            WechatUtil.say(room,text,ctx.message.text)
+                            WechatUtil.say(room,text,ctx)
                         }
                     }
                 }else {
@@ -1368,7 +1370,7 @@ export class TelegramBotClient extends BaseClient {
      * @private
      */
     private undoMessage(replyMessageId: number | string, ctx: any) {
-        const undoMessageCache = CacheHelper.getInstances().getUndoMessageCache(replyMessageId)
+        const undoMessageCache = CacheHelper.getInstances().getUndoMessageCache(replyMessageId,ctx.message?.chat.id)
         if (undoMessageCache) {
             // 撤回消息
             this.weChatClient.client.Message.find({id: undoMessageCache.wechat_message_id})
@@ -1380,7 +1382,7 @@ export class TelegramBotClient extends BaseClient {
                                     message_id: replyMessageId
                                 }
                             })
-                            CacheHelper.getInstances().deleteUndoMessageCache(replyMessageId)
+                            CacheHelper.getInstances().deleteUndoMessageCache(replyMessageId,ctx.message?.chat.id)
                         } else {
                             ctx.reply('撤回失败', {
                                 reply_parameters: {

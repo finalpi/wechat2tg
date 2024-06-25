@@ -11,6 +11,8 @@ import {CustomFile} from 'telegram/client/uploads'
 import {SetupServiceImpl} from '../service/Impl/SetupServiceImpl'
 import * as os from 'node:os'
 import {LogLevel} from 'telegram/extensions/Logger'
+import {DeletedMessage} from 'telegram/events/DeletedMessage'
+import {NewMessage} from 'telegram/events'
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -67,6 +69,15 @@ export class TelegramUserClient extends TelegramClient {
                         this.telegramBotClient.bot.telegram.deleteMessage(this.telegramBotClient.chatId, msg.message_id)
                     }, 10000)
                 })
+                const me = await this._client?.getMe()
+                if (me){
+                    this._client?.addEventHandler(async event=>{
+                        //todo 消息被删除的事件
+                    },new DeletedMessage({}))
+                    this._client?.addEventHandler(async event=>{
+                        //todo 接收到新消息的事件
+                    },new NewMessage({fromUsers:[me]}))
+                }
             }).catch((e) => {
                 this.telegramBotClient.tgUserClientLogin = false
                 this.logError('login... user error', e)
