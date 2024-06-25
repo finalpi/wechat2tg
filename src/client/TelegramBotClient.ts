@@ -1298,8 +1298,8 @@ export class TelegramBotClient extends BaseClient {
                 }
                 if (saveFile.endsWith('.tgs')) {
                     lottie_config = {
-                        width: 100,
-                        height: ctx.message.sticker.height / ctx.message.sticker.width * 100
+                        width: 200,
+                        height: ctx.message.sticker.height / ctx.message.sticker.width * lottie_config.width
                     }
                 }
 

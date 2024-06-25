@@ -37,6 +37,19 @@ export default class TgsUtils {
                         })
 
                         fs.writeFileSync(outputFile, converted, 'base64')
+                        const stats = fs.statSync(outputFile)
+                        const fileSizeInBytes = stats.size
+
+                        if (fileSizeInBytes > 1024 * 1024) {
+                            const converted = await converter({
+                                file: file,
+                                format: 'gif',
+                                width: 100,
+                                height: 100
+                            })
+
+                            fs.writeFileSync(outputFile, converted, 'base64')
+                        }
                     } else {
                         // 文件不止一个
                         reject('Tgs file is more than one file')
