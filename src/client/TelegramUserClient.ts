@@ -13,6 +13,8 @@ import * as os from 'node:os'
 import {LogLevel} from 'telegram/extensions/Logger'
 import {DeletedMessage} from 'telegram/events/DeletedMessage'
 import {NewMessage} from 'telegram/events'
+import {CacheHelper} from '../utils/CacheHelper'
+import {MessageUtils} from '../utils/MessageUtils'
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -73,9 +75,19 @@ export class TelegramUserClient extends TelegramClient {
                 if (me){
                     this._client?.addEventHandler(async event=>{
                         //todo 消息被删除的事件
+                        console.log(event)
+                        // 撤回消息
+                        if (event._messageId){
+                            MessageUtils.undoMessage(event._messageId)
+                        }
                     },new DeletedMessage({}))
                     this._client?.addEventHandler(async event=>{
                         //todo 接收到新消息的事件
+                        const msg = event.message
+                        CacheHelper.getInstances().addUndoMessageCache({
+                            telegram_message_id: msg.id,
+                            msgDate: msg.date
+                        })
                     },new NewMessage({fromUsers:[me]}))
                 }
             }).catch((e) => {

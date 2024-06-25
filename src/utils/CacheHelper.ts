@@ -27,27 +27,39 @@ export class CacheHelper {
         return this.undoMessageCaches.find(item=>item.telegram_bot_message_id === tg_message_id && item.chat_id === chat_id)
     }
 
+    public getUndoMessageCacheByTelegramMessageId(telegram_message_id: number | string): undoMessageCache | undefined {
+        return this.undoMessageCaches.find(item=>item.telegram_message_id === telegram_message_id)
+    }
+
     public deleteUndoMessageCache(tg_message_id: number | string,chat_id: number): void {
         this.undoMessageCaches = this.undoMessageCaches.filter(item=>!(item.telegram_bot_message_id === tg_message_id && item.chat_id === chat_id))
+    }
+
+    public deleteUndoMessageCacheByTelegramMessageId(telegram_message_id: number | string): void {
+        this.undoMessageCaches = this.undoMessageCaches.filter(item=>!(item.telegram_message_id === telegram_message_id))
     }
 
     public addUndoMessageCache(undoMessage: undoMessageCache): void {
         const time = Date.now()
         undoMessage.time = time
-        // const item = this.undoMessageCaches.find(item=>item.msgDate === undoMessage.msgDate)
-        // if (item){
-        //     if (undoMessage.telegram_message_id){
-        //         return
-        //     }
-        //     if (!item.telegram_bot_message_id) {
-        //         item.telegram_bot_message_id = undoMessage.telegram_bot_message_id
-        //         item.chat_id = undoMessage.chat_id
-        //         item.wechat_message_id = undoMessage.wechat_message_id
-        //         return
-        //     }
-        // }else {
+        const item = this.undoMessageCaches.find(item=>item.msgDate === undoMessage.msgDate)
+        if (item){
+            if (!item.telegram_bot_message_id) {
+                item.telegram_bot_message_id = undoMessage.telegram_bot_message_id
+                item.chat_id = undoMessage.chat_id
+                item.wechat_message_id = undoMessage.wechat_message_id
+                return
+            }else {
+                if (!item.telegram_message_id){
+                    item.telegram_message_id = undoMessage.telegram_message_id
+                    return
+                }else {
+                    this.undoMessageCaches.push(undoMessage)
+                }
+            }
+        }else {
             this.undoMessageCaches.push(undoMessage)
-        // }
+        }
     }
 
 
