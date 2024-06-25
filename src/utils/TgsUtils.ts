@@ -41,8 +41,7 @@ export default class TgsUtils {
                         const fileSizeInBytes = stats.size
                         if (fileSizeInBytes > 1024 * 1024) {
                             // 超过1mb压缩
-                            const fileBuffer = fs.readFileSync(outputFile)
-                            await new ConverterHelper().webmToGif(fileBuffer, outputFile)
+                            await new ConverterHelper().webmToGif(file, outputFile)
                         }
                     } else {
                         // 文件不止一个
