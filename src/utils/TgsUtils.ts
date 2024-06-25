@@ -4,6 +4,7 @@ import * as fs from 'node:fs'
 // @ts-ignore
 import converter from 'lottie-converter'
 import os from 'node:os'
+import {ConverterHelper} from './FfmpegUtils'
 
 export default class TgsUtils {
     // 需要系统安装 7z
@@ -36,6 +37,13 @@ export default class TgsUtils {
                         })
 
                         fs.writeFileSync(outputFile, converted, 'base64')
+                        const stats = fs.statSync(outputFile)
+                        const fileSizeInBytes = stats.size
+                        if (fileSizeInBytes > 1024 * 1024) {
+                            // 超过1mb压缩
+                            const fileBuffer = fs.readFileSync(outputFile)
+                            await new ConverterHelper().webmToGif(fileBuffer, outputFile)
+                        }
                     } else {
                         // 文件不止一个
                         reject('Tgs file is more than one file')

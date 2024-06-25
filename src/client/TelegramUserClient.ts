@@ -75,7 +75,6 @@ export class TelegramUserClient extends TelegramClient {
                 if (me){
                     this._client?.addEventHandler(async event=>{
                         //todo 消息被删除的事件
-                        console.log(event)
                         // 撤回消息
                         if (event._messageId){
                             MessageUtils.undoMessage(event._messageId)
