@@ -2251,8 +2251,8 @@ export class TelegramBotClient extends BaseClient {
     }
 
     private async dealWithCommand(ctx: Context,text: string){
-        this.waitInputCommand = undefined
         if (this.waitInputCommand === 'phoneNumber') {
+            this.waitInputCommand = undefined
             // 等待输入手机号
             this.phoneNumber = text
             await ctx.deleteMessage()
@@ -2260,6 +2260,7 @@ export class TelegramBotClient extends BaseClient {
         }
 
         if (this.waitInputCommand === 'password') {
+            this.waitInputCommand = undefined
             // 等待输入密码
             this.password = text
             await ctx.deleteMessage()
@@ -2267,6 +2268,7 @@ export class TelegramBotClient extends BaseClient {
         }
 
         if (this.waitInputCommand === 'listAdd') {
+            this.waitInputCommand = undefined
             // 黑白名单添加
             const roomList = this._weChatClient.roomList.filter(room => {
                 // const roomName = ;
