@@ -49,4 +49,15 @@ export class FileUtils {
             throw error
         }
     }
+
+    static async deleteFile(filePath: string) {
+        try {
+            // 使用 fs.promises.unlink() 方法删除文件
+            await fs.promises.unlink(filePath)
+            console.log(`Successfully deleted file: ${filePath}`)
+        } catch (err) {
+            console.error(`Error deleting file: ${filePath}`, err)
+            throw err // 抛出错误以便上层处理
+        }
+    }
 }

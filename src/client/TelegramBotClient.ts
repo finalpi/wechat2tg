@@ -2144,17 +2144,6 @@ export class TelegramBotClient extends BaseClient {
         }
     }
 
-    private async deleteFile(filePath: string) {
-        try {
-            // 使用 fs.promises.unlink() 方法删除文件
-            await fs.promises.unlink(filePath)
-            console.log(`Successfully deleted file: ${filePath}`)
-        } catch (err) {
-            console.error(`Error deleting file: ${filePath}`, err)
-            throw err // 抛出错误以便上层处理
-        }
-    }
-
     private async sendFile(ctx: any, fileBox: FileBox,fileLink?: string) {
         if (config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== '' && fileBox.type === FileBoxType.Url && fileLink) {
             // 使用代理的情况
@@ -2183,7 +2172,7 @@ export class TelegramBotClient extends BaseClient {
                     }
                     WechatUtil.say(message,fileBox,ctx).then(msg=>{
                         if (fileBox.type === FileBoxType.File && fileLink) {
-                            this.deleteFile(fileLink)
+                            FileUtils.deleteFile(fileLink)
                         }
                     })
                     const text = ctx.message.caption
@@ -2203,7 +2192,7 @@ export class TelegramBotClient extends BaseClient {
                     if (contact) {
                         WechatUtil.say(contact,fileBox,ctx).then(msg=>{
                             if (fileBox.type === FileBoxType.File && fileLink) {
-                                this.deleteFile(fileLink)
+                                FileUtils.deleteFile(fileLink)
                             }
                         })
                         const text = ctx.message.caption
@@ -2216,7 +2205,7 @@ export class TelegramBotClient extends BaseClient {
                     if (room) {
                         WechatUtil.say(room,fileBox,ctx).then(msg=>{
                             if (fileBox.type === FileBoxType.File && fileLink) {
-                                this.deleteFile(fileLink)
+                                FileUtils.deleteFile(fileLink)
                             }
                         })
                         const text = ctx.message.caption
@@ -2238,7 +2227,7 @@ export class TelegramBotClient extends BaseClient {
             if (this._currentSelectContact){
                 WechatUtil.say(this._currentSelectContact,fileBox,ctx).then(msg=>{
                     if (fileBox.type === FileBoxType.File && fileLink) {
-                        this.deleteFile(fileLink)
+                        FileUtils.deleteFile(fileLink)
                     }
                 })
                 const text = ctx.message.caption
@@ -2250,7 +2239,7 @@ export class TelegramBotClient extends BaseClient {
             if (this.selectRoom){
                 WechatUtil.say(this.selectRoom,fileBox,ctx).then(msg=>{
                     if (fileBox.type === FileBoxType.File && fileLink) {
-                        this.deleteFile(fileLink)
+                        FileUtils.deleteFile(fileLink)
                     }
                 })
                 const text = ctx.message.caption
