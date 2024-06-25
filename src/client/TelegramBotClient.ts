@@ -6,7 +6,7 @@ import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from 'https-proxy-agent'
 import * as tg from 'telegraf/src/core/types/typegram'
 import {message} from 'telegraf/filters'
-import {FileBox} from 'file-box'
+import {FileBox, FileBoxType} from 'file-box'
 import * as fs from 'node:fs'
 import {NotionListType, NotionMode, StorageSettings, VariableContainer, VariableType} from '../models/Settings'
 import {ConverterHelper} from '../utils/FfmpegUtils'
@@ -2361,7 +2361,7 @@ export class TelegramBotClient extends BaseClient {
                 } else {
                     fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message[fileType].file_name)
                 }
-                this.sendFile(ctx, fileBox)
+                this.sendFile(ctx, fileBox,fileLink.toString())
             }).catch(() => {
                 ctx.reply('文件发送失败！', {
                     reply_parameters: {
@@ -2372,7 +2372,26 @@ export class TelegramBotClient extends BaseClient {
         }
     }
 
-    private async sendFile(ctx: any, fileBox: FileBox) {
+    private async deleteFile(filePath: string) {
+        try {
+            // 使用 fs.promises.unlink() 方法删除文件
+            await fs.promises.unlink(filePath)
+            console.log(`Successfully deleted file: ${filePath}`)
+        } catch (err) {
+            console.error(`Error deleting file: ${filePath}`, err)
+            throw err // 抛出错误以便上层处理
+        }
+    }
+
+    private async sendFile(ctx: any, fileBox: FileBox,fileLink?: string) {
+        if (config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== '' && fileBox.type === FileBoxType.Url && fileLink) {
+            // 使用代理的情况
+            const savePath = `./save-files/${fileBox.name}`
+            FileUtils.downloadWithProxy(fileLink, savePath).then(() => {
+                this.sendFile(ctx,FileBox.fromFile(savePath,fileBox.name),savePath)
+            }).catch(() => ctx.reply('发送失败, 原始文件保存失败'))
+            return
+        }
         const replyMessageId = ctx.update.message['reply_to_message']?.message_id
         // 如果是回复的消息 优先回复该发送的消息
         if (replyMessageId) {
@@ -2391,6 +2410,9 @@ export class TelegramBotClient extends BaseClient {
                         return
                     }
                     message?.say(fileBox).then(msg => {
+                        if (fileBox.type === FileBoxType.File && fileLink) {
+                            this.deleteFile(fileLink)
+                        }
                         // 保存到undo消息缓存
                         if (msg) {
                             CacheHelper.getInstances().addUndoMessageCache(ctx.message.message_id, msg.id)
@@ -2441,6 +2463,9 @@ export class TelegramBotClient extends BaseClient {
                     const contact = this.getContactByBindItem(bindItem)
                     if (contact) {
                         contact.say(fileBox).then(msg => {
+                            if (fileBox.type === FileBoxType.File && fileLink) {
+                                this.deleteFile(fileLink)
+                            }
                             if (msg) {
                                 CacheHelper.getInstances().addUndoMessageCache(
                                     ctx.message.message_id, msg.id)
@@ -2478,6 +2503,9 @@ export class TelegramBotClient extends BaseClient {
                     const room = this.getRoomByBindItem(bindItem)
                     if (room) {
                         room.say(fileBox).then(msg => {
+                            if (fileBox.type === FileBoxType.File && fileLink) {
+                                this.deleteFile(fileLink)
+                            }
                             if (msg) {
                                 CacheHelper.getInstances().addUndoMessageCache(
                                     ctx.message.message_id, msg.id)
@@ -2523,6 +2551,9 @@ export class TelegramBotClient extends BaseClient {
         }
         if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
             this._currentSelectContact?.say(fileBox).then(msg => {
+                if (fileBox.type === FileBoxType.File && fileLink) {
+                    this.deleteFile(fileLink)
+                }
                 if (msg) {
                     CacheHelper.getInstances().addUndoMessageCache(
                         ctx.message.message_id, msg.id)
@@ -2561,6 +2592,9 @@ export class TelegramBotClient extends BaseClient {
             }
         } else {
             this.selectRoom?.say(fileBox).then(msg => {
+                if (fileBox.type === FileBoxType.File && fileLink) {
+                    this.deleteFile(fileLink)
+                }
                 if (msg) {
                     CacheHelper.getInstances().addUndoMessageCache(
                         ctx.message.message_id, msg.id)
