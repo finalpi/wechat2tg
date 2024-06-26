@@ -1305,7 +1305,7 @@ export class TelegramBotClient extends BaseClient {
 
                 // gif 文件存在
                 if (fs.existsSync(gifFile)) {
-                    await this.sendGif(saveFile, gifFile, ctx, lottie_config)
+                    this.sendGif(saveFile, gifFile, ctx, lottie_config)
                 } else {
                     // 尝试使用代理下载tg文件
                     if (config.HOST !== '') {
