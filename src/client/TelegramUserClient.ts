@@ -76,8 +76,8 @@ export class TelegramUserClient extends TelegramClient {
                     this._client?.addEventHandler(async event=>{
                         //todo 消息被删除的事件
                         // 撤回消息
-                        if (event._messageId){
-                            MessageUtils.undoMessage(event._messageId)
+                        for (const deletedId of event.deletedIds) {
+                            MessageUtils.undoMessage(deletedId)
                         }
                     },new DeletedMessage({}))
                     this._client?.addEventHandler(async event=>{
