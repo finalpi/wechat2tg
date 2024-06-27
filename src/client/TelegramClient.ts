@@ -5,9 +5,8 @@ import {TelegramBotClient} from './TelegramBotClient'
 import * as authMethods from 'telegram/client/auth'
 import os from 'node:os'
 import BaseClient from '../base/BaseClient'
-import {Message, MessageResult} from '../base/IClient'
 
-export class TelegramClient extends BaseClient<Message, MessageResult> {
+export class TelegramClient extends BaseClient {
     get client() {
         return this._client
     }
@@ -66,21 +65,6 @@ export class TelegramClient extends BaseClient<Message, MessageResult> {
         if (messages) {
             return messages[0].downloadMedia()
         }
-    }
-
-    // todo: 重写sendMessage方法
-    sendMessage(message: any): Promise<any> {
-        return super.sendMessage(message)
-    }
-
-    // todo: 重写sendMessage方法
-    editMessage(key: string | number, m: any): Promise<any> {
-        return super.editMessage(key, m)
-    }
-
-    // todo: 重写sendMessage方法
-    deleteMessage(key: string | number): Promise<any> {
-        return super.deleteMessage(key)
     }
 
 }

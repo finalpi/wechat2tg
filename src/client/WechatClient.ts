@@ -28,10 +28,9 @@ import {ContactItem} from '../models/ContactItem'
 import TelegramError from 'telegraf/src/core/network/error'
 import BaseClient from '../base/BaseClient'
 import {MessageService} from '../service/MessageService'
-import {Message, MessageResult} from '../base/IClient'
 
 
-export class WeChatClient extends BaseClient<Message, MessageResult> {
+export class WeChatClient extends BaseClient {
 
 
     constructor(private readonly tgClient: TelegramBotClient) {
