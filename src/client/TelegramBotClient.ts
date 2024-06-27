@@ -30,8 +30,9 @@ import {TelegramUserClient} from './TelegramUserClient'
 import BaseClient from '../base/BaseClient'
 import {MessageService} from '../service/MessageService'
 import {WechatUtil} from '../utils/WechatUtil'
+import {Message, MessageResult} from '../base/IClient'
 
-export class TelegramBotClient extends BaseClient {
+export class TelegramBotClient extends BaseClient<Message, MessageResult> {
     get tgUserClient(): TelegramUserClient | undefined {
         return this._tgUserClient
     }
