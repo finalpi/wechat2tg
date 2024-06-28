@@ -1,4 +1,4 @@
-import {FileBox, FileBoxType} from 'file-box'
+import {FileBox} from 'file-box'
 import {MessageInterface} from 'wechaty/impls'
 import {CacheHelper} from './CacheHelper'
 import {VariableType} from '../models/Settings'
@@ -6,7 +6,7 @@ import {Constants} from '../constants/Constants'
 import {ContactInterface, RoomInterface} from 'wechaty/dist/esm/src/mods/impls'
 import {TelegramBotClient} from '../client/TelegramBotClient'
 
-export class WechatUtil{
+export class WechatUtil {
     private constructor() {
         ///
     }
@@ -17,19 +17,17 @@ export class WechatUtil{
      * @param msg
      * @param ctx
      */
-    public static say(context: MessageInterface|ContactInterface|RoomInterface,msg: string|FileBox,ctx: any): Promise<void | MessageInterface>{
+    public static say(context: MessageInterface | ContactInterface | RoomInterface, msg: string | FileBox, ctx: any): Promise<void | MessageInterface> {
         const msgId = ctx.message.message_id
         const chat_id = ctx.message?.chat.id
-        const msgDate = ctx.message.date
         return new Promise((resolve, reject) => {
             context.say(msg).then(msg => {
                 // 保存到undo消息缓存
                 if (msg) {
-                    CacheHelper.getInstances().addUndoMessageCache({
-                        telegram_bot_message_id: msgId,
+                    CacheHelper.getInstances().addUndoMessage({
                         chat_id: chat_id,
-                        wechat_message_id: msg.id,
-                        msgDate: msgDate
+                        wx_msg_id: msg.id,
+                        msg_id: msgId,
                     })
                 }
                 if (TelegramBotClient.getInstance().setting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {

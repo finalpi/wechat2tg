@@ -5,10 +5,12 @@ import {TelegramBotClient} from '../client/TelegramBotClient'
 
 export class MessageUtils {
     private static instance: MessageUtils
+
     private constructor() {
         //
     }
-    public getInstance (): MessageUtils {
+
+    public getInstance(): MessageUtils {
         if (!MessageUtils.instance) {
             MessageUtils.instance = new MessageUtils()
         }
@@ -32,31 +34,33 @@ export class MessageUtils {
      * @param tgMsgId
      * @private
      */
-    public static undoMessage(tgMsgId: number | string) {
-        const undoMessageCache = CacheHelper.getInstances().getUndoMessageCacheByTelegramMessageId(tgMsgId)
-        if (undoMessageCache && undoMessageCache.wechat_message_id) {
+    public static undoMessage(tgMsgId: number) {
+        const undoMessageCache = CacheHelper.getInstances().getUndoMessageByMsgId({msg_id: tgMsgId})
+        if (undoMessageCache) {
             // 撤回消息
-            TelegramBotClient.getInstance().weChatClient.client.Message.find({id: undoMessageCache.wechat_message_id})
+            const wxMsgId = undoMessageCache?.wx_msg_id
+            TelegramBotClient.getInstance().weChatClient.client.Message.find({id: wxMsgId})
                 .then(message => {
                     message?.recall().then((res) => {
                         if (res) {
-                            if (undoMessageCache.chat_id){
-                                TelegramBotClient.getInstance().bot.telegram.sendMessage(undoMessageCache.chat_id,'撤回成功')
+                            if (wxMsgId) {
+                                CacheHelper.getInstances().removeUndoMessage(wxMsgId)
                             }
-                            CacheHelper.getInstances().deleteUndoMessageCacheByTelegramMessageId(tgMsgId)
+                            if (undoMessageCache.chat_id) {
+                                TelegramBotClient.getInstance().bot.telegram.sendMessage(undoMessageCache.chat_id, '撤回成功')
+                            }
                         } else {
-                            if (undoMessageCache.chat_id){
-                                TelegramBotClient.getInstance().bot.telegram.sendMessage(undoMessageCache.chat_id,'撤回失败')
+                            if (undoMessageCache.chat_id) {
+                                TelegramBotClient.getInstance().bot.telegram.sendMessage(undoMessageCache.chat_id, '撤回失败')
                             }
                         }
 
                     }).catch((e) => {
-                        if (undoMessageCache.chat_id){
-                            TelegramBotClient.getInstance().bot.telegram.sendMessage(undoMessageCache.chat_id,'撤回失败')
+                        if (undoMessageCache.chat_id) {
+                            TelegramBotClient.getInstance().bot.telegram.sendMessage(undoMessageCache.chat_id, '撤回失败')
                         }
                     })
                 })
         }
-        return
     }
 }
