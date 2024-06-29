@@ -4,8 +4,9 @@ import {TelegramClient as GramClient} from 'telegram'
 import {TelegramBotClient} from './TelegramBotClient'
 import os from 'node:os'
 import BaseClient from '../base/BaseClient'
-import {DeletedMessage} from "telegram/events/DeletedMessage";
-import {MessageUtils} from "../utils/MessageUtils";
+import {DeletedMessage} from 'telegram/events/DeletedMessage'
+import {MessageUtils} from '../utils/MessageUtils'
+import {NewMessage} from 'telegram/events'
 
 export class TelegramClient extends BaseClient {
     get client() {
@@ -57,30 +58,11 @@ export class TelegramClient extends BaseClient {
             this._client.start({
                 botAuthToken: config.BOT_TOKEN,
             }).then(async () => {
-                // 测试测试 DELETED ME
-                this._client?.getMe().then(me => {
-                    // 新消息处理
-                    // this._client?.addEventHandler(async event => {
-                    //     const msg = event.message
-                    //     this.logInfo(`New message from ${msg.id} in chat ${msg.chatId}: ${msg.text}`)
-                    //     // CacheHelper.getInstances().addUndoMessageCache({
-                    //     //     telegram_bot_message_id: msg.id,
-                    //     //     chat_id: msg.chatId,
-                    //     //     msgDate: msg.date
-                    //     // })
-                    // }, new NewMessage({fromUsers: [me]}))
-
-                    // 监听删除消息事件
-                }).catch(err => {
-                    this.logError(err)
-                })
-
                 this._client?.addEventHandler(async event => {
                     // let id = event.peer?.id
                     // this.logInfo(`Deleted message: ${event.inputChat}`)
                     for (const deletedId of event.deletedIds) {
                         MessageUtils.undoMessage(deletedId)
-                        this.logInfo(`Deleted message id: ${deletedId}`)
                     }
                 }, new DeletedMessage({}))
             })
@@ -94,6 +76,16 @@ export class TelegramClient extends BaseClient {
         if (messages) {
             return messages[0].downloadMedia()
         }
+    }
+
+    // TODO: 请在上层接口定义 (暂时是具体实现)
+    public async editMessage(inputPeer: { chat_id: number, msg_id: number }, messageText: string) {
+        const inputPeerChannelFromMessage = await this?.client?.getInputEntity(inputPeer.chat_id) || inputPeer.chat_id
+        console.debug('editMessage', inputPeer)
+        return this?.client?.editMessage(
+            inputPeerChannelFromMessage,
+            {message: inputPeer.msg_id, text: messageText})
+
     }
 
 }

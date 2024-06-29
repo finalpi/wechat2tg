@@ -28,6 +28,10 @@ import {ContactItem} from '../models/ContactItem'
 import TelegramError from 'telegraf/src/core/network/error'
 import BaseClient from '../base/BaseClient'
 import {MessageService} from '../service/MessageService'
+import {CacheHelper} from '../utils/CacheHelper'
+import {Constants} from '../constants/Constants'
+import {Sayable} from 'wechaty/src/sayable/types'
+import {config} from '../config'
 
 
 export class WeChatClient extends BaseClient {
@@ -147,6 +151,76 @@ export class WeChatClient extends BaseClient {
 
     public get client() {
         return this._client
+    }
+
+    // TODO: 请在接口中定义方法
+    public sendMessage(sayable: MessageInterface | ContactInterface | RoomInterface, msg: string | FileBox, extra: {
+        msg_id: number,
+        chat_id: number
+    }): Promise<void | MessageInterface> {
+        const msgText = msg instanceof FileBox ? msg.name : msg.toString()
+        // 保存发送的消息到数据库
+        // this.logInfo('数据库保存', msgText)
+        MessageService.getInstance().updateMessageByChatMsg({
+            chat_id: extra.chat_id.toString(),
+            msg_text: msgText,
+        },{
+            telegram_message_id: extra.msg_id,
+            type: msg instanceof FileBox ? 0 : 7,
+            sender_id: sayable.id,
+        })
+        return new Promise((resolve, reject) => {
+            sayable.say(msg).then(msg => {
+                // 保存到undo消息缓存
+                if (msg) {
+                    CacheHelper.getInstances().addUndoMessage({
+                        chat_id: extra.chat_id,
+                        wx_msg_id: msg.id,
+                        msg_id: extra.msg_id,
+                    })
+
+                    if (this.tgClient.setting.getVariable(VariableType.SETTING_REPLY_SUCCESS)) {
+                        // 配置了能编辑消息
+                        if (this.tgClient.tgUserClientLogin) {
+                            MessageService.getInstance().findMessageByTelegramMessageId(extra.msg_id, extra.chat_id).then(item => {
+                                if (item && item.telegram_user_message_id) {
+                                    this.tgClient.tgUserClient?.editMessage({
+                                        ...extra,
+                                        msg_id: item.telegram_user_message_id,
+                                    }, `${msgText} ✅`)
+                                }
+                            })
+                        } else {
+                            this.tgClient.sendMessage({
+                                body: Constants.SEND_SUCCESS,
+                                replay_msg_id: extra.msg_id,
+                                chatId: extra.chat_id
+                            })
+                        }
+                    }
+                }
+                resolve(msg)
+            }).catch(() => {
+                if (this.tgClient.tgUserClientLogin) {
+                    MessageService.getInstance().findMessageByTelegramMessageId(extra.msg_id, extra.chat_id).then(item => {
+                        if (item.telegram_user_message_id) {
+                            this.tgClient.tgClient?.editMessage({
+                                ...extra,
+                                msg_id: item.telegram_user_message_id,
+                            }, `${msgText} ❌`)
+                        }
+                    })
+                } else {
+                    this.tgClient.sendMessage({
+                        body: Constants.SEND_FAIL,
+                        replay_msg_id: extra.msg_id,
+                        chatId: extra.chat_id
+                    })
+                }
+
+                reject()
+            })
+        })
     }
 
     public async start() {
@@ -503,7 +577,8 @@ export class WeChatClient extends BaseClient {
             type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
             id: message.id,
             chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId,
-            message: message
+            message: message,
+            send_id: talker.id,
         }
 
         if (message.self()) {
@@ -595,7 +670,8 @@ export class WeChatClient extends BaseClient {
                 room: roomTopic,
                 id: message.id,
                 chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId,
-                message: message
+                message: message,
+                send_id: talker.id,
             })
         }
 
@@ -643,7 +719,8 @@ export class WeChatClient extends BaseClient {
                             id: message.id,
                             not_escape_html: true,
                             chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId,
-                            message: message
+                            message: message,
+                            send_id: talker.id,
                         })
                         return
                     }
@@ -657,7 +734,8 @@ export class WeChatClient extends BaseClient {
                         type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                         id: message.id,
                         chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId,
-                        message: message
+                        message: message,
+                        send_id: talker.id,
                     })
                 }
             }
@@ -713,7 +791,7 @@ export class WeChatClient extends BaseClient {
             case PUPPET.types.Message.Audio:
             case PUPPET.types.Message.Emoticon: // 处理表情消息的逻辑
             case PUPPET.types.Message.Video:
-                if (messageType === PUPPET.types.Message.Attachment && !message.payload?.filename){
+                if (messageType === PUPPET.types.Message.Attachment && !message.payload?.filename) {
                     this._tgClient.sendMessage({
                         sender: showSender,
                         body: '[合并转发消息]请在手机上查看',
@@ -721,7 +799,8 @@ export class WeChatClient extends BaseClient {
                         type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                         id: message.id,
                         chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId,
-                        message: message
+                        message: message,
+                        send_id: talker.id,
                     })
                     break
                 }
@@ -732,7 +811,8 @@ export class WeChatClient extends BaseClient {
                     type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                     id: message.id,
                     chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId,
-                    message: message
+                    message: message,
+                    send_id: talker.id,
                 })
                 break
             case PUPPET.types.Message.MiniProgram: // 处理小程序消息的逻辑
@@ -953,7 +1033,7 @@ export class WeChatClient extends BaseClient {
                                         type: tgMessage.message.type(),
                                         msg_text: tgMessage.body + '',
                                         send_by: tgMessage.sender ? tgMessage.sender : '',
-                                        create_time: new Date().getTime()
+                                        create_time: new Date().getTime(),
                                     })
                                 }
                             }).catch((e: TelegramError) => {

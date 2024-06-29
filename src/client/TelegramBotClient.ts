@@ -29,9 +29,6 @@ import {Constants} from '../constants/Constants'
 import {TelegramUserClient} from './TelegramUserClient'
 import BaseClient from '../base/BaseClient'
 import {MessageService} from '../service/MessageService'
-import {WechatUtil} from '../utils/WechatUtil'
-
-// import {int, long} from "telegram/tl/api";
 
 export class TelegramBotClient extends BaseClient {
     get tgUserClient(): TelegramUserClient | undefined {
@@ -1177,16 +1174,7 @@ export class TelegramBotClient extends BaseClient {
             }
             ctx.answerCbQuery()
         })
-        // 发送消息 回复等...
-        bot.command('edit', async ctx => {
-            const messageText = ctx.update.message.text
-            const strings = messageText.split(' ')
-            const inputPeerChannelFromMessage = await this.tgClient?.client?.getInputEntity(strings[2]) || strings[2]
-            const msgId = Number.parseInt(strings[1]) || 9106
-            this.tgClient?.client?.editMessage(
-                inputPeerChannelFromMessage,
-                {message: msgId, text: '试试'})
-        })
+
         bot.on(message('text'), async ctx => {
             const text = ctx.message.text // 获取消息内容
             // 处理等待用户输入的指令
@@ -1207,7 +1195,7 @@ export class TelegramBotClient extends BaseClient {
                     this.undoMessage(replyMessageId, ctx)
                     return
                 }
-                const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId)
+                const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId, ctx.chat.id)
                 const weChatMessageId = messageItem?.wechat_message_id
                 // 设置别名
                 if (text.startsWith('&alias') && weChatMessageId) {
@@ -1226,7 +1214,10 @@ export class TelegramBotClient extends BaseClient {
                             })
                             return
                         }
-                        WechatUtil.say(message, ctx.message.text, ctx)
+                        this.weChatClient.sendMessage(message, ctx.message.text, {
+                            chat_id: ctx.chat.id,
+                            msg_id: ctx.message.message_id
+                        })
                     })
                 }
                 return
@@ -1239,12 +1230,18 @@ export class TelegramBotClient extends BaseClient {
                     if (bindItem.type === 0) {
                         const contact = this.getContactByBindItem(bindItem)
                         if (contact) {
-                            WechatUtil.say(contact, text, ctx)
+                            this.weChatClient.sendMessage(contact, text, {
+                                chat_id: ctx.chat.id,
+                                msg_id: ctx.message.message_id
+                            })
                         }
                     } else {
                         const room = this.getRoomByBindItem(bindItem)
                         if (room) {
-                            WechatUtil.say(room, text, ctx)
+                            this.weChatClient.sendMessage(room, text, {
+                                chat_id: ctx.chat.id,
+                                msg_id: ctx.message.message_id
+                            })
                         }
                     }
                 } else {
@@ -1259,13 +1256,19 @@ export class TelegramBotClient extends BaseClient {
 
             // 当前有回复的'个人用户' 并且是选择了用户的情况下
             if (this._flagPinMessageType === 'user' && this._currentSelectContact) {
-                WechatUtil.say(this._currentSelectContact, text, ctx)
+                this.weChatClient.sendMessage(this._currentSelectContact, text, {
+                    chat_id: ctx.chat.id,
+                    msg_id: ctx.message.message_id
+                })
                 return
             }
 
             // 当前有回复的'群' 并且是选择了群的情况下
             if (this._flagPinMessageType === 'room' && this.selectRoom) {
-                WechatUtil.say(this.selectRoom, text, ctx)
+                this.weChatClient.sendMessage(this.selectRoom, text, {
+                    chat_id: ctx.chat.id,
+                    msg_id: ctx.message.message_id
+                })
                 return
             }
             return
@@ -1608,7 +1611,7 @@ export class TelegramBotClient extends BaseClient {
             // 如果是回复的消息 优先回复该发送的消息
             if (replyMessageId) {
                 // try get weChat cache message id
-                const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId)
+                const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId, ctx.chat.id)
                 const weChatMessageId = messageItem.wechat_message_id
                 if (weChatMessageId) {
                     // 添加或者移除名单
@@ -1622,7 +1625,10 @@ export class TelegramBotClient extends BaseClient {
                             })
                             return
                         }
-                        WechatUtil.say(message, fileBox, ctx)
+                        this.weChatClient.sendMessage(message, fileBox, {
+                            chat_id: ctx.chat.id,
+                            msg_id: ctx.message.message_id
+                        })
                     })
                 }
                 return
@@ -1636,7 +1642,10 @@ export class TelegramBotClient extends BaseClient {
                         const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
                         individual?.forEach(value => {
                             if (value.id === bindItem.bind_id) {
-                                WechatUtil.say(value.contact, fileBox, ctx)
+                                this.weChatClient.sendMessage(value.contact, fileBox, {
+                                    chat_id: ctx.chat.id,
+                                    msg_id: ctx.message.message_id
+                                })
                                 return
                             }
                         })
@@ -1644,7 +1653,10 @@ export class TelegramBotClient extends BaseClient {
                         if (!findItem) {
                             official?.forEach(value => {
                                 if (value.id === bindItem.bind_id) {
-                                    WechatUtil.say(value.contact, fileBox, ctx)
+                                    this.weChatClient.sendMessage(value.contact, fileBox, {
+                                        chat_id: ctx.chat.id,
+                                        msg_id: ctx.message.message_id
+                                    })
                                     return
                                 }
                             })
@@ -1652,7 +1664,10 @@ export class TelegramBotClient extends BaseClient {
                     } else {
                         const room = this.weChatClient.roomList.find(value => value.id === bindItem.bind_id)
                         if (room) {
-                            WechatUtil.say(room.room, fileBox, ctx)
+                            this.weChatClient.sendMessage(room.room, fileBox, {
+                                chat_id: ctx.chat.id,
+                                msg_id: ctx.message.message_id
+                            })
                         }
                     }
                 } else {
@@ -1665,11 +1680,17 @@ export class TelegramBotClient extends BaseClient {
             } else {
                 if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
                     if (this._currentSelectContact) {
-                        WechatUtil.say(this._currentSelectContact, fileBox, ctx)
+                        this.weChatClient.sendMessage(this._currentSelectContact, fileBox, {
+                            chat_id: ctx.chat.id,
+                            msg_id: ctx.message.message_id
+                        })
                     }
                 } else {
                     if (this.selectRoom) {
-                        WechatUtil.say(this.selectRoom, fileBox, ctx)
+                        this.weChatClient.sendMessage(this.selectRoom, fileBox, {
+                            chat_id: ctx.chat.id,
+                            msg_id: ctx.message.message_id
+                        })
                     }
                 }
             }
@@ -1694,7 +1715,10 @@ export class TelegramBotClient extends BaseClient {
             message.room = undefined
         }
         this.bot.telegram.sendMessage(message.chatId, SimpleMessageSender.send(message), {
-            parse_mode: 'HTML'
+            parse_mode: 'HTML',
+            reply_parameters: message.replay_msg_id ? {
+                message_id: message.replay_msg_id
+            } : undefined
         }).then(res => {
             if (message.message && message.id) {
                 MessageService.getInstance().addMessage({
@@ -1704,7 +1728,8 @@ export class TelegramBotClient extends BaseClient {
                     type: message.message.type(),
                     msg_text: message.body + '',
                     send_by: message.sender ? message.sender : '',
-                    create_time: new Date().getTime()
+                    create_time: new Date().getTime(),
+                    sender_id: message.send_id,
                 })
             }
         }).catch(e => {
@@ -2172,7 +2197,7 @@ export class TelegramBotClient extends BaseClient {
         // 如果是回复的消息 优先回复该发送的消息
         if (replyMessageId) {
             // try get weChat cache message id
-            const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId)
+            const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId, ctx.chat.id)
             const weChatMessageId = messageItem.wechat_message_id
             if (weChatMessageId) {
                 // 添加或者移除名单
@@ -2185,14 +2210,20 @@ export class TelegramBotClient extends BaseClient {
                         })
                         return
                     }
-                    WechatUtil.say(message, fileBox, ctx).then(msg => {
+                    this.weChatClient.sendMessage(message, fileBox, {
+                        chat_id: ctx.chat.id,
+                        msg_id: ctx.message.message_id
+                    }).then(msg => {
                         if (fileBox.type === FileBoxType.File && fileLink) {
                             FileUtils.deleteFile(fileLink)
                         }
                     })
                     const text = ctx.message.caption
                     if (text) {
-                        WechatUtil.say(message, text, ctx)
+                        this.weChatClient.sendMessage(message, text, {
+                            chat_id: ctx.chat.id,
+                            msg_id: ctx.message.message_id
+                        })
                     }
                 })
             }
@@ -2205,27 +2236,39 @@ export class TelegramBotClient extends BaseClient {
                 if (bindItem.type === 0) {
                     const contact = this.getContactByBindItem(bindItem)
                     if (contact) {
-                        WechatUtil.say(contact, fileBox, ctx).then(msg => {
+                        this.weChatClient.sendMessage(contact, fileBox, {
+                            chat_id: ctx.chat.id,
+                            msg_id: ctx.message.message_id
+                        }).then(msg => {
                             if (fileBox.type === FileBoxType.File && fileLink) {
                                 FileUtils.deleteFile(fileLink)
                             }
                         })
                         const text = ctx.message.caption
                         if (text) {
-                            WechatUtil.say(contact, text, ctx)
+                            this.weChatClient.sendMessage(contact, text, {
+                                chat_id: ctx.chat.id,
+                                msg_id: ctx.message.message_id
+                            })
                         }
                     }
                 } else {
                     const room = this.getRoomByBindItem(bindItem)
                     if (room) {
-                        WechatUtil.say(room, fileBox, ctx).then(msg => {
+                        this.weChatClient.sendMessage(room, fileBox, {
+                            chat_id: ctx.chat.id,
+                            msg_id: ctx.message.message_id
+                        }).then(msg => {
                             if (fileBox.type === FileBoxType.File && fileLink) {
                                 FileUtils.deleteFile(fileLink)
                             }
                         })
                         const text = ctx.message.caption
                         if (text) {
-                            WechatUtil.say(room, text, ctx)
+                            this.weChatClient.sendMessage(room, text, {
+                                chat_id: ctx.chat.id,
+                                msg_id: ctx.message.message_id
+                            })
                         }
                     }
                 }
@@ -2240,26 +2283,38 @@ export class TelegramBotClient extends BaseClient {
         }
         if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
             if (this._currentSelectContact) {
-                WechatUtil.say(this._currentSelectContact, fileBox, ctx).then(msg => {
+                this.weChatClient.sendMessage(this._currentSelectContact, fileBox, {
+                    chat_id: ctx.chat.id,
+                    msg_id: ctx.message.message_id
+                }).then(msg => {
                     if (fileBox.type === FileBoxType.File && fileLink) {
                         FileUtils.deleteFile(fileLink)
                     }
                 })
                 const text = ctx.message.caption
                 if (text) {
-                    WechatUtil.say(this._currentSelectContact, text, ctx)
+                    this.weChatClient.sendMessage(this._currentSelectContact, text, {
+                        chat_id: ctx.chat.id,
+                        msg_id: ctx.message.message_id
+                    })
                 }
             }
         } else {
             if (this.selectRoom) {
-                WechatUtil.say(this.selectRoom, fileBox, ctx).then(msg => {
+                this.weChatClient.sendMessage(this.selectRoom, fileBox, {
+                    chat_id: ctx.chat.id,
+                    msg_id: ctx.message.message_id
+                }).then(msg => {
                     if (fileBox.type === FileBoxType.File && fileLink) {
                         FileUtils.deleteFile(fileLink)
                     }
                 })
                 const text = ctx.message.caption
                 if (text) {
-                    WechatUtil.say(this.selectRoom, text, ctx)
+                    this.weChatClient.sendMessage(this.selectRoom, text, {
+                        chat_id: ctx.chat.id,
+                        msg_id: ctx.message.message_id
+                    })
                 }
             }
         }

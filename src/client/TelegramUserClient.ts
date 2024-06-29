@@ -10,6 +10,9 @@ import {CreateGroupInterface} from '../models/CreateGroupInterface'
 import {CustomFile} from 'telegram/client/uploads'
 import {SetupServiceImpl} from '../service/impl/SetupServiceImpl'
 import * as os from 'node:os'
+import {NewMessage} from 'telegram/events'
+import {MessageUtils} from '../utils/MessageUtils'
+import {MessageService} from '../service/MessageService'
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -54,7 +57,6 @@ export class TelegramUserClient extends TelegramClient {
         if (this._client?.disconnected) {
             await this._client?.start(authParams).then(async () => {
                 this.telegramBotClient.tgUserClientLogin = true
-                // TODO: 测试自动创建文件夹
                 const setupServiceImpl = new SetupServiceImpl()
                 await setupServiceImpl.createFolder()
                 const bindItems = await TelegramBotClient.getInstance().bindItemService.getAllBindItems()
@@ -66,24 +68,21 @@ export class TelegramUserClient extends TelegramClient {
                         this.telegramBotClient.bot.telegram.deleteMessage(this.telegramBotClient.chatId, msg.message_id)
                     }, 10000)
                 })
-                // const me = await this._client?.getMe()
-                // if (me){
-                //     this._client?.addEventHandler(async event=>{
-                //         //todo 消息被删除的事件
-                //         // 撤回消息
-                //         for (const deletedId of event.deletedIds) {
-                //             MessageUtils.undoMessage(deletedId)
-                //         }
-                //     },new DeletedMessage({}))
-                //     this._client?.addEventHandler(async event=>{
-                //         //todo 接收到新消息的事件
-                //         const msg = event.message
-                //         CacheHelper.getInstances().addUndoMessageCache({
-                //             telegram_message_id: msg.id,
-                //             msgDate: msg.date
-                //         })
-                //     },new NewMessage({fromUsers:[me]}))
-                // }
+                const me = await this._client?.getMe()
+                if (me) {
+                    this._client?.addEventHandler(async event => {
+                        // 我发送的消息
+                        const msg = event.message
+                        this.logInfo(`New message from ${msg.id} in chat ${msg.chatId}: ${msg.text}`)
+                        MessageService.getInstance().addMessage({
+                            chat_id: msg.chatId?.toJSNumber().toString(),
+                            msg_text: msg.text,
+                            create_time: Date.now(),
+                            telegram_user_message_id: msg.id,
+                            sender_id: this.telegramBotClient.weChatClient.client.currentUser.id,
+                        })
+                    }, new NewMessage({fromUsers: [me]}))
+                }
             }).catch((e) => {
                 this.telegramBotClient.tgUserClientLogin = false
                 this.logError('login... user error', e)
@@ -97,7 +96,7 @@ export class TelegramUserClient extends TelegramClient {
     /**
      * 获取用户名
      */
-    public async getUserId(){
+    public async getUserId() {
         const me = await this._client?.getMe()
         const id = me?.id
         return id
@@ -106,7 +105,7 @@ export class TelegramUserClient extends TelegramClient {
     public async createGroup(createGroupInterface: CreateGroupInterface) {
         // 如果之前存在改实例则重新绑定
         const row = await this.telegramBotClient.bindItemService.reBind(createGroupInterface)
-        if (row){
+        if (row) {
             return row
         }
         let bindItem
@@ -200,5 +199,14 @@ export class TelegramUserClient extends TelegramClient {
                 })
             )
         }
+    }
+
+    public async editMessage(inputPeer: { chat_id: number, msg_id: number }, messageText: string) {
+        const inputPeerChannelFromMessage = await this?.client?.getInputEntity(inputPeer.chat_id) || inputPeer.chat_id
+        console.debug('editMessage', inputPeer)
+        return this?.client?.editMessage(
+            inputPeerChannelFromMessage,
+            {message: inputPeer.msg_id, text: messageText})
+
     }
 }

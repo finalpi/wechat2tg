@@ -2,14 +2,16 @@ import {FmtString} from 'telegraf/format'
 import {MessageInterface} from 'wechaty/impls'
 
 export interface SimpleMessage {
-    id?: string;
-    room?: string;
-    sender?: string;
-    type?: number;
-    body: string | FmtString;
-    not_escape_html?: boolean;
+    id?: string,
+    room?: string,
+    sender?: string,
+    type?: number,
+    body: string | FmtString,
+    not_escape_html?: boolean,
     chatId: number | string,
-    message?: MessageInterface
+    message?: MessageInterface,
+    replay_msg_id?: number,
+    send_id?: string,
 }
 
 export interface MessageSender {
