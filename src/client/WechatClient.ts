@@ -187,7 +187,13 @@ export class WeChatClient extends BaseClient {
                                     this.tgClient.tgUserClient?.editMessage({
                                         ...extra,
                                         msg_id: item.telegram_user_message_id,
-                                    }, `${msgText} ✅`)
+                                    }, `${msgText} [✅]`)
+                                }else {
+                                    this.tgClient.sendMessage({
+                                        body: Constants.SEND_SUCCESS,
+                                        replay_msg_id: extra.msg_id,
+                                        chatId: extra.chat_id
+                                    })
                                 }
                             })
                         } else {
@@ -208,6 +214,12 @@ export class WeChatClient extends BaseClient {
                                 ...extra,
                                 msg_id: item.telegram_user_message_id,
                             }, `${msgText} ❌`)
+                        }else {
+                            this.tgClient.sendMessage({
+                                body: Constants.SEND_FAIL,
+                                replay_msg_id: extra.msg_id,
+                                chatId: extra.chat_id
+                            })
                         }
                     })
                 } else {
