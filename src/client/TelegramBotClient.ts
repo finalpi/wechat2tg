@@ -1309,9 +1309,10 @@ export class TelegramBotClient extends BaseClient {
                 const gifFile = `save-files/${fileName.slice(0, fileName.lastIndexOf('.'))}.gif`
 
                 let lottie_config = {
-                    width: 100,
-                    height: 100
+                    width: 200,
+                    height: 200
                 }
+
                 if (saveFile.endsWith('.tgs')) {
                     lottie_config = {
                         width: 200,
