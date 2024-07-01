@@ -164,7 +164,7 @@ export class WeChatClient extends BaseClient {
         MessageService.getInstance().updateMessageByChatMsg({
             chat_id: extra.chat_id.toString(),
             msg_text: msgText,
-        },{
+        }, {
             telegram_message_id: extra.msg_id,
             type: msg instanceof FileBox ? 0 : 7,
             sender_id: sayable.id,
@@ -187,8 +187,8 @@ export class WeChatClient extends BaseClient {
                                     this.tgClient.tgUserClient?.editMessage({
                                         ...extra,
                                         msg_id: item.telegram_user_message_id,
-                                    }, `${msgText} [✅]`)
-                                }else {
+                                    }, `${msgText}  ✅`)
+                                } else {
                                     this.tgClient.sendMessage({
                                         body: Constants.SEND_SUCCESS,
                                         replay_msg_id: extra.msg_id,
@@ -213,8 +213,8 @@ export class WeChatClient extends BaseClient {
                             this.tgClient.tgClient?.editMessage({
                                 ...extra,
                                 msg_id: item.telegram_user_message_id,
-                            }, `${msgText} ❌`)
-                        }else {
+                            }, `${msgText}  ❌`)
+                        } else {
                             this.tgClient.sendMessage({
                                 body: Constants.SEND_FAIL,
                                 replay_msg_id: extra.msg_id,

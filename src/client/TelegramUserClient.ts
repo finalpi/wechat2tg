@@ -13,6 +13,7 @@ import * as os from 'node:os'
 import {NewMessage} from 'telegram/events'
 import {MessageUtils} from '../utils/MessageUtils'
 import {MessageService} from '../service/MessageService'
+import {BindItemService} from '../service/BindItemService'
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -68,21 +69,23 @@ export class TelegramUserClient extends TelegramClient {
                         this.telegramBotClient.bot.telegram.deleteMessage(this.telegramBotClient.chatId, msg.message_id)
                     }, 10000)
                 })
-                this.telegramBotClient.bot.telegram.getMe().then(bot => {
-                    this.client?.getInputEntity(bot.id).then(userBot => {
-                        this.client.addEventHandler(async event => {
-                            // 我发送的消息
-                            const msg = event.message
-                            // this.logInfo(`New message from ${msg.id} in chat ${msg.chatId}: ${msg.text} ,,,, userBot ${userBot}`)
-                            MessageService.getInstance().addMessage({
-                                chat_id: msg.chatId?.toJSNumber().toString(),
-                                msg_text: msg.text,
-                                create_time: Date.now(),
-                                telegram_user_message_id: msg.id,
-                                sender_id: this.telegramBotClient.weChatClient.client.currentUser.id,
-                            })
-                        }, new NewMessage({fromUsers: [userBot]}))
-                    })
+                this.client?.getMe().then(me => {
+                    this.client.addEventHandler(async event => {
+                        // 我发送的消息
+                        const msg = event.message
+                        TelegramBotClient.getInstance().bindItemService.getAllBindItems().then(binds => {
+                            const msgChatId = msg.chatId?.toJSNumber()
+                            if (msgChatId == this.telegramBotClient.chatId || binds.find(it => it.chat_id == msgChatId)) {
+                                MessageService.getInstance().addMessage({
+                                    chat_id: msgChatId?.toString(),
+                                    msg_text: msg.text,
+                                    create_time: Date.now(),
+                                    telegram_user_message_id: msg.id,
+                                    sender_id: this.telegramBotClient.weChatClient.client.currentUser.id,
+                                })
+                            }
+                        })
+                    }, new NewMessage({fromUsers: [me]}))
                 })
 
 
