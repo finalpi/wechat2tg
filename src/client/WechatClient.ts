@@ -460,10 +460,10 @@ export class WeChatClient extends BaseClient {
                 if (this.scanMsgId) {
                     tgBot.telegram.editMessageMedia(this._tgClient.chatId, this.scanMsgId, undefined, {
                         type: 'photo',
-                        media: {source: buff}, caption: '请扫码登陆:'
+                        media: {source: buff}, caption: this.t('common.scanLogin')
                     })
                 } else {
-                    tgBot.telegram.sendPhoto(this._tgClient.chatId, {source: buff}, {caption: '请扫码登陆:'}).then(msg => {
+                    tgBot.telegram.sendPhoto(this._tgClient.chatId, {source: buff}, {caption: this.t('common.scanLogin')}).then(msg => {
                         this.scanMsgId = msg.message_id
                     })
                 }

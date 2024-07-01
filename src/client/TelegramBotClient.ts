@@ -1,7 +1,7 @@
 import {Context, Markup, NarrowedContext, session, Telegraf} from 'telegraf'
 import {WeChatClient} from './WechatClient'
 import {config} from '../config'
-import {BotHelpText, SimpleMessage, SimpleMessageSender} from '../models/Message'
+import {SimpleMessage, SimpleMessageSender} from '../models/Message'
 import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from 'https-proxy-agent'
 import * as tg from 'telegraf/src/core/types/typegram'
@@ -29,8 +29,6 @@ import {Constants} from '../constants/Constants'
 import {TelegramUserClient} from './TelegramUserClient'
 import BaseClient from '../base/BaseClient'
 import {MessageService} from '../service/MessageService'
-import {sleep} from 'telegram/Helpers'
-import {sendMessage} from 'telegram/client/messages'
 
 export class TelegramBotClient extends BaseClient {
     get tgUserClient(): TelegramUserClient | undefined {
@@ -135,6 +133,7 @@ export class TelegramBotClient extends BaseClient {
         this.onWeChatLogout = this.onWeChatLogout.bind(this)
         this.onWeChatStop = this.onWeChatStop.bind(this)
         this.eventEmitter = new EventEmitter()
+
     }
 
     public get messageMap(): Map<number, string> {
@@ -213,26 +212,27 @@ export class TelegramBotClient extends BaseClient {
         // 加载转发配置
         this.loadForwardSettings()
 
+        // language
+        const language = this.forwardSetting.getVariable(VariableType.SETTING_LANGUAGE)
+        this.setLanguage(language)
+
         // 初始化配置
         this.forwardSetting.writeToFile()
-        this.loadForwardSettings()
         const commands = [
-            {command: 'help', description: '使用说明'},
-            {command: 'start', description: '开始'},
-            {command: 'login', description: '扫码登陆'},
-            {command: 'user', description: '用户列表'},
-            {command: 'room', description: '群组列表'},
-            {command: 'recent', description: '最近联系人'},
-            {command: 'settings', description: '程序设置'},
-            {command: 'check', description: '微信登录状态'},
-            {command: 'bind', description: '查询群组的绑定状态'},
-            {command: 'unbind', description: '解绑群组'},
-            {command: 'cgdata', description: '设置群组的头像和名称(需要管理员权限)'},
-            {command: 'reset', description: '清空缓存重新登陆'},
-            {command: 'stop', description: '停止微信客户端, 需要重新登陆'},
-            // {command: 'logout', description: '退出登陆'},
-            // {command: 'stop', description: '停止微信客户端'},
-            // {command: 'quit', description: '退出程序!! 会停止程序,需要手动重启(未实现)'},
+            {command: 'help', description: this.t('command.description.help')},
+            {command: 'start', description: this.t('command.description.start')},
+            {command: 'login', description: this.t('command.description.login')},
+            {command: 'user', description: this.t('command.description.user')},
+            {command: 'room', description: this.t('command.description.room')},
+            {command: 'recent', description: this.t('command.description.recent')},
+            {command: 'settings', description: this.t('command.description.settings')},
+            {command: 'check', description: this.t('command.description.check')},
+            {command: 'bind', description: this.t('command.description.bind')},
+            {command: 'unbind', description: this.t('command.description.unbind')},
+            {command: 'cgdata', description: this.t('command.description.cgdata')},
+            {command: 'reset', description: this.t('command.description.reset')},
+            {command: 'stop', description: this.t('command.description.stop')},
+            {command: 'lang', description: this.t('command.description.lang')},
         ]
         if (config.API_ID && config.API_HASH) {
             // 启动tg client
@@ -241,7 +241,7 @@ export class TelegramBotClient extends BaseClient {
                 this._tgUserClient = TelegramUserClient.getInstance()
             }
             // 设置command
-            commands.push({command: 'autocg', description: '自动创建群组模式, 需要配置Api并且登陆Telegram User Client'})
+            commands.push({command: 'autocg', description: this.t('command.description.autocg')})
         } else {
             this.forwardSetting.setVariable(VariableType.SETTING_AUTO_GROUP, false)
             // 修改后持成文件
@@ -249,34 +249,32 @@ export class TelegramBotClient extends BaseClient {
         }
         bot.telegram.setMyCommands(commands)
 
-        bot.command('autocg', async ctx => {
+        bot.command('autocg', ctx => {
             if (!config.API_ID || !config.API_HASH) {
-                ctx.reply('请先配置API_ID和API_HASH')
+                ctx.reply(this.t('command.autocg.configApi'))
                 return
             }
             if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
-                await ctx.reply(Constants.STRING_1)
+                ctx.reply(this.t('common.plzLoginWeChat'))
                 return
             }
             const b = this.forwardSetting.getVariable(VariableType.SETTING_AUTO_GROUP)
-            ctx.reply(`自动创建群组模式(${b ? '开启' : '关闭'}):`, {
+            const state = b ? this.t('common.open') : this.t('common.close')
+            ctx.reply(`${this.t('command.autocg.configApi')}(${state}):`, {
                 reply_markup: {
                     inline_keyboard: [
                         [
-                            {text: '点击切换', callback_data: VariableType.SETTING_AUTO_GROUP},
+                            {text: this.t('common.clickChange'), callback_data: VariableType.SETTING_AUTO_GROUP},
                         ]
                     ]
                 }
             })
         })
 
-        bot.help((ctx) => ctx.replyWithMarkdownV2(BotHelpText.help))
+        bot.help((ctx) => ctx.replyWithMarkdownV2(this.t('command.helpText')))
 
-        bot.start(async ctx => {
-            await ctx.reply(
-                '请输入 /login 登陆,或者输入 /help 查看帮助\n' +
-                '请注意执行/login 后你就是该机器的所有者'
-                , Markup.removeKeyboard())
+        bot.start( ctx => {
+            ctx.reply(this.t('command.startText'), Markup.removeKeyboard())
         })
 
         bot.on(message('group_chat_created'), ctx => {
@@ -358,7 +356,7 @@ export class TelegramBotClient extends BaseClient {
 
         bot.settings(ctx => {
 
-            ctx.reply('程序设置:', {
+            ctx.reply(this.t('command.settingsText'), {
                 reply_markup: this.getSettingButton()
             })
         })
@@ -609,14 +607,14 @@ export class TelegramBotClient extends BaseClient {
 
         bot.command('reset', (ctx) => {
             this._weChatClient.resetValue()
-            ctx.reply('重置成功')
+            ctx.reply(this.t('command.resetTet'))
         })
 
         bot.command('cgdata', async (ctx) => {
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
                 if (!bindItem) {
-                    return ctx.reply('当前未绑定联系人或群组')
+                    return ctx.reply(this.t('command.cgdata.notBind'))
                 }
                 // 获取群组管理员列表
                 const administrators = await ctx.telegram.getChatAdministrators(ctx.chat.id)
@@ -626,7 +624,7 @@ export class TelegramBotClient extends BaseClient {
                 const isAdmin = administrators.some(admin => admin.user.id === botId)
 
                 if (!isAdmin) {
-                    return ctx.reply('机器人不是该群组的管理员')
+                    return ctx.reply(this.t('command.cgdata.notAdmin'))
                 }
                 if (bindItem.type === 0) {
                     const contact = this.getContactByBindItem(bindItem)
@@ -645,7 +643,7 @@ export class TelegramBotClient extends BaseClient {
                     await ctx.telegram.setChatTitle(ctx.chat.id, bindItem.name)
                 }
             } else {
-                return ctx.reply('该命令仅支持在群组使用')
+                return ctx.reply(this.t('common.onlyInGroup'))
             }
         })
 
@@ -654,24 +652,24 @@ export class TelegramBotClient extends BaseClient {
                 const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
                 if (bindItem) {
                     if (bindItem.type === 0) {
-                        ctx.reply(`当前绑定联系人:${bindItem.alias}[${bindItem.name}]`)
+                        ctx.reply(`${this.t('command.bind.currentBindUser')}${bindItem.alias}[${bindItem.name}]`)
                     } else {
-                        ctx.reply(`当前绑定群组:${bindItem.alias}[${bindItem.name}]`)
+                        ctx.reply(`${this.t('command.bind.currentBindGroup')}${bindItem.alias}[${bindItem.name}]`)
                     }
                 } else {
-                    ctx.reply('当前未绑定任何联系人或者群聊')
+                    ctx.reply(this.t('command.bind.noBinding'))
                 }
             } else {
-                ctx.reply('该命令仅支持在群组中使用')
+                ctx.reply(this.t('common.onlyInGroup'))
             }
         })
 
         bot.command('unbind', async (ctx) => {
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 await this.bindItemService.removeBindItemByChatId(ctx.chat.id)
-                ctx.reply('取消绑定成功')
+                ctx.reply(this.t('command.unbindText'))
             } else {
-                ctx.reply('该命令仅支持在群组中使用')
+                ctx.reply(this.t('common.onlyInGroup'))
             }
         })
 
@@ -688,7 +686,7 @@ export class TelegramBotClient extends BaseClient {
                     this.loginCommandExecuted = true
 
                 }).catch(() => {
-                    ctx.reply('已经登陆或登录失败请检查状态')
+                    ctx.reply(this.t('command.login.fail'))
                 })
             }
         })
@@ -697,18 +695,42 @@ export class TelegramBotClient extends BaseClient {
 
         bot.command('check', ctx => {
             if (this.wechatStartFlag && this._weChatClient.client.isLoggedIn) {
-                ctx.reply('微信在线')
+                ctx.reply(this.t('command.check.onLine'))
             } else {
-                ctx.reply('微信不在线')
+                ctx.reply(this.t('command.check.offLine'))
             }
         })
+
+        // select language
+        bot.command('lang', ctx => {
+            ctx.reply(this.t('command.langText'), {
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            {text: '中文', callback_data: 'lang-zh'},
+                            {text: 'English', callback_data: 'lang-en'}
+                        ]
+                    ]
+                }
+            })
+        })
+
+        bot.action(/lang-/, ctx => {
+            this.setLanguage(ctx.match.input.slice(5))
+            bot.telegram.setMyCommands(commands)
+            this.forwardSetting.setVariable(VariableType.SETTING_LANGUAGE, ctx.match.input.slice(5))
+            this.forwardSetting.writeToFile()
+            ctx.reply(this.t('command.langText'))
+            ctx.answerCbQuery()
+        })
+
         // 选择群聊
         const currentSelectRoomMap = new Map<string, RoomItem>()
         let searchRooms: RoomItem [] = []
 
         bot.command('room', async ctx => {
             if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
-                await ctx.reply(Constants.STRING_1)
+                await ctx.reply(this.t('common.plzLoginWeChat'))
                 return
             }
 
@@ -751,11 +773,11 @@ export class TelegramBotClient extends BaseClient {
                         buttons.push(buttonRow)
                     }
                     if (page.hasNext()) {
-                        buttons.push([Markup.button.callback('下一页', 'search-2')])
+                        buttons.push([Markup.button.callback(this.t('common.nextPage'), 'search-2')])
                     }
-                    ctx.reply('请选择联系人(点击回复):', Markup.inlineKeyboard(buttons))
+                    ctx.reply(this.t('command.room.plzSelect'), Markup.inlineKeyboard(buttons))
                 } else {
-                    ctx.reply('未找到该群组:' + topic)
+                    ctx.reply(this.t('command.room.notFound') + topic)
                 }
                 return
             }
@@ -764,9 +786,9 @@ export class TelegramBotClient extends BaseClient {
             searchRooms = this._weChatClient.roomList
             this.generateRoomButtons(searchRooms, currentSelectRoomMap, count).then(buttons => {
                 if (buttons.length === 0) {
-                    ctx.reply('没有找到群聊')
+                    ctx.reply(this.t('command.room.notFound'))
                 } else {
-                    ctx.reply('请选择群聊(点击回复):', {
+                    ctx.reply(this.t('command.room.plzSelect'), {
                         ...Markup.inlineKeyboard(buttons)
                     })
                 }
@@ -806,17 +828,17 @@ export class TelegramBotClient extends BaseClient {
 
             // wait all contact loaded
             if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
-                ctx.reply(Constants.STRING_1)
+                ctx.reply(this.t('command.user.onLoading'))
                 return
             }
 
             if (!this.loginCommandExecuted) {
-                await ctx.reply('请等待,正在登陆...')
+                await ctx.reply(this.t('command.user.onLogin'))
                 return
             }
 
             if (!this._weChatClient.cacheMemberDone) {
-                await ctx.reply(Constants.STRING_3)
+                await ctx.reply(this.t('command.user.onLoading'))
                 return
             }
 
@@ -891,11 +913,11 @@ export class TelegramBotClient extends BaseClient {
                         buttons.push(buttonRow)
                     }
                     if (page.hasNext()) {
-                        buttons.push([Markup.button.callback('下一页', 'search-2')])
+                        buttons.push([Markup.button.callback(this.t('common.nextPage'), 'search-2')])
                     }
-                    ctx.reply('请选择联系人(点击回复):', Markup.inlineKeyboard(buttons))
+                    ctx.reply(this.t('command.user.plzSelect'), Markup.inlineKeyboard(buttons))
                 } else {
-                    ctx.reply('未找到该用户:' + username)
+                    ctx.reply(this.t('command.user.notFound') + username)
                 }
                 return
             }
@@ -910,13 +932,13 @@ export class TelegramBotClient extends BaseClient {
             // Create inline keyboard
             const inlineKeyboard = Markup.inlineKeyboard([
                 // Markup.button.callback('未知', 'UNKNOWN'),
-                Markup.button.callback('个人', 'INDIVIDUAL'),
-                Markup.button.callback('公众号', 'OFFICIAL'),
+                Markup.button.callback(this.t('command.user.individual'), 'INDIVIDUAL'),
+                Markup.button.callback(this.t('command.user.official'), 'OFFICIAL'),
                 // Markup.button.callback('公司', 'CORPORATION')
             ])
 
             // Send message with inline keyboard
-            ctx.reply('请选择类型：', inlineKeyboard)
+            ctx.reply(this.t('command.user.plzSelectType'), inlineKeyboard)
 
         })
 
@@ -1042,12 +1064,12 @@ export class TelegramBotClient extends BaseClient {
 
         bot.command('recent', async ctx => {
             if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
-                ctx.reply(Constants.STRING_1)
+                ctx.reply(this.t('common.plzLoginWeChat'))
                 return
             }
 
             if (this.recentUsers.length == 0) {
-                ctx.reply('最近联系人为空')
+                ctx.reply(this.t('command.recent.noUsers'))
                 return
             }
 
@@ -1056,7 +1078,7 @@ export class TelegramBotClient extends BaseClient {
                 buttons.push([Markup.button.callback(item.name, item.id)])
             })
             const inlineKeyboard = Markup.inlineKeyboard(buttons)
-            ctx.reply('请选择要回复的联系人：', inlineKeyboard)
+            ctx.reply(this.t('command.recent.plzSelect'), inlineKeyboard)
         })
 
         bot.action(/.*recent.*/, async (ctx) => {
@@ -1185,7 +1207,7 @@ export class TelegramBotClient extends BaseClient {
             }
 
             if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
-                ctx.reply(Constants.STRING_1)
+                ctx.reply(this.t('common.plzLoginWeChat'))
                 return
             }
 
@@ -1293,7 +1315,7 @@ export class TelegramBotClient extends BaseClient {
 
         bot.on(message('sticker'), ctx => {
             if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
-                ctx.reply(Constants.STRING_1)
+                ctx.reply(this.t('common.plzLoginWeChat'))
                 return
             }
             const fileId = ctx.message.sticker.file_id
@@ -2014,7 +2036,7 @@ export class TelegramBotClient extends BaseClient {
     public onWeChatStop(ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
         this.wechatStartFlag = false
         this._weChatClient.stop().then(() => {
-            ctx.reply('停止成功,使用 /login 启动bot').then(() => this.loginCommandExecuted = false)
+            ctx.reply(this.t('command.stop.success')).then(() => this.loginCommandExecuted = false)
             const filePath = 'storage/wechat_bot.memory-card.json'
             fs.access(filePath, fs.constants.F_OK, async (err) => {
                 if (!err) {
@@ -2023,7 +2045,7 @@ export class TelegramBotClient extends BaseClient {
                 }
                 this._weChatClient = new WeChatClient(this)
             })
-        }).catch(() => ctx.reply('停止失败'))
+        }).catch(() => ctx.reply(this.t('command.stop.fail')))
     }
 
     private async generateRoomButtons(rooms: RoomItem[], currentSelectRoomMap: Map<string, RoomItem>, page: number) {
@@ -2130,7 +2152,7 @@ export class TelegramBotClient extends BaseClient {
 
     private async handleFileMessage(ctx: any, fileType: string | 'audio' | 'video' | 'document' | 'photo' | 'voice') {
         if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
-            ctx.reply(Constants.STRING_1)
+            ctx.reply(this.t('common.plzLoginWeChat'))
             return
         }
         if (ctx.message[fileType]) {
