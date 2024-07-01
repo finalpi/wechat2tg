@@ -13,9 +13,9 @@ export default class TgsUtils {
         return new Promise<void>((resolve, reject) => {
             const output = outputFile.substring(0, outputFile.lastIndexOf('.'))
             // 解压文件
-            _7z.unpack(inputFile, output,async (err: any) => {
+            _7z.unpack(inputFile, output, async (err: any) => {
                 // done
-                if (!err){
+                if (!err) {
                     try {
                         const tmpFilePath = outputFile.substring(0, outputFile.lastIndexOf('.'))
 
@@ -50,7 +50,7 @@ export default class TgsUtils {
                     } catch (error) {
                         reject(error)
                     }
-                }else {
+                } else {
                     reject(err)
                 }
             })
