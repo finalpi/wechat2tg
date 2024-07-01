@@ -1106,6 +1106,8 @@ export class WeChatClient extends BaseClient {
         switch (messageType) {
             case PUPPET.types.Message.Image:
                 return 'sendPhoto'
+            case PUPPET.types.Message.Emoticon:
+                return 'sendPhoto'
             case PUPPET.types.Message.Audio:
                 return 'sendVoice'
             case PUPPET.types.Message.Video:
