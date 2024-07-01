@@ -73,7 +73,7 @@ export class TelegramUserClient extends TelegramClient {
                     this._client?.addEventHandler(async event => {
                         // 我发送的消息
                         const msg = event.message
-                        this.logInfo(`New message from ${msg.id} in chat ${msg.chatId}: ${msg.text}`)
+                        this.logDebug(`New message from ${msg.id} in chat ${msg.chatId}: ${msg.text}`)
                         MessageService.getInstance().addMessage({
                             chat_id: msg.chatId?.toJSNumber().toString(),
                             msg_text: msg.text,

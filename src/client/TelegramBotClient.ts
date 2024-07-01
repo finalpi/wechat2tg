@@ -29,6 +29,8 @@ import {Constants} from '../constants/Constants'
 import {TelegramUserClient} from './TelegramUserClient'
 import BaseClient from '../base/BaseClient'
 import {MessageService} from '../service/MessageService'
+import {sleep} from 'telegram/Helpers'
+import {sendMessage} from 'telegram/client/messages'
 
 export class TelegramBotClient extends BaseClient {
     get tgUserClient(): TelegramUserClient | undefined {
@@ -1733,7 +1735,9 @@ export class TelegramBotClient extends BaseClient {
                 })
             }
         }).catch(e => {
+            this.logError(e.message)
             if (e.response.error_code === 403) {
+                // group deleted
                 this.bindItemService.removeBindItemByChatId(parseInt(message.chatId + ''))
                 this.bot.telegram.sendMessage(this.chatId, SimpleMessageSender.send(message), {
                     parse_mode: 'HTML'
@@ -1742,6 +1746,12 @@ export class TelegramBotClient extends BaseClient {
                         this.messageMap.set(res.message_id, message.id)
                     }
                 })
+            }
+            if (e.response.error_code === 429){
+                // many request
+                setTimeout(()=>{
+                    this.sendMessage(message)
+                },1000)
             }
         })
     }
