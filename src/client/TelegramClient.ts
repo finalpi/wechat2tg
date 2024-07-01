@@ -81,7 +81,6 @@ export class TelegramClient extends BaseClient {
     // TODO: 请在上层接口定义 (暂时是具体实现)
     public async editMessage(inputPeer: { chat_id: number, msg_id: number }, messageText: string) {
         const inputPeerChannelFromMessage = await this?.client?.getInputEntity(inputPeer.chat_id) || inputPeer.chat_id
-        console.debug('editMessage', inputPeer)
         return this?.client?.editMessage(
             inputPeerChannelFromMessage,
             {message: inputPeer.msg_id, text: messageText})

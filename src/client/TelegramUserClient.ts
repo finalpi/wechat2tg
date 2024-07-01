@@ -68,21 +68,24 @@ export class TelegramUserClient extends TelegramClient {
                         this.telegramBotClient.bot.telegram.deleteMessage(this.telegramBotClient.chatId, msg.message_id)
                     }, 10000)
                 })
-                const me = await this._client?.getMe()
-                if (me) {
-                    this._client?.addEventHandler(async event => {
-                        // 我发送的消息
-                        const msg = event.message
-                        this.logDebug(`New message from ${msg.id} in chat ${msg.chatId}: ${msg.text}`)
-                        MessageService.getInstance().addMessage({
-                            chat_id: msg.chatId?.toJSNumber().toString(),
-                            msg_text: msg.text,
-                            create_time: Date.now(),
-                            telegram_user_message_id: msg.id,
-                            sender_id: this.telegramBotClient.weChatClient.client.currentUser.id,
-                        })
-                    }, new NewMessage({fromUsers: [me]}))
-                }
+                this.telegramBotClient.bot.telegram.getMe().then(bot => {
+                    this.client?.getInputEntity(bot.id).then(userBot => {
+                        this.client.addEventHandler(async event => {
+                            // 我发送的消息
+                            const msg = event.message
+                            // this.logInfo(`New message from ${msg.id} in chat ${msg.chatId}: ${msg.text} ,,,, userBot ${userBot}`)
+                            MessageService.getInstance().addMessage({
+                                chat_id: msg.chatId?.toJSNumber().toString(),
+                                msg_text: msg.text,
+                                create_time: Date.now(),
+                                telegram_user_message_id: msg.id,
+                                sender_id: this.telegramBotClient.weChatClient.client.currentUser.id,
+                            })
+                        }, new NewMessage({fromUsers: [userBot]}))
+                    })
+                })
+
+
             }).catch((e) => {
                 this.telegramBotClient.tgUserClientLogin = false
                 this.logError('login... user error', e)

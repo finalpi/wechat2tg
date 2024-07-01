@@ -44,9 +44,9 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
         if (id === 1) {
             id = 100
         }
-        console.log('filter id', id)
+        // console.log('filter id', id)
         if (!value) {
-            log.info('创建 TG 文件夹')
+            // log.info('创建 TG 文件夹')
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             const me = await this.tgBotClient.bot.telegram.getMe()
