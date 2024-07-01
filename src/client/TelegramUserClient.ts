@@ -56,19 +56,23 @@ export class TelegramUserClient extends TelegramClient {
 
     public async start(authParams: authMethods.UserAuthParams | authMethods.BotAuthParams) {
         if (this._client?.disconnected) {
-            await this._client?.start(authParams).then(async () => {
+            this._client?.start(authParams).then(async () => {
                 this.telegramBotClient.tgUserClientLogin = true
                 const setupServiceImpl = new SetupServiceImpl()
-                await setupServiceImpl.createFolder()
-                const bindItems = await TelegramBotClient.getInstance().bindItemService.getAllBindItems()
-                for (const bindItem of bindItems) {
-                    await setupServiceImpl.addToFolder(bindItem.chat_id)
-                }
-                this.telegramBotClient.bot.telegram.sendMessage(this.telegramBotClient.chatId, 'TG登录成功!').then(msg => {
-                    setTimeout(() => {
-                        this.telegramBotClient.bot.telegram.deleteMessage(this.telegramBotClient.chatId, msg.message_id)
-                    }, 10000)
+                setupServiceImpl.createFolder().then(() => {
+                    TelegramBotClient.getInstance().bindItemService.getAllBindItems().then(async (bindItems) => {
+                        for (const bindItem of bindItems) {
+                            await setupServiceImpl.addToFolder(bindItem.chat_id)
+                        }
+                        this.telegramBotClient.bot.telegram.sendMessage(this.telegramBotClient.chatId, 'TG登录成功!').then(msg => {
+                            setTimeout(() => {
+                                this.telegramBotClient.bot.telegram.deleteMessage(this.telegramBotClient.chatId, msg.message_id)
+                            }, 10000)
+                        })
+                    })
+
                 })
+
                 this.client?.getMe().then(me => {
                     this.client.addEventHandler(async event => {
                         // 我发送的消息
@@ -87,7 +91,6 @@ export class TelegramUserClient extends TelegramClient {
                         })
                     }, new NewMessage({fromUsers: [me]}))
                 })
-
 
             }).catch((e) => {
                 this.telegramBotClient.tgUserClientLogin = false
@@ -209,7 +212,6 @@ export class TelegramUserClient extends TelegramClient {
 
     public async editMessage(inputPeer: { chat_id: number, msg_id: number }, messageText: string) {
         const inputPeerChannelFromMessage = await this?.client?.getInputEntity(inputPeer.chat_id) || inputPeer.chat_id
-        console.debug('editMessage', inputPeer)
         return this?.client?.editMessage(
             inputPeerChannelFromMessage,
             {message: inputPeer.msg_id, text: messageText})

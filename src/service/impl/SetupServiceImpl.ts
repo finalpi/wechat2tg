@@ -29,16 +29,18 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
         const result = await this.userClient.client?.invoke(new Api.messages.GetDialogFilters())
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
-        const values = result.filters.map(it => {return it.className === 'DialogFilter' ? it.id : 0})
+        const values = result.filters.map(it => {
+            return it.className === 'DialogFilter' ? it.id : 0
+        })
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         const value = result?.filters.find(it => it.title === this.folderName)
         let id
-        if (value){
+        if (value) {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             id = value.id
-        }else {
+        } else {
             id = Math.max(...values) + 1 || this.DEFAULT_FILTER_ID
         }
         if (id === 1) {
@@ -49,31 +51,35 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
             // log.info('创建 TG 文件夹')
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
-            const me = await this.tgBotClient.bot.telegram.getMe()
-            const botEntity = await this.userClient.client?.getInputEntity(me.id)
-            if (botEntity){
-                const dialogFilter = new Api.DialogFilter({
-                    id: id,
-                    title: this.folderName,
-                    pinnedPeers: [botEntity],
-                    includePeers: [],
-                    excludePeers: [],
-                })
-                await this.userClient.client?.invoke(new Api.messages.UpdateDialogFilter({
-                    id: id,
-                    filter: dialogFilter,
-                })).catch(e => {
-                    if (e.errorMessage.includes('DIALOG_FILTERS_TOO_MUCH')){
-                        // 已经到达文件夹创建的上限,不再创建新的文件夹
-                        return
+            this.tgBotClient.bot.telegram.getMe().then(me => {
+                this.userClient.client?.getInputEntity(me.id).then(botEntity => {
+                    if (botEntity) {
+                        const dialogFilter = new Api.DialogFilter({
+                            id: id,
+                            title: this.folderName,
+                            pinnedPeers: [botEntity],
+                            includePeers: [botEntity],
+                            excludePeers: [],
+                        })
+                        this.userClient.client?.invoke(new Api.messages.UpdateDialogFilter({
+                            id: id,
+                            filter: dialogFilter,
+                        })).catch(e => {
+                            if (e.errorMessage.includes('DIALOG_FILTERS_TOO_MUCH')) {
+                                // 已经到达文件夹创建的上限,不再创建新的文件夹
+                                return
+                            }
+                            log.error('创建 TG 文件夹失败', e)
+                            this.tgBotClient.sendMessage({
+                                chatId: this.tgBotClient.chatId,
+                                body: '创建 TG 文件夹失败',
+                            })
+                        })
                     }
-                    log.error('创建 TG 文件夹失败', e)
-                    this.tgBotClient.sendMessage({
-                        chatId: this.tgBotClient.chatId,
-                        body: '创建 TG 文件夹失败',
-                    })
                 })
-            }
+
+            })
+
         }
     }
 
@@ -86,11 +92,11 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
         // @ts-ignore
         const id = dialogFilter.id
         const entity = await this.userClient.client?.getInputEntity(chatId)
-        if (entity && dialogFilter){
+        if (entity && dialogFilter) {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
-            const exist = dialogFilter.includePeers.find(it=>it.chatId === entity.chatId)
-            if (!exist){
+            const exist = dialogFilter.includePeers.find(it => it.chatId === entity.chatId)
+            if (!exist) {
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
                 dialogFilter.includePeers.push(entity)
@@ -116,7 +122,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
 
     }
 
-    private idConvert(chatId: number){
+    private idConvert(chatId: number) {
         return 0 - chatId
     }
 }
