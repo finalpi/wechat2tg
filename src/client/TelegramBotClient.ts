@@ -218,6 +218,7 @@ export class TelegramBotClient extends BaseClient {
 
         // 初始化配置
         this.forwardSetting.writeToFile()
+
         const commands = [
             {command: 'help', description: this.t('command.description.help')},
             {command: 'start', description: this.t('command.description.start')},
@@ -715,12 +716,12 @@ export class TelegramBotClient extends BaseClient {
             })
         })
 
-        bot.action(/lang-/, ctx => {
+        bot.action(/lang-/,async ctx => {
             this.setLanguage(ctx.match.input.slice(5))
-            bot.telegram.setMyCommands(commands)
+            await bot.telegram.setMyCommands(commands)
             this.forwardSetting.setVariable(VariableType.SETTING_LANGUAGE, ctx.match.input.slice(5))
             this.forwardSetting.writeToFile()
-            ctx.reply(this.t('command.langText'))
+            ctx.reply(this.t('common.setSuccess'))
             ctx.answerCbQuery()
         })
 

@@ -15,6 +15,7 @@ const en = {
             reset: 'Clear cache and re-login',
             stop: 'Stop WeChat client, requires re-login',
             autocg: 'Automatic group creation mode, requires configuring the API and logging into the Telegram User Client',
+            lang: 'Set language',
         },
         helpText: `**Welcome to the WeChat message forwarding bot**
         
@@ -92,6 +93,7 @@ const en = {
         error: 'Error',
         unknown: 'Unknown',
         large: 'Too large',
+        setSuccess: 'Set successfully',
     },
     wechat: {
         requestAddFriend: 'Request to add you as a friend:',

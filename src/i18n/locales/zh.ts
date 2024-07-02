@@ -15,6 +15,7 @@ const zh = {
             reset: '清空缓存重新登陆',
             stop: '停止微信客户端, 需要重新登陆',
             autocg: '自动设置群组的头像和名称(需要管理员权限)',
+            lang: '设置语言',
         },
         helpText: `**欢迎使用微信消息转发bot**
 
@@ -93,6 +94,7 @@ const zh = {
         error: '错误',
         unknown: '未知',
         large: '过大',
+        setSuccess: '设置成功',
     },
     wechat: {
         requestAddFriend: '请求添加您为好友:',
