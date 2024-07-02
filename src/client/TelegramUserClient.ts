@@ -72,7 +72,6 @@ export class TelegramUserClient extends TelegramClient {
                     })
 
                 })
-
                 this.client?.getMe().then(me => {
                     this.client.addEventHandler(async event => {
                         // 我发送的消息

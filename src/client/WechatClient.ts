@@ -369,14 +369,14 @@ export class WeChatClient extends BaseClient {
             if (!this.cacheMemberSendMessage) {
                 this.cacheMemberSendMessage = true
                 this._tgClient.bot.telegram.editMessageText(this._tgClient.chatId, this.loadMsg, undefined, '联系人加载完成').then(msg => {
+                    const b = this.tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)
+                    if (b && !this.tgClient.tgUserClientLogin) {
+                        // 启动bot
+                        this.tgClient.loginUserClient()
+                    }
                     setTimeout(() => {
                         if (this.loadMsg) {
                             this._tgClient.bot.telegram.deleteMessage(this._tgClient.chatId, this.loadMsg)
-                            const b = this.tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)
-                            if (b && !this.tgClient.tgUserClientLogin) {
-                                // 启动bot
-                                this.tgClient.loginUserClient()
-                            }
                         }
                     }, 10 * 1000)
                 })
