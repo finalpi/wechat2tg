@@ -36,7 +36,8 @@ const en = {
         resetText: 'Reset successful',
         autocg: {
             configApi: 'Please configure API_ID and API_HASH first',
-            modelAutoCreate: 'Auto create group mode',
+            modelAutoCreate: 'Auto create group mode({0})',
+            inputVerificationCode:'Please enter the verification code you received:{0}'
         },
         check: {
             onLine: 'WeChat online',
@@ -66,12 +67,24 @@ const en = {
         },
         user: {
             onLogin: 'Please wait, logging in...',
-            onLoading: 'Loading contact list, the returned data may be incomplete',
+            onLoading: 'Loading contact list, Please try again later',
             plzSelect: 'Please select a contact (click to reply)',
             notFound: 'User not found:',
             individual: 'Individual',
             official: 'Official account',
             plzSelectType: 'Please select a type:',
+        },
+        setting: {
+            messageMode: 'Message mode switch({0})',
+            messageFallback: 'Send successful feedback({0})',
+            autoSwitchContact: 'Automatically switch contacts({0})',
+            receiveOfficial: 'Receive official account messages({0})',
+            forwardSelf: 'Forward a message you sent on WeChat({0})',
+            mediaQualityCompression: 'Media Quality Compression({0})',
+            blackMode: 'Blacklist Mode',
+            whiteMode: 'Whitelist mode',
+            whiteGroup: 'Whitelist Groups',
+            blackGroup: 'Blacklist Groups',
         },
         recent: {
             noUsers: 'No recent contacts',
@@ -83,6 +96,7 @@ const en = {
         close: 'Close',
         sendSuccess: 'Send successful',
         sendFail: 'Send failed',
+        sendFailNoBind: 'Failed to send message. Contact or group not bound. Please use /room or /user command to bind the contact or group.',
         plzLoginWeChat: 'Please log in to WeChat first',
         clickChange: 'Click to switch',
         onlyInGroup: 'This command is only supported in groups',
@@ -94,6 +108,11 @@ const en = {
         unknown: 'Unknown',
         large: 'Too large',
         setSuccess: 'Set successfully',
+        notFoundGroup: 'The group was not found. Please check if the group name is correct',
+        chooseGroup: 'Please select a group (click to add):',
+        blackListRemove: 'Blacklist (click to remove):',
+        loginHint: 'Please enter your mobile phone number (with country code, for example: +18312118576)',
+        transFail: 'File conversion failed',
     },
     wechat: {
         requestAddFriend: 'Request to add you as a friend:',
@@ -110,6 +129,8 @@ const en = {
         audioOrVideo: 'Audio/Video call',
         forwardFail: 'Forwarding failed',
         recallMessage: 'Recalled a message',
+        friendExpired: 'Friend request has expired!',
+        addSuccess: 'Added successfully!',
         messageType: {
             unknown: 'Unknown message',
             text: 'Text',

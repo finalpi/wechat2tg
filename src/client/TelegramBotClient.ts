@@ -25,7 +25,6 @@ import {ContactItem} from '../models/ContactItem'
 import {BindItem} from '../models/BindItem'
 import {UserAuthParams} from 'telegram/client/auth'
 import {EventEmitter} from 'node:events'
-import {Constants} from '../constants/Constants'
 import {TelegramUserClient} from './TelegramUserClient'
 import BaseClient from '../base/BaseClient'
 import {MessageService} from '../service/MessageService'
@@ -282,7 +281,7 @@ export class TelegramBotClient extends BaseClient {
             if (this._tgUserClientLogin) {
                 return
             }
-            ctx.reply(Constants.STRING_2)
+            ctx.reply(this.t('common.plzLoginWeChat'))
         })
 
         bot.on(message('left_chat_member'), ctx => {
@@ -294,7 +293,7 @@ export class TelegramBotClient extends BaseClient {
         bot.on(message('new_chat_members'), ctx => {
             for (const newChatMember of ctx.message.new_chat_members) {
                 if (newChatMember.id === ctx.botInfo.id) {
-                    ctx.reply(Constants.STRING_2)
+                    ctx.reply(this.t('common.plzLoginWeChat'))
                 }
             }
         })
@@ -376,7 +375,7 @@ export class TelegramBotClient extends BaseClient {
                     inputCode = inputCode + '_ '
                 }
             }
-            ctx.editMessageText(`请输入你收到的验证码:${inputCode}`, {
+            ctx.editMessageText(this.t('command.autocg.inputVerificationCode',inputCode), {
                 reply_markup: {
                     inline_keyboard: [
                         [
@@ -409,12 +408,12 @@ export class TelegramBotClient extends BaseClient {
             this.logDebug('接受到 好友请求', ctx.match.input)
             const friend = this._weChatClient.friendShipList.find(item => item.id === ctx.match.input)?.friendship
             if (!friend) {
-                ctx.deleteMessage().then(() => ctx.reply('好友申请已过期!'))
+                ctx.deleteMessage().then(() => ctx.reply(this.t('wechat.friendExpired')))
                 ctx.answerCbQuery()
                 return
             } else {
                 await friend.accept()
-                ctx.deleteMessage().then(() => ctx.reply('添加成功!'))
+                ctx.deleteMessage().then(() => ctx.reply(this.t('wechat.addSuccess')))
             }
             ctx.answerCbQuery()
         })
@@ -422,16 +421,16 @@ export class TelegramBotClient extends BaseClient {
         // 开启自动群组
         bot.action(VariableType.SETTING_AUTO_GROUP, async ctx => {
             const b = !this.forwardSetting.getVariable(VariableType.SETTING_AUTO_GROUP)
-            const answerText = b ? '开启' : '关闭'
+            const answerText = b ? this.t('common.open') : this.t('common.close')
             this.forwardSetting.setVariable(VariableType.SETTING_AUTO_GROUP, b)
             // 修改后持成文件
             this.forwardSetting.writeToFile()
             // 点击后修改上面按钮
-            ctx.editMessageText(`自动创建群组模式(${b ? '开启' : '关闭'}):`, {
+            ctx.editMessageText(this.t('command.autocg.modelAutoCreate',b ? this.t('common.open') : this.t('common.close')), {
                 reply_markup: {
                     inline_keyboard: [
                         [
-                            {text: '点击切换', callback_data: VariableType.SETTING_AUTO_GROUP},
+                            {text: this.t('common.clickChange'), callback_data: VariableType.SETTING_AUTO_GROUP},
                         ]
                     ]
                 }
@@ -464,7 +463,7 @@ export class TelegramBotClient extends BaseClient {
         // 修改回复设置
         bot.action(VariableType.SETTING_REPLY_SUCCESS, ctx => {
             const b = !this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS)
-            const answerText = b ? '开启' : '关闭'
+            const answerText = b ? this.t('common.open') : this.t('common.close')
             this.forwardSetting.setVariable(VariableType.SETTING_REPLY_SUCCESS, b)
             // 修改后持成文件
             this.forwardSetting.writeToFile()
@@ -477,7 +476,7 @@ export class TelegramBotClient extends BaseClient {
         // 自动切换设置
         bot.action(VariableType.SETTING_AUTO_SWITCH, ctx => {
             const b = !this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH)
-            const answerText = b ? '开启' : '关闭'
+            const answerText = b ? this.t('common.open') : this.t('common.close')
             this.forwardSetting.setVariable(VariableType.SETTING_AUTO_SWITCH, b)
             // 修改后持成文件
             this.forwardSetting.writeToFile()
@@ -489,7 +488,7 @@ export class TelegramBotClient extends BaseClient {
         // 接受公众号消息
         bot.action(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT, ctx => {
             const b = !this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT)
-            const answerText = b ? '关闭' : '开启'
+            const answerText = b ? this.t('common.close') : this.t('common.open')
             this.forwardSetting.setVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT, b)
             // 修改后持成文件
             this.forwardSetting.writeToFile()
@@ -501,7 +500,7 @@ export class TelegramBotClient extends BaseClient {
         // 接受公众号消息
         bot.action(VariableType.SETTING_FORWARD_SELF, ctx => {
             const b = !this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF)
-            const answerText = b ? '开启' : '关闭'
+            const answerText = b ? this.t('common.open') : this.t('common.close')
             this.forwardSetting.setVariable(VariableType.SETTING_FORWARD_SELF, b)
             // 修改后持成文件
             this.forwardSetting.writeToFile()
@@ -513,7 +512,7 @@ export class TelegramBotClient extends BaseClient {
         // 媒体质量压缩
         bot.action(VariableType.SETTING_COMPRESSION, ctx => {
             const b = !this.forwardSetting.getVariable(VariableType.SETTING_COMPRESSION)
-            const answerText = b ? '开启' : '关闭'
+            const answerText = b ? this.t('common.open') : this.t('common.close')
             this.forwardSetting.setVariable(VariableType.SETTING_COMPRESSION, b)
             // 修改后持成文件
             this.forwardSetting.writeToFile()
@@ -608,7 +607,7 @@ export class TelegramBotClient extends BaseClient {
 
         bot.command('reset', (ctx) => {
             this._weChatClient.resetValue()
-            ctx.reply(this.t('command.resetTet'))
+            ctx.reply(this.t('command.resetText'))
         })
 
         bot.command('cgdata', async (ctx) => {
@@ -736,7 +735,7 @@ export class TelegramBotClient extends BaseClient {
             }
 
             if (!this._weChatClient.cacheMemberDone) {
-                await ctx.reply(Constants.STRING_3)
+                await ctx.reply(this.t('command.user.onLoading'))
                 return
             }
 
@@ -987,13 +986,13 @@ export class TelegramBotClient extends BaseClient {
             }
             const lastButton = []
             if (page1.hasLast()) {
-                lastButton.push(Markup.button.callback('上一页', `search-${page - 1}`))
+                lastButton.push(Markup.button.callback(this.t('common.prevPage'), `search-${page - 1}`))
             }
             if (page1.hasNext()) {
-                lastButton.push(Markup.button.callback('下一页', `search-${page + 1}`))
+                lastButton.push(Markup.button.callback(this.t('common.nextPage'), `search-${page + 1}`))
             }
             buttons.push(lastButton)
-            ctx.editMessageText('请选择群组(点击添加):', Markup.inlineKeyboard(buttons))
+            ctx.editMessageText(this.t('common.chooseGroup'), Markup.inlineKeyboard(buttons))
             ctx.answerCbQuery()
         })
 
@@ -1144,13 +1143,13 @@ export class TelegramBotClient extends BaseClient {
             }
             const lastButton = []
             if (page1.hasLast()) {
-                lastButton.push(Markup.button.callback('上一页', `addBlackOrWhite-${page - 1}`))
+                lastButton.push(Markup.button.callback(this.t('common.prevPage'), `addBlackOrWhite-${page - 1}`))
             }
             if (page1.hasNext()) {
-                lastButton.push(Markup.button.callback('下一页', `addBlackOrWhite-${page + 1}`))
+                lastButton.push(Markup.button.callback(this.t('common.nextPage'), `addBlackOrWhite-${page + 1}`))
             }
             buttons.push(lastButton)
-            ctx.editMessageText('请选择群组(点击添加):', Markup.inlineKeyboard(buttons))
+            ctx.editMessageText(this.t('common.chooseGroup'), Markup.inlineKeyboard(buttons))
             ctx.answerCbQuery()
         })
 
@@ -1232,7 +1231,7 @@ export class TelegramBotClient extends BaseClient {
                     // 添加或者移除名单
                     this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
                         if (!message) {
-                            ctx.reply(Constants.SEND_FAIL, {
+                            ctx.reply(this.t('common.sendFail'), {
                                 reply_parameters: {
                                     message_id: ctx.message.message_id
                                 }
@@ -1270,7 +1269,7 @@ export class TelegramBotClient extends BaseClient {
                         }
                     }
                 } else {
-                    await ctx.reply('发送消息失败,未绑定联系人或群组,请使用 /room 或者 /user 命令将联系人或者群组绑定', {
+                    await ctx.reply(this.t('common.sendFailNoBind'), {
                         reply_parameters: {
                             message_id: ctx.message.message_id
                         }
@@ -1463,7 +1462,7 @@ export class TelegramBotClient extends BaseClient {
             }
             buttons.push(buttonRow)
         }
-        buttons.push([Markup.button.callback('上一页', `whiteList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `whiteList-${pageNum + 1}`, !page.hasNext())])
+        buttons.push([Markup.button.callback(this.t('common.prevPage'), `whiteList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback(this.t('common.nextPage'), `whiteList-${pageNum + 1}`, !page.hasNext())])
         ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
     }
 
@@ -1478,8 +1477,8 @@ export class TelegramBotClient extends BaseClient {
             }
             buttons.push(buttonRow)
         }
-        buttons.push([Markup.button.callback('上一页', `blackList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback('下一页', `blackList-${pageNum + 1}`, !page.hasNext())])
-        ctx.editMessageText('黑名单列表(点击移除):', Markup.inlineKeyboard(buttons))
+        buttons.push([Markup.button.callback(this.t('common.prevPage'), `blackList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback(this.t('common.nextPage'), `blackList-${pageNum + 1}`, !page.hasNext())])
+        ctx.editMessageText(this.t('common.blackListRemove'), Markup.inlineKeyboard(buttons))
     }
 
     public async loginUserClient() {
@@ -1490,7 +1489,7 @@ export class TelegramBotClient extends BaseClient {
             },
             phoneNumber: async () =>
                 new Promise((resolve) => {
-                    this.bot.telegram.sendMessage(this.chatId, '请输入你的手机号码（需要带国家区号，例如：+8613355558888）').then(res => {
+                    this.bot.telegram.sendMessage(this.chatId, this.t('common.loginHint')).then(res => {
                         this.waitInputCommand = 'phoneNumber'
                         const intervalId = setInterval(() => {
                             if (this.phoneNumber) {
@@ -1625,7 +1624,7 @@ export class TelegramBotClient extends BaseClient {
                 }
             }
             if (!fs.existsSync(gifFile)) {
-                await ctx.reply(Constants.SEND_FAIL + '文件转换失败', {
+                await ctx.reply(this.t('common.sendFail') + this.t('common.transFail'), {
                     reply_parameters: {
                         message_id: ctx.message.message_id
                     }
@@ -1644,7 +1643,7 @@ export class TelegramBotClient extends BaseClient {
 
                     this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
                         if (!message) {
-                            ctx.reply(Constants.SEND_FAIL, {
+                            ctx.reply(this.t('common.sendFail'), {
                                 reply_parameters: {
                                     message_id: ctx.message.message_id
                                 }
@@ -1697,7 +1696,7 @@ export class TelegramBotClient extends BaseClient {
                         }
                     }
                 } else {
-                    await ctx.reply('发送消息失败,未绑定联系人或群组,请使用 /room 或者 /user 命令将联系人或者群组绑定', {
+                    await ctx.reply(this.t('common.sendFailNoBind'), {
                         reply_parameters: {
                             message_id: ctx.message.message_id
                         }
@@ -1722,7 +1721,7 @@ export class TelegramBotClient extends BaseClient {
             }
         } catch (e) {
             this.logError('发送失败', e)
-            await ctx.reply(Constants.SEND_FAIL, {
+            await ctx.reply(this.t('common.sendFail'), {
                 reply_parameters: {
                     message_id: ctx.message.message_id
                 }
@@ -1877,8 +1876,8 @@ export class TelegramBotClient extends BaseClient {
 
         const type = source[0]?.type()
 
-        const nextButton = Markup.button.callback('下一页', `&page:${type}-next-${page}`)
-        const pervButton = Markup.button.callback('上一页', `&page:${type}-perv-${page}`)
+        const nextButton = Markup.button.callback(this.t('common.nextPage'), `&page:${type}-next-${page}`)
+        const pervButton = Markup.button.callback(this.t('common.prevPage'), `&page:${type}-perv-${page}`)
 
         const buttons = []
         for (let i = 0; i < slice.length; i += lines) {
@@ -2070,8 +2069,8 @@ export class TelegramBotClient extends BaseClient {
             buttons.push(row)
         }
 
-        const nextButton = Markup.button.callback('下一页', 'room-next-' + (page + 1))
-        const prevButton = Markup.button.callback('上一页', 'room-next-' + (page - 1))
+        const nextButton = Markup.button.callback(this.t('common.nextPage'), 'room-next-' + (page + 1))
+        const prevButton = Markup.button.callback(this.t('common.prevPage'), 'room-next-' + (page - 1))
 
         if (buttons.length > 0) {
             if (page > 0 && nextIndex < rooms.length) {
@@ -2100,7 +2099,7 @@ export class TelegramBotClient extends BaseClient {
             }
             if (!find) {
                 blackList.push({id: id + '', name: text})
-                this.bot.telegram.sendMessage(this.chatId, '添加成功')
+                this.bot.telegram.sendMessage(this.chatId, this.t('common.addSuccess'))
             }
         } else {
             const whiteList = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST)
@@ -2112,7 +2111,7 @@ export class TelegramBotClient extends BaseClient {
             }
             if (!find) {
                 whiteList.push({id: id + '', name: text})
-                this.bot.telegram.sendMessage(this.chatId, '添加成功')
+                this.bot.telegram.sendMessage(this.chatId, this.t('common.addSuccess'))
             }
         }
         this.forwardSetting.writeToFile()
@@ -2121,15 +2120,15 @@ export class TelegramBotClient extends BaseClient {
     private getSettingButton() {
         return {
             inline_keyboard: [
-                [Markup.button.callback(`消息模式切换(${this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK ? '黑名单模式' : '白名单模式'})`, VariableType.SETTING_NOTION_MODE),],
-                [Markup.button.callback(`反馈发送成功(${this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS) ? '开启' : '关闭'})`, VariableType.SETTING_REPLY_SUCCESS),],
-                [Markup.button.callback(`自动切换联系人(${this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH) ? '开启' : '关闭'})`, VariableType.SETTING_AUTO_SWITCH),],
-                [Markup.button.callback(`接收公众号消息(${this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) ? '关闭' : '开启'})`, VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT),],
-                [Markup.button.callback(`转发自己在微信发送的消息(${this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF) ? '开启' : '关闭'})`, VariableType.SETTING_FORWARD_SELF),],
-                [Markup.button.callback(`媒体质量压缩(${this.forwardSetting.getVariable(VariableType.SETTING_COMPRESSION) ? '开启' : '关闭'})`, VariableType.SETTING_COMPRESSION),],
+                [Markup.button.callback(this.t('command.setting.messageMode',this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK ? this.t('command.setting.blackMode') : this.t('command.setting.whiteMode')), VariableType.SETTING_NOTION_MODE),],
+                [Markup.button.callback(this.t('command.setting.messageFallback',this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_REPLY_SUCCESS),],
+                [Markup.button.callback(this.t('command.setting.autoSwitchContact',this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_AUTO_SWITCH),],
+                [Markup.button.callback(this.t('command.setting.receiveOfficial',this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) ? this.t('common.close') : this.t('common.open')), VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT),],
+                [Markup.button.callback(this.t('command.setting.forwardSelf',this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_FORWARD_SELF),],
+                [Markup.button.callback(this.t('command.setting.mediaQualityCompression',this.forwardSetting.getVariable(VariableType.SETTING_COMPRESSION) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_COMPRESSION),],
                 [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE ?
-                    Markup.button.callback('白名单群组', VariableType.SETTING_WHITE_LIST) :
-                    Markup.button.callback('黑名单群组', VariableType.SETTING_BLACK_LIST)]
+                    Markup.button.callback(this.t('command.setting.whiteGroup'), VariableType.SETTING_WHITE_LIST) :
+                    Markup.button.callback(this.t('command.setting.blackGroup'), VariableType.SETTING_BLACK_LIST)]
             ],
         }
     }
@@ -2237,7 +2236,7 @@ export class TelegramBotClient extends BaseClient {
                 // 添加或者移除名单
                 this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
                     if (!message) {
-                        ctx.reply(Constants.SEND_FAIL, {
+                        ctx.reply(this.t('common.sendFail'), {
                             reply_parameters: {
                                 message_id: ctx.message.message_id
                             }
@@ -2307,7 +2306,7 @@ export class TelegramBotClient extends BaseClient {
                     }
                 }
             } else {
-                await ctx.reply('发送消息失败,未绑定联系人或群组,请使用 /room 或者 /user 命令将联系人或者群组绑定', {
+                await ctx.reply(this.t('common.sendFailNoBind'), {
                     reply_parameters: {
                         message_id: ctx.message.message_id
                     }
@@ -2379,7 +2378,7 @@ export class TelegramBotClient extends BaseClient {
                 return room.room.payload?.topic?.includes(text)
             })
             if (roomList.length === 0) {
-                ctx.reply('未找到该群组,请检查群名称是否正确')
+                ctx.reply(this.t('common.notFoundGroup'))
             } else {
                 const buttons: tg.InlineKeyboardButton[][] = []
                 roomList.forEach(item => {
@@ -2399,9 +2398,9 @@ export class TelegramBotClient extends BaseClient {
                     buttons.push(buttonRow)
                 }
                 if (page1.hasNext()) {
-                    buttons.push([Markup.button.callback('下一页', 'addBlackOrWhite-2')])
+                    buttons.push([Markup.button.callback(this.t('common.nextPage'), 'addBlackOrWhite-2')])
                 }
-                ctx.reply('请选择群组(点击添加):', Markup.inlineKeyboard(buttons))
+                ctx.reply(this.t('common.chooseGroup'), Markup.inlineKeyboard(buttons))
             }
             return true
         }

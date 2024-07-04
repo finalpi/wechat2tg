@@ -37,8 +37,10 @@ export default class I18n {
         this.translations = this.loadTranslations(language)
     }
 
-    public t(key: string): string {
-        return this.getNestedTranslation(this.translations, key.split('.')) || key
+    public t(key: string, ...args: (string | number)[]): string {
+        return this.getNestedTranslation(this.translations, key.split('.')).replace(/{(\d+)}/g, (match, index) => {
+            return typeof args[index] !== 'undefined' ? args[index].toString() : match
+        }) || key
     }
 
     private getNestedTranslation(translations: Translations, keys: string[]): any {

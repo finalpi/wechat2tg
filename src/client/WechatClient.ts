@@ -29,9 +29,6 @@ import TelegramError from 'telegraf/src/core/network/error'
 import BaseClient from '../base/BaseClient'
 import {MessageService} from '../service/MessageService'
 import {CacheHelper} from '../utils/CacheHelper'
-import {Constants} from '../constants/Constants'
-import {Sayable} from 'wechaty/src/sayable/types'
-import {config} from '../config'
 
 
 export class WeChatClient extends BaseClient {
@@ -190,7 +187,7 @@ export class WeChatClient extends BaseClient {
                                     }, `${msgText}  ✅`)
                                 } else {
                                     this.tgClient.sendMessage({
-                                        body: Constants.SEND_SUCCESS,
+                                        body: this.t('common.sendSuccess'),
                                         replay_msg_id: extra.msg_id,
                                         chatId: extra.chat_id
                                     })
@@ -198,7 +195,7 @@ export class WeChatClient extends BaseClient {
                             })
                         } else {
                             this.tgClient.sendMessage({
-                                body: Constants.SEND_SUCCESS,
+                                body: this.t('common.sendSuccess'),
                                 replay_msg_id: extra.msg_id,
                                 chatId: extra.chat_id
                             })
@@ -216,7 +213,7 @@ export class WeChatClient extends BaseClient {
                             }, `${msgText}  ❌`)
                         } else {
                             this.tgClient.sendMessage({
-                                body: Constants.SEND_FAIL,
+                                body: this.t('common.sendFail'),
                                 replay_msg_id: extra.msg_id,
                                 chatId: extra.chat_id
                             })
@@ -224,7 +221,7 @@ export class WeChatClient extends BaseClient {
                     })
                 } else {
                     this.tgClient.sendMessage({
-                        body: Constants.SEND_FAIL,
+                        body: this.t('common.sendFail'),
                         replay_msg_id: extra.msg_id,
                         chatId: extra.chat_id
                     })

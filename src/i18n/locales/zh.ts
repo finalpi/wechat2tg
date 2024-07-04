@@ -37,7 +37,8 @@ const zh = {
         resetText: '重置成功',
         autocg: {
             configApi: '请先配置API_ID和API_HASH',
-            modelAutoCreate: '自动创建群组模式',
+            modelAutoCreate: '自动创建群组模式({0})',
+            inputVerificationCode:'请输入你收到的验证码:{0}'
         },
         check: {
             onLine: '微信在线',
@@ -67,12 +68,24 @@ const zh = {
         },
         user: {
             onLogin: '请等待,正在登陆...',
-            onLoading: '正在加载联系人列表,现在返回的数据可能不完整',
+            onLoading: '正在加载联系人列表,请稍候再试',
             plzSelect: '请选择联系人(点击回复)',
             notFound: '未找到该用户:',
             individual: '个人',
             official: '公众号',
             plzSelectType: '请选择类型:',
+        },
+        setting: {
+            messageMode: '消息模式切换({0})',
+            messageFallback: '发送成功反馈({0})',
+            autoSwitchContact: '自动切换联系人({0})',
+            receiveOfficial: '接收公众号消息({0})',
+            forwardSelf: '转发自己在微信发送的消息({0})',
+            mediaQualityCompression: '媒体质量压缩({0})',
+            blackMode: '黑名单模式',
+            whiteMode: '白名单模式',
+            whiteGroup: '白名单群组',
+            blackGroup: '黑名单群组',
         },
         recent: {
             noUsers: '最近联系人为空',
@@ -84,6 +97,7 @@ const zh = {
         close: '关闭',
         sendSuccess: '发送成功',
         sendFail: '发送失败',
+        sendFailNoBind: '发送消息失败,未绑定联系人或群组,请使用 /room 或者 /user 命令将联系人或者群组绑定',
         plzLoginWeChat: '请先登录微信',
         clickChange: '点击切换',
         onlyInGroup: '该命令仅支持在群组使用',
@@ -95,6 +109,11 @@ const zh = {
         unknown: '未知',
         large: '过大',
         setSuccess: '设置成功',
+        notFoundGroup: '未找到该群组,请检查群名称是否正确',
+        chooseGroup: '请选择群组(点击添加):',
+        blackListRemove: '黑名单列表(点击移除):',
+        loginHint: '请输入你的手机号码（需要带国家区号，例如：+8613355558888）',
+        transFail: '文件转换失败',
     },
     wechat: {
         requestAddFriend: '请求添加您为好友:',
@@ -111,6 +130,8 @@ const zh = {
         audioOrVideo: '语音/视频通话',
         forwardFail: '转发失败',
         recallMessage: '撤回了一条消息',
+        friendExpired: '好友申请已过期!',
+        addSuccess: '添加成功!',
         messageType: {
             unknown: '未知消息',
             text: '文本',

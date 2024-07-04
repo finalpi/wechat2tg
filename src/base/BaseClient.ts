@@ -32,8 +32,8 @@ abstract class BaseClient {
         this.i18n.setLanguage(language)
     }
 
-    protected t(key: string): string {
-        return this.i18n.t(key)
+    protected t(key: string, ...args: (string | number)[]): string {
+        return this.i18n.t(key,...args)
     }
 }
 
