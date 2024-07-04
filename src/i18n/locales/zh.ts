@@ -14,7 +14,7 @@ const zh = {
             cgdata: '设置群组的头像和名称(需要管理员权限)',
             reset: '清空缓存重新登陆',
             stop: '停止微信客户端, 需要重新登陆',
-            autocg: '自动设置群组的头像和名称(需要管理员权限)',
+            autocg: '自动创建群组模式, 需要配置Api并且登陆Telegram User Client',
             lang: '设置语言',
         },
         helpText: `**欢迎使用微信消息转发bot**
