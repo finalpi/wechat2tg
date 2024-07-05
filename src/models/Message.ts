@@ -31,7 +31,7 @@ export class SimpleMessageSender implements MessageSender {
     sendMessage(simpleMessage: SimpleMessage): string | FmtString {
         if (simpleMessage instanceof FmtString) {
             return simpleMessage
-        } else if (message) {
+        } else if (simpleMessage.sender && message) {
             // 根据配置文件构建title
             const title = SimpleMessageSender.getTitle(simpleMessage.message,simpleMessage.chatId !== TelegramBotClient.getInstance().chatId)
             // let title = !simpleMessage.room || simpleMessage.room === ''
