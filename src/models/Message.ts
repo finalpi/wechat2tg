@@ -28,25 +28,23 @@ export class SimpleMessageSender implements MessageSender {
 
     }
 
+    public static NAME_REGEXP = new RegExp(/\${(alias|name|topic)}/, 'g')
+    public static ALIAS_FIRST_REGEXP = new RegExp(/\${alias_first}/, 'g')
+
+
     sendMessage(simpleMessage: SimpleMessage): string | FmtString {
         if (simpleMessage instanceof FmtString) {
             return simpleMessage
         } else if (simpleMessage.sender && message) {
             // 根据配置文件构建title
-            const title = SimpleMessageSender.getTitle(simpleMessage.message,simpleMessage.chatId !== TelegramBotClient.getInstance().chatId)
-            // let title = !simpleMessage.room || simpleMessage.room === ''
-            //     ? `<b>👤${simpleMessage.sender} : </b> \n` :
-            //     `<i>🌐${simpleMessage.room}</i> ---- <b>👤${simpleMessage.sender} : </b> \n`
-            // if (simpleMessage.type === 1) {
-            //     title = `<b>📣${simpleMessage.sender} : </b> \n`
-            // }
+            const title = SimpleMessageSender.getTitle(simpleMessage.message, simpleMessage.chatId !== TelegramBotClient.getInstance().chatId)
             return `${title}\n${!simpleMessage.not_escape_html ? this.escapeHTML(typeof simpleMessage.body === 'string' ? simpleMessage.body : '') : simpleMessage.body}`
         } else {
             return simpleMessage.body
         }
     }
 
-    static getTitle(message: MessageInterface,isGroup: boolean): string {
+    static getTitle(message: MessageInterface, isGroup: boolean): string {
         const room = message.room()
         if (!isGroup) {
             if (room) {
@@ -74,19 +72,7 @@ export class SimpleMessageSender implements MessageSender {
     }
 
     private escapeHTML(str: string) {
-        // 查找所有 <a> 标签并将它们替换成占位符
-        // const aTagPattern = /<a href="tg:\/\/user\?id=\d+">.*?<\/a>/g
-        // const aTags = str.match(aTagPattern) || []
-        // let placeholderStr = str.replace(aTagPattern, (match, offset) => `__PLACEHOLDER_${offset}__`)
         let placeholderStr = str
-        // 转义其他 HTML 字符
-        // placeholderStr = placeholderStr.replace(/</g, '&lt;')
-        //     .replace(/>/g, '&gt;')
-
-        // 将占位符替换回原始的 <a> 标签
-        // aTags.forEach((aTag, offset) => {
-        //     placeholderStr = placeholderStr.replace(`__PLACEHOLDER_${offset}__`, aTag)
-        // })
 
         // 查找和处理分隔线
         const splitLineNumber = placeholderStr.search(/\n- - - - - - - - - - - - - - -\n/)
@@ -103,12 +89,7 @@ export class SimpleMessageSender implements MessageSender {
 
     static transformTitleStr(inputString: string, alias: string, name: string, topic: string): string {
         const alias_first = alias || name
-
-        // 创建一个正则表达式，用于匹配 ${alias}、${name} 和 ${topic} 占位符
-        const regex = new RegExp('\\$\\{(alias|name|topic)\\}', 'g')
-
-        // 使用指定的替换值替换占位符
-        inputString = inputString.replace(regex, (match, p1) => {
+        inputString = inputString.replace(this.NAME_REGEXP, (match, p1) => {
             switch (p1) {
                 case 'alias':
                     return alias
@@ -120,10 +101,7 @@ export class SimpleMessageSender implements MessageSender {
                     return match
             }
         })
-
-        // 替换 ${alias_first} 占位符
-        const alias_firstReg = new RegExp(`\\$\\{${alias_first}\\}`, 'g')
-        return inputString.replace(alias_firstReg, alias_first)
+        return inputString.replace(this.ALIAS_FIRST_REGEXP, alias_first)
     }
 
 }
