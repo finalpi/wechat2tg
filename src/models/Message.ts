@@ -92,16 +92,18 @@ export class SimpleMessageSender implements MessageSender {
         inputString = inputString.replace(this.NAME_REGEXP, (match, p1) => {
             switch (p1) {
                 case 'alias':
-                    return alias
+                    return alias || '$EMP_TEMP_VAR$'
                 case 'name':
-                    return name
+                    return name || '$EMP_TEMP_VAR$'
                 case 'topic':
-                    return topic
+                    return topic || '$EMP_TEMP_VAR$'
                 default:
-                    return match
+                    return match || '$EMP_TEMP_VAR$'
             }
         })
-        return inputString.replace(this.ALIAS_FIRST_REGEXP, alias_first)
+
+        return inputString.replace('[$EMP_TEMP_VAR$]', '')
+            .replace(this.ALIAS_FIRST_REGEXP, alias_first)
     }
 
 }
