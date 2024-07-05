@@ -28,6 +28,8 @@ import {EventEmitter} from 'node:events'
 import {TelegramUserClient} from './TelegramUserClient'
 import BaseClient from '../base/BaseClient'
 import {MessageService} from '../service/MessageService'
+import {MessageSender} from '../message/MessageSender'
+import {SenderFactory} from '../message/SenderFactory'
 
 export class TelegramBotClient extends BaseClient {
     get tgUserClient(): TelegramUserClient | undefined {
@@ -94,6 +96,8 @@ export class TelegramBotClient extends BaseClient {
     private pinnedMessageId: number | undefined
     private readonly _bindItemService: BindItemService
     private addBlackOrWhite: any[] = []
+    private telegramApiSender: MessageSender
+    private telegramBotApiSender: MessageSender
 
 
     private constructor() {
@@ -104,6 +108,7 @@ export class TelegramBotClient extends BaseClient {
         this._chatId = 0
         this._ownerId = 0
         this._chatId = 0
+        this.telegramBotApiSender = new SenderFactory().createSender(this._bot)
         if (config.PROTOCOL === 'socks5' && config.HOST !== '' && config.PORT !== '') {
             const info = {
                 hostname: config.HOST,
@@ -239,6 +244,7 @@ export class TelegramBotClient extends BaseClient {
             if (!this._tgClient) {
                 this._tgClient = TelegramClient.getInstance()
                 this._tgUserClient = TelegramUserClient.getInstance()
+                this.telegramApiSender = new SenderFactory().createSender(this._tgClient.client)
             }
             // 设置command
             commands.push({command: 'autocg', description: this.t('command.description.autocg')})
@@ -674,6 +680,7 @@ export class TelegramBotClient extends BaseClient {
         })
 
         bot.command('login', async ctx => {
+            this.getUserId()
             if (!this.wechatStartFlag) {
                 this.wechatStartFlag = true
                 this._weChatClient.start().then(() => {
@@ -1201,6 +1208,9 @@ export class TelegramBotClient extends BaseClient {
 
         bot.on(message('text'), async ctx => {
             const text = ctx.message.text // 获取消息内容
+            const replyMessageId = ctx.update.message['reply_to_message']?.message_id
+            const chatId = ctx.chat.id
+            const msgId = ctx.message.message_id
             // 处理等待用户输入的指令
             if (await this.dealWithCommand(ctx, text)) {
                 return
@@ -1211,7 +1221,6 @@ export class TelegramBotClient extends BaseClient {
                 return
             }
 
-            const replyMessageId = ctx.update.message['reply_to_message']?.message_id
             // 如果是回复的消息 优先回复该发送的消息
             if (replyMessageId) {
                 // 假设回复消息是撤回命令 撤回web协议获取不到消息id 放弃 更新上游代码可获取了
@@ -1219,13 +1228,13 @@ export class TelegramBotClient extends BaseClient {
                     this.undoMessage(replyMessageId, ctx)
                     return
                 }
-                const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId, ctx.chat.id)
+                const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId, chatId)
                 const weChatMessageId = messageItem?.wechat_message_id
-                // 设置别名
-                if (text.startsWith('&alias') && weChatMessageId) {
-                    this.setAlias(weChatMessageId, text, ctx)
-                    return
-                }
+                // 设置别名(不可用)
+                // if (text.startsWith('&alias') && weChatMessageId) {
+                    // this.setAlias(weChatMessageId, text, ctx)
+                    // return
+                // }
 
                 if (weChatMessageId) {
                     // 添加或者移除名单
@@ -1233,14 +1242,14 @@ export class TelegramBotClient extends BaseClient {
                         if (!message) {
                             ctx.reply(this.t('common.sendFail'), {
                                 reply_parameters: {
-                                    message_id: ctx.message.message_id
+                                    message_id: msgId
                                 }
                             })
                             return
                         }
-                        this.weChatClient.sendMessage(message, ctx.message.text, {
-                            chat_id: ctx.chat.id,
-                            msg_id: ctx.message.message_id
+                        this.weChatClient.sendMessage(message, text, {
+                            chat_id: chatId,
+                            msg_id: msgId
                         })
                     })
                 }
@@ -1249,29 +1258,29 @@ export class TelegramBotClient extends BaseClient {
 
             // 如果是群组消息的情况
             if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
-                const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
+                const bindItem = await this.bindItemService.getBindItemByChatId(chatId)
                 if (bindItem) {
                     if (bindItem.type === 0) {
                         const contact = this.getContactByBindItem(bindItem)
                         if (contact) {
                             this.weChatClient.sendMessage(contact, text, {
-                                chat_id: ctx.chat.id,
-                                msg_id: ctx.message.message_id
+                                chat_id: chatId,
+                                msg_id: msgId
                             })
                         }
                     } else {
                         const room = this.getRoomByBindItem(bindItem)
                         if (room) {
                             this.weChatClient.sendMessage(room, text, {
-                                chat_id: ctx.chat.id,
-                                msg_id: ctx.message.message_id
+                                chat_id: chatId,
+                                msg_id: msgId
                             })
                         }
                     }
                 } else {
                     await ctx.reply(this.t('common.sendFailNoBind'), {
                         reply_parameters: {
-                            message_id: ctx.message.message_id
+                            message_id: msgId
                         }
                     })
                 }
@@ -1281,8 +1290,8 @@ export class TelegramBotClient extends BaseClient {
             // 当前有回复的'个人用户' 并且是选择了用户的情况下
             if (this._flagPinMessageType === 'user' && this._currentSelectContact) {
                 this.weChatClient.sendMessage(this._currentSelectContact, text, {
-                    chat_id: ctx.chat.id,
-                    msg_id: ctx.message.message_id
+                    chat_id: chatId,
+                    msg_id: msgId
                 })
                 return
             }
@@ -1290,8 +1299,8 @@ export class TelegramBotClient extends BaseClient {
             // 当前有回复的'群' 并且是选择了群的情况下
             if (this._flagPinMessageType === 'room' && this.selectRoom) {
                 this.weChatClient.sendMessage(this.selectRoom, text, {
-                    chat_id: ctx.chat.id,
-                    msg_id: ctx.message.message_id
+                    chat_id: chatId,
+                    msg_id: msgId
                 })
                 return
             }
@@ -1956,6 +1965,12 @@ export class TelegramBotClient extends BaseClient {
 
         }
 
+    }
+
+    public getUserId(){
+        this._bot.telegram.getChat(this._chatId).then(value => {
+            console.log(value)
+        })
     }
 
     public async findPinMessage() {

@@ -7,6 +7,7 @@ import BaseClient from '../base/BaseClient'
 import {DeletedMessage} from 'telegram/events/DeletedMessage'
 import {MessageUtils} from '../utils/MessageUtils'
 import {NewMessage} from 'telegram/events'
+import {MessageService} from '../service/MessageService'
 
 export class TelegramClient extends BaseClient {
     get client() {
