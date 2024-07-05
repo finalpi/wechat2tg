@@ -28,8 +28,8 @@ export class SimpleMessageSender implements MessageSender {
 
     }
 
-    public static NAME_REGEXP = new RegExp(/\${(alias|name|topic)}/, 'g')
-    public static ALIAS_FIRST_REGEXP = new RegExp(/\${alias_first}/, 'g')
+    public static NAME_REGEXP = new RegExp(/#[(alias|name|topic)]/, 'g')
+    public static ALIAS_FIRST_REGEXP = new RegExp(/#[alias_first]/, 'g')
 
 
     sendMessage(simpleMessage: SimpleMessage): string | FmtString {
