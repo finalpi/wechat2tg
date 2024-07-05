@@ -14,7 +14,7 @@ import {
 import {TelegramBotClient} from './TelegramBotClient'
 import {EmojiConverter} from '../utils/EmojiUtils'
 import {MemberCacheType} from '../models/TgCache'
-import {SimpleMessage} from '../models/Message'
+import {MessageSender, SimpleMessage, SimpleMessageSender} from '../models/Message'
 import {TalkerEntity} from '../models/TalkerCache'
 import {UniqueIdGenerator} from '../utils/IdUtils'
 import {NotionMode, VariableType} from '../models/Settings'
@@ -573,12 +573,7 @@ export class WeChatClient extends BaseClient {
                 }
             }
         }
-        let identityStr = roomEntity ? `🌐${roomTopic} --- 👤${showSender} : ` : `👤${showSender} : `
-        if (talker?.type() === PUPPET.types.Contact.Official) {
-            identityStr = `📣${showSender} : `
-        } else if (bindItem) {
-            identityStr = `👤${showSender} : `
-        }
+        let identityStr = SimpleMessageSender.getTitle(message,bindItem ? true : false)
         const sendMessageBody: SimpleMessage = {
             sender: showSender,
             body: `${this.t('wechat.getOne')} ${this.t('wechat.messageType.unknown')}`,
@@ -1005,6 +1000,7 @@ export class WeChatClient extends BaseClient {
                             file: new CustomFile(fileName, buff.length, '', buff),
                             forceDocument: !this.tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION),
                             caption: identityStr,
+                            parseMode: 'HTML'
                         }).catch((e) => {
                             this.logError('send file error:', e)
                             this._tgClient.sendMessage({
@@ -1033,7 +1029,8 @@ export class WeChatClient extends BaseClient {
                             // @ts-ignore
                             this.tgClient.bot.telegram[this.getSendTgFileMethodString(messageType)](
                                 tgMessage.chatId, {source: buff, filename: fileName}, {
-                                    caption: identityStr
+                                    caption: identityStr,
+                                    parse_mode: 'HTML'
                                 }).then((msg: { message_id: number }) => {
                                 if (tgMessage.message && tgMessage.id) {
                                     MessageService.getInstance().addMessage({
@@ -1064,7 +1061,8 @@ export class WeChatClient extends BaseClient {
                 } else { // 不需要判断类型压缩 直接发送文件
                     this.tgClient.bot.telegram.sendDocument(
                         tgMessage.chatId, {source: buff, filename: fileName}, {
-                            caption: identityStr
+                            caption: identityStr,
+                            parse_mode: 'HTML'
                         }).then(msg => {
                         if (tgMessage.message && tgMessage.id) {
                             MessageService.getInstance().addMessage({
