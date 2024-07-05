@@ -716,7 +716,7 @@ export class WeChatClient extends BaseClient {
                     // 地址 只有个人发送的才会有这个连接的文本出现
                     if (messageTxt.endsWith('pictype=location')) {
                         const locationText = `位置信息: <code>${message.text().split('\n')[0].replace(':', '')}</code>`
-                        this._tgClient.sendMessage({
+                        this.tgClient.sendMessage({
                             sender: showSender,
                             body: locationText,
                             room: roomTopic,

@@ -7,8 +7,10 @@ services:
     volumes:
       - ./config:/app/storage
       - ./save-files:/app/save-files # 保存文件夹挂载后表情不需要重新转换
-    environment:
-      - BOT_TOKEN=
+    # use env file or you can jest set environment here
+    env_file: "wechat2tg.env"
+    # environment:
+      # - BOT_TOKEN=
       # - PROXY_HOST=
       # - PROXY_PORT=
       # 代理类型:socks5,http,https
