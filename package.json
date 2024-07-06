@@ -33,8 +33,10 @@
     "wechaty-puppet-wechat4u": "https://github.com/areidx/puppet-wechat4u/releases/download/v1.14.21/wechaty-puppet-wechat4u-1.14.21.tgz"
   },
   "devDependencies": {
+    "@types/node": "^18.19.39",
     "@types/node-7z": "^2.1.8",
     "@types/qrcode": "^1.5.5",
+    "@types/raven": "^2.5.7",
     "@typescript-eslint/eslint-plugin": "^5.59.0",
     "@typescript-eslint/parser": "^5.59.0",
     "eslint": "^8.39.0",
