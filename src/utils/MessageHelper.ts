@@ -1,55 +1,70 @@
 import {MessageWrapper} from '../models/MessageWrapper'
+import BaseClient from '../base/BaseClient'
+import {TelegramClient} from '../client/TelegramClient'
 
-type Queue = {
-    message: MessageWrapper,
-    id?: number,
+type MessageStatus = 'success' | 'failure' | 'timeout';
+
+type Message = {
+    message?: MessageWrapper,
+    id: number,
     time?: number,
 }
 
-interface IQueue {
-    getQueue: () => Promise<Queue[]>,
-    add: (message: MessageWrapper) => void,
-    remove: (id: number) => void,
-    // onSuccess: () => Promise<Queue>,
-    // onFail: () => Promise<Error>,
-    // onTimeout: () => Promise<Queue>,
-    // onCompleted: () => Promise<boolean>,
+interface IQueue<C extends BaseClient> {
+    enqueue(message: MessageWrapper): Promise<MessageStatus>;
+    dequeue(): Message | undefined;
+    processMessage(client: C, message: MessageWrapper): Promise<MessageStatus>;
 }
 
+class TelegramMessageQueue implements IQueue<TelegramClient> {
+    private queue: Message[] = []
+    private idCounter = 0
+    private client: TelegramClient
 
-export default class MessageQueue implements IQueue {
-
-    private queue: Queue[] = []
-
-    getQueue(): Promise<Queue[]> {
-        return Promise.resolve(this.queue)
+    constructor(private timeout: number = 5000,client: TelegramClient) {
+        this.client = client
     }
 
-    add(message: MessageWrapper): void {
-        this.queue.push({
-            id: this.queue.length + 1,
-            time: new Date().getTime(),
-            message,
+    // default timeout is 5000 ms
+    processMessage(client: TelegramClient, message: MessageWrapper): Promise<MessageStatus> {
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                resolve('success')
+            }, Math.random() * this.timeout) // Simulate processing time
         })
     }
 
-    remove(id: number): void {
-        const index = this.queue.findIndex(message => message.id === id)
-        if (index !== -1) {
-            this.queue.splice(index, 1)
+    enqueue(message: MessageWrapper): Promise<MessageStatus> {
+        const queue: Message = {
+            id: this.idCounter++,
+            time: new Date().getTime(),
+            message: message,
         }
+        this.queue.push(queue)
+
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                reject('timeout')
+            }, this.timeout)
+
+            // Simulate message processing
+            this.processMessage(this.client, message)
+                .then((status: MessageStatus) => {
+                    clearTimeout(timer)
+                    if (status === 'success') {
+                        resolve(status)
+                    } else {
+                        reject(status)
+                    }
+                })
+                .catch((err) => {
+                    clearTimeout(timer)
+                    reject(err)
+                })
+        })
     }
 
-    onSuccess(): Promise<Queue> {
-        const message = this.queue.shift()
-        if (message) {
-            return Promise.resolve(message)
-        }
-        return Promise.reject(new Error('Message not found'))
+    dequeue(): Message | undefined {
+        return this.queue.shift()
     }
-
-    // onFail: () => Promise<Error>
-    // onTimeout: () => Promise<Queue>
-    // onCompleted: () => Promise<boolean>
-
 }
