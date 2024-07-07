@@ -113,6 +113,11 @@ const en = {
         blackListRemove: 'Blacklist (click to remove):',
         loginHint: 'Please enter your mobile phone number (with country code, for example: +18312118576)',
         transFail: 'File conversion failed',
+        sendFailMsg: 'Send failed, {0}',
+        sendFailFailMsg: 'File send failed, {0}',
+        saveOrgFileError: 'Failed to save the original file',
+        emptyFile: 'The file is empty',
+        fileLarge: 'The file is too large (Telegram limits to 20MB)'
     },
     wechat: {
         requestAddFriend: 'Request to add you as a friend:',
@@ -131,6 +136,12 @@ const en = {
         recallMessage: 'Recalled a message',
         friendExpired: 'Friend request has expired!',
         addSuccess: 'Added successfully!',
+        logoutSuccess: 'Logout Success !',
+        logoutFail: 'Logout Failed !',
+        user: 'User',
+        room: 'Room',
+        official: 'Official',
+        all: 'All',
         messageType: {
             unknown: 'Unknown message',
             text: 'Text',
@@ -149,8 +160,34 @@ const en = {
             chatHistory: 'Chat history',
             post: 'Post',
             location: 'Location',
+            setMsg: 'Forwarding combined messages',
         },
     },
+    telegram: {
+        btn: {
+            whiteListManager: 'Whitelist Manager:',
+            addWhiteList: 'Add to Whitelist',
+            whiteList: 'Whitelist',
+            blackListManager: 'Blacklist Manager:',
+            addBlackList: 'Add to Blacklist',
+            blackList: 'Blacklist',
+        },
+        msg: {
+            emptyWhiteList: 'Whitelist is empty',
+            removeWhiteList: 'Whitelist (click to remove):',
+            emptyBlackList: 'Blacklist is empty',
+            removeSuccess: 'Removed successfully',
+            addListName: 'Enter the name of the group to add to the list',
+            updateAliasSuccess: 'Alias set successfully',
+            updateAliasFail: 'Failed to set alias',
+            recallSuccess: 'Recalled successfully',
+            recallFail: 'Failed to recall',
+            recallNotDone: 'The message has already been recalled, has not been fully sent, or has timed out',
+            noContacts: 'No contacts',
+            selectContacts: 'Please select contacts (click to reply):',
+            currentReply: 'Current reply {0}:',
+        }
+    }
 }
 
 export default en

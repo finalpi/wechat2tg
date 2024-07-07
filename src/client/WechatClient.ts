@@ -29,6 +29,7 @@ import TelegramError from 'telegraf/src/core/network/error'
 import BaseClient from '../base/BaseClient'
 import {MessageService} from '../service/MessageService'
 import {CacheHelper} from '../utils/CacheHelper'
+import {BindItemConstants} from '../models/BindItem'
 
 
 export class WeChatClient extends BaseClient {
@@ -518,7 +519,7 @@ export class WeChatClient extends BaseClient {
                     bindId: bindId
                 })
             }
-        } else {
+        } else { // 人
             bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
             // 找到bindId
             let bindId
@@ -559,6 +560,7 @@ export class WeChatClient extends BaseClient {
             }
             if (!bindItem && this.cacheMemberDone && this._tgClient.tgUserClientLogin && !message.self() && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)) {
                 if (talker?.type() === PUPPET.types.Contact.Official && !this._tgClient.setting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT)) {
+                    // TODO: 公众号一个群组
                     bindItem = await this._tgClient.tgUserClient?.createGroup({
                         type: 0,
                         contact: talker,
@@ -708,14 +710,14 @@ export class WeChatClient extends BaseClient {
                                 messageTxt = messageTxt.replaceAll(`@${me.payload.name}`,
                                     `<a href="tg://user?id=${tgId}">@${me.payload.name}</a>`)
                                 messageTxt = messageTxt.replaceAll('@所有人',
-                                    `<a href="tg://user?id=${tgId}">@所有人</a>`)
+                                    `<a href="tg://user?id=${tgId}">@${this.t('wechat.all')}</a>`)
                             }
                         }
                     }
                     // console.log('showSender is :', showSender, 'talker id is :', talker.id, 'message text is ', messageTxt,)
                     // 地址 只有个人发送的才会有这个连接的文本出现
                     if (messageTxt.endsWith('pictype=location')) {
-                        const locationText = `位置信息: <code>${message.text().split('\n')[0].replace(':', '')}</code>`
+                        const locationText = `${this.t('wechat.messageType.location')}: <code>${message.text().split('\n')[0].replace(':', '')}</code>`
                         this.tgClient.sendMessage({
                             sender: showSender,
                             body: locationText,
@@ -799,7 +801,7 @@ export class WeChatClient extends BaseClient {
                 if (messageType === PUPPET.types.Message.Attachment && !message.payload?.filename) {
                     this._tgClient.sendMessage({
                         sender: showSender,
-                        body: `[合并转发消息]${this.t('wechat.plzViewOnPhone')}`,
+                        body: `[${this.t('wechat.messageType.setMsg')}]${this.t('wechat.plzViewOnPhone')}`,
                         room: roomTopic,
                         type: talker?.type() === PUPPET.types.Contact.Official ? 1 : 0,
                         id: message.id,

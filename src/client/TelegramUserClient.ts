@@ -14,6 +14,7 @@ import {NewMessage} from 'telegram/events'
 import {MessageUtils} from '../utils/MessageUtils'
 import {MessageService} from '../service/MessageService'
 import {BindItemService} from '../service/BindItemService'
+import {ContactType} from 'wechaty-puppet/src/schemas/contact'
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -171,14 +172,24 @@ export class TelegramUserClient extends TelegramClient {
 
             // 添加绑定
             if (createGroupInterface.type === 0) {
-                bindItem = this.telegramBotClient.bindItemService.bindGroup(
-                    createGroupInterface.contact?.payload?.name ? createGroupInterface.contact?.payload.name : '',
-                    TelegramUserClient.idConvert(id), createGroupInterface.type,
-                    createGroupInterface.bindId ? createGroupInterface.bindId : '',
-                    createGroupInterface.contact?.payload?.alias ? createGroupInterface.contact?.payload?.alias : '',
-                    createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '',
-                    createGroupInterface.contact?.payload?.avatar ? createGroupInterface.contact?.payload?.avatar : '')
-            } else {
+                if (createGroupInterface.contact.type() === ContactType.Official) {
+                    bindItem = this.telegramBotClient.bindItemService.bindGroup(
+                        '订阅号',
+                        TelegramUserClient.idConvert(id), createGroupInterface.type,
+                        createGroupInterface.bindId ? createGroupInterface.bindId : '',
+                        '',
+                        createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '',
+                        '')
+                } else {
+                    bindItem = this.telegramBotClient.bindItemService.bindGroup(
+                        createGroupInterface.contact?.payload?.name ? createGroupInterface.contact?.payload.name : '',
+                        TelegramUserClient.idConvert(id), createGroupInterface.type,
+                        createGroupInterface.bindId ? createGroupInterface.bindId : '',
+                        createGroupInterface.contact?.payload?.alias ? createGroupInterface.contact?.payload?.alias : '',
+                        createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '',
+                        createGroupInterface.contact?.payload?.avatar ? createGroupInterface.contact?.payload?.avatar : '')
+                }
+            } else { // room
                 const topic = await createGroupInterface.room?.topic()
                 bindItem = this.telegramBotClient.bindItemService.bindGroup(topic ? topic : '', TelegramUserClient.idConvert(id),
                     createGroupInterface.type,

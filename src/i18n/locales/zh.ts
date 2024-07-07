@@ -29,8 +29,7 @@ const zh = {
 5\\. 当前回复的用户或者群会被pin。
 6\\. 回复转发的消息能直接直接转发到对应的人或者群（暂时不支持回复回复的消息，而且不改变当前正在回复的用户）。
 7\\. 由于使用的web协议的微信协议所以可能会**封号**（目前我没遇到过），使用前请三思。
-8\\. 更多功能请查看 github 仓库（For more features, please check the GitHub repository README）。
-`,
+8\\. 更多功能请查看 github 仓库（For more features, please check the GitHub repository README）。`,
         startText: '请输入 /login 登陆,或者输入 /help 查看帮助\n请注意执行/login 后你就是该机器的所有者',
         settingsText: '程序设置:',
         langText: '语言设置:',
@@ -114,6 +113,11 @@ const zh = {
         blackListRemove: '黑名单列表(点击移除):',
         loginHint: '请输入你的手机号码（需要带国家区号，例如：+8613355558888）',
         transFail: '文件转换失败',
+        sendFailMsg: '发送失败, {0}',
+        sendFailFailMsg: '文件发送失败, {0}',
+        saveOrgFileError: '保存原始文件失败',
+        emptyFile: '文件为空',
+        fileLarge: '文件过大(telegram限制20Mb)',
     },
     wechat: {
         requestAddFriend: '请求添加您为好友:',
@@ -132,6 +136,12 @@ const zh = {
         recallMessage: '撤回了一条消息',
         friendExpired: '好友申请已过期!',
         addSuccess: '添加成功!',
+        logoutSuccess: '登出成功!',
+        logoutFail: '登出失败!',
+        user: '用户',
+        room: '群组',
+        official: '公众号',
+        all: '所有人',
         messageType: {
             unknown: '未知消息',
             text: '文本',
@@ -150,8 +160,34 @@ const zh = {
             chatHistory: '聊天记录',
             post: '帖子',
             location: '位置',
+            setMsg: '合并转发消息',
         },
     },
+    telegram: {
+        btn: {
+            whiteListManager: '白名单管理:',
+            addWhiteList: '添加白名单',
+            whiteList: '白名单列表',
+            blackListManager: '黑名单管理:',
+            addBlackList: '添加黑名单',
+            blackList: '黑名单列表',
+        },
+        msg: {
+            emptyWhiteList: '白名单为空',
+            removeWhiteList: '白名单列表(点击移除):',
+            emptyBlackList: '黑名单为空',
+            removeSuccess: '移除成功',
+            addListName: '输入要加入名单的群名',
+            updateAliasSuccess: '备注设置成功',
+            updateAliasFail: '备注设置失败',
+            recallSuccess: '撤回成功',
+            recallFail: '撤回失败',
+            recallNotDone: '该消息已经撤回、尚未发送完毕或已超时',
+            noContacts: '没有联系人',
+            selectContacts: '请选择联系人(点击回复):',
+            currentReply: '当前回复{0}:',
+        }
+    }
 }
 
 export default zh

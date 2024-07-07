@@ -279,7 +279,7 @@ export class TelegramBotClient extends BaseClient {
 
         bot.help((ctx) => ctx.replyWithMarkdownV2(this.t('command.helpText')))
 
-        bot.start( ctx => {
+        bot.start(ctx => {
             ctx.reply(this.t('command.startText'), Markup.removeKeyboard())
         })
 
@@ -381,7 +381,7 @@ export class TelegramBotClient extends BaseClient {
                     inputCode = inputCode + '_ '
                 }
             }
-            ctx.editMessageText(this.t('command.autocg.inputVerificationCode',inputCode), {
+            ctx.editMessageText(this.t('command.autocg.inputVerificationCode', inputCode), {
                 reply_markup: {
                     inline_keyboard: [
                         [
@@ -432,7 +432,7 @@ export class TelegramBotClient extends BaseClient {
             // 修改后持成文件
             this.forwardSetting.writeToFile()
             // 点击后修改上面按钮
-            ctx.editMessageText(this.t('command.autocg.modelAutoCreate',b ? this.t('common.open') : this.t('common.close')), {
+            ctx.editMessageText(this.t('command.autocg.modelAutoCreate', b ? this.t('common.open') : this.t('common.close')), {
                 reply_markup: {
                     inline_keyboard: [
                         [
@@ -530,9 +530,9 @@ export class TelegramBotClient extends BaseClient {
         // 白名单设置
         bot.action(VariableType.SETTING_WHITE_LIST, ctx => {
             // 当前白名单
-            ctx.editMessageText('白名单管理:', Markup.inlineKeyboard([
-                [Markup.button.callback('添加白名单', 'listAdd-')],
-                [Markup.button.callback('白名单列表', 'whiteList-1')]
+            ctx.editMessageText(this.t('telegram.btn.whiteListManager'), Markup.inlineKeyboard([
+                [Markup.button.callback(this.t('telegram.btn.addWhiteList'), 'listAdd-')],
+                [Markup.button.callback(this.t('telegram.btn.whiteList'), 'whiteList-1')]
             ]))
             ctx.answerCbQuery()
         })
@@ -543,7 +543,7 @@ export class TelegramBotClient extends BaseClient {
             // 获取黑名单或者白名单的列表
             const list = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST)
             if (!list || list.length === 0) {
-                ctx.reply('白名单列表为空')
+                ctx.reply(this.t('telegram.msg.emptyWhiteList'))
                 ctx.answerCbQuery()
                 return
             }
@@ -560,16 +560,16 @@ export class TelegramBotClient extends BaseClient {
             })
             this.forwardSetting.setVariable(VariableType.SETTING_WHITE_LIST, list)
             this.forwardSetting.writeToFile()
-            ctx.answerCbQuery('移除成功')
+            ctx.answerCbQuery(this.t('telegram.msg.removeSuccess'))
             this.replyWhiteBtn(list, 1, ctx)
         })
 
         // 黑名单设置
         bot.action(VariableType.SETTING_BLACK_LIST, ctx => {
             // 当前黑名单
-            ctx.editMessageText('黑名单管理:', Markup.inlineKeyboard([
-                [Markup.button.callback('添加黑名单', 'listAdd-')],
-                [Markup.button.callback('黑名单列表', 'blackList-1')]
+            ctx.editMessageText(this.t('telegram.btn.blackListManager'), Markup.inlineKeyboard([
+                [Markup.button.callback(this.t('telegram.btn.addBlackList'), 'listAdd-')],
+                [Markup.button.callback(this.t('telegram.btn.blackList'), 'blackList-1')]
             ]))
             ctx.answerCbQuery()
         })
@@ -580,7 +580,7 @@ export class TelegramBotClient extends BaseClient {
             // 获取黑名单或者白名单的列表
             const list = this.forwardSetting.getVariable(VariableType.SETTING_BLACK_LIST)
             if (!list || list.length === 0) {
-                ctx.reply('黑名单列表为空')
+                ctx.reply(this.t('telegram.msg.emptyBlackList'))
                 ctx.answerCbQuery()
                 return
             }
@@ -597,14 +597,14 @@ export class TelegramBotClient extends BaseClient {
             })
             this.forwardSetting.setVariable(VariableType.SETTING_BLACK_LIST, list)
             this.forwardSetting.writeToFile()
-            ctx.answerCbQuery('移除成功')
+            ctx.answerCbQuery(this.t('telegram.msg.removeSuccess'))
             this.replyEditBlackBtn(list, 1, ctx)
 
         })
 
         // 黑白名单添加
         bot.action(/listAdd-/, ctx => {
-            ctx.reply('输入要加入名单的群名').then(() => {
+            ctx.reply(this.t('telegram.msg.addListName')).then(() => {
                 this.waitInputCommand = 'listAdd'
             })
             ctx.answerCbQuery()
@@ -722,7 +722,7 @@ export class TelegramBotClient extends BaseClient {
             })
         })
 
-        bot.action(/lang-/,async ctx => {
+        bot.action(/lang-/, async ctx => {
             this.setLanguage(ctx.match.input.slice(5))
             await bot.telegram.setMyCommands(commands)
             this.forwardSetting.setVariable(VariableType.SETTING_LANGUAGE, ctx.match.input.slice(5))
@@ -1232,8 +1232,8 @@ export class TelegramBotClient extends BaseClient {
                 const weChatMessageId = messageItem?.wechat_message_id
                 // 设置别名(不可用)
                 // if (text.startsWith('&alias') && weChatMessageId) {
-                    // this.setAlias(weChatMessageId, text, ctx)
-                    // return
+                // this.setAlias(weChatMessageId, text, ctx)
+                // return
                 // }
 
                 if (weChatMessageId) {
@@ -1359,15 +1359,15 @@ export class TelegramBotClient extends BaseClient {
                     if (config.HOST !== '') {
                         FileUtils.downloadWithProxy(fileLink.toString(), saveFile).then(() => {
                             this.sendGif(saveFile, gifFile, ctx, lottie_config)
-                        }).catch(() => ctx.reply('发送失败, 原始文件保存失败'))
+                        }).catch(() => ctx.reply(this.t('common.sendFailMsg', this.t('common.saveOrgFileError'))))
                     } else {
                         FileBox.fromUrl(fileLink.toString()).toFile(saveFile).then(() => {
                             this.sendGif(saveFile, gifFile, ctx, lottie_config)
-                        }).catch(() => ctx.reply('发送失败, 原始文件保存失败'))
+                        }).catch(() => ctx.reply(this.t('common.sendFailMsg', this.t('common.saveOrgFileError'))))
                     }
                 }
             }).catch(e => {
-                ctx.reply('文件过大,发送失败(telegram文件发送不能大于20M)', {
+                ctx.reply(this.t('common.sendFailMsg', this.t('common.fileLarge')), {
                     reply_parameters: {
                         message_id: ctx.message.message_id
                     }
@@ -1403,10 +1403,10 @@ export class TelegramBotClient extends BaseClient {
                         }
                     }
                 }
-                ctx.reply('备注设置成功')
+                ctx.reply(this.t('telegram.msg.updateAliasSuccess'))
             })
         }).catch(() => {
-            ctx.reply('备注设置失败')
+            ctx.reply(this.t('telegram.msg.updateAliasFail'))
         })
         return
     }
@@ -1427,14 +1427,14 @@ export class TelegramBotClient extends BaseClient {
                 .then(message => {
                     message?.recall().then((res) => {
                         if (res) {
-                            ctx.reply('撤回成功', {
+                            ctx.reply(this.t('telegram.msg.recallSuccess'), {
                                 reply_parameters: {
                                     message_id: replyMessageId
                                 }
                             })
                             CacheHelper.getInstances().removeUndoMessage(message.id)
                         } else {
-                            ctx.reply('撤回失败', {
+                            ctx.reply(this.t('telegram.msg.recallFail'), {
                                 reply_parameters: {
                                     message_id: replyMessageId
                                 }
@@ -1442,8 +1442,8 @@ export class TelegramBotClient extends BaseClient {
                         }
 
                     }).catch((e) => {
-                        this.logError('撤回失败', e)
-                        ctx.reply('撤回失败', {
+                        this.logError(this.t('telegram.msg.recallFail'), e)
+                        ctx.reply(this.t('telegram.msg.recallFail'), {
                             reply_parameters: {
                                 message_id: replyMessageId
                             }
@@ -1451,7 +1451,7 @@ export class TelegramBotClient extends BaseClient {
                     })
                 })
         } else {
-            ctx.reply('该消息已经撤回、尚未发送完毕或已超时', {
+            ctx.reply(this.t('telegram.msg.recallNotDone'), {
                 reply_parameters: {
                     message_id: replyMessageId
                 }
@@ -1472,7 +1472,7 @@ export class TelegramBotClient extends BaseClient {
             buttons.push(buttonRow)
         }
         buttons.push([Markup.button.callback(this.t('common.prevPage'), `whiteList-${pageNum - 1}`, !page.hasLast()), Markup.button.callback(this.t('common.nextPage'), `whiteList-${pageNum + 1}`, !page.hasNext())])
-        ctx.editMessageText('白名单列表(点击移除):', Markup.inlineKeyboard(buttons))
+        ctx.editMessageText(this.t('telegram.msg.removeWhiteList'), Markup.inlineKeyboard(buttons))
     }
 
     private replyEditBlackBtn(list: NotionListType[], pageNum: number, ctx: any) {
@@ -1779,11 +1779,11 @@ export class TelegramBotClient extends BaseClient {
                     }
                 })
             }
-            if (e.response.error_code === 429){
+            if (e.response.error_code === 429) {
                 // many request
-                setTimeout(()=>{
+                setTimeout(() => {
                     this.sendMessage(message)
-                },1000)
+                }, 1000)
             }
         })
     }
@@ -1796,7 +1796,7 @@ export class TelegramBotClient extends BaseClient {
 
 
         if (!source) {
-            await ctx.reply('没有联系人')
+            await ctx.reply(this.t('telegram.msg.noContacts'))
         }
         source = await TelegramBotClient.filterByNameAndAlias(currentSearchWord, source)
 
@@ -1837,7 +1837,7 @@ export class TelegramBotClient extends BaseClient {
             })
         }
 
-        ctx.editMessageText('请选择联系人(点击回复):', {
+        ctx.editMessageText(this.t('telegram.msg.selectContacts'), {
             ...Markup.inlineKeyboard(buttons),
         })
 
@@ -1967,7 +1967,7 @@ export class TelegramBotClient extends BaseClient {
 
     }
 
-    public getUserId(){
+    public getUserId() {
         this._bot.telegram.getChat(this._chatId).then(value => {
             console.log(value)
         })
@@ -2006,13 +2006,13 @@ export class TelegramBotClient extends BaseClient {
         // 判断是否是群组
         let str = ''
         if (type === 'user') {
-            str = `当前回复用户:👤 ${name}`
+            str = `${this.t('telegram.msg.currentReply'), this.t('wechat.user')}:👤 ${name}`
             this._flagPinMessageType = type
         } else if (type === 'room') {
-            str = `当前回复群组:🌐 ${name}`
+            str = `${this.t('telegram.msg.currentReply'), this.t('wechat.room')}:🌐 ${name}`
             this._flagPinMessageType = type
         } else if (type === 'official') {
-            str = `当前回复公众号:📣 ${name}`
+            str = `${this.t('telegram.msg.currentReply'), this.t('wechat.official')}:📣 ${name}`
             this._flagPinMessageType = 'user'
         }
         if (this.pinnedMessageId) {
@@ -2044,8 +2044,8 @@ export class TelegramBotClient extends BaseClient {
     public onWeChatLogout(ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
 
         this._weChatClient.logout().then(() => {
-            ctx.reply('登出成功').then(() => this.loginCommandExecuted = false)
-        }).catch(() => ctx.reply('登出失败'))
+            ctx.reply(this.t('wechat.logoutSuccess')).then(() => this.loginCommandExecuted = false)
+        }).catch(() => ctx.reply(this.t('wechat.logoutFail')))
     }
 
     public onWeChatStop(ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
@@ -2135,12 +2135,12 @@ export class TelegramBotClient extends BaseClient {
     private getSettingButton() {
         return {
             inline_keyboard: [
-                [Markup.button.callback(this.t('command.setting.messageMode',this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK ? this.t('command.setting.blackMode') : this.t('command.setting.whiteMode')), VariableType.SETTING_NOTION_MODE),],
-                [Markup.button.callback(this.t('command.setting.messageFallback',this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_REPLY_SUCCESS),],
-                [Markup.button.callback(this.t('command.setting.autoSwitchContact',this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_AUTO_SWITCH),],
-                [Markup.button.callback(this.t('command.setting.receiveOfficial',this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) ? this.t('common.close') : this.t('common.open')), VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT),],
-                [Markup.button.callback(this.t('command.setting.forwardSelf',this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_FORWARD_SELF),],
-                [Markup.button.callback(this.t('command.setting.mediaQualityCompression',this.forwardSetting.getVariable(VariableType.SETTING_COMPRESSION) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_COMPRESSION),],
+                [Markup.button.callback(this.t('command.setting.messageMode', this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK ? this.t('command.setting.blackMode') : this.t('command.setting.whiteMode')), VariableType.SETTING_NOTION_MODE),],
+                [Markup.button.callback(this.t('command.setting.messageFallback', this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_REPLY_SUCCESS),],
+                [Markup.button.callback(this.t('command.setting.autoSwitchContact', this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_AUTO_SWITCH),],
+                [Markup.button.callback(this.t('command.setting.receiveOfficial', this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) ? this.t('common.close') : this.t('common.open')), VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT),],
+                [Markup.button.callback(this.t('command.setting.forwardSelf', this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_FORWARD_SELF),],
+                [Markup.button.callback(this.t('command.setting.mediaQualityCompression', this.forwardSetting.getVariable(VariableType.SETTING_COMPRESSION) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_COMPRESSION),],
                 [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE ?
                     Markup.button.callback(this.t('command.setting.whiteGroup'), VariableType.SETTING_WHITE_LIST) :
                     Markup.button.callback(this.t('command.setting.blackGroup'), VariableType.SETTING_BLACK_LIST)]
@@ -2186,7 +2186,7 @@ export class TelegramBotClient extends BaseClient {
                             const fileBox = FileBox.fromBuffer(Buffer.from(buff), fileName)
                             this.sendFile(ctx, fileBox)
                         } else {
-                            ctx.reply('发送文件失败，获取文件为空！', {
+                            ctx.reply(this.t('common.sendFailFailMsg', this.t('common.emptyFile')), {
                                 reply_parameters: {
                                     message_id: ctx.message.message_id
                                 }
@@ -2194,7 +2194,7 @@ export class TelegramBotClient extends BaseClient {
                         }
                     }).catch(err => {
                         this.logError('use telegram api download file error: ', err)
-                        ctx.reply('发送文件失败!', {
+                        ctx.reply(this.t('common.sendFailFailMsg'), {
                             reply_parameters: {
                                 message_id: ctx.message.message_id
                             }
@@ -2202,7 +2202,7 @@ export class TelegramBotClient extends BaseClient {
                     })
                     return
                 }
-                ctx.reply('bot发送文件不能大于20M', {
+                ctx.reply(this.t('common.sendFailFailMsg', this.t('common.fileLarge')), {
                     reply_parameters: {
                         message_id: ctx.message.message_id
                     }
@@ -2223,7 +2223,7 @@ export class TelegramBotClient extends BaseClient {
                 }
                 this.sendFile(ctx, fileBox, fileLink.toString())
             }).catch(() => {
-                ctx.reply('文件发送失败！', {
+                ctx.reply(this.t('common.sendFailFailMsg'), {
                     reply_parameters: {
                         message_id: ctx.message.message_id
                     }
@@ -2238,7 +2238,7 @@ export class TelegramBotClient extends BaseClient {
             const savePath = `./save-files/${fileBox.name}`
             FileUtils.downloadWithProxy(fileLink, savePath).then(() => {
                 this.sendFile(ctx, FileBox.fromFile(savePath, fileBox.name), savePath)
-            }).catch(() => ctx.reply('发送失败, 原始文件保存失败'))
+            }).catch(() => ctx.reply(this.t('common.sendFailMsg', this.t('common.saveOrgFileError'))))
             return
         }
         const replyMessageId = ctx.update.message['reply_to_message']?.message_id
