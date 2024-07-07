@@ -387,7 +387,7 @@ export class BindItemService extends AbstractSqlService {
     }
 
     /**
-     * 根据微信Id查询BindItem
+     * 根据微信Id查询BindItem （这是item实例的id...）
      * @param bindId
      */
     public getBindItemByWechatId(wechatId: string): Promise<BindItem> {
