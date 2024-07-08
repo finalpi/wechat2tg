@@ -30,7 +30,7 @@ services:
          - ./config:/app/storage
          - ./save-files:/app/save-files # 保存文件夹挂载后表情不需要重新转换
       # use env file or you can jest set environment here
-      env_file: ".env"
+      # env_file: ".env"
       environment:
          BOT_TOKEN: ''
          # PROXY_HOST: ''
