@@ -32,7 +32,7 @@ services:
          - ./config:/app/storage
          - ./save-files:/app/save-files # After mounting the save folder, emojis do not need to be reconverted
       # Use env file or you can just set environment here
-      env_file: ".env"
+      # env_file: ".env"
       environment:
          BOT_TOKEN:
          # Proxy settings (uncomment and fill in if needed)
