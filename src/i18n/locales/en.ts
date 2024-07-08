@@ -125,7 +125,7 @@ const en = {
     },
     wechat: {
         requestAddFriend: 'Request to add you as a friend:',
-        unknownUser: 'Unknown user:\n',
+        unknownUser: 'Unknown user:',
         plzViewOnPhone: 'Please view on phone',
         get: 'Received',
         getOne: 'Received one',

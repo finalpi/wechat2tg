@@ -125,7 +125,7 @@ const zh = {
     },
     wechat: {
         requestAddFriend: '请求添加您为好友:',
-        unknownUser: '未知用户:\n',
+        unknownUser: '未知用户:',
         plzViewOnPhone: '请在手机上查看',
         get: '收到',
         getOne: '收到一条',
