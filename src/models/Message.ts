@@ -29,8 +29,6 @@ export class SimpleMessageSender implements MessageSender {
     }
 
     public static NAME_REGEXP = new RegExp(/#\[(.*?)\]/, 'g')
-    public static ALIAS_FIRST_REGEXP = new RegExp(/#\[alias_first]/, 'g')
-
 
     sendMessage(simpleMessage: SimpleMessage): string | FmtString {
         if (simpleMessage instanceof FmtString) {
@@ -92,16 +90,18 @@ export class SimpleMessageSender implements MessageSender {
         inputString = inputString.replace(this.NAME_REGEXP, (match, p1) => {
             if (p1.includes('alias')){
                 return alias ? p1.replaceAll('alias',alias) : ''
-            }else if (p1.includes('name')){
+            } else if (p1.includes('name')){
                 return name ? p1.replaceAll('name',name) : ''
-            }else if (p1.includes('topic')){
+            } else if (p1.includes('topic')){
                 return topic ? p1.replaceAll('topic',topic) : ''
-            }else {
+            } else if (p1.includes('alias_first')){
+                return alias_first ? p1.replaceAll('alias_first',alias_first) : ''
+            } else {
                 return match
             }
         })
 
-        return inputString.replace(this.ALIAS_FIRST_REGEXP, alias_first)
+        return inputString
     }
 
 }
