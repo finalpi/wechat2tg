@@ -7,16 +7,30 @@ services:
     volumes:
       - ./config:/app/storage
       - ./save-files:/app/save-files # 保存文件夹挂载后表情不需要重新转换
+    # use env file or you can jest set environment here
+    env_file: ".env"
     environment:
-      - BOT_TOKEN=
-      # - PROXY_HOST=
-      # - PROXY_PORT=
+      BOT_TOKEN:
+      # PROXY_HOST: ''
+      # PROXY_PORT: ''
       # 代理类型:socks5,http,https
-      # - PROXY_PROTOCOL=socks5
+      # PROXY_PROTOCOL: 'socks5'
       # 用户名密码可选
-      # - PROXY_USERNAME=
-      # - PROXY_PASSWORD=
+      # PROXY_USERNAME: ''
+      # PROXY_PASSWORD: ''
       # 发送大文件所需Telegram API配置(可选)
-      #- API_ID=
-      #- API_HASH=
+      # API_ID: ''
+      # API_HASH: ''
+      # 群消息格式
+      ROOM_MESSAGE: '<i>🌐#[topic]</i> ---- <b>👤#[(alias)] #[name]: </b>'
+      # 公众号消息格式
+      OFFICIAL_MESSAGE: '<b>📣#[name]: </b>'
+      # 联系人消息格式
+      CONTACT_MESSAGE: '<b>👤#[alias_first]: </b>'
+      # 群消息格式(群组下)
+      ROOM_MESSAGE_GROUP: '<b>👤#[(alias)] #[name]: </b>'
+      # 公众号消息格式(群组下)
+      OFFICIAL_MESSAGE_GROUP: '<b>📣#[name]: </b>'
+      # 联系人消息格式(群组下)
+      CONTACT_MESSAGE_GROUP: '<b>👤#[alias_first]: </b>'
     restart: unless-stopped

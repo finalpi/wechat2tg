@@ -8,9 +8,10 @@ import {TelegramClient as GramClient} from 'telegram/client/TelegramClient'
 import {BigInteger} from 'big-integer'
 import {CreateGroupInterface} from '../models/CreateGroupInterface'
 import {CustomFile} from 'telegram/client/uploads'
-import {SetupServiceImpl} from '../service/Impl/SetupServiceImpl'
+import {SetupServiceImpl} from '../service/impl/SetupServiceImpl'
 import * as os from 'node:os'
-import {LogLevel} from 'telegram/extensions/Logger'
+import {NewMessage} from 'telegram/events'
+import {MessageService} from '../service/MessageService'
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -53,20 +54,41 @@ export class TelegramUserClient extends TelegramClient {
 
     public async start(authParams: authMethods.UserAuthParams | authMethods.BotAuthParams) {
         if (this._client?.disconnected) {
-            await this._client?.start(authParams).then(async () => {
+            this._client?.start(authParams).then(async () => {
                 this.telegramBotClient.tgUserClientLogin = true
-                // TODO: 测试自动创建文件夹
                 const setupServiceImpl = new SetupServiceImpl()
-                await setupServiceImpl.createFolder()
-                const bindItems = await TelegramBotClient.getInstance().bindItemService.getAllBindItems()
-                for (const bindItem of bindItems) {
-                    await setupServiceImpl.addToFolder(bindItem.chat_id)
-                }
-                this.telegramBotClient.bot.telegram.sendMessage(this.telegramBotClient.chatId, 'TG登录成功!').then(msg => {
-                    setTimeout(() => {
-                        this.telegramBotClient.bot.telegram.deleteMessage(this.telegramBotClient.chatId, msg.message_id)
-                    }, 10000)
+                setupServiceImpl.createFolder().then(() => {
+                    TelegramBotClient.getInstance().bindItemService.getAllBindItems().then(async (bindItems) => {
+                        for (const bindItem of bindItems) {
+                            await setupServiceImpl.addToFolder(bindItem.chat_id)
+                        }
+                        this.telegramBotClient.bot.telegram.sendMessage(this.telegramBotClient.chatId, this.t('common.tgLoginSuccess')).then(msg => {
+                            setTimeout(() => {
+                                this.telegramBotClient.bot.telegram.deleteMessage(this.telegramBotClient.chatId, msg.message_id)
+                            }, 10000)
+                        })
+                    })
+
                 })
+                this.client?.getMe().then(me => {
+                    this.client.addEventHandler(async event => {
+                        // 我发送的消息
+                        const msg = event.message
+                        TelegramBotClient.getInstance().bindItemService.getAllBindItems().then(binds => {
+                            const msgChatId = msg.chatId?.toJSNumber()
+                            if (msgChatId == this.telegramBotClient.chatId || binds.find(it => it.chat_id == msgChatId)) {
+                                MessageService.getInstance().addMessage({
+                                    chat_id: msgChatId?.toString(),
+                                    msg_text: msg.text,
+                                    create_time: Date.now(),
+                                    telegram_user_message_id: msg.id,
+                                    sender_id: this.telegramBotClient.weChatClient.client.currentUser.id,
+                                })
+                            }
+                        })
+                    }, new NewMessage({fromUsers: [me]}))
+                })
+
             }).catch((e) => {
                 this.telegramBotClient.tgUserClientLogin = false
                 this.logError('login... user error', e)
@@ -80,7 +102,7 @@ export class TelegramUserClient extends TelegramClient {
     /**
      * 获取用户名
      */
-    public async getUserId(){
+    public async getUserId() {
         const me = await this._client?.getMe()
         const id = me?.id
         return id
@@ -89,7 +111,7 @@ export class TelegramUserClient extends TelegramClient {
     public async createGroup(createGroupInterface: CreateGroupInterface) {
         // 如果之前存在改实例则重新绑定
         const row = await this.telegramBotClient.bindItemService.reBind(createGroupInterface)
-        if (row){
+        if (row) {
             return row
         }
         let bindItem
@@ -147,14 +169,25 @@ export class TelegramUserClient extends TelegramClient {
 
             // 添加绑定
             if (createGroupInterface.type === 0) {
-                bindItem = this.telegramBotClient.bindItemService.bindGroup(
-                    createGroupInterface.contact?.payload?.name ? createGroupInterface.contact?.payload.name : '',
-                    TelegramUserClient.idConvert(id), createGroupInterface.type,
-                    createGroupInterface.bindId ? createGroupInterface.bindId : '',
-                    createGroupInterface.contact?.payload?.alias ? createGroupInterface.contact?.payload?.alias : '',
-                    createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '',
-                    createGroupInterface.contact?.payload?.avatar ? createGroupInterface.contact?.payload?.avatar : '')
-            } else {
+                // TODO: 公众号合并
+                // if (createGroupInterface.contact.type() === ContactType.Official) {
+                //     bindItem = this.telegramBotClient.bindItemService.bindGroup(
+                //         '订阅号',
+                //         TelegramUserClient.idConvert(id), createGroupInterface.type,
+                //         createGroupInterface.bindId ? createGroupInterface.bindId : '',
+                //         '',
+                //         createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '',
+                //         '')
+                // } else {
+                    bindItem = this.telegramBotClient.bindItemService.bindGroup(
+                        createGroupInterface.contact?.payload?.name ? createGroupInterface.contact?.payload.name : '',
+                        TelegramUserClient.idConvert(id), createGroupInterface.type,
+                        createGroupInterface.bindId ? createGroupInterface.bindId : '',
+                        createGroupInterface.contact?.payload?.alias ? createGroupInterface.contact?.payload?.alias : '',
+                        createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '',
+                        createGroupInterface.contact?.payload?.avatar ? createGroupInterface.contact?.payload?.avatar : '')
+                // }
+            } else { // room
                 const topic = await createGroupInterface.room?.topic()
                 bindItem = this.telegramBotClient.bindItemService.bindGroup(topic ? topic : '', TelegramUserClient.idConvert(id),
                     createGroupInterface.type,
@@ -183,5 +216,13 @@ export class TelegramUserClient extends TelegramClient {
                 })
             )
         }
+    }
+
+    public async editMessage(inputPeer: { chat_id: number, msg_id: number }, messageText: string) {
+        const inputPeerChannelFromMessage = await this?.client?.getInputEntity(inputPeer.chat_id) || inputPeer.chat_id
+        return this?.client?.editMessage(
+            inputPeerChannelFromMessage,
+            {message: inputPeer.msg_id, text: messageText})
+
     }
 }

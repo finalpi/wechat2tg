@@ -1,7 +1,7 @@
 FROM node:18-slim
 
 RUN apt-get update &&  \
-    apt-get install -y p7zip-full python3 make gcc g++ &&  \
+    apt-get install -y python3 make gcc g++ &&  \
     mkdir -p /app/storage /app/save-files
 
 WORKDIR /app

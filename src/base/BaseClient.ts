@@ -1,8 +1,10 @@
 import log4js from 'log4js'
 import {LogUtils} from '../utils/LogUtils'
+import I18n from '../i18n/i18n'
 
 abstract class BaseClient {
     protected _log: log4js.Logger
+    protected i18n: I18n = I18n.grable()
 
     protected constructor() {
         const env = process.env.NODE_ENV || 'default'
@@ -24,6 +26,14 @@ abstract class BaseClient {
 
     protected logWarn(message: string, ...args: any[]): void {
         this._log.warn(message, ...args)
+    }
+
+    protected setLanguage(language: string): void {
+        this.i18n.setLanguage(language)
+    }
+
+    protected t(key: string, ...args: (string | number)[]): string {
+        return this.i18n.t(key,...args)
     }
 }
 

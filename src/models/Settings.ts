@@ -13,6 +13,7 @@ export class VariableContainer {
         [VariableType.SETTING_FORWARD_SELF]: boolean,
         [VariableType.SETTING_COMPRESSION]: boolean,
         [VariableType.SETTING_AUTO_GROUP]: boolean,
+        [VariableType.SETTING_LANGUAGE]: string,
     } = {
         [VariableType.SETTING_NOTION_MODE]: NotionMode.BLACK,
         [VariableType.SETTING_WHITE_LIST]: [],
@@ -24,6 +25,7 @@ export class VariableContainer {
         [VariableType.SETTING_FORWARD_SELF]: false,
         [VariableType.SETTING_COMPRESSION]: false,
         [VariableType.SETTING_AUTO_GROUP]: false,
+        [VariableType.SETTING_LANGUAGE]: 'zh',
     }
 
     setVariable<T extends VariableType>(key: T, value: VariableMap[T]) {
@@ -66,6 +68,7 @@ export class VariableContainer {
                 [VariableType.SETTING_COMPRESSION]: this.variables[VariableType.SETTING_COMPRESSION] ? this.variables[VariableType.SETTING_COMPRESSION] : false,
                 [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: this.variables[VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT] ? this.variables[VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT] : false,
                 [VariableType.SETTING_AUTO_GROUP]: this.variables[VariableType.SETTING_AUTO_GROUP] ? this.variables[VariableType.SETTING_AUTO_GROUP] : false,
+                [VariableType.SETTING_LANGUAGE]: this.variables[VariableType.SETTING_LANGUAGE] ? this.variables[VariableType.SETTING_LANGUAGE] : 'zh',
             }
             fs.writeFileSync(filePath, JSON.stringify(data), 'utf8')
             console.log('File written successfully.')
@@ -95,7 +98,9 @@ export enum VariableType {
     // 媒体是否压缩
     SETTING_COMPRESSION = 'Setting_Compression',
     // 是否自动创建群组
-    SETTING_AUTO_GROUP = 'Setting_Auto_Group'
+    SETTING_AUTO_GROUP = 'Setting_Auto_Group',
+    // 语言设置
+    SETTING_LANGUAGE = 'Setting_Language',
 }
 
 export enum NotionMode {
@@ -115,6 +120,7 @@ type VariableMap = {
     [VariableType.SETTING_FORWARD_SELF]: boolean,
     [VariableType.SETTING_COMPRESSION]: boolean,
     [VariableType.SETTING_AUTO_GROUP]: boolean,
+    [VariableType.SETTING_LANGUAGE]: string,
 };
 
 export class GroupListSave {

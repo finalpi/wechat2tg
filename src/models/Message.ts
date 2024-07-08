@@ -1,15 +1,21 @@
 import {FmtString} from 'telegraf/format'
 import {MessageInterface} from 'wechaty/impls'
+import {config} from '../config'
+import {TelegramBotClient} from '../client/TelegramBotClient'
+import {message} from 'telegraf/filters'
+import * as PUPPET from 'wechaty-puppet'
 
 export interface SimpleMessage {
-    id?: string;
-    room?: string;
-    sender?: string;
-    type?: number;
-    body: string | FmtString;
-    not_escape_html?: boolean;
+    id?: string,
+    room?: string,
+    sender?: string,
+    type?: number,
+    body: string | FmtString,
+    not_escape_html?: boolean,
     chatId: number | string,
-    message?: MessageInterface
+    message?: MessageInterface,
+    replay_msg_id?: number,
+    send_id?: string,
 }
 
 export interface MessageSender {
@@ -22,36 +28,51 @@ export class SimpleMessageSender implements MessageSender {
 
     }
 
+    public static NAME_REGEXP = new RegExp(/#\[(.*?)\]/, 'g')
+    public static ALIAS_FIRST_REGEXP = new RegExp(/#\[alias_first]/, 'g')
+
+
     sendMessage(simpleMessage: SimpleMessage): string | FmtString {
         if (simpleMessage instanceof FmtString) {
             return simpleMessage
-        } else if (simpleMessage.sender) {
-            let title = !simpleMessage.room || simpleMessage.room === ''
-                ? `<b>👤${simpleMessage.sender} : </b> \n` :
-                `<i>🌐${simpleMessage.room}</i> ---- <b>👤${simpleMessage.sender} : </b> \n`
-            if (simpleMessage.type === 1) {
-                title = `<b>📣${simpleMessage.sender} : </b> \n`
-            }
-            return `${title}${!simpleMessage.not_escape_html ? this.escapeHTML(typeof simpleMessage.body === 'string' ? simpleMessage.body : '') : simpleMessage.body}`
+        } else if (simpleMessage.sender && message) {
+            // 根据配置文件构建title
+            const title = SimpleMessageSender.getTitle(simpleMessage.message, simpleMessage.chatId !== TelegramBotClient.getInstance().chatId)
+            return `${title}\n${!simpleMessage.not_escape_html ? this.escapeHTML(typeof simpleMessage.body === 'string' ? simpleMessage.body : '') : simpleMessage.body}`
         } else {
             return simpleMessage.body
         }
     }
 
-    private escapeHTML(str: string) {
-        // 查找所有 <a> 标签并将它们替换成占位符
-        // const aTagPattern = /<a href="tg:\/\/user\?id=\d+">.*?<\/a>/g
-        // const aTags = str.match(aTagPattern) || []
-        // let placeholderStr = str.replace(aTagPattern, (match, offset) => `__PLACEHOLDER_${offset}__`)
-        let placeholderStr = str
-        // 转义其他 HTML 字符
-        // placeholderStr = placeholderStr.replace(/</g, '&lt;')
-        //     .replace(/>/g, '&gt;')
+    static getTitle(message: MessageInterface, isGroup: boolean): string {
+        const room = message.room()
+        if (!isGroup) {
+            if (room) {
+                return this.transformTitleStr(config.ROOM_MESSAGE, message.talker().payload.alias, message.talker().payload.name, room.payload.topic)
+            } else {
+                if (message.talker().type() === PUPPET.types.Contact.Official) {
+                    // 公众号
+                    return this.transformTitleStr(config.OFFICIAL_MESSAGE, message.talker().payload.alias, message.talker().payload.name, '')
+                } else {
+                    return this.transformTitleStr(config.CONTACT_MESSAGE, message.talker().payload.alias, message.talker().payload.name, '')
+                }
+            }
+        } else {
+            if (room) {
+                return this.transformTitleStr(config.ROOM_MESSAGE_GROUP, message.talker().payload.alias, message.talker().payload.name, room.payload.topic)
+            } else {
+                if (message.talker().type() === PUPPET.types.Contact.Official) {
+                    // 公众号
+                    return this.transformTitleStr(config.OFFICIAL_MESSAGE_GROUP, message.talker().payload.alias, message.talker().payload.name, '')
+                } else {
+                    return this.transformTitleStr(config.CONTACT_MESSAGE_GROUP, message.talker().payload.alias, message.talker().payload.name, '')
+                }
+            }
+        }
+    }
 
-        // 将占位符替换回原始的 <a> 标签
-        // aTags.forEach((aTag, offset) => {
-        //     placeholderStr = placeholderStr.replace(`__PLACEHOLDER_${offset}__`, aTag)
-        // })
+    private escapeHTML(str: string) {
+        let placeholderStr = str
 
         // 查找和处理分隔线
         const splitLineNumber = placeholderStr.search(/\n- - - - - - - - - - - - - - -\n/)
@@ -66,23 +87,21 @@ export class SimpleMessageSender implements MessageSender {
         return new SimpleMessageSender().sendMessage(simpleMessage)
     }
 
-}
+    static transformTitleStr(inputString: string, alias: string, name: string, topic: string): string {
+        const alias_first = alias || name
+        inputString = inputString.replace(this.NAME_REGEXP, (match, p1) => {
+            if (p1.includes('alias')){
+                return alias ? p1.replaceAll('alias',alias) : ''
+            }else if (p1.includes('name')){
+                return name ? p1.replaceAll('name',name) : ''
+            }else if (p1.includes('topic')){
+                return topic ? p1.replaceAll('topic',topic) : ''
+            }else {
+                return match
+            }
+        })
 
+        return inputString.replace(this.ALIAS_FIRST_REGEXP, alias_first)
+    }
 
-export class BotHelpText {
-    static help = `
-                        **欢迎使用微信消息转发bot**
-                            
-                    [本项目](https://github.com/finalpi/wechat2tg)是基于Wechaty和wechat4u项目开发
-                  **本项目仅用于技术研究和学习，不得用于非法用途。**
-
-1\\. 使用 /start 或 /login 命令来启动微信客户端实例，使用 /login 命令进行扫码登录
-2\\. 使用 /user 或者 /room 命令搜索联系人或者群聊（可以加名称或者备注,例如"/user 张"可以搜索名称或备注含有"张"的用户）
-3\\. 每次登陆后需要等待联系人列表加载才能选择人和群发送信息
-4\\. /settings 打开设置
-5\\. 当前回复的用户或者群会被pin
-6\\. 回复转发的消息能直接直接转发到对应的人或者群（暂时不支持回复回复的消息，而且不改变当前正在回复的用户）
-7\\. 由于使用的web协议的微信协议所以可能会**封号**（目前我没遇到过），使用前请三思 
-8\\. 更多功能请查看 github 仓库（For more features, please check the GitHub repository README）
-`
 }

@@ -17,6 +17,51 @@
 
 ## 安装
 
+### docker-compose中使用
+创建`docker-compose.yml`文件:
+```yaml
+version: '3'
+
+services:
+   wechat2tg:
+      image: finalpi/wechat2tg:latest
+      container_name: wx2tg
+      volumes:
+         - ./config:/app/storage
+         - ./save-files:/app/save-files # 保存文件夹挂载后表情不需要重新转换
+      # use env file or you can jest set environment here
+      env_file: ".env"
+      environment:
+         BOT_TOKEN: ''
+         # PROXY_HOST: ''
+         # PROXY_PORT: ''
+         # 代理类型:socks5,http,https
+         # PROXY_PROTOCOL: 'socks5'
+         # 用户名密码可选
+         # PROXY_USERNAME: ''
+         # PROXY_PASSWORD: ''
+         # 发送大文件所需Telegram API配置(可选)
+         # API_ID: ''
+         # API_HASH: ''
+         # 群消息格式
+         ROOM_MESSAGE: '<i>🌐#[topic]</i> ---- <b>👤#[(alias)] #[name]: </b>'
+         # 公众号消息格式
+         OFFICIAL_MESSAGE: '<b>📣#[name]: </b>'
+         # 联系人消息格式
+         CONTACT_MESSAGE: '<b>👤#[alias_first]: </b>'
+         # 群消息格式(群组下)
+         ROOM_MESSAGE_GROUP: '<b>👤#[(alias)] #[name]: </b>'
+         # 公众号消息格式(群组下)
+         OFFICIAL_MESSAGE_GROUP: '<b>📣#[name]: </b>'
+         # 联系人消息格式(群组下)
+         CONTACT_MESSAGE_GROUP: '<b>👤#[alias_first]: </b>'
+      restart: unless-stopped
+```
+运行
+```shell
+docker-compose up -d
+```
+
 ### Node.js v16以上的版本中使用
 
 1. 安装依赖：
@@ -40,36 +85,6 @@
 docker run -itd --env BOT_TOKEN="" --env PROXY_HOST="" --env PROXY_PORT="" --env PROXY_USERNAME="" --env PROXY_PASSWORD="" --env PROXY_PROTOCOL="socks5" finalpi/wechat2tg:latest
 ```
 
-### docker-compose中使用
-创建`docker-compose.yml`文件:
-```yaml
-version: '3'
-
-services:
-  wechat2tg:
-    image: finalpi/wechat2tg:latest
-    container_name: wx2tg
-    volumes:
-      - ./config:/app/storage
-    environment:
-      - BOT_TOKEN=
-      # - PROXY_HOST=
-      # - PROXY_PORT=
-      # 代理类型:socks5,http,https
-      # - PROXY_PROTOCOL=socks5
-      # 用户名密码可选
-      # - PROXY_USERNAME=
-      # - PROXY_PASSWORD=
-      # Telegram API配置(可选:发送大文件,自动创建group分组所需)
-      # - API_ID=
-      # - API_HASH=
-    restart: unless-stopped
-
-```
-运行
-```shell
-docker-compose up -d
-```
 ## BOT命令说明
 
 `/login`:获取登录二维码
@@ -150,6 +165,20 @@ PROXY_PASSWORD=
 2. 关闭掉机器人的隐私模式,打开BotFather,输入`/mybots`,选择你的bot,点击`Bot Settings`-`Group Privacy`-`Turn off`,出现`Privacy mode is disabled for xxx`就说明关闭成功了.
 3. 用`/autocg`命令开启自动分组模式,按提示登录Telegram即可
 
+### 自定义消息模板
+
+如果你想修改消息发送者的格式,你可以修改docker中的环境变量或者.env文件
+
+自定义消息模板占位符:
+
+`#[alias]`:联系人备注
+
+`#[name]`:联系人昵称
+
+`#[topic]`:群聊昵称
+
+`#[alias_first]`:备注优先,如果没有备注就显示联系人的昵称
+
 ## License
 
 [MIT](LICENSE)
@@ -158,4 +187,4 @@ PROXY_PASSWORD=
 
 感谢Jetbrains对本项目的支持
 
-[![Jetbrains](https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.png)](https://www.jetbrains.com)
+[<img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.png" width="200" height="200">](https://www.jetbrains.com)

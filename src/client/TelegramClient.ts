@@ -2,9 +2,12 @@ import {config} from '../config'
 import {StoreSession} from 'telegram/sessions'
 import {TelegramClient as GramClient} from 'telegram'
 import {TelegramBotClient} from './TelegramBotClient'
-import * as authMethods from 'telegram/client/auth'
 import os from 'node:os'
 import BaseClient from '../base/BaseClient'
+import {DeletedMessage} from 'telegram/events/DeletedMessage'
+import {MessageUtils} from '../utils/MessageUtils'
+import {NewMessage} from 'telegram/events'
+import {MessageService} from '../service/MessageService'
 
 export class TelegramClient extends BaseClient {
     get client() {
@@ -55,7 +58,16 @@ export class TelegramClient extends BaseClient {
 
             this._client.start({
                 botAuthToken: config.BOT_TOKEN,
+            }).then(async () => {
+                this._client?.addEventHandler(async event => {
+                    // let id = event.peer?.id
+                    // this.logInfo(`Deleted message: ${event.inputChat}`)
+                    for (const deletedId of event.deletedIds) {
+                        MessageUtils.undoMessage(deletedId)
+                    }
+                }, new DeletedMessage({}))
             })
+
         }
     }
 
@@ -65,6 +77,15 @@ export class TelegramClient extends BaseClient {
         if (messages) {
             return messages[0].downloadMedia()
         }
+    }
+
+    // TODO: 请在上层接口定义 (暂时是具体实现)
+    public async editMessage(inputPeer: { chat_id: number, msg_id: number }, messageText: string) {
+        const inputPeerChannelFromMessage = await this?.client?.getInputEntity(inputPeer.chat_id) || inputPeer.chat_id
+        return this?.client?.editMessage(
+            inputPeerChannelFromMessage,
+            {message: inputPeer.msg_id, text: messageText})
+
     }
 
 }

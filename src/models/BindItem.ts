@@ -31,3 +31,7 @@ export type ChatMapping = {
     signature?: string
     city?: string
 }
+
+export class BindItemConstants {
+    static readonly OFFICIAL_BIND_ID = '##official_bind_id'
+}
