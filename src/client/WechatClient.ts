@@ -14,7 +14,7 @@ import {
 import {TelegramBotClient} from './TelegramBotClient'
 import {EmojiConverter} from '../utils/EmojiUtils'
 import {MemberCacheType} from '../models/TgCache'
-import {MessageSender, SimpleMessage, SimpleMessageSender} from '../models/Message'
+import {SimpleMessage, SimpleMessageSender} from '../models/Message'
 import {TalkerEntity} from '../models/TalkerCache'
 import {UniqueIdGenerator} from '../utils/IdUtils'
 import {NotionMode, VariableType} from '../models/Settings'
@@ -29,7 +29,7 @@ import TelegramError from 'telegraf/src/core/network/error'
 import BaseClient from '../base/BaseClient'
 import {MessageService} from '../service/MessageService'
 import {CacheHelper} from '../utils/CacheHelper'
-import {BindItemConstants} from '../models/BindItem'
+import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper'
 
 
 export class WeChatClient extends BaseClient {
@@ -82,6 +82,8 @@ export class WeChatClient extends BaseClient {
     private _friendShipList: FriendshipItem[] = []
     private loadMsg: number | undefined
     private readyCount = 0
+
+    private sendQueueHelper: SimpleMessageSendQueueHelper
 
     public get contactMap(): Map<number, Set<ContactItem>> | undefined {
         return this._contactMap
@@ -151,6 +153,13 @@ export class WeChatClient extends BaseClient {
         return this._client
     }
 
+    public addMessage(sayable: MessageInterface | ContactInterface | RoomInterface, msg: string | FileBox, extra: {
+        msg_id: number,
+        chat_id: number
+    }): void {
+        this.sendQueueHelper.addMessage(sayable, msg, extra)
+    }
+
     // TODO: 请在接口中定义方法
     public sendMessage(sayable: MessageInterface | ContactInterface | RoomInterface, msg: string | FileBox, extra: {
         msg_id: number,
@@ -167,6 +176,7 @@ export class WeChatClient extends BaseClient {
             type: msg instanceof FileBox ? 0 : 7,
             sender_id: sayable.id,
         })
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
         return new Promise((resolve, reject) => {
             sayable.say(msg).then(msg => {
                 // 保存到undo消息缓存
@@ -243,6 +253,8 @@ export class WeChatClient extends BaseClient {
             await this._client.start().then(() => {
                 this._started = true
                 this.logInfo('Wechat client start!')
+
+                this.sendQueueHelper = new SimpleMessageSendQueueHelper(this.sendMessage.bind(this), 500)
             })
         } else {
             this.logInfo('Wechat client already started!')
@@ -575,7 +587,7 @@ export class WeChatClient extends BaseClient {
                 }
             }
         }
-        let identityStr = SimpleMessageSender.getTitle(message,bindItem ? true : false)
+        let identityStr = SimpleMessageSender.getTitle(message, bindItem ? true : false)
         const sendMessageBody: SimpleMessage = {
             sender: showSender,
             body: `${this.t('wechat.getOne')} ${this.t('wechat.messageType.unknown')}`,

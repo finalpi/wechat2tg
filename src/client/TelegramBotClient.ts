@@ -1247,7 +1247,7 @@ export class TelegramBotClient extends BaseClient {
                             })
                             return
                         }
-                        this.weChatClient.sendMessage(message, text, {
+                        this.weChatClient.addMessage(message, text, {
                             chat_id: chatId,
                             msg_id: msgId
                         })
@@ -1263,7 +1263,7 @@ export class TelegramBotClient extends BaseClient {
                     if (bindItem.type === 0) {
                         const contact = this.getContactByBindItem(bindItem)
                         if (contact) {
-                            this.weChatClient.sendMessage(contact, text, {
+                            this.weChatClient.addMessage(contact, text, {
                                 chat_id: chatId,
                                 msg_id: msgId
                             })
@@ -1271,7 +1271,7 @@ export class TelegramBotClient extends BaseClient {
                     } else {
                         const room = this.getRoomByBindItem(bindItem)
                         if (room) {
-                            this.weChatClient.sendMessage(room, text, {
+                            this.weChatClient.addMessage(room, text, {
                                 chat_id: chatId,
                                 msg_id: msgId
                             })
@@ -1289,7 +1289,7 @@ export class TelegramBotClient extends BaseClient {
 
             // 当前有回复的'个人用户' 并且是选择了用户的情况下
             if (this._flagPinMessageType === 'user' && this._currentSelectContact) {
-                this.weChatClient.sendMessage(this._currentSelectContact, text, {
+                this.weChatClient.addMessage(this._currentSelectContact, text, {
                     chat_id: chatId,
                     msg_id: msgId
                 })
@@ -1298,7 +1298,7 @@ export class TelegramBotClient extends BaseClient {
 
             // 当前有回复的'群' 并且是选择了群的情况下
             if (this._flagPinMessageType === 'room' && this.selectRoom) {
-                this.weChatClient.sendMessage(this.selectRoom, text, {
+                this.weChatClient.addMessage(this.selectRoom, text, {
                     chat_id: chatId,
                     msg_id: msgId
                 })
@@ -1659,7 +1659,7 @@ export class TelegramBotClient extends BaseClient {
                             })
                             return
                         }
-                        this.weChatClient.sendMessage(message, fileBox, {
+                        this.weChatClient.addMessage(message, fileBox, {
                             chat_id: ctx.chat.id,
                             msg_id: ctx.message.message_id
                         })
@@ -1676,7 +1676,7 @@ export class TelegramBotClient extends BaseClient {
                         const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
                         individual?.forEach(value => {
                             if (value.id === bindItem.bind_id) {
-                                this.weChatClient.sendMessage(value.contact, fileBox, {
+                                this.weChatClient.addMessage(value.contact, fileBox, {
                                     chat_id: ctx.chat.id,
                                     msg_id: ctx.message.message_id
                                 })
@@ -1687,7 +1687,7 @@ export class TelegramBotClient extends BaseClient {
                         if (!findItem) {
                             official?.forEach(value => {
                                 if (value.id === bindItem.bind_id) {
-                                    this.weChatClient.sendMessage(value.contact, fileBox, {
+                                    this.weChatClient.addMessage(value.contact, fileBox, {
                                         chat_id: ctx.chat.id,
                                         msg_id: ctx.message.message_id
                                     })
@@ -1698,7 +1698,7 @@ export class TelegramBotClient extends BaseClient {
                     } else {
                         const room = this.weChatClient.roomList.find(value => value.id === bindItem.bind_id)
                         if (room) {
-                            this.weChatClient.sendMessage(room.room, fileBox, {
+                            this.weChatClient.addMessage(room.room, fileBox, {
                                 chat_id: ctx.chat.id,
                                 msg_id: ctx.message.message_id
                             })
@@ -1714,14 +1714,14 @@ export class TelegramBotClient extends BaseClient {
             } else {
                 if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
                     if (this._currentSelectContact) {
-                        this.weChatClient.sendMessage(this._currentSelectContact, fileBox, {
+                        this.weChatClient.addMessage(this._currentSelectContact, fileBox, {
                             chat_id: ctx.chat.id,
                             msg_id: ctx.message.message_id
                         })
                     }
                 } else {
                     if (this.selectRoom) {
-                        this.weChatClient.sendMessage(this.selectRoom, fileBox, {
+                        this.weChatClient.addMessage(this.selectRoom, fileBox, {
                             chat_id: ctx.chat.id,
                             msg_id: ctx.message.message_id
                         })
@@ -2258,17 +2258,18 @@ export class TelegramBotClient extends BaseClient {
                         })
                         return
                     }
-                    this.weChatClient.sendMessage(message, fileBox, {
+                    this.weChatClient.addMessage(message, fileBox, {
                         chat_id: ctx.chat.id,
                         msg_id: ctx.message.message_id
-                    }).then(msg => {
-                        if (fileBox.type === FileBoxType.File && fileLink) {
-                            FileUtils.deleteFile(fileLink)
-                        }
                     })
+                    //     .then(msg => {
+                    //     if (fileBox.type === FileBoxType.File && fileLink) {
+                    //         FileUtils.deleteFile(fileLink)
+                    //     }
+                    // })
                     const text = ctx.message.caption
                     if (text) {
-                        this.weChatClient.sendMessage(message, text, {
+                        this.weChatClient.addMessage(message, text, {
                             chat_id: ctx.chat.id,
                             msg_id: ctx.message.message_id
                         })
@@ -2284,17 +2285,18 @@ export class TelegramBotClient extends BaseClient {
                 if (bindItem.type === 0) {
                     const contact = this.getContactByBindItem(bindItem)
                     if (contact) {
-                        this.weChatClient.sendMessage(contact, fileBox, {
+                        this.weChatClient.addMessage(contact, fileBox, {
                             chat_id: ctx.chat.id,
                             msg_id: ctx.message.message_id
-                        }).then(msg => {
-                            if (fileBox.type === FileBoxType.File && fileLink) {
-                                FileUtils.deleteFile(fileLink)
-                            }
                         })
+                        //     .then(msg => {
+                        //     if (fileBox.type === FileBoxType.File && fileLink) {
+                        //         FileUtils.deleteFile(fileLink)
+                        //     }
+                        // })
                         const text = ctx.message.caption
                         if (text) {
-                            this.weChatClient.sendMessage(contact, text, {
+                            this.weChatClient.addMessage(contact, text, {
                                 chat_id: ctx.chat.id,
                                 msg_id: ctx.message.message_id
                             })
@@ -2303,17 +2305,18 @@ export class TelegramBotClient extends BaseClient {
                 } else {
                     const room = this.getRoomByBindItem(bindItem)
                     if (room) {
-                        this.weChatClient.sendMessage(room, fileBox, {
+                        this.weChatClient.addMessage(room, fileBox, {
                             chat_id: ctx.chat.id,
                             msg_id: ctx.message.message_id
-                        }).then(msg => {
-                            if (fileBox.type === FileBoxType.File && fileLink) {
-                                FileUtils.deleteFile(fileLink)
-                            }
                         })
+                        //     .then(msg => {
+                        //     if (fileBox.type === FileBoxType.File && fileLink) {
+                        //         FileUtils.deleteFile(fileLink)
+                        //     }
+                        // })
                         const text = ctx.message.caption
                         if (text) {
-                            this.weChatClient.sendMessage(room, text, {
+                            this.weChatClient.addMessage(room, text, {
                                 chat_id: ctx.chat.id,
                                 msg_id: ctx.message.message_id
                             })
@@ -2331,17 +2334,18 @@ export class TelegramBotClient extends BaseClient {
         }
         if (this._flagPinMessageType && this._flagPinMessageType === 'user') {
             if (this._currentSelectContact) {
-                this.weChatClient.sendMessage(this._currentSelectContact, fileBox, {
+                this.weChatClient.addMessage(this._currentSelectContact, fileBox, {
                     chat_id: ctx.chat.id,
                     msg_id: ctx.message.message_id
-                }).then(msg => {
-                    if (fileBox.type === FileBoxType.File && fileLink) {
-                        FileUtils.deleteFile(fileLink)
-                    }
                 })
+                //     .then(msg => {
+                //     if (fileBox.type === FileBoxType.File && fileLink) {
+                //         FileUtils.deleteFile(fileLink)
+                //     }
+                // })
                 const text = ctx.message.caption
                 if (text) {
-                    this.weChatClient.sendMessage(this._currentSelectContact, text, {
+                    this.weChatClient.addMessage(this._currentSelectContact, text, {
                         chat_id: ctx.chat.id,
                         msg_id: ctx.message.message_id
                     })
@@ -2349,17 +2353,18 @@ export class TelegramBotClient extends BaseClient {
             }
         } else {
             if (this.selectRoom) {
-                this.weChatClient.sendMessage(this.selectRoom, fileBox, {
+                this.weChatClient.addMessage(this.selectRoom, fileBox, {
                     chat_id: ctx.chat.id,
                     msg_id: ctx.message.message_id
-                }).then(msg => {
-                    if (fileBox.type === FileBoxType.File && fileLink) {
-                        FileUtils.deleteFile(fileLink)
-                    }
                 })
+                //     .then(msg => {
+                //     if (fileBox.type === FileBoxType.File && fileLink) {
+                //         FileUtils.deleteFile(fileLink)
+                //     }
+                // })
                 const text = ctx.message.caption
                 if (text) {
-                    this.weChatClient.sendMessage(this.selectRoom, text, {
+                    this.weChatClient.addMessage(this.selectRoom, text, {
                         chat_id: ctx.chat.id,
                         msg_id: ctx.message.message_id
                     })
