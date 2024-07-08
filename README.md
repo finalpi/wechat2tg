@@ -53,7 +53,7 @@ services:
          # Contact message format
          CONTACT_MESSAGE: '<b>👤#[alias_first]: </b>'
          # Group message format (under group context)
-         ROOM_MESSAGE_GROUP: '<b>👤[#[alias]] #[name]: </b>'
+         ROOM_MESSAGE_GROUP: '<b>👤#[(alias)] #[name]: </b>'
          # Official account message format (under group context)
          OFFICIAL_MESSAGE_GROUP: '<b>📣#[name]: </b>'
          # Contact message format (under group context)

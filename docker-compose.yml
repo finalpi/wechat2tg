@@ -28,7 +28,7 @@ services:
       # 联系人消息格式
       CONTACT_MESSAGE: '<b>👤#[alias_first]: </b>'
       # 群消息格式(群组下)
-      ROOM_MESSAGE_GROUP: '<b>👤[#[alias]] #[name]: </b>'
+      ROOM_MESSAGE_GROUP: '<b>👤#[(alias)] #[name]: </b>'
       # 公众号消息格式(群组下)
       OFFICIAL_MESSAGE_GROUP: '<b>📣#[name]: </b>'
       # 联系人消息格式(群组下)
