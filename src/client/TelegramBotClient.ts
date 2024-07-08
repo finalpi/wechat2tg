@@ -1513,7 +1513,7 @@ export class TelegramBotClient extends BaseClient {
                 }),
             password: async (hint?: string) =>
                 new Promise((resolve) => {
-                    this.bot.telegram.sendMessage(this.chatId, `请输入你的二步验证密码${hint ? '\n密码提示：' + hint : ''}`).then(res => {
+                    this.bot.telegram.sendMessage(this.chatId, this.t('common.tgLoginInputPassword')).then(res => {
                         this.waitInputCommand = 'password'
                         const intervalId = setInterval(() => {
                             if (this.password) {
@@ -1528,7 +1528,7 @@ export class TelegramBotClient extends BaseClient {
                 }),
             phoneCode: async (isCodeViaApp?) =>
                 new Promise((resolve) => {
-                    this.bot.telegram.sendMessage(this.chatId, `请输入你${isCodeViaApp ? ' Telegram APP 中' : '手机上'}收到的验证码:_ _ _ _ _\n`, {
+                    this.bot.telegram.sendMessage(this.chatId, this.t('common.tgLoginVerifyCode'), {
                         reply_markup: {
                             inline_keyboard: [
                                 [
@@ -1978,7 +1978,7 @@ export class TelegramBotClient extends BaseClient {
         const chatInfo = await this._bot.telegram.getChat(this.chatId)
         if (chatInfo.pinned_message) {
             this.pinnedMessageId = chatInfo.pinned_message.message_id
-            this._bot.telegram.editMessageText(this.chatId, this.pinnedMessageId, undefined, '当前无回复用户').then((res) => {
+            this._bot.telegram.editMessageText(this.chatId, this.pinnedMessageId, undefined, this.t('common.emptyReply')).then((res) => {
                 if (typeof res !== 'boolean') {
                     this._bot.telegram.pinChatMessage(this._chatId, res.message_id)
                 }
@@ -1987,7 +1987,7 @@ export class TelegramBotClient extends BaseClient {
                 if (e.response.error_code === 400) {
                     return
                 }
-                this._bot.telegram.sendMessage(this._chatId, '当前无回复用户').then(msg => {
+                this._bot.telegram.sendMessage(this._chatId, this.t('common.emptyReply')).then(msg => {
                     this._bot.telegram.pinChatMessage(this._chatId, msg.message_id).then(() => {
                         this.pinnedMessageId = msg.message_id
                     })
@@ -1995,7 +1995,7 @@ export class TelegramBotClient extends BaseClient {
             })
         } else {
             // 发送消息并且pin
-            this._bot.telegram.sendMessage(this._chatId, '当前无回复用户').then(msg => {
+            this._bot.telegram.sendMessage(this._chatId, this.t('common.emptyReply')).then(msg => {
                 this._bot.telegram.pinChatMessage(this._chatId, msg.message_id)
                 this.pinnedMessageId = msg.message_id
             })

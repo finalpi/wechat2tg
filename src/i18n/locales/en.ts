@@ -117,7 +117,11 @@ const en = {
         sendFailFailMsg: 'File send failed, {0}',
         saveOrgFileError: 'Failed to save the original file',
         emptyFile: 'The file is empty',
-        fileLarge: 'The file is too large (Telegram limits to 20MB)'
+        fileLarge: 'The file is too large (Telegram limits to 20MB)',
+        tgLoginSuccess: 'TG login successful!',
+        tgLoginInputPassword:'Please enter your two-step verification password:',
+        tgLoginVerifyCode: 'Please enter the verification code you received:_ _ _ _ _\n',
+        emptyReply: 'There are currently no reply users',
     },
     wechat: {
         requestAddFriend: 'Request to add you as a friend:',

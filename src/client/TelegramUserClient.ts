@@ -62,7 +62,7 @@ export class TelegramUserClient extends TelegramClient {
                         for (const bindItem of bindItems) {
                             await setupServiceImpl.addToFolder(bindItem.chat_id)
                         }
-                        this.telegramBotClient.bot.telegram.sendMessage(this.telegramBotClient.chatId, 'TG登录成功!').then(msg => {
+                        this.telegramBotClient.bot.telegram.sendMessage(this.telegramBotClient.chatId, this.t('common.tgLoginSuccess')).then(msg => {
                             setTimeout(() => {
                                 this.telegramBotClient.bot.telegram.deleteMessage(this.telegramBotClient.chatId, msg.message_id)
                             }, 10000)

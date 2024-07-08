@@ -28,7 +28,7 @@ export class SimpleMessageSender implements MessageSender {
 
     }
 
-    public static NAME_REGEXP = new RegExp(/#\[(alias|name|topic)]/, 'g')
+    public static NAME_REGEXP = new RegExp(/#\[(.*?)\]/, 'g')
     public static ALIAS_FIRST_REGEXP = new RegExp(/#\[alias_first]/, 'g')
 
 
@@ -90,20 +90,18 @@ export class SimpleMessageSender implements MessageSender {
     static transformTitleStr(inputString: string, alias: string, name: string, topic: string): string {
         const alias_first = alias || name
         inputString = inputString.replace(this.NAME_REGEXP, (match, p1) => {
-            switch (p1) {
-                case 'alias':
-                    return alias || '$EMP_TEMP_VAR$'
-                case 'name':
-                    return name || '$EMP_TEMP_VAR$'
-                case 'topic':
-                    return topic || '$EMP_TEMP_VAR$'
-                default:
-                    return match || '$EMP_TEMP_VAR$'
+            if (p1.includes('alias')){
+                return alias ? p1.replaceAll('alias',alias) : ''
+            }else if (p1.includes('name')){
+                return name ? p1.replaceAll('name',name) : ''
+            }else if (p1.includes('topic')){
+                return topic ? p1.replaceAll('topic',topic) : ''
+            }else {
+                return match
             }
         })
 
-        return inputString.replace('[$EMP_TEMP_VAR$]', '')
-            .replace(this.ALIAS_FIRST_REGEXP, alias_first)
+        return inputString.replace(this.ALIAS_FIRST_REGEXP, alias_first)
     }
 
 }

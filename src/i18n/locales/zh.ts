@@ -118,6 +118,10 @@ const zh = {
         saveOrgFileError: '保存原始文件失败',
         emptyFile: '文件为空',
         fileLarge: '文件过大(telegram限制20Mb)',
+        tgLoginSuccess: 'TG登录成功!',
+        tgLoginInputPassword: '请输入你的二步验证密码:',
+        tgLoginVerifyCode: '请输入你收到的验证码:_ _ _ _ _\n',
+        emptyReply: '当前无回复用户',
     },
     wechat: {
         requestAddFriend: '请求添加您为好友:',

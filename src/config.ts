@@ -17,8 +17,8 @@ export const config = {
 	APP_NAME: process.env.APP_NAME?.toString() || 'wechat2Tg' ,
 	CONTACT_MESSAGE: process.env.CONTACT_MESSAGE?.toString() || '<b>👤#[alias_first]: </b>' ,
 	OFFICIAL_MESSAGE: process.env.OFFICIAL_MESSAGE?.toString() || '<b>📣#[name]: </b>' ,
-	ROOM_MESSAGE: process.env.ROOM_MESSAGE?.toString() || '<i>🌐#[topic]</i> ---- <b>👤[#[alias]] #[name]: </b>' ,
+	ROOM_MESSAGE: process.env.ROOM_MESSAGE?.toString() || '<i>🌐#[topic]</i> ---- <b>👤#[(alias)] #[name]: </b>' ,
 	CONTACT_MESSAGE_GROUP: process.env.CONTACT_MESSAGE_GROUP?.toString() || '<b>👤#[alias_first]: </b>' ,
 	OFFICIAL_MESSAGE_GROUP: process.env.OFFICIAL_MESSAGE_GROUP?.toString() || '<b>📣#[name]: </b>' ,
-	ROOM_MESSAGE_GROUP: process.env.ROOM_MESSAGE_GROUP?.toString() || '<b>👤[#[alias]] #[name]: </b>' ,
+	ROOM_MESSAGE_GROUP: process.env.ROOM_MESSAGE_GROUP?.toString() || '<b>👤#[(alias)] #[name]: </b>' ,
 }
