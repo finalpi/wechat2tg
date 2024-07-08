@@ -979,7 +979,7 @@ export class WeChatClient extends BaseClient {
     }
 
     private async sendFileToTg(message: MessageInterface, identityStr: string, tgMessage: SimpleMessage) {
-        const messageType = message.type()
+        let messageType = message.type()
         message.toFileBox().then(fBox => {
             // 配置了tg api尝试发送大文件
             if (this.sentMessageWhenFileToLage(fBox, {
@@ -1029,6 +1029,9 @@ export class WeChatClient extends BaseClient {
                         case PUPPET.types.Message.Attachment:
                             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                             // @ts-ignore
+                            if (fileName.endsWith('.gif')) {
+                                messageType = PUPPET.types.Message.Attachment
+                            }
                             this.tgClient.bot.telegram[this.getSendTgFileMethodString(messageType)](
                                 tgMessage.chatId, {source: buff, filename: fileName}, {
                                     caption: identityStr,
