@@ -33,19 +33,11 @@ export class SimpleMessageSendQueueHelper {
             msg_id: msgId,
             tg_chat_id: tgChatId,
         }
+        this.messageQueue.push(sendMessage)
         if (this.messageQueue.length > 0) {
-            const findIndex = this.messageQueue.findIndex((value) => value.tg_chat_id === tgChatId)
-            if (findIndex !== -1) {
-                if (msgId > this.messageQueue[findIndex].msg_id) {
-                    this.messageQueue.splice(findIndex + 1, 0, sendMessage)
-                } else {
-                    this.messageQueue.splice(findIndex, 0, sendMessage)
-                }
-            } else {
-                this.messageQueue.push(sendMessage)
-            }
-        } else {
-            this.messageQueue.push(sendMessage)
+            this.messageQueue.sort((a, b) => {
+                return a.msg_id - b.msg_id
+            })
         }
     }
 
