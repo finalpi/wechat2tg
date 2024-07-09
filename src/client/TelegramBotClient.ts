@@ -30,6 +30,7 @@ import BaseClient from '../base/BaseClient'
 import {MessageService} from '../service/MessageService'
 import {MessageSender} from '../message/MessageSender'
 import {SenderFactory} from '../message/SenderFactory'
+import {LockUtil} from '../utils/LockUtil'
 
 export class TelegramBotClient extends BaseClient {
     get tgUserClient(): TelegramUserClient | undefined {
@@ -83,6 +84,7 @@ export class TelegramBotClient extends BaseClient {
     private phoneNumber: string | undefined = undefined
     private password: string | undefined = undefined
     private phoneCode = ''
+    private lock = new LockUtil()
 
     private forwardSetting: VariableContainer = new VariableContainer()
 
@@ -1220,12 +1222,14 @@ export class TelegramBotClient extends BaseClient {
                 ctx.reply(this.t('common.plzLoginWeChat'))
                 return
             }
-
+            // 获取锁
+            await this.lock.acquire()
             // 如果是回复的消息 优先回复该发送的消息
             if (replyMessageId) {
                 // 假设回复消息是撤回命令 撤回web协议获取不到消息id 放弃 更新上游代码可获取了
                 if (text === '&rm') {
                     this.undoMessage(replyMessageId, ctx)
+                    this.lock.release()
                     return
                 }
                 const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId, chatId)
@@ -1245,6 +1249,7 @@ export class TelegramBotClient extends BaseClient {
                                     message_id: msgId
                                 }
                             })
+                            this.lock.release()
                             return
                         }
                         this.weChatClient.addMessage(message, text, {
@@ -1253,6 +1258,7 @@ export class TelegramBotClient extends BaseClient {
                         })
                     })
                 }
+                this.lock.release()
                 return
             }
 
@@ -1284,6 +1290,7 @@ export class TelegramBotClient extends BaseClient {
                         }
                     })
                 }
+                this.lock.release()
                 return
             }
 
@@ -1293,6 +1300,7 @@ export class TelegramBotClient extends BaseClient {
                     chat_id: chatId,
                     msg_id: msgId
                 })
+                this.lock.release()
                 return
             }
 
@@ -1302,8 +1310,10 @@ export class TelegramBotClient extends BaseClient {
                     chat_id: chatId,
                     msg_id: msgId
                 })
+                this.lock.release()
                 return
             }
+            this.lock.release()
             return
         })
 
