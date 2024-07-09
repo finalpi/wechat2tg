@@ -157,7 +157,7 @@ export class WeChatClient extends BaseClient {
         msg_id: number,
         chat_id: number
     }): void {
-        this.sendQueueHelper.addMessageWithMsgId(extra.msg_id, extra.chat_id, sayable, msg, extra)
+        this.sendQueueHelper.addMessageWithMsgId(extra.msg_id, sayable, msg, extra)
     }
 
     // TODO: 请在接口中定义方法

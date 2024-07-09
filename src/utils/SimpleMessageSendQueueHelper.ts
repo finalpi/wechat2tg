@@ -24,29 +24,25 @@ export class SimpleMessageSendQueueHelper {
         this.messageQueue.push(sendMessage)
     }
 
-    public addMessageWithMsgId(msgId: number, tgChatId: number, ...message: any): void {
+    public addMessageWithMsgId(msgId: number, ...message: any): void {
         const sendMessage = {
             success: false,
             time: new Date(),
             message: message,
             sending: false,
             msg_id: msgId,
-            tg_chat_id: tgChatId,
         }
-        if (this.messageQueue.length > 0) {
-            const findIndex = this.messageQueue.findIndex((value) => value.tg_chat_id === tgChatId)
-            if (findIndex !== -1) {
-                if (msgId > this.messageQueue[findIndex].msg_id) {
-                    this.messageQueue.splice(findIndex + 1, 0, sendMessage)
-                } else {
-                    this.messageQueue.splice(findIndex, 0, sendMessage)
-                }
+        let left = 0
+        let right = this.messageQueue.length - 1
+        while (left <= right) {
+            const mid = left + Math.floor((right - left) / 2)
+            if (this.messageQueue[mid].msg_id < msgId) {
+                left = mid + 1
             } else {
-                this.messageQueue.push(sendMessage)
+                right = mid - 1
             }
-        } else {
-            this.messageQueue.push(sendMessage)
         }
+        this.messageQueue.splice(left, 0, sendMessage)
     }
 
     private startSend(): void {
@@ -87,5 +83,4 @@ export interface SendMessageWarps {
     time: Date,
     message: any[],
     msg_id?: number,
-    tg_chat_id?: number,
 }
