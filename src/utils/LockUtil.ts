@@ -17,7 +17,7 @@ export class LockUtil {
 
         return new Promise<void>((resolve, reject) => {
             const timer = setTimeout(() => {
-                reject(new Error('Timeout'))
+                this.release()
             }, this.timeout)
 
             this.waiting.push({

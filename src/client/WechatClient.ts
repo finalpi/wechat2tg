@@ -489,9 +489,6 @@ export class WeChatClient extends BaseClient {
         const talker = message.talker()
         const [roomEntity] = await Promise.all([message.room()])
         const messageType = message.type()
-        if (PUPPET.types.Message.Text === messageType){
-            await this.lock.acquire()
-        }
         const alias = await talker.alias()
         let showSender: string = alias ? `[${alias}] ${talker.name()}` : talker.name()
 
@@ -745,7 +742,6 @@ export class WeChatClient extends BaseClient {
                             message: message,
                             send_id: talker.id,
                         })
-                        this.lock.release()
                         return
                     }
                     // 表情转换
@@ -760,7 +756,7 @@ export class WeChatClient extends BaseClient {
                         chatId: bindItem ? bindItem.chat_id : this.tgClient.chatId,
                         message: message,
                         send_id: talker.id,
-                    }).then(()=>this.lock.release())
+                    })
                 }
             }
                 break
