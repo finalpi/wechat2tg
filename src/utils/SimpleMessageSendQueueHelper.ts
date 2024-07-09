@@ -34,12 +34,12 @@ export class SimpleMessageSendQueueHelper {
             tg_chat_id: tgChatId,
         }
         if (this.messageQueue.length > 0) {
-            const first = this.messageQueue[0]
-            if (first.tg_chat_id === tgChatId) {
-                if (msgId > first.msg_id) {
-                    this.messageQueue.push(sendMessage)
+            const findIndex = this.messageQueue.findIndex((value) => value.tg_chat_id === tgChatId)
+            if (findIndex !== -1) {
+                if (msgId > this.messageQueue[findIndex].msg_id) {
+                    this.messageQueue.splice(findIndex + 1, 0, sendMessage)
                 } else {
-                    this.messageQueue.unshift(sendMessage,)
+                    this.messageQueue.splice(findIndex, 0, sendMessage)
                 }
             } else {
                 this.messageQueue.push(sendMessage)
