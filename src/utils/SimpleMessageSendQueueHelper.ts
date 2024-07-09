@@ -16,13 +16,37 @@ export class SimpleMessageSendQueueHelper {
 
     public addMessage(...message: any): void {
         const sendMessage = {
-            msgId: new Date().getTime(),
             success: false,
             time: new Date(),
             message: message,
             sending: false,
         }
         this.messageQueue.push(sendMessage)
+    }
+
+    public addMessageWithMsgId(msgId: number, tgChatId: number, ...message: any): void {
+        const sendMessage = {
+            success: false,
+            time: new Date(),
+            message: message,
+            sending: false,
+            msg_id: msgId,
+            tg_chat_id: tgChatId,
+        }
+        if (this.messageQueue.length > 0) {
+            const first = this.messageQueue[0]
+            if (first.tg_chat_id === tgChatId) {
+                if (msgId > first.msg_id) {
+                    this.messageQueue.push(sendMessage)
+                } else {
+                    this.messageQueue.unshift(sendMessage,)
+                }
+            } else {
+                this.messageQueue.push(sendMessage)
+            }
+        } else {
+            this.messageQueue.push(sendMessage)
+        }
     }
 
     private startSend(): void {
@@ -39,8 +63,8 @@ export class SimpleMessageSendQueueHelper {
                 await this.sendFunction(...sendMessage.message).then(() => {
                     sendMessage.success = true
                     sendMessage.sending = false
-                }).catch(() => {
-                    this.sendFunction(...sendMessage.message).then(() => {
+                }).catch(async () => {
+                    await this.sendFunction(...sendMessage.message).then(() => {
                         sendMessage.success = true
                         sendMessage.sending = false
                     })
@@ -58,9 +82,10 @@ export class SimpleMessageSendQueueHelper {
 }
 
 export interface SendMessageWarps {
-    msgId: number | string,
     success: boolean,
     sending: boolean,
     time: Date,
     message: any[],
+    msg_id?: number,
+    tg_chat_id?: number,
 }
