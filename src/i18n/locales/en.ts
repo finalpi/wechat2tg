@@ -168,7 +168,7 @@ const en = {
         },
         contactFinished: 'Contacts loaded',
         fileReceivingFailed: 'Failed to receive file',
-        receivingFile: 'Receiving file...',
+        receivingFile: 'Receiving file...Please wait',
     },
     telegram: {
         btn: {
