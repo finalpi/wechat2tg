@@ -4,8 +4,8 @@ import {MessageSender} from './MessageSender'
 import {TelegramApiMessageSender} from './TelegramApiMessageSender'
 import {TelegramBotApiMessageSender} from './TelegramBotApiMessageSender'
 
-export class SenderFactory{
-    createSender(bot: GramClient|Telegraf): MessageSender{
+export class SenderFactory {
+    createSender(bot: GramClient | Telegraf): MessageSender {
         if (bot instanceof GramClient) {
             return new TelegramApiMessageSender(bot)
         } else if (bot instanceof Telegraf) {
