@@ -59,3 +59,4 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
           repository: finalpi/wechat2tg
           readme-filepath: ./README_zh.md
+          short-description: 'telegram收发微信消息'
