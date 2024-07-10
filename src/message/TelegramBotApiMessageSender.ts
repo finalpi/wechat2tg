@@ -16,7 +16,7 @@ export class TelegramBotApiMessageSender implements MessageSender {
         caption?: string;
         fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video'
     }, option?: Option): Promise<SendResult> {
-        if (file.buff && file.fileType === 'photo' && file.buff.length > 5 * 1024 * 1024){
+        if (file.buff && file.fileType === 'photo' && file.buff.length > 5 * 1024 * 1024) {
             // 大于5mb采用document方式发送
             file.fileType = 'document'
         }
@@ -79,7 +79,7 @@ export class TelegramBotApiMessageSender implements MessageSender {
                 sendParam.parse_mode = option.parse_mode
             }
         }
-        if (file.fileType === 'photo' && file.buff.length > 5 * 1024 * 1024){
+        if (file.fileType === 'photo' && file.buff.length > 5 * 1024 * 1024) {
             // 大于5mb采用document方式发送
             file.fileType = 'document'
         }
