@@ -1063,7 +1063,7 @@ export class WeChatClient extends BaseClient {
                         }
                         fBox.toBuffer().then(async buff => {
                             // 配置了 tg api 尝试发送大文件
-                            if (this.tgClient.tgClient) {
+                            if (this.tgClient.tgClient && fBox.size > 1024 * 1024 * 50) {
                                 sender = new SenderFactory().createSender(this._tgClient.tgClient.client)
                             }
 

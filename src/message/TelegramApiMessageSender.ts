@@ -23,6 +23,12 @@ export class TelegramApiMessageSender implements MessageSender {
                     sendParam.parseMode = option.parse_mode.toLowerCase()
                 }
             }
+            if (file.buff && file.fileType === 'photo' && file.buff.length > 5 * 1024 * 1024){
+                // 大于5mb采用document方式发送
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                sendParam.forceDocument = true
+            }
             if (file.buff){
                 sendParam.file = new CustomFile(file.filename, file.buff.length, '', file.buff)
             }
@@ -78,6 +84,10 @@ export class TelegramApiMessageSender implements MessageSender {
             const sendParam: uploadMethods.SendFileInterface = {
                 workers: 3,
                 file: new CustomFile(file.filename, file.buff.length, '', file.buff),
+            }
+            if (file.buff.length > 5 * 1024 * 1024){
+                // 大于5mb采用document方式发送
+                sendParam.forceDocument = true
             }
             if (option){
                 if (option.reply_id){

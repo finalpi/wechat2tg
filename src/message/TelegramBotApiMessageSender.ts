@@ -12,6 +12,10 @@ export class TelegramBotApiMessageSender implements MessageSender {
     }
 
     editFile(chatId: string | number, msgId: string | number, file: { buff?: Buffer; filename?: string; caption?: string; fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' }, option?: Option): Promise<SendResult> {
+        if (file.buff && file.fileType === 'photo' && file.buff.length > 5 * 1024 * 1024){
+            // 大于5mb采用document方式发送
+            file.fileType = 'document'
+        }
         return new Promise<SendResult>((resolve, reject) => {
             this.sender.telegram['send' + file.fileType.charAt(0).toUpperCase() + file.fileType.slice(1).toLowerCase()](chatId,{source: file.buff, filename: file.filename}).then(res => {
                 this.sender.telegram.editMessageMedia(chatId,parseInt(msgId + ''),undefined,{
@@ -66,6 +70,10 @@ export class TelegramBotApiMessageSender implements MessageSender {
             if (option.parse_mode){
                 sendParam.parse_mode = option.parse_mode
             }
+        }
+        if (file.fileType === 'photo' && file.buff.length > 5 * 1024 * 1024){
+            // 大于5mb采用document方式发送
+            file.fileType = 'document'
         }
         return new Promise<SendResult>((resolve, reject) => {
             this.sender.telegram['send' + file.fileType.charAt(0).toUpperCase() + file.fileType.slice(1)](
