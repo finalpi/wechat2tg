@@ -168,6 +168,7 @@ const zh = {
         },
         contactFinished: '联系人加载完成',
         fileReceivingFailed: '接收文件失败',
+        receivingFile: '文件接收中...',
     },
     telegram: {
         btn: {

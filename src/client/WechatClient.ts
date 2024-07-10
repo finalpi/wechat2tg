@@ -1039,7 +1039,7 @@ export class WeChatClient extends BaseClient {
             sender.sendFile(tgMessage.chatId,{
                 buff: Buffer.from('0'),
                 filename: 'tempFile',
-                caption: '文件接收中...',
+                caption: this.t('wechat.receivingFile'),
                 fileType: 'document'
             }).then(tempRes=>{
                 if (tgMessage.message && tgMessage.id) {
