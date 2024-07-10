@@ -53,6 +53,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-          repository: finalpi/wechat2tg
+          repository: finalpi/wechat2tg-dev
           readme-filepath: ./README_zh.md
           short-description: 'telegram收发微信消息'
