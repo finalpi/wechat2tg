@@ -36,7 +36,7 @@ export class LockUtil {
     // 释放锁
     release(): void {
         if (this.waiting.length > 0) {
-            const { resolve } = this.waiting.shift()!
+            const {resolve} = this.waiting.shift()!
             resolve()
         } else {
             this.isLocked = false
