@@ -58,4 +58,4 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
           repository: finalpi/wechat2tg
-          description-file: ./README_zh.md
+          readme-filepath: ./README_zh.md
