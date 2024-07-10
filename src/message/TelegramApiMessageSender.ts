@@ -1,4 +1,4 @@
-import {File, MessageSender, Option, SendResult} from './MessageSender'
+import {MessageSender, Option, SendResult} from './MessageSender'
 import {TelegramClient as GramClient} from 'telegram/client/TelegramClient'
 import * as messageMethods from 'telegram/client/messages'
 import * as uploadMethods from 'telegram/client/uploads'
@@ -10,6 +10,33 @@ export class TelegramApiMessageSender implements MessageSender {
 
     constructor(sender:GramClient) {
         this.sender = sender
+    }
+
+    async editFile(chatId: string | number, msgId: string | number, file: { buff?: Buffer; filename?: string; caption?: string; fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' }, option?: Option): Promise<SendResult> {
+        const inputPeerChannelFromMessage = await this.sender.getInputEntity(chatId) || chatId
+        return new Promise( (resolve, reject) => {
+            const sendParam: messageMethods.EditMessageParams = {
+                message: parseInt(msgId + '')
+            }
+            if (option){
+                if (option.parse_mode){
+                    sendParam.parseMode = option.parse_mode.toLowerCase()
+                }
+            }
+            if (file.buff){
+                sendParam.file = new CustomFile(file.filename, file.buff.length, '', file.buff)
+            }
+            if (file.caption){
+                sendParam.text = file.caption
+            }
+            this.sender.editMessage(inputPeerChannelFromMessage,sendParam).then(res=>{
+                resolve({
+                    message_id: res.id
+                })
+            }).catch(e=>{
+                reject(e)
+            })
+        })
     }
 
     async deleteMessage(chatId: undefined | number, msgId: number) {
@@ -28,7 +55,7 @@ export class TelegramApiMessageSender implements MessageSender {
                     sendParam.replyTo = option.reply_id
                 }
                 if (option.parse_mode){
-                    sendParam.parseMode = option.parse_mode
+                    sendParam.parseMode = option.parse_mode.toLowerCase()
                 }
             }
             this.sender.sendMessage(inputPeerChannelFromMessage,sendParam).then(res=>{
@@ -40,7 +67,12 @@ export class TelegramApiMessageSender implements MessageSender {
             })
         })
     }
-    async sendFile(chatId: string | number, file: File, option?: Option): Promise<SendResult> {
+    async sendFile(chatId: string | number, file:  {
+        buff: Buffer,
+        filename:string,
+        caption?:string,
+        fileType: 'audio' | 'video' | 'document' | 'photo' | 'voice'
+    }, option?: Option): Promise<SendResult> {
         const inputPeerChannelFromMessage = await this.sender.getInputEntity(chatId) || chatId
         return new Promise( (resolve, reject) => {
             const sendParam: uploadMethods.SendFileInterface = {
@@ -52,7 +84,7 @@ export class TelegramApiMessageSender implements MessageSender {
                     sendParam.replyTo = option.reply_id
                 }
                 if (option.parse_mode){
-                    sendParam.parseMode = option.parse_mode
+                    sendParam.parseMode = option.parse_mode.toLowerCase()
                 }
             }
             if (file.fileType === 'document'){

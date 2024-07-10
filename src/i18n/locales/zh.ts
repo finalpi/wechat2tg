@@ -166,6 +166,8 @@ const zh = {
             location: '位置',
             setMsg: '合并转发消息',
         },
+        contactFinished: '联系人加载完成',
+        fileReceivingFailed: '接收文件失败',
     },
     telegram: {
         btn: {

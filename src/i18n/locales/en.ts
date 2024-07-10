@@ -166,6 +166,8 @@ const en = {
             location: 'Location',
             setMsg: 'Forwarding combined messages',
         },
+        contactFinished: 'Contacts loaded',
+        fileReceivingFailed: 'Failed to receive file',
     },
     telegram: {
         btn: {
