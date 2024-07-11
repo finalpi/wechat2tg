@@ -2186,7 +2186,7 @@ export class TelegramBotClient extends BaseClient {
                         }
                     }).catch(err => {
                         this.logError('use telegram api download file error: ', err)
-                        ctx.reply(this.t('common.sendFailFailMsg'), {
+                        ctx.reply(this.t('common.sendFailFailMsg', err.message), {
                             reply_parameters: {
                                 message_id: ctx.message.message_id
                             }
@@ -2214,8 +2214,8 @@ export class TelegramBotClient extends BaseClient {
                     fileBox = FileBox.fromUrl(fileLink.toString(), ctx.message[fileType].file_name)
                 }
                 this.sendFile(ctx, fileBox, fileLink.toString())
-            }).catch(() => {
-                ctx.reply(this.t('common.sendFailFailMsg'), {
+            }).catch(reason => {
+                ctx.reply(this.t('common.sendFailFailMsg', reason.message), {
                     reply_parameters: {
                         message_id: ctx.message.message_id
                     }
