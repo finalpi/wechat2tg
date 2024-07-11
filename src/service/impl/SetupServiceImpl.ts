@@ -7,6 +7,7 @@ import {ContactInterface, RoomInterface} from 'wechaty/dist/esm/src/mods/impls'
 import DynamicService from '../DynamicService'
 import {TelegramUserClient} from '../../client/TelegramUserClient'
 import {TelegramClient} from '../../client/TelegramClient'
+import I18n from '../../i18n/i18n'
 
 export class SetupServiceImpl extends AbstractSqlService implements ISetupService {
     private readonly userClient: TelegramUserClient = TelegramUserClient.getInstance()
@@ -15,6 +16,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
     private readonly folderName = 'WeChat'
 
     private readonly DEFAULT_FILTER_ID = 115
+    protected i18n: I18n = I18n.grable()
 
     constructor() {
         super()
@@ -70,10 +72,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
                                 return
                             }
                             log.error('创建 TG 文件夹失败', e)
-                            this.tgBotClient.sendMessage({
-                                chatId: this.tgBotClient.chatId,
-                                body: '创建 TG 文件夹失败',
-                            })
+                            this.tgBotClient.bot.telegram.sendMessage(this.tgBotClient.chatId, this.i18n.t('common.createFolderFail'))
                         })
                     }
                 })
@@ -104,10 +103,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
                     id: id,
                     filter: dialogFilter,
                 })).catch(e => {
-                    this.tgBotClient.sendMessage({
-                        chatId: this.tgBotClient.chatId,
-                        body: '添加群组进文件夹失败'
-                    })
+                    this.tgBotClient.bot.telegram.sendMessage(this.tgBotClient.chatId, this.i18n.t('common.addGroupToFolderFail'))
                 })
             }
         }

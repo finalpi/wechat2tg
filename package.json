@@ -21,6 +21,7 @@
     "https-proxy-agent": "^7.0.4",
     "log4js": "^6.9.1",
     "lottie-converter": "^1.0.0",
+    "nodejs-snowflake": "^2.0.1",
     "qrcode": "^1.5.1",
     "simple-xml-to-json": "^1.2.2",
     "socks-proxy-agent": "^7.0.0",

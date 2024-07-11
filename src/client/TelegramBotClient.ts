@@ -23,7 +23,7 @@ import {BindItemService} from '../service/BindItemService'
 import {RoomItem} from '../models/RoomItem'
 import {ContactItem} from '../models/ContactItem'
 import {BindItem} from '../models/BindItem'
-import {UserAuthParams} from 'telegram/client/auth'
+import {start, UserAuthParams} from 'telegram/client/auth'
 import {EventEmitter} from 'node:events'
 import {TelegramUserClient} from './TelegramUserClient'
 import BaseClient from '../base/BaseClient'
@@ -31,8 +31,17 @@ import {MessageService} from '../service/MessageService'
 import {MessageSender} from '../message/MessageSender'
 import {SenderFactory} from '../message/SenderFactory'
 import {LockUtil} from '../utils/LockUtil'
+import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper'
 
 export class TelegramBotClient extends BaseClient {
+    get sendQueueHelper(): SimpleMessageSendQueueHelper {
+        return this._sendQueueHelper
+    }
+
+    set sendQueueHelper(value: SimpleMessageSendQueueHelper) {
+        this._sendQueueHelper = value
+    }
+
     get tgUserClient(): TelegramUserClient | undefined {
         return this._tgUserClient
     }
@@ -100,6 +109,7 @@ export class TelegramBotClient extends BaseClient {
     private addBlackOrWhite: any[] = []
     private telegramApiSender: MessageSender
     private telegramBotApiSender: MessageSender
+    private _sendQueueHelper: SimpleMessageSendQueueHelper
 
 
     private constructor() {
@@ -1768,51 +1778,6 @@ export class TelegramBotClient extends BaseClient {
 
     public onMessage() {
         return
-    }
-
-    public async sendMessage(message: SimpleMessage) {
-        if (message.chatId !== this.chatId) {
-            // 说明是群组消息,不加群组前缀
-            message.room = undefined
-        }
-        this.bot.telegram.sendMessage(message.chatId, SimpleMessageSender.send(message), {
-            parse_mode: 'HTML',
-            reply_parameters: message.replay_msg_id ? {
-                message_id: message.replay_msg_id
-            } : undefined
-        }).then(res => {
-            if (message.message && message.id) {
-                MessageService.getInstance().addMessage({
-                    wechat_message_id: message.id,
-                    chat_id: message.chatId ? message.chatId + '' : '',
-                    telegram_message_id: res.message_id,
-                    type: message.message.type(),
-                    msg_text: message.body + '',
-                    send_by: message.sender ? message.sender : '',
-                    create_time: new Date().getTime(),
-                    sender_id: message.send_id,
-                })
-            }
-        }).catch(e => {
-            this.logError(e.message)
-            if (e.response.error_code === 403) {
-                // group deleted
-                this.bindItemService.removeBindItemByChatId(parseInt(message.chatId + ''))
-                this.bot.telegram.sendMessage(this.chatId, SimpleMessageSender.send(message), {
-                    parse_mode: 'HTML'
-                }).then(res => {
-                    if (message.id) {
-                        this.messageMap.set(res.message_id, message.id)
-                    }
-                })
-            }
-            if (e.response.error_code === 429) {
-                // many request
-                setTimeout(() => {
-                    this.sendMessage(message)
-                }, 1000)
-            }
-        })
     }
 
     public saveMessage(tgMessageId: number, wechatMessageId: string) {
