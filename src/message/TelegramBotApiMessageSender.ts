@@ -2,6 +2,7 @@ import {MessageSender, Option, SendResult} from './MessageSender'
 import {Telegraf} from 'telegraf'
 import * as tt from 'telegraf/src/telegram-types'
 import TelegramError from 'telegraf/src/core/network/error'
+import * as buffer from 'node:buffer'
 
 export class TelegramBotApiMessageSender implements MessageSender {
     private sender: Telegraf
@@ -21,19 +22,12 @@ export class TelegramBotApiMessageSender implements MessageSender {
             file.fileType = 'document'
         }
         return new Promise<SendResult>((resolve, reject) => {
-            this.sender.telegram['send' + file.fileType.charAt(0).toUpperCase() + file.fileType.slice(1).toLowerCase()](chatId, {
-                source: file.buff,
-                filename: file.filename
-            }).then(res => {
-                this.sender.telegram.editMessageMedia(chatId, parseInt(msgId + ''), undefined, {
-                    type: file.fileType,
-                    media: res[file.fileType].file_id || res[file.fileType][0].file_id,
-                    caption: file.caption,
-                    parse_mode: option?.parse_mode
-                })
-                this.sender.telegram.deleteMessage(chatId, res.message_id)
-                resolve({message_id: msgId})
-            }).catch(e => reject(e))
+            this.sender.telegram.editMessageMedia(chatId, parseInt(msgId + ''), undefined, {
+                type: file.fileType,
+                media: {source: file.buff, filename: file.filename},
+                caption: file.caption,
+                parse_mode: option?.parse_mode
+            }, {})
         })
     }
 
