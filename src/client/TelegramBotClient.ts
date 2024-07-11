@@ -1233,13 +1233,13 @@ export class TelegramBotClient extends BaseClient {
                 return
             }
             // 获取锁
-            await this.lock.acquire()
+            // await this.lock.acquire()
             // 如果是回复的消息 优先回复该发送的消息
             if (replyMessageId) {
                 // 假设回复消息是撤回命令 撤回web协议获取不到消息id 放弃 更新上游代码可获取了
                 if (text === '&rm') {
                     this.undoMessage(replyMessageId, ctx)
-                    this.lock.release()
+                    // this.lock.release()
                     return
                 }
                 const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId, chatId)
@@ -1259,7 +1259,7 @@ export class TelegramBotClient extends BaseClient {
                                     message_id: msgId
                                 }
                             })
-                            this.lock.release()
+                            // this.lock.release()
                             return
                         }
                         this.weChatClient.addMessage(message, text, {
@@ -1268,7 +1268,7 @@ export class TelegramBotClient extends BaseClient {
                         })
                     })
                 }
-                this.lock.release()
+                // this.lock.release()
                 return
             }
 
@@ -1282,7 +1282,7 @@ export class TelegramBotClient extends BaseClient {
                                 message_id: ctx.message.message_id
                             }
                         })
-                        this.lock.release()
+                        // this.lock.release()
                         return
                     }
                     if (bindItem.type === 0) {
@@ -1309,7 +1309,7 @@ export class TelegramBotClient extends BaseClient {
                         }
                     })
                 }
-                this.lock.release()
+                // this.lock.release()
                 return
             }
 
@@ -1319,7 +1319,7 @@ export class TelegramBotClient extends BaseClient {
                     chat_id: chatId,
                     msg_id: msgId
                 })
-                this.lock.release()
+                // this.lock.release()
                 return
             }
 
@@ -1329,10 +1329,10 @@ export class TelegramBotClient extends BaseClient {
                     chat_id: chatId,
                     msg_id: msgId
                 })
-                this.lock.release()
+                // this.lock.release()
                 return
             }
-            this.lock.release()
+            // this.lock.release()
             return
         })
 

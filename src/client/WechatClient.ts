@@ -255,8 +255,8 @@ export class WeChatClient extends BaseClient {
                 this._started = true
                 this.logInfo('Wechat client start!')
 
-                this.sendQueueHelper = new SimpleMessageSendQueueHelper(this.sendMessage.bind(this), 500)
-                this.tgClient.sendQueueHelper = new SimpleMessageSendQueueHelper(this.sendMessageToTg.bind(this), 500)
+                this.sendQueueHelper = new SimpleMessageSendQueueHelper(this.sendMessage.bind(this), 1000)
+                this.tgClient.sendQueueHelper = new SimpleMessageSendQueueHelper(this.sendMessageToTg.bind(this), 1000)
             })
         } else {
             this.logInfo('Wechat client already started!')

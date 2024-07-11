@@ -7,6 +7,7 @@ export class SimpleMessageSendQueueHelper {
     private interval: number
     private messageQueue: SendMessageWarps[] = []
     private loopTime = 503
+    private processFlag = false
 
     constructor(sendFunction: (...args) => Promise<any>, interval: number) {
         this.sendFunction = sendFunction
@@ -48,11 +49,12 @@ export class SimpleMessageSendQueueHelper {
     private startSend(): void {
         setInterval(async () => {
             await this.processQueue()
-        }, this.loopTime)
+        }, this.interval)
     }
 
     private async processQueue(): Promise<void> {
-        while (this.messageQueue.length > 0) {
+        if (this.messageQueue.length > 0 && !this.processFlag) {
+            this.processFlag = true
             const sendMessage = this.messageQueue.shift()
             if (sendMessage && sendMessage.success !== true && sendMessage.sending !== true) {
                 sendMessage.sending = true
@@ -67,11 +69,12 @@ export class SimpleMessageSendQueueHelper {
                 }).finally(() => {
                     sendMessage.sending = false
                 })
-                await sleep(this.interval)
+                // await sleep(this.interval)
             } else if (!sendMessage.success && sendMessage.time.getTime() + this.interval * 7 < new Date().getTime()) {
-                await sleep(this.interval)
+                // await sleep(this.interval)
                 this.messageQueue.push(sendMessage)
             }
+            this.processFlag = false
         }
 
     }
