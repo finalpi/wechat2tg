@@ -1272,6 +1272,7 @@ export class TelegramBotClient extends BaseClient {
                                 message_id: ctx.message.message_id
                             }
                         })
+                        this.lock.release()
                         return
                     }
                     if (bindItem.type === 0) {
