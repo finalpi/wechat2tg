@@ -218,7 +218,7 @@ export class WeChatClient extends BaseClient {
             }).catch(() => {
                 if (this.tgClient.tgUserClientLogin) {
                     MessageService.getInstance().findMessageByTelegramMessageId(extra.msg_id, extra.chat_id).then(item => {
-                        if (item.telegram_user_message_id) {
+                        if (item && item.telegram_user_message_id) {
                             this.tgClient.tgClient?.editMessage({
                                 ...extra,
                                 msg_id: item.telegram_user_message_id,
