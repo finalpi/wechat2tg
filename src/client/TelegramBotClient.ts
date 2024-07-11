@@ -1266,6 +1266,14 @@ export class TelegramBotClient extends BaseClient {
             if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
                 const bindItem = await this.bindItemService.getBindItemByChatId(chatId)
                 if (bindItem) {
+                    if (!this._weChatClient.cacheMemberDone) {
+                        await ctx.reply(`${this.t('common.sendFail')},${this.t('command.user.onLoading')}`, {
+                            reply_parameters: {
+                                message_id: ctx.message.message_id
+                            }
+                        })
+                        return
+                    }
                     if (bindItem.type === 0) {
                         const contact = this.getContactByBindItem(bindItem)
                         if (contact) {
@@ -1681,6 +1689,14 @@ export class TelegramBotClient extends BaseClient {
             if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
                 const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
                 if (bindItem) {
+                    if (!this._weChatClient.cacheMemberDone) {
+                        await ctx.reply(`${this.t('common.sendFail')},${this.t('command.user.onLoading')}`, {
+                            reply_parameters: {
+                                message_id: ctx.message.message_id
+                            }
+                        })
+                        return
+                    }
                     if (bindItem.type === 0) {
                         const findItem: ContactInterface | undefined = undefined
                         const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
@@ -2292,6 +2308,14 @@ export class TelegramBotClient extends BaseClient {
         if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
             const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
             if (bindItem) {
+                if (!this._weChatClient.cacheMemberDone) {
+                    await ctx.reply(`${this.t('common.sendFail')},${this.t('command.user.onLoading')}`, {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
+                    return
+                }
                 if (bindItem.type === 0) {
                     const contact = this.getContactByBindItem(bindItem)
                     if (contact) {
@@ -2319,11 +2343,6 @@ export class TelegramBotClient extends BaseClient {
                             chat_id: ctx.chat.id,
                             msg_id: ctx.message.message_id
                         })
-                        //     .then(msg => {
-                        //     if (fileBox.type === FileBoxType.File && fileLink) {
-                        //         FileUtils.deleteFile(fileLink)
-                        //     }
-                        // })
                         const text = ctx.message.caption
                         if (text) {
                             this.weChatClient.addMessage(room, text, {
@@ -2348,11 +2367,6 @@ export class TelegramBotClient extends BaseClient {
                     chat_id: ctx.chat.id,
                     msg_id: ctx.message.message_id
                 })
-                //     .then(msg => {
-                //     if (fileBox.type === FileBoxType.File && fileLink) {
-                //         FileUtils.deleteFile(fileLink)
-                //     }
-                // })
                 const text = ctx.message.caption
                 if (text) {
                     this.weChatClient.addMessage(this._currentSelectContact, text, {
