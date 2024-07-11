@@ -27,7 +27,7 @@ export class TelegramBotApiMessageSender implements MessageSender {
                 media: {source: file.buff, filename: file.filename},
                 caption: file.caption,
                 parse_mode: option?.parse_mode
-            }, {})
+            }, {}).then(() => resolve({message_id: msgId})).catch(e => reject(e))
         })
     }
 
