@@ -1080,6 +1080,17 @@ export class WeChatClient extends BaseClient {
                             sender = new SenderFactory().createSender(this._tgClient.tgClient.client)
                         }
 
+                        if (fileName.endsWith('.gif')) {
+                            messageType = PUPPET.types.Message.Attachment
+                        }
+                        if (messageType === PUPPET.types.Message.Audio) {
+                            // 如果是语音文件 替换后缀方便直接播放
+                            if (fileName.endsWith('.sil')) {
+                                fileName = fileName.replace('.sil', '.mp3')
+                                messageType = 34
+                            }
+                        }
+
                         if (this.tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) { // 需要判断类型压缩
                             //
                             switch (messageType) {
@@ -1088,16 +1099,6 @@ export class WeChatClient extends BaseClient {
                                 case PUPPET.types.Message.Video:
                                 case PUPPET.types.Message.Emoticon:
                                 case PUPPET.types.Message.Attachment:
-                                    if (fileName.endsWith('.gif')) {
-                                        messageType = PUPPET.types.Message.Attachment
-                                    }
-                                    if (messageType === PUPPET.types.Message.Audio) {
-                                        // 如果是语音文件 替换后缀方便直接播放
-                                        if (fileName.endsWith('.sil')) {
-                                            fileName = fileName.replace('.sil', '.mp3')
-                                            messageType = 34
-                                        }
-                                    }
                                     sender.editFile(tgMessage.chatId, tempRes.message_id, {
                                         buff: buff,
                                         filename: fileName,
