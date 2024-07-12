@@ -345,7 +345,7 @@ export class TelegramBotClient extends BaseClient {
             }
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
-            if (ctx.message && !ctx.message.from.is_bot) {
+            if (ctx.chat && !ctx.chat.type.includes('group') && ctx.message && !ctx.message.from.is_bot) {
                 return ctx.reply('Sorry, you are not authorized to interact with this bot.') // 如果用户未授权，发送提示消息
             }
         })
