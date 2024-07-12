@@ -80,8 +80,9 @@ export class TelegramBotApiMessageSender implements MessageSender {
         return new Promise<SendResult>((resolve, reject) => {
             this.sender.telegram['send' + file.fileType.charAt(0).toUpperCase() + file.fileType.slice(1)](
                 chatId, {source: file.buff, filename: file.filename}, {
-                    caption: file.caption
-                }, sendParam).then((msg: { message_id: number }) => {
+                    caption: file.caption,
+                    ...sendParam
+                }).then((msg: { message_id: number }) => {
                 resolve({message_id: msg.message_id})
             }).catch((e: TelegramError) => {
                 reject(e)
