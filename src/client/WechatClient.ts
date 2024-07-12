@@ -255,8 +255,8 @@ export class WeChatClient extends BaseClient {
                 this._started = true
                 this.logInfo('Wechat client start!')
 
-                this.sendQueueHelper = new SimpleMessageSendQueueHelper(this.sendMessage.bind(this), 1000)
-                this.tgClient.sendQueueHelper = new SimpleMessageSendQueueHelper(this.sendMessageToTg.bind(this), 1000)
+                this.sendQueueHelper = new SimpleMessageSendQueueHelper(this.sendMessage.bind(this), 617)
+                this.tgClient.sendQueueHelper = new SimpleMessageSendQueueHelper(this.sendMessageToTg.bind(this), 733)
             })
         } else {
             this.logInfo('Wechat client already started!')
@@ -282,12 +282,13 @@ export class WeChatClient extends BaseClient {
     }
 
     private roomInvite(roomInvitation: RoomInvitationInterface) {
-        this.sendMessageToTg({
-            sender: this.t('wechat.unknownUser'),
-            body: this.t('wechat.roomInvite'),
-            id: roomInvitation.id,
-            chatId: this.tgClient.chatId
-        })
+        this.tgClient.sendQueueHelper.addMessageWithMsgId(Number(this.snowflakeUtil.getUniqueID()),
+            {
+                sender: this.t('wechat.unknownUser'),
+                body: this.t('wechat.roomInvite'),
+                id: roomInvitation.id,
+                chatId: this.tgClient.chatId
+            })
     }
 
     private error(error: Error) {
