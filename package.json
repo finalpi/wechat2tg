@@ -1,6 +1,6 @@
 {
   "name": "wechat2tg",
-  "version": "v1.10.0",
+  "version": "v1.1.0",
   "description": "简单的转发微信消息到Telegram",
   "main": "app.ts",
   "esModuleInterop": true,
