@@ -37,7 +37,7 @@ const zh = {
         autocg: {
             configApi: '请先配置API_ID和API_HASH',
             modelAutoCreate: '自动创建群组模式({0})',
-            inputVerificationCode:'请输入你收到的验证码:{0}'
+            inputVerificationCode: '请输入你收到的验证码:{0}'
         },
         check: {
             onLine: '微信在线',
@@ -91,7 +91,7 @@ const zh = {
             plzSelect: '请选择联系人(点击回复)',
         },
     },
-    common:{
+    common: {
         open: '开启',
         close: '关闭',
         sendSuccess: '发送成功',
@@ -122,10 +122,12 @@ const zh = {
         tgLoginInputPassword: '请输入你的二步验证密码:',
         tgLoginVerifyCode: '请输入你收到的验证码:_ _ _ _ _\n',
         emptyReply: '当前无回复用户',
+        createFolderFail: '创建 Telegram 文件夹失败',
+        addGroupToFolderFail: '添加群组进文件夹失败',
     },
     wechat: {
         requestAddFriend: '请求添加您为好友:',
-        unknownUser: '未知用户',
+        unknownUser: '未知用户:',
         plzViewOnPhone: '请在手机上查看',
         get: '收到',
         getOne: '收到一条',
@@ -166,6 +168,9 @@ const zh = {
             location: '位置',
             setMsg: '合并转发消息',
         },
+        contactFinished: '联系人加载完成',
+        fileReceivingFailed: '接收文件失败',
+        receivingFile: '文件接收中...请稍候',
     },
     telegram: {
         btn: {

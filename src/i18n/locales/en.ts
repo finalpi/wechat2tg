@@ -37,7 +37,7 @@ const en = {
         autocg: {
             configApi: 'Please configure API_ID and API_HASH first',
             modelAutoCreate: 'Auto create group mode({0})',
-            inputVerificationCode:'Please enter the verification code you received:{0}'
+            inputVerificationCode: 'Please enter the verification code you received:{0}'
         },
         check: {
             onLine: 'WeChat online',
@@ -119,13 +119,15 @@ const en = {
         emptyFile: 'The file is empty',
         fileLarge: 'The file is too large (Telegram limits to 20MB)',
         tgLoginSuccess: 'TG login successful!',
-        tgLoginInputPassword:'Please enter your two-step verification password:',
+        tgLoginInputPassword: 'Please enter your two-step verification password:',
         tgLoginVerifyCode: 'Please enter the verification code you received:_ _ _ _ _\n',
         emptyReply: 'There are currently no reply users',
+        createFolderFail: 'Failed to create Telegram folder',
+        addGroupToFolderFail: 'Failed to add group to folder',
     },
     wechat: {
         requestAddFriend: 'Request to add you as a friend:',
-        unknownUser: 'Unknown user',
+        unknownUser: 'Unknown user:',
         plzViewOnPhone: 'Please view on phone',
         get: 'Received',
         getOne: 'Received one',
@@ -166,6 +168,9 @@ const en = {
             location: 'Location',
             setMsg: 'Forwarding combined messages',
         },
+        contactFinished: 'Contacts loaded',
+        fileReceivingFailed: 'Failed to receive file',
+        receivingFile: 'Receiving file...Please wait',
     },
     telegram: {
         btn: {

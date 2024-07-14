@@ -35,7 +35,9 @@ export class SimpleMessageSender implements MessageSender {
             return simpleMessage
         } else if (simpleMessage.sender && message) {
             // 根据配置文件构建title
-            const title = SimpleMessageSender.getTitle(simpleMessage.message, simpleMessage.chatId !== TelegramBotClient.getInstance().chatId)
+            const title = simpleMessage.message ?
+                SimpleMessageSender.getTitle(simpleMessage.message, simpleMessage.chatId !== TelegramBotClient.getInstance().chatId)
+                : simpleMessage.sender
             return `${title}\n${!simpleMessage.not_escape_html ? this.escapeHTML(typeof simpleMessage.body === 'string' ? simpleMessage.body : '') : simpleMessage.body}`
         } else {
             return simpleMessage.body

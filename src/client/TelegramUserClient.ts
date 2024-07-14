@@ -44,7 +44,7 @@ export class TelegramUserClient extends TelegramClient {
                     username: config.USERNAME,
                 } : undefined,
                 autoReconnect: true,
-                maxConcurrentDownloads: 5,
+                maxConcurrentDownloads: 3,
             })
 
             // this._client.logger.setLevel(LogLevel.DEBUG)

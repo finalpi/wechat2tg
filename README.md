@@ -1,6 +1,6 @@
 # [wechat2tg](https://github.com/finalpi/wechat2tg)
 
-English | [中文](README_zh.md)
+English | [中文](https://github.com/finalpi/wechat2tg/blob/master/README_zh.md)
 
 This project is based on [wechaty](https://github.com/wechaty/wechaty) and implements a WeChat message forwarding to Telegram bot using the [puppet-wechat4u](https://github.com/wechaty/puppet-wechat4u) protocol UOS. Thus, it can circumvent the issue where some accounts are unable to log in to the WeChat web version.
 

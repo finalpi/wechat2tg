@@ -131,13 +131,6 @@ export class BindItemService extends AbstractSqlService {
                         continue
                     }
                 }
-                // 如果找不到则删除该元素
-                await this.tgBotClient.telegram.sendMessage(bindItem.chat_id, '找不到对应的绑定信息,请使用 /room 或者 /user 命令将联系人或者群组绑定').catch(e=>{
-                    if (e.response.error_code === 403 && bindItem){
-                        this.removeBindItemByChatId(bindItem.chat_id)
-                        return
-                    }
-                })
                 this.bindErr(bindItem.chat_id)
             } else {
                 let room = roomList.find(item => item.room.id === bindItem.wechat_id)
@@ -154,12 +147,12 @@ export class BindItemService extends AbstractSqlService {
                     continue
                 }
                 // 如果找不到则删除该元素
-                await this.tgBotClient.telegram.sendMessage(bindItem.chat_id, '找不到对应的绑定信息,请使用 /room 或者 /user 命令将联系人或者群组绑定').catch(e=>{
-                    if (e.response.error_code === 403 && bindItem){
-                        this.removeBindItemByChatId(bindItem.chat_id)
-                        return
-                    }
-                })
+                // await this.tgBotClient.telegram.sendMessage(bindItem.chat_id, '找不到对应的绑定信息,请使用 /room 或者 /user 命令将联系人或者群组绑定').catch(e=>{
+                //     if (e.response.error_code === 403 && bindItem){
+                //         this.removeBindItemByChatId(bindItem.chat_id)
+                //         return
+                //     }
+                // })
                 this.bindErr(bindItem.chat_id)
             }
         }
@@ -240,7 +233,7 @@ export class BindItemService extends AbstractSqlService {
                 wechatId = createGroupInterface.contact?.id ? createGroupInterface.contact?.id : ''
                 avatar = createGroupInterface.contact?.payload?.avatar ? createGroupInterface.contact?.payload?.avatar : ''
             }else {
-                name = createGroupInterface.contact?.payload?.name ? createGroupInterface.contact?.payload?.name : ''
+                name = createGroupInterface.room?.payload?.topic ? createGroupInterface.room?.payload?.topic : ''
                 wechatId = createGroupInterface.room?.id ? createGroupInterface.room?.id : ''
             }
             this.db.serialize(() => {
@@ -313,15 +306,15 @@ export class BindItemService extends AbstractSqlService {
             stmt1.finalize()
         })
 
-        this.tgBotClient.telegram.sendMessage(chatId, `绑定成功:${name}`,{disable_notification: true}).then(ctx => {
-            setTimeout(() => {
-                this.tgBotClient.telegram.deleteMessage(chatId, ctx.message_id)
-            }, 10 * 1000)
-        }).catch(e => {
-            if (e.response.error_code === 403) {
-                this.removeBindItemByChatId(chatId)
-            }
-        })
+        // this.tgBotClient.telegram.sendMessage(chatId, `绑定成功:${name}`,{disable_notification: true}).then(ctx => {
+        //     setTimeout(() => {
+        //         this.tgBotClient.telegram.deleteMessage(chatId, ctx.message_id)
+        //     }, 10 * 1000)
+        // }).catch(e => {
+        //     if (e.response.error_code === 403) {
+        //         this.removeBindItemByChatId(chatId)
+        //     }
+        // })
 
         // 创建对象
         const bindItem: BindItem = {

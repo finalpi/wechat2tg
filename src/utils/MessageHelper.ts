@@ -30,7 +30,7 @@ class TelegramMessageQueue implements IQueue<TelegramClient> {
         return new Promise((resolve) => {
             setTimeout(() => {
                 resolve('success')
-            }, Math.random() * this.timeout) // Simulate processing time
+            }, Math.random() * this.timeout)
         })
     }
 
