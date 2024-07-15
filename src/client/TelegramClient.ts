@@ -53,7 +53,7 @@ export class TelegramClient extends BaseClient {
                     username: config.USERNAME,
                 } : undefined,
                 autoReconnect: true,
-                maxConcurrentDownloads: 5,
+                maxConcurrentDownloads: 3,
             })
 
             this._client.start({

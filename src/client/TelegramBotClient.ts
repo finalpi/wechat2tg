@@ -1,7 +1,6 @@
 import {Context, Markup, NarrowedContext, session, Telegraf} from 'telegraf'
 import {WeChatClient} from './WechatClient'
 import {config} from '../config'
-import {SimpleMessage, SimpleMessageSender} from '../models/Message'
 import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from 'https-proxy-agent'
 import * as tg from 'telegraf/src/core/types/typegram'
@@ -23,7 +22,7 @@ import {BindItemService} from '../service/BindItemService'
 import {RoomItem} from '../models/RoomItem'
 import {ContactItem} from '../models/ContactItem'
 import {BindItem} from '../models/BindItem'
-import {start, UserAuthParams} from 'telegram/client/auth'
+import {UserAuthParams} from 'telegram/client/auth'
 import {EventEmitter} from 'node:events'
 import {TelegramUserClient} from './TelegramUserClient'
 import BaseClient from '../base/BaseClient'
@@ -343,9 +342,8 @@ export class TelegramBotClient extends BaseClient {
             if (ctx.chat && this._chatId === ctx.chat.id) {
                 return next() // 如果用户授权，则继续处理下一个中间件或命令
             }
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            if (ctx.chat && !ctx.chat.type.includes('group') && ctx.message && !ctx.message.from.is_bot) {
+
+            if (!ctx.chat?.type.includes('group') && ctx.message && !ctx.message.from.is_bot) {
                 return ctx.reply('Sorry, you are not authorized to interact with this bot.') // 如果用户未授权，发送提示消息
             }
         })

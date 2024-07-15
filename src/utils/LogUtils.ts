@@ -10,8 +10,8 @@ export class LogUtils {
         return log4js.configure({
             appenders: {
                 console: {type: 'console'},
-                file: {type: 'file', filename: 'logs/app.log'},
-                errorFile: {type: 'file', filename: 'logs/error.log'},
+                file: {type: 'file', filename: 'logs/app.log', maxLogSize: '2M', backups: 5},
+                errorFile: {type: 'file', filename: 'logs/error.log', maxLogSize: '2M', backups: 5},
                 logLevelFilter: {
                     type: 'logLevelFilter',
                     appender: 'errorFile',

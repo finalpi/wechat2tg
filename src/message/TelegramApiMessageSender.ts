@@ -15,7 +15,7 @@ export class TelegramApiMessageSender implements MessageSender {
         buff?: Buffer;
         filename?: string;
         caption?: string;
-        fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video'
+        fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
     }, option?: Option): Promise<SendResult> {
         const inputPeerChannelFromMessage = await this.sender.getInputEntity(chatId) || chatId
         return new Promise((resolve, reject) => {

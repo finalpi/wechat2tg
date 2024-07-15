@@ -12,7 +12,7 @@ export interface MessageSender {
         buff?: Buffer,
         filename?: string,
         caption?: string,
-        fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video'
+        fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
     }, option?: Option): Promise<SendResult>
 
     deleteMessage(chatId: undefined | number, msgId: number)
