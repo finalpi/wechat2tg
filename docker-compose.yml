@@ -7,10 +7,11 @@ services:
     volumes:
       - ./config:/app/storage
       - ./save-files:/app/save-files # 保存文件夹挂载后表情不需要重新转换
+      - ./logs:/app/logs # 日志文件夹
     # use env file or you can jest set environment here
     # env_file: ".env"
     environment:
-      BOT_TOKEN:
+      BOT_TOKEN:   # Required  必须配置
       # PROXY_HOST: ''
       # PROXY_PORT: ''
       # 代理类型:socks5,http,https

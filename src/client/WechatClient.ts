@@ -1026,8 +1026,8 @@ export class WeChatClient extends BaseClient {
             }
         }).catch(e => {
             this.logError(e.message)
+            // group deleted
             if (e.response.error_code === 403) {
-                // group deleted
                 this._tgClient.bindItemService.removeBindItemByChatId(parseInt(message.chatId + ''))
                 this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, SimpleMessageSender.send(message), {
                     parse_mode: 'HTML'
@@ -1037,11 +1037,12 @@ export class WeChatClient extends BaseClient {
                     }
                 })
             }
+            // Telegram Too Many Requests
             if (e.response.error_code === 429) {
-                // many request
                 setTimeout(() => {
-                    this.sendTextToTg(message)
-                }, 1000)
+                    this.tgClient.sendQueueHelper.addMessageWithMsgId(Number(this.snowflakeUtil.getUniqueID()),
+                        message)
+                }, e.response.parameters.retry_after * 1000 || 2000)
             }
         })
     }
@@ -1050,76 +1051,39 @@ export class WeChatClient extends BaseClient {
         // 先发送一个临时文件
         let sender = new SenderFactory().createSender(this._tgClient.bot)
         let messageType: PUPPET.types.Message | number = message.type()
-        sender.sendFile(tgMessage.chatId, {
-            buff: Buffer.from('0'),
-            filename: 'tempFile',
-            caption: this.t('wechat.receivingFile'),
-            fileType: 'document'
-        }).then(tempRes => {
+        // 语音文件无法编辑, 所以所有音频文件不进行编辑
+        if (messageType === PUPPET.types.Message.Audio) {
             if (tgMessage.message && tgMessage.id) {
-                MessageService.getInstance().addMessage({
-                    wechat_message_id: tgMessage.id,
-                    chat_id: tgMessage.chatId ? tgMessage.chatId + '' : '',
-                    telegram_message_id: parseInt(tempRes.message_id + ''),
-                    type: tgMessage.message.type(),
-                    msg_text: tgMessage.body + '',
-                    send_by: tgMessage.sender ? tgMessage.sender : '',
-                    create_time: new Date().getTime(),
-                })
+                // 语音文件特殊处理
                 message.toFileBox().then(fBox => {
                     let fileName = fBox.name
-                    // 配置了tg api尝试发送大文件
-                    if (this.sentMessageWhenFileToLage(fBox, {
-                        ...tgMessage,
-                        body: `[${this.getMessageName(messageType)}]${this.t('common.large')}, ${this.t('wechat.plzViewOnPhone')}`
-                    })) {
-                        return
+                    // 如果是语音文件 替换后缀方便直接播放
+                    if (fileName.endsWith('.sil')) {
+                        fileName = fileName.replace('.sil', '.mp3')
+                        messageType = 34
                     }
-                    fBox.toBuffer().then(async buff => {
-                        // 配置了 tg api 尝试发送大文件
-                        if (this.tgClient.tgClient && fBox.size > 1024 * 1024 * 50) {
-                            sender = new SenderFactory().createSender(this._tgClient.tgClient.client)
-                        }
-
-                        if (fileName.endsWith('.gif')) {
-                            messageType = PUPPET.types.Message.Attachment
-                        }
-                        if (messageType === PUPPET.types.Message.Audio) {
-                            // 如果是语音文件 替换后缀方便直接播放
-                            if (fileName.endsWith('.sil')) {
-                                fileName = fileName.replace('.sil', '.mp3')
-                                messageType = 34
-                            }
-                        }
-
-                        if (this.tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) { // 需要判断类型压缩
-                            //
-                            switch (messageType) {
-                                case PUPPET.types.Message.Image:
-                                case PUPPET.types.Message.Audio:
-                                case PUPPET.types.Message.Video:
-                                case PUPPET.types.Message.Emoticon:
-                                case PUPPET.types.Message.Attachment:
-                                    sender.editFile(tgMessage.chatId, tempRes.message_id, {
-                                        buff: buff,
-                                        filename: fileName,
-                                        fileType: this.getSendTgFileMethodString(messageType),
-                                        caption: identityStr
-                                    }, {parse_mode: 'HTML'}).catch(e => {
-                                        sender.sendText(tgMessage.chatId, this.t('wechat.fileReceivingFailed'), {reply_id: parseInt(tempRes.message_id + '')})
-                                    })
-                                    break
-                            }
-                        } else { // 不需要判断类型压缩 直接发送文件
-                            sender.editFile(tgMessage.chatId, tempRes.message_id, {
-                                buff: buff,
-                                filename: fileName,
-                                fileType: 'document',
-                                caption: identityStr
-                            }, {parse_mode: 'HTML'}).catch(e => {
-                                sender.sendText(tgMessage.chatId, this.t('wechat.fileReceivingFailed'), {reply_id: parseInt(tempRes.message_id + '')})
+                    fBox.toBuffer().then(buffer => {
+                        sender.sendFile(tgMessage.chatId, {
+                            buff: buffer,
+                            filename: fileName,
+                            caption: identityStr,
+                            fileType: this.getSendTgFileMethodString(messageType),
+                        }, {parse_mode: 'HTML'}).then(res => {
+                            MessageService.getInstance().addMessage({
+                                wechat_message_id: tgMessage.id,
+                                chat_id: tgMessage.chatId ? tgMessage.chatId + '' : '',
+                                telegram_message_id: parseInt(res.message_id + ''),
+                                type: tgMessage.message.type(),
+                                msg_text: tgMessage.body + '',
+                                send_by: tgMessage.sender ? tgMessage.sender : '',
+                                create_time: new Date().getTime(),
                             })
-                        }
+                        }).catch(() => {
+                            this.sendMessageToTg({
+                                ...tgMessage,
+                                body: `${this.t('wechat.get')}[${this.getMessageName(message.type())}]${this.t('common.error')}, ${this.t('wechat.plzViewOnPhone')}`
+                            })
+                        })
                     })
                 }).catch(() => {
                     this.sendMessageToTg({
@@ -1128,19 +1092,91 @@ export class WeChatClient extends BaseClient {
                     })
                 })
             }
-        }).catch(e => {
-            if (e.response.error_code === 403) {
-                this.tgClient.bindItemService.removeBindItemByChatId(tgMessage.chatId)
-                tgMessage.chatId = this.tgClient.chatId
-                this.sendMessageToTg(tgMessage, message, identityStr)
-                return
-            }
-            this.logError('send file error:', e)
-            this.sendMessageToTg({
-                ...tgMessage,
-                body: `[${this.getMessageName(messageType)}]${this.t('wechat.forwardFail')}, ${this.t('wechat.plzViewOnPhone')}`
+        } else {
+            sender.sendFile(tgMessage.chatId, {
+                buff: Buffer.from('0'),
+                filename: 'tempFile',
+                caption: this.t('wechat.receivingFile'),
+                fileType: 'document'
+            }).then(tempRes => {
+                if (tgMessage.message && tgMessage.id) {
+                    MessageService.getInstance().addMessage({
+                        wechat_message_id: tgMessage.id,
+                        chat_id: tgMessage.chatId ? tgMessage.chatId + '' : '',
+                        telegram_message_id: parseInt(tempRes.message_id + ''),
+                        type: tgMessage.message.type(),
+                        msg_text: tgMessage.body + '',
+                        send_by: tgMessage.sender ? tgMessage.sender : '',
+                        create_time: new Date().getTime(),
+                    })
+                    message.toFileBox().then(fBox => {
+                        const fileName = fBox.name
+                        // 配置了tg api尝试发送大文件
+                        if (this.sentMessageWhenFileToLage(fBox, {
+                            ...tgMessage,
+                            body: `[${this.getMessageName(messageType)}]${this.t('common.large')}, ${this.t('wechat.plzViewOnPhone')}`
+                        })) {
+                            return
+                        }
+                        fBox.toBuffer().then(async buff => {
+                            // 配置了 tg api 尝试发送大文件
+                            if (this.tgClient.tgClient && fBox.size > 1024 * 1024 * 50) {
+                                sender = new SenderFactory().createSender(this._tgClient.tgClient.client)
+                            }
+
+                            if (fileName.endsWith('.gif')) {
+                                messageType = PUPPET.types.Message.Attachment
+                            }
+                            if (this.tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) { // 需要判断类型压缩
+                                //
+                                switch (messageType) {
+                                    case PUPPET.types.Message.Image:
+                                    case PUPPET.types.Message.Audio:
+                                    case PUPPET.types.Message.Video:
+                                    case PUPPET.types.Message.Emoticon:
+                                    case PUPPET.types.Message.Attachment:
+                                        sender.editFile(tgMessage.chatId, tempRes.message_id, {
+                                            buff: buff,
+                                            filename: fileName,
+                                            fileType: this.getSendTgFileMethodString(messageType),
+                                            caption: identityStr
+                                        }, {parse_mode: 'HTML'}).catch(e => {
+                                            sender.sendText(tgMessage.chatId, this.t('wechat.fileReceivingFailed'), {reply_id: parseInt(tempRes.message_id + '')})
+                                        })
+                                        break
+                                }
+                            } else { // 不需要判断类型压缩 直接发送文件
+                                sender.editFile(tgMessage.chatId, tempRes.message_id, {
+                                    buff: buff,
+                                    filename: fileName,
+                                    fileType: 'document',
+                                    caption: identityStr
+                                }, {parse_mode: 'HTML'}).catch(e => {
+                                    sender.sendText(tgMessage.chatId, this.t('wechat.fileReceivingFailed'), {reply_id: parseInt(tempRes.message_id + '')})
+                                })
+                            }
+                        })
+                    }).catch(() => {
+                        this.sendMessageToTg({
+                            ...tgMessage,
+                            body: `${this.t('wechat.get')}[${this.getMessageName(message.type())}]${this.t('common.error')}, ${this.t('wechat.plzViewOnPhone')}`
+                        })
+                    })
+                }
+            }).catch(e => {
+                if (e.response.error_code === 403) {
+                    this.tgClient.bindItemService.removeBindItemByChatId(tgMessage.chatId)
+                    tgMessage.chatId = this.tgClient.chatId
+                    this.sendMessageToTg(tgMessage, message, identityStr)
+                    return
+                }
+                this.logError('send file error:', e)
+                this.sendMessageToTg({
+                    ...tgMessage,
+                    body: `[${this.getMessageName(messageType)}]${this.t('wechat.forwardFail')}, ${this.t('wechat.plzViewOnPhone')}`
+                })
             })
-        })
+        }
     }
 
     private getSendTgFileMethodString(messageType: number): 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice' {
