@@ -5,7 +5,7 @@ export interface MessageSender {
         buff: Buffer,
         filename: string,
         caption?: string,
-        fileType: 'audio' | 'video' | 'document' | 'photo' | 'voice'
+        fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
     }, option?: Option): Promise<SendResult>
 
     editFile(chatId: string | number, msgId: string | number, file: {

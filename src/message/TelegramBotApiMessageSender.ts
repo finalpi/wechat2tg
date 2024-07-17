@@ -60,7 +60,7 @@ export class TelegramBotApiMessageSender implements MessageSender {
         buff: Buffer,
         filename: string,
         caption?: string,
-        fileType: 'audio' | 'video' | 'document' | 'photo' | 'voice'
+        fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
     }, option?: Option): Promise<SendResult> {
         const sendParam: tt.ExtraReplyMessage = {}
         if (option) {
