@@ -30,6 +30,7 @@ import {CacheHelper} from '../utils/CacheHelper.js'
 import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper.js'
 import {SenderFactory} from '../message/SenderFactory.js'
 import {Snowflake} from 'nodejs-snowflake'
+import {Markup} from 'telegraf'
 
 
 export class WeChatClient extends BaseClient {
@@ -1125,6 +1126,11 @@ export class WeChatClient extends BaseClient {
                             return
                         }
                         fBox.toBuffer().then(async buff => {
+                            // buff无内容说明不支持,直接发送失败
+                            if (buff.length === 0) {
+                                this.tgClient.bot.telegram.editMessageCaption(tgMessage.chatId, Number(tempRes.message_id), undefined, `${this.t('wechat.get')}[${this.getMessageName(message.type())}]${this.t('common.error')}, ${this.t('wechat.plzViewOnPhone')}`)
+                                return
+                            }
                             // 配置了 tg api 尝试发送大文件
                             if (this.tgClient.tgClient && fBox.size > 1024 * 1024 * 50) {
                                 sender = new SenderFactory().createSender(this._tgClient.tgClient.client)
@@ -1147,7 +1153,8 @@ export class WeChatClient extends BaseClient {
                                             fileType: this.getSendTgFileMethodString(messageType),
                                             caption: identityStr
                                         }, {parse_mode: 'HTML'}).catch(e => {
-                                            sender.sendText(tgMessage.chatId, this.t('wechat.fileReceivingFailed'), {reply_id: parseInt(tempRes.message_id + '')})
+                                            // sender.sendText(tgMessage.chatId, this.t('wechat.fileReceivingFailed'), {reply_id: parseInt(tempRes.message_id + '')})
+                                            this.editSendFailButton(Number(tgMessage.chatId), Number(tempRes.message_id), this.t('wechat.fileReceivingFailed'))
                                         })
                                         break
                                 }
@@ -1158,15 +1165,17 @@ export class WeChatClient extends BaseClient {
                                     fileType: 'document',
                                     caption: identityStr
                                 }, {parse_mode: 'HTML'}).catch(e => {
-                                    sender.sendText(tgMessage.chatId, this.t('wechat.fileReceivingFailed'), {reply_id: parseInt(tempRes.message_id + '')})
+                                    // sender.sendText(tgMessage.chatId, this.t('wechat.fileReceivingFailed'), {reply_id: parseInt(tempRes.message_id + '')})
+                                    this.editSendFailButton(Number(tgMessage.chatId), Number(tempRes.message_id), this.t('wechat.fileReceivingFailed'))
                                 })
                             }
                         })
-                    }).catch(() => {
-                        this.sendMessageToTg({
-                            ...tgMessage,
-                            body: `${this.t('wechat.get')}[${this.getMessageName(message.type())}]${this.t('common.error')}, ${this.t('wechat.plzViewOnPhone')}`
-                        })
+                    }).catch(e => {
+                        // this.sendMessageToTg({
+                        //     ...tgMessage,
+                        //     body: `${this.t('wechat.get')}[${this.getMessageName(message.type())}]${this.t('common.error')}, ${this.t('wechat.plzViewOnPhone')}`
+                        // })
+                        this.editSendFailButton(Number(tgMessage.chatId), Number(tempRes.message_id), `${this.t('wechat.get')}[${this.getMessageName(message.type())}]${this.t('common.error')}, ${this.t('wechat.plzViewOnPhone')}`)
                     })
                 }
             }).catch(e => {
@@ -1185,7 +1194,15 @@ export class WeChatClient extends BaseClient {
         }
     }
 
-    private getSendTgFileMethodString(messageType: number): 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice' {
+    public editSendFailButton(chatId: number, tg_msg_id: number, caption: string) {
+        this.tgClient.bot.telegram.editMessageCaption(chatId, tg_msg_id, undefined, caption, {
+            reply_markup: {
+                inline_keyboard: [[Markup.button.callback('重新接收', 'resendFile')]]
+            }
+        })
+    }
+
+    public getSendTgFileMethodString(messageType: number): 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice' {
         switch (messageType) {
             case PUPPET.types.Message.Image:
                 return 'photo'

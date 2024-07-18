@@ -840,6 +840,74 @@ export class TelegramBotClient extends BaseClient {
             await ctx.answerCbQuery()
         })
 
+        // 发送失败的消息重发
+        bot.action(/resendFile/, async (ctx) => {
+            const msgId = ctx.update.callback_query.message.message_id
+            const chatId = ctx.update.callback_query.message.chat.id
+            const messageObj = await MessageService.getInstance().findMessageByTelegramMessageId(msgId, chatId)
+            if (!messageObj) {
+                ctx.editMessageReplyMarkup(undefined)
+                await ctx.answerCbQuery('消息已过期')
+                return
+            }
+            const message = await this._weChatClient.client.Message.find({id: messageObj.wechat_message_id})
+            if (!message) {
+                ctx.editMessageReplyMarkup(undefined)
+                await ctx.answerCbQuery('消息已过期')
+                return
+            }
+            // 尝试重新接收
+            let sender = new SenderFactory().createSender(this.bot)
+            let messageType = message.type()
+            const identityStr = SimpleMessageSender.getTitle(message, chatId !== this.chatId)
+            message.toFileBox().then(fBox => {
+                const fileName = fBox.name
+                fBox.toBuffer().then(async buff => {
+                    // 配置了 tg api 尝试发送大文件
+                    if (this.tgClient && fBox.size > 1024 * 1024 * 50) {
+                        sender = new SenderFactory().createSender(this.tgClient.client)
+                    }
+
+                    if (fileName.endsWith('.gif')) {
+                        messageType = PUPPET.types.Message.Attachment
+                    }
+                    if (this.setting.getVariable(VariableType.SETTING_COMPRESSION)) { // 需要判断类型压缩
+                        //
+                        switch (messageType) {
+                            case PUPPET.types.Message.Image:
+                            case PUPPET.types.Message.Audio:
+                            case PUPPET.types.Message.Video:
+                            case PUPPET.types.Message.Emoticon:
+                            case PUPPET.types.Message.Attachment:
+                                sender.editFile(chatId, msgId, {
+                                    buff: buff,
+                                    filename: fileName,
+                                    fileType: this._weChatClient.getSendTgFileMethodString(messageType),
+                                    caption: identityStr
+                                }, {parse_mode: 'HTML'}).catch(e => {
+                                    ctx.answerCbQuery('重新接收失败')
+                                    return
+                                })
+                                break
+                        }
+                    } else { // 不需要判断类型压缩 直接发送文件
+                        sender.editFile(chatId, msgId, {
+                            buff: buff,
+                            filename: fileName,
+                            fileType: 'document',
+                            caption: identityStr
+                        }, {parse_mode: 'HTML'}).catch(e => {
+                            ctx.answerCbQuery('重新接收失败')
+                            return
+                        })
+                    }
+                })
+            }).catch(() => {
+                ctx.answerCbQuery('重新接收失败')
+                return
+            })
+        })
+
         let currentSearchWord = ''
 
         bot.command('user', async ctx => {
