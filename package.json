@@ -7,7 +7,6 @@
   "scripts": {
     "dev": "ts-node src/app.ts NODE_ENV=development",
     "bot-test": "ts-node-dev src/test/tgKeyboardTest.ts",
-    "url-test": "ts-node-dev src/test/UrlTest.ts",
     "build": "tsc",
     "start": "tsc && node dist/app.js NODE_ENV=production"
   },

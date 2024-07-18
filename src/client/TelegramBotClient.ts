@@ -31,7 +31,7 @@ import {MessageService} from '../service/MessageService.js'
 import {MessageSender} from '../message/MessageSender.js'
 import {SenderFactory} from '../message/SenderFactory.js'
 import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper.js'
-import {SimpleMessageSender} from '../models/Message'
+import {SimpleMessageSender} from '../models/Message.js'
 
 export class TelegramBotClient extends BaseClient {
     get sendQueueHelper(): SimpleMessageSendQueueHelper {
