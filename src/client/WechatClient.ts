@@ -11,24 +11,24 @@ import {
     RoomInvitationInterface,
     WechatyInterface
 } from 'wechaty/impls'
-import {TelegramBotClient} from './TelegramBotClient'
-import {EmojiConverter} from '../utils/EmojiUtils'
-import {MemberCacheType} from '../models/TgCache'
-import {SimpleMessage, SimpleMessageSender} from '../models/Message'
-import {TalkerEntity} from '../models/TalkerCache'
-import {UniqueIdGenerator} from '../utils/IdUtils'
-import {NotionMode, VariableType} from '../models/Settings'
-import {FriendshipItem} from '../models/FriendshipItem'
-import {MessageUtils} from '../utils/MessageUtils'
+import {TelegramBotClient} from './TelegramBotClient.js'
+import {EmojiConverter} from '../utils/EmojiUtils.js'
+import {MemberCacheType} from '../models/TgCache.js'
+import {SimpleMessage, SimpleMessageSender} from '../models/Message.js'
+import {TalkerEntity} from '../models/TalkerCache.js'
+import {UniqueIdGenerator} from '../utils/IdUtils.js'
+import {NotionMode, VariableType} from '../models/Settings.js'
+import {FriendshipItem} from '../models/FriendshipItem.js'
+import {MessageUtils} from '../utils/MessageUtils.js'
 import {FileBox, type FileBoxInterface} from 'file-box'
 import * as fs from 'fs'
-import {RoomItem} from '../models/RoomItem'
-import {ContactItem} from '../models/ContactItem'
-import BaseClient from '../base/BaseClient'
-import {MessageService} from '../service/MessageService'
-import {CacheHelper} from '../utils/CacheHelper'
-import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper'
-import {SenderFactory} from '../message/SenderFactory'
+import {RoomItem} from '../models/RoomItem.js'
+import {ContactItem} from '../models/ContactItem.js'
+import BaseClient from '../base/BaseClient.js'
+import {MessageService} from '../service/MessageService.js'
+import {CacheHelper} from '../utils/CacheHelper.js'
+import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper.js'
+import {SenderFactory} from '../message/SenderFactory.js'
 import {Snowflake} from 'nodejs-snowflake'
 
 
@@ -1040,9 +1040,15 @@ export class WeChatClient extends BaseClient {
             // Telegram Too Many Requests
             if (e.response.error_code === 429) {
                 setTimeout(() => {
+                    this._tgClient.bot.telegram.sendMessage(message.chatId,
+                        SimpleMessageSender.send(
+                            {
+                                body: this.t('common.tooManyRequests', e.response.parameters.retry_after),
+                                chatId: message.chatId,
+                            }))
                     this.tgClient.sendQueueHelper.addMessageWithMsgId(Number(this.snowflakeUtil.getUniqueID()),
                         message)
-                }, e.response.parameters.retry_after * 1000 || 2000)
+                }, e.response.parameters.retry_after * 1000 || 20000)
             }
         })
     }

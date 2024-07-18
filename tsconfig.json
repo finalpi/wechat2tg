@@ -1,9 +1,8 @@
 {
   "compilerOptions": {
-    "target": "es2021",
-    "module": "commonjs",
+    "target": "ES2021",
+    "module": "CommonJS",
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
     "strict": false,
     "outDir": "dist",
     "rootDir": "src",

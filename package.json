@@ -1,12 +1,13 @@
 {
   "name": "wechat2tg",
-  "version": "1.0.0",
+  "version": "1.10.0",
   "description": "simple kit send wechat message to telegram",
   "main": "app.ts",
   "esModuleInterop": true,
   "scripts": {
     "dev": "ts-node src/app.ts NODE_ENV=development",
     "bot-test": "ts-node-dev src/test/tgKeyboardTest.ts",
+    "url-test": "ts-node-dev src/test/UrlTest.ts",
     "build": "tsc",
     "start": "tsc && node dist/app.js NODE_ENV=production"
   },
@@ -15,10 +16,12 @@
   "license": "MIT",
   "dependencies": {
     "7zip-min": "^1.4.4",
+    "better-telegraph": "^2.1.1",
     "dotenv": "^16.0.3",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.2",
     "https-proxy-agent": "^7.0.4",
+    "jsdom": "^24.1.0",
     "log4js": "^6.9.1",
     "lottie-converter": "^1.0.0",
     "nodejs-snowflake": "^2.0.1",
