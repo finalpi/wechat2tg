@@ -124,6 +124,7 @@ const en = {
         emptyReply: 'There are currently no reply users',
         createFolderFail: 'Failed to create Telegram folder',
         addGroupToFolderFail: 'Failed to add group to folder',
+        tooManyRequests: 'Too many requests, please wait {0} seconds before trying again',
     },
     wechat: {
         requestAddFriend: 'Request to add you as a friend:',

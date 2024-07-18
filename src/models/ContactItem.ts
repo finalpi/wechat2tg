@@ -1,4 +1,4 @@
-import {ContactInterface} from 'wechaty/dist/esm/src/mods/impls'
+import {ContactInterface} from 'wechaty/impls'
 
 export interface ContactItem {
     id: string

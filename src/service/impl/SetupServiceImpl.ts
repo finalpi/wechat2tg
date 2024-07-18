@@ -1,13 +1,12 @@
-import {log} from 'wechaty'
-import {ISetupService} from '../SetupService'
+import {Contact, log, Room} from 'wechaty'
+import {ISetupService} from '../SetupService.js'
 import {Api} from 'telegram'
-import {TelegramBotClient} from '../../client/TelegramBotClient'
-import AbstractSqlService from '../BaseSqlService'
-import {ContactInterface, RoomInterface} from 'wechaty/dist/esm/src/mods/impls'
-import DynamicService from '../DynamicService'
-import {TelegramUserClient} from '../../client/TelegramUserClient'
-import {TelegramClient} from '../../client/TelegramClient'
-import I18n from '../../i18n/i18n'
+import {TelegramBotClient} from '../../client/TelegramBotClient.js'
+import AbstractSqlService from '../BaseSqlService.js'
+import DynamicService from '../DynamicService.js'
+import {TelegramUserClient} from '../../client/TelegramUserClient.js'
+import {TelegramClient} from '../../client/TelegramClient.js'
+import I18n from '../../i18n/i18n.js'
 
 export class SetupServiceImpl extends AbstractSqlService implements ISetupService {
     private readonly userClient: TelegramUserClient = TelegramUserClient.getInstance()
@@ -111,7 +110,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
 
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore TODO: WIP
-    setupGroup(contact: ContactInterface | RoomInterface): Promise<void> {
+    setupGroup(contact: Contact | Room): Promise<void> {
         const contactHash = DynamicService.hash(contact)
         // 创建群组
         // this.userClient.client.invoke(new Api.)

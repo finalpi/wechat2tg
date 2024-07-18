@@ -1,4 +1,6 @@
-import * as tg from 'telegraf/src/core/types/typegram'
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import * as tg from 'telegraf/src/core/types/typegram.js'
 import {Markup} from 'telegraf'
 
 export class KeyboardPageUtils {

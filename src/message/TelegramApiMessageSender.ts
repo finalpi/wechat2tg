@@ -1,8 +1,8 @@
-import {MessageSender, Option, SendResult} from './MessageSender'
-import {TelegramClient as GramClient} from 'telegram/client/TelegramClient'
-import * as messageMethods from 'telegram/client/messages'
-import * as uploadMethods from 'telegram/client/uploads'
-import {CustomFile} from 'telegram/client/uploads'
+import {MessageSender, Option, SendResult} from './MessageSender.js'
+import {TelegramClient as GramClient} from 'telegram/client/TelegramClient.js'
+import * as messageMethods from 'telegram/client/messages.js'
+import * as uploadMethods from 'telegram/client/uploads.js'
+import {CustomFile} from 'telegram/client/uploads.js'
 
 export class TelegramApiMessageSender implements MessageSender {
     private sender: GramClient

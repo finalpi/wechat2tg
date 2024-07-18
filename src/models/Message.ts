@@ -1,7 +1,7 @@
 import {FmtString} from 'telegraf/format'
 import {MessageInterface} from 'wechaty/impls'
-import {config} from '../config'
-import {TelegramBotClient} from '../client/TelegramBotClient'
+import {config} from '../config.js'
+import {TelegramBotClient} from '../client/TelegramBotClient.js'
 import {message} from 'telegraf/filters'
 import * as PUPPET from 'wechaty-puppet'
 
