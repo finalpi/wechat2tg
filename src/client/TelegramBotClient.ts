@@ -31,6 +31,7 @@ import {MessageService} from '../service/MessageService.js'
 import {MessageSender} from '../message/MessageSender.js'
 import {SenderFactory} from '../message/SenderFactory.js'
 import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper.js'
+import {SimpleMessageSender} from '../models/Message'
 
 export class TelegramBotClient extends BaseClient {
     get sendQueueHelper(): SimpleMessageSendQueueHelper {
@@ -842,20 +843,20 @@ export class TelegramBotClient extends BaseClient {
 
         // 发送失败的消息重发
         bot.action(/resendFile/, async (ctx) => {
+            ctx.editMessageReplyMarkup(undefined)
             const msgId = ctx.update.callback_query.message.message_id
             const chatId = ctx.update.callback_query.message.chat.id
             const messageObj = await MessageService.getInstance().findMessageByTelegramMessageId(msgId, chatId)
             if (!messageObj) {
-                ctx.editMessageReplyMarkup(undefined)
                 await ctx.answerCbQuery('消息已过期')
                 return
             }
             const message = await this._weChatClient.client.Message.find({id: messageObj.wechat_message_id})
             if (!message) {
-                ctx.editMessageReplyMarkup(undefined)
                 await ctx.answerCbQuery('消息已过期')
                 return
             }
+            ctx.editMessageCaption(this.t('wechat.receivingFile'))
             // 尝试重新接收
             let sender = new SenderFactory().createSender(this.bot)
             let messageType = message.type()
@@ -886,6 +887,7 @@ export class TelegramBotClient extends BaseClient {
                                     caption: identityStr
                                 }, {parse_mode: 'HTML'}).catch(e => {
                                     ctx.answerCbQuery('重新接收失败')
+                                    this.weChatClient.editSendFailButton(chatId, msgId, this.t('wechat.fileReceivingFailed'))
                                     return
                                 })
                                 break
@@ -898,12 +900,14 @@ export class TelegramBotClient extends BaseClient {
                             caption: identityStr
                         }, {parse_mode: 'HTML'}).catch(e => {
                             ctx.answerCbQuery('重新接收失败')
+                            this.weChatClient.editSendFailButton(chatId, msgId, this.t('wechat.fileReceivingFailed'))
                             return
                         })
                     }
                 })
             }).catch(() => {
                 ctx.answerCbQuery('重新接收失败')
+                this.weChatClient.editSendFailButton(chatId, msgId, this.t('wechat.fileReceivingFailed'))
                 return
             })
         })
