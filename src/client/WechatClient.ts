@@ -1197,7 +1197,7 @@ export class WeChatClient extends BaseClient {
     public editSendFailButton(chatId: number, tg_msg_id: number, caption: string) {
         this.tgClient.bot.telegram.editMessageCaption(chatId, tg_msg_id, undefined, caption, {
             reply_markup: {
-                inline_keyboard: [[Markup.button.callback('重新接收', 'resendFile')]]
+                inline_keyboard: [[Markup.button.callback(this.t('common.reReceive'), 'resendFile')]]
             }
         })
     }

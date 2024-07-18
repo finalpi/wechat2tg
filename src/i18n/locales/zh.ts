@@ -125,6 +125,7 @@ const zh = {
         createFolderFail: '创建 Telegram 文件夹失败',
         addGroupToFolderFail: '添加群组进文件夹失败',
         tooManyRequests: '请求过多,请等待{0}秒再试',
+        reReceive: '重新接收',
     },
     wechat: {
         requestAddFriend: '请求添加您为好友:',
