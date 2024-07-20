@@ -1,13 +1,13 @@
-import {BindItem} from '../models/BindItem'
-import {RoomItem} from '../models/RoomItem'
-import {ContactItem} from '../models/ContactItem'
-import {ContactImpl} from 'wechaty/impls'
+import {BindItem} from '../models/BindItem.js'
+import {RoomItem} from '../models/RoomItem.js'
+import {ContactItem} from '../models/ContactItem.js'
+import {ContactImpl, WechatyInterface} from 'wechaty/impls'
 import {Telegraf} from 'telegraf'
-import AbstractSqlService from './BaseSqlService'
+import AbstractSqlService from './BaseSqlService.js'
 import * as fs from 'fs'
-import {ContactInterface, RoomInterface, WechatyInterface} from 'wechaty/dist/esm/src/mods/impls'
-import DynamicService from './DynamicService'
-import {CreateGroupInterface} from '../models/CreateGroupInterface'
+import {Contact, Room} from 'wechaty'
+import DynamicService from './DynamicService.js'
+import {CreateGroupInterface} from '../models/CreateGroupInterface.js'
 
 export class BindItemService extends AbstractSqlService {
     private tgBotClient: Telegraf
@@ -340,19 +340,19 @@ export class BindItemService extends AbstractSqlService {
         return avatar
     }
 
-    public bindGroupBetterArgs(concat: ContactInterface | RoomInterface, chatId: number, bindId: string) {
+    public async bindGroupBetterArgs(concat: Contact | Room, chatId: number, bindId: string) {
         let name = ''
         let type: number
         let alias: string
         let wechatId: string
         if (DynamicService.isContact(concat)) {
-            name = concat.payload?.name ? concat.payload.name : ''
+            name = concat.name()
             type = 0
-            alias = concat.payload?.alias ? concat.payload.alias : ''
+            alias = await concat.alias()
             wechatId = concat.id
         }
         if (DynamicService.isRoom(concat)) {
-            name = concat.payload?.topic ? concat.payload.topic : ''
+            name = await concat.topic()
             type = 1
             alias = ''
             wechatId = concat.id

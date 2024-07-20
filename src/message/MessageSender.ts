@@ -1,21 +1,28 @@
-export interface MessageSender {
-    sendText(chatId: string | number, text: string, option?: Option): Promise<SendResult>
+import {TelegramBotClient} from '../client/TelegramBotClient'
+import {ChatAction} from 'telegraf/types'
 
-    sendFile(chatId: string | number, file: {
+export abstract class MessageSender {
+    abstract sendText(chatId: string | number, text: string, option?: Option): Promise<SendResult>
+
+    abstract sendFile(chatId: string | number, file: {
         buff: Buffer,
         filename: string,
         caption?: string,
-        fileType: 'audio' | 'video' | 'document' | 'photo' | 'voice'
+        fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
     }, option?: Option): Promise<SendResult>
 
-    editFile(chatId: string | number, msgId: string | number, file: {
+    abstract editFile(chatId: string | number, msgId: string | number, file: {
         buff?: Buffer,
         filename?: string,
         caption?: string,
         fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
     }, option?: Option): Promise<SendResult>
 
-    deleteMessage(chatId: undefined | number, msgId: number)
+    abstract deleteMessage(chatId: undefined | number, msgId: number)
+
+    sendAction(chatId: number, action: ChatAction) {
+        TelegramBotClient.getInstance().bot.telegram.sendChatAction(chatId, action)
+    }
 }
 
 export interface Option {

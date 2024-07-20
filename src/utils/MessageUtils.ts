@@ -1,7 +1,7 @@
-import {MyMessageContact} from '../models/MyContact'
+import {MyMessageContact} from '../models/MyContact.js'
 import {convertXML} from 'simple-xml-to-json'
-import {CacheHelper} from './CacheHelper'
-import {TelegramBotClient} from '../client/TelegramBotClient'
+import {CacheHelper} from './CacheHelper.js'
+import {TelegramBotClient} from '../client/TelegramBotClient.js'
 
 export class MessageUtils {
     private static instance: MessageUtils

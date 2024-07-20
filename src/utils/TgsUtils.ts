@@ -1,5 +1,4 @@
 import * as fs from 'node:fs'
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import converter from 'lottie-converter'
 // eslint-disable-next-line @typescript-eslint/no-var-requires

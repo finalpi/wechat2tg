@@ -1,7 +1,7 @@
 {
   "name": "wechat2tg",
-  "version": "v1.1.0",
-  "description": "简单的转发微信消息到Telegram",
+  "version": "1.10.0",
+  "description": "simple kit send wechat message to telegram",
   "main": "app.ts",
   "esModuleInterop": true,
   "scripts": {
@@ -15,10 +15,12 @@
   "license": "MIT",
   "dependencies": {
     "7zip-min": "^1.4.4",
+    "better-telegraph": "^2.1.1",
     "dotenv": "^16.0.3",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.2",
     "https-proxy-agent": "^7.0.4",
+    "jsdom": "^24.1.0",
     "log4js": "^6.9.1",
     "lottie-converter": "^1.0.0",
     "nodejs-snowflake": "^2.0.1",

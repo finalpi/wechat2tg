@@ -1,11 +1,10 @@
-import {ContactInterface, RoomInterface} from 'wechaty/dist/esm/src/mods/impls'
 import {Md5} from 'ts-md5'
-import {ContactGender, ContactType} from 'wechaty-puppet/src/schemas/contact'
-import {BindItem, ChatMapping} from '../models/BindItem'
+import {ChatMapping} from '../models/BindItem.js'
+import {Contact, Room} from 'wechaty'
 
 class DynamicService {
 
-    public static hash(source: ContactInterface | RoomInterface) {
+    public static hash(source: Contact | Room) {
         if (DynamicService.isContact(source)) {
             return DynamicService.hashContact(source)
         } else if (DynamicService.isRoom(source)) {
@@ -13,11 +12,11 @@ class DynamicService {
         }
     }
 
-    private static hashContact(source: ContactInterface): string {
+    private static hashContact(source: Contact): string {
         if (source.payload) {
             const noDynamicIdPayload: {
-                gender: ContactGender
-                type: ContactType
+                gender: number
+                type: number
                 name: string
                 avatar: string
                 address?: string
@@ -40,7 +39,7 @@ class DynamicService {
         return ''
     }
 
-    private static hashRoom(source: RoomInterface): string {
+    private static hashRoom(source: Room): string {
         if (source.payload) {
             const noDynamicIdPayload: {
                 topic: string
@@ -54,15 +53,15 @@ class DynamicService {
         return ''
     }
 
-    public static isContact(contact: ContactInterface | RoomInterface): contact is ContactInterface {
-        return (contact as ContactInterface).id !== undefined
+    public static isContact(contact: Contact | Room): contact is Contact {
+        return (contact as Contact).id !== undefined
     }
 
-    public static isRoom(contact: ContactInterface | RoomInterface): contact is RoomInterface {
-        return (contact as RoomInterface).id !== undefined
+    public static isRoom(contact: Contact | Room): contact is Room {
+        return (contact as Room).id !== undefined
     }
 
-    public static isSameContact(contact: ContactInterface, bindItem: ChatMapping): boolean {
+    public static isSameContact(contact: Contact, bindItem: ChatMapping): boolean {
         // 我的联系人信息 统计有的字段数量
         // avatar,302
         // name,302

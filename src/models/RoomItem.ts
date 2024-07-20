@@ -1,4 +1,4 @@
-import {RoomInterface} from 'wechaty/dist/esm/src/mods/impls'
+import {RoomInterface} from 'wechaty/impls'
 
 export interface RoomItem{
     id: string

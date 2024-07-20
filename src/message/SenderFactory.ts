@@ -1,8 +1,8 @@
-import {TelegramClient as GramClient} from 'telegram/client/TelegramClient'
+import {TelegramClient as GramClient} from 'telegram/client/TelegramClient.js'
 import {Telegraf} from 'telegraf'
-import {MessageSender} from './MessageSender'
-import {TelegramApiMessageSender} from './TelegramApiMessageSender'
-import {TelegramBotApiMessageSender} from './TelegramBotApiMessageSender'
+import {MessageSender} from './MessageSender.js'
+import {TelegramApiMessageSender} from './TelegramApiMessageSender.js'
+import {TelegramBotApiMessageSender} from './TelegramBotApiMessageSender.js'
 
 export class SenderFactory {
     createSender(bot: GramClient | Telegraf): MessageSender {

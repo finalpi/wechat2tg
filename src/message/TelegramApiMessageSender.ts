@@ -1,13 +1,14 @@
-import {MessageSender, Option, SendResult} from './MessageSender'
-import {TelegramClient as GramClient} from 'telegram/client/TelegramClient'
-import * as messageMethods from 'telegram/client/messages'
-import * as uploadMethods from 'telegram/client/uploads'
-import {CustomFile} from 'telegram/client/uploads'
+import {MessageSender, Option, SendResult} from './MessageSender.js'
+import {TelegramClient as GramClient} from 'telegram/client/TelegramClient.js'
+import * as messageMethods from 'telegram/client/messages.js'
+import * as uploadMethods from 'telegram/client/uploads.js'
+import {CustomFile} from 'telegram/client/uploads.js'
 
-export class TelegramApiMessageSender implements MessageSender {
+export class TelegramApiMessageSender extends MessageSender {
     private sender: GramClient
 
     constructor(sender: GramClient) {
+        super()
         this.sender = sender
     }
 
@@ -17,6 +18,7 @@ export class TelegramApiMessageSender implements MessageSender {
         caption?: string;
         fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
     }, option?: Option): Promise<SendResult> {
+        this.sendAction(Number(chatId), 'upload_document')
         const inputPeerChannelFromMessage = await this.sender.getInputEntity(chatId) || chatId
         return new Promise((resolve, reject) => {
             const sendParam: messageMethods.EditMessageParams = {
@@ -55,6 +57,7 @@ export class TelegramApiMessageSender implements MessageSender {
     }
 
     async sendText(chatId: string | number, text: string, option?: Option): Promise<SendResult> {
+        this.sendAction(Number(chatId), 'typing')
         const inputPeerChannelFromMessage = await this.sender.getInputEntity(chatId) || chatId
         return new Promise((resolve, reject) => {
             const sendParam: messageMethods.SendMessageParams = {
@@ -82,9 +85,10 @@ export class TelegramApiMessageSender implements MessageSender {
         buff: Buffer,
         filename: string,
         caption?: string,
-        fileType: 'audio' | 'video' | 'document' | 'photo' | 'voice'
+        fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
     }, option?: Option): Promise<SendResult> {
         const inputPeerChannelFromMessage = await this.sender.getInputEntity(chatId) || chatId
+        this.sendAction(Number(chatId), 'upload_document')
         return new Promise((resolve, reject) => {
             const sendParam: uploadMethods.SendFileInterface = {
                 workers: 3,

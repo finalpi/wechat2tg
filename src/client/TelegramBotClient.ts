@@ -1,36 +1,37 @@
 import {Context, Markup, NarrowedContext, session, Telegraf} from 'telegraf'
-import {WeChatClient} from './WechatClient'
-import {config} from '../config'
+import {WeChatClient} from './WechatClient.js'
+import {config} from '../config.js'
 import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from 'https-proxy-agent'
-import * as tg from 'telegraf/src/core/types/typegram'
+// @ts-ignore
+import * as tg from 'telegraf/src/core/types/typegram.js'
 import {message} from 'telegraf/filters'
 import {FileBox, FileBoxType} from 'file-box'
 import * as fs from 'node:fs'
-import {NotionListType, NotionMode, StorageSettings, VariableContainer, VariableType} from '../models/Settings'
-import {ConverterHelper} from '../utils/FfmpegUtils'
-import {SelectedEntity} from '../models/TgCache'
-import {TalkerEntity} from '../models/TalkerCache'
-import {UniqueIdGenerator} from '../utils/IdUtils'
-import {Page} from '../models/Page'
-import {FileUtils} from '../utils/FileUtils'
+import {NotionListType, NotionMode, StorageSettings, VariableContainer, VariableType} from '../models/Settings.js'
+import {ConverterHelper} from '../utils/FfmpegUtils.js'
+import {SelectedEntity} from '../models/TgCache.js'
+import {TalkerEntity} from '../models/TalkerCache.js'
+import {UniqueIdGenerator} from '../utils/IdUtils.js'
+import {Page} from '../models/Page.js'
+import {FileUtils} from '../utils/FileUtils.js'
 import {ContactImpl, ContactInterface, MessageInterface, RoomInterface} from 'wechaty/impls'
-import {CacheHelper} from '../utils/CacheHelper'
+import {CacheHelper} from '../utils/CacheHelper.js'
 import * as PUPPET from 'wechaty-puppet'
-import {TelegramClient} from './TelegramClient'
-import {BindItemService} from '../service/BindItemService'
-import {RoomItem} from '../models/RoomItem'
-import {ContactItem} from '../models/ContactItem'
-import {BindItem} from '../models/BindItem'
-import {UserAuthParams} from 'telegram/client/auth'
+import {TelegramClient} from './TelegramClient.js'
+import {BindItemService} from '../service/BindItemService.js'
+import {RoomItem} from '../models/RoomItem.js'
+import {ContactItem} from '../models/ContactItem.js'
+import {BindItem} from '../models/BindItem.js'
+import {UserAuthParams} from 'telegram/client/auth.js'
 import {EventEmitter} from 'node:events'
-import {TelegramUserClient} from './TelegramUserClient'
-import BaseClient from '../base/BaseClient'
-import {MessageService} from '../service/MessageService'
-import {MessageSender} from '../message/MessageSender'
-import {SenderFactory} from '../message/SenderFactory'
-import {LockUtil} from '../utils/LockUtil'
-import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper'
+import {TelegramUserClient} from './TelegramUserClient.js'
+import BaseClient from '../base/BaseClient.js'
+import {MessageService} from '../service/MessageService.js'
+import {MessageSender} from '../message/MessageSender.js'
+import {SenderFactory} from '../message/SenderFactory.js'
+import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper.js'
+import {SimpleMessageSender} from '../models/Message.js'
 
 export class TelegramBotClient extends BaseClient {
     get sendQueueHelper(): SimpleMessageSendQueueHelper {
@@ -92,7 +93,6 @@ export class TelegramBotClient extends BaseClient {
     private phoneNumber: string | undefined = undefined
     private password: string | undefined = undefined
     private phoneCode = ''
-    private lock = new LockUtil()
 
     private forwardSetting: VariableContainer = new VariableContainer()
 
@@ -697,6 +697,7 @@ export class TelegramBotClient extends BaseClient {
 
 
                     // 第一次输入的人当成bot的所有者
+                    // @ts-ignore
                     this.loadOwnerChat(ctx)
 
                     // 标记为已执行
@@ -708,6 +709,7 @@ export class TelegramBotClient extends BaseClient {
             }
         })
 
+        // @ts-ignore
         bot.command('stop', this.onWeChatStop)
 
         bot.command('check', ctx => {
@@ -837,6 +839,77 @@ export class TelegramBotClient extends BaseClient {
                 })
             })
             await ctx.answerCbQuery()
+        })
+
+        // 发送失败的消息重发
+        bot.action(/resendFile/, async (ctx) => {
+            ctx.editMessageReplyMarkup(undefined)
+            const msgId = ctx.update.callback_query.message.message_id
+            const chatId = ctx.update.callback_query.message.chat.id
+            const messageObj = await MessageService.getInstance().findMessageByTelegramMessageId(msgId, chatId)
+            if (!messageObj) {
+                await ctx.answerCbQuery('消息已过期')
+                return
+            }
+            const message = await this._weChatClient.client.Message.find({id: messageObj.wechat_message_id})
+            if (!message) {
+                await ctx.answerCbQuery('消息已过期')
+                return
+            }
+            ctx.editMessageCaption(this.t('wechat.receivingFile'))
+            // 尝试重新接收
+            let sender = new SenderFactory().createSender(this.bot)
+            let messageType = message.type()
+            const identityStr = SimpleMessageSender.getTitle(message, chatId !== this.chatId)
+            message.toFileBox().then(fBox => {
+                const fileName = fBox.name
+                fBox.toBuffer().then(async buff => {
+                    // 配置了 tg api 尝试发送大文件
+                    if (this.tgClient && fBox.size > 1024 * 1024 * 50) {
+                        sender = new SenderFactory().createSender(this.tgClient.client)
+                    }
+
+                    if (fileName.endsWith('.gif')) {
+                        messageType = PUPPET.types.Message.Attachment
+                    }
+                    if (this.setting.getVariable(VariableType.SETTING_COMPRESSION)) { // 需要判断类型压缩
+                        //
+                        switch (messageType) {
+                            case PUPPET.types.Message.Image:
+                            case PUPPET.types.Message.Audio:
+                            case PUPPET.types.Message.Video:
+                            case PUPPET.types.Message.Emoticon:
+                            case PUPPET.types.Message.Attachment:
+                                sender.editFile(chatId, msgId, {
+                                    buff: buff,
+                                    filename: fileName,
+                                    fileType: this._weChatClient.getSendTgFileMethodString(messageType),
+                                    caption: identityStr
+                                }, {parse_mode: 'HTML'}).catch(e => {
+                                    ctx.answerCbQuery('重新接收失败')
+                                    this.weChatClient.editSendFailButton(chatId, msgId, this.t('wechat.fileReceivingFailed'))
+                                    return
+                                })
+                                break
+                        }
+                    } else { // 不需要判断类型压缩 直接发送文件
+                        sender.editFile(chatId, msgId, {
+                            buff: buff,
+                            filename: fileName,
+                            fileType: 'document',
+                            caption: identityStr
+                        }, {parse_mode: 'HTML'}).catch(e => {
+                            ctx.answerCbQuery('重新接收失败')
+                            this.weChatClient.editSendFailButton(chatId, msgId, this.t('wechat.fileReceivingFailed'))
+                            return
+                        })
+                    }
+                })
+            }).catch(() => {
+                ctx.answerCbQuery('重新接收失败')
+                this.weChatClient.editSendFailButton(chatId, msgId, this.t('wechat.fileReceivingFailed'))
+                return
+            })
         })
 
         let currentSearchWord = ''
@@ -1407,10 +1480,12 @@ export class TelegramBotClient extends BaseClient {
         const officialPage = 0
 
         bot.action('INDIVIDUAL', ctx => {
+            // @ts-ignore
             this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Individual) || []].map(item => item.contact), individualPage, currentSearchWord)
             ctx.answerCbQuery()
         })
         bot.action('OFFICIAL', ctx => {
+            // @ts-ignore
             this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Official) || []].map(item => item.contact), officialPage, currentSearchWord)
             ctx.answerCbQuery()
         })

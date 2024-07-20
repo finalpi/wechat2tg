@@ -1,6 +1,5 @@
-import AbstractSqlService from './BaseSqlService'
-import {MessageItem, MessageItemUpdate} from '../models/MessageItem'
-import log4js from 'log4js'
+import AbstractSqlService from './BaseSqlService.js'
+import {MessageItem, MessageItemUpdate} from '../models/MessageItem.js'
 
 export class MessageService extends AbstractSqlService {
     private static instance?: MessageService = undefined
