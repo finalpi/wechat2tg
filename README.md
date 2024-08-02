@@ -17,7 +17,7 @@ This project is based on [wechaty](https://github.com/wechaty/wechaty) and imple
 
 1. This project is intended only for technical research and learning and must not be used for illegal purposes.
 2. Please submit any issues you encounter to the issue tracker.
-3. Due to limitations in the Telegram Bot API, it is not possible to send files larger than 20MB or receive files larger than 50MB.
+3. Due to limitations in the Telegram Bot API, it is not possible to send files larger than 20MB or receive files larger than 50MB.(Configuring API_ID and API_HASH can solve this)
 
 ## Installation
 

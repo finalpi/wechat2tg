@@ -15,7 +15,7 @@
 
 1. 本项目仅用于技术研究和学习，不得用于非法用途。
 2. 遇到问题请提交issue。
-3. 因Telegram Bot API限制,无法发送超过20MB的文件以及接收超过50MB的文件
+3. 因Telegram Bot API限制,无法发送超过20MB的文件以及接收超过50MB的文件(配置API_ID和API_HASH可以解决)
 
 ## 安装
 
