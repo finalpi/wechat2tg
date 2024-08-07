@@ -129,8 +129,8 @@ export class GroupListSave {
 
 export enum StorageSettings {
     STORAGE_FOLDER = 'storage',
-    OWNER_FILE_NAME = 'telegram-owneron',
-    SETTING_FILE_NAME = 'wechat-forwardon',
+    OWNER_FILE_NAME = 'telegram-owner.json',
+    SETTING_FILE_NAME = 'wechat-forward.json',
 }
 
 export type NotionListType = {
