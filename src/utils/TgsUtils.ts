@@ -48,8 +48,8 @@ export default class TgsUtils {
                                 await renderLottie({
                                     path: path.resolve(tmpFilePath + '/' + files[0]),
                                     output: outputFile,
-                                    width: 100,
-                                    height: 100,
+                                    width: 200,
+                                    height: lottieConfig.height / lottieConfig.width * 200,
                                     browser: browser
                                 })
 

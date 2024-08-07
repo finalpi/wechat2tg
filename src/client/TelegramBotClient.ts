@@ -1437,16 +1437,13 @@ export class TelegramBotClient extends BaseClient {
                 const saveFile = `save-files/${fileName}`
                 const gifFile = `save-files/${fileName.slice(0, fileName.lastIndexOf('.'))}.gif`
 
-                let lottie_config = {
+                const lottie_config = {
                     width: 200,
                     height: 200
                 }
-
                 if (saveFile.endsWith('.tgs')) {
-                    lottie_config = {
-                        width: 300,
-                        height: ctx.message.sticker.height / ctx.message.sticker.width * lottie_config.width
-                    }
+                    lottie_config.width = ctx.message.sticker.width
+                    lottie_config.height = ctx.message.sticker.height
                 }
 
                 // gif 文件存在
