@@ -16,7 +16,7 @@ export class ConverterHelper {
         return new Promise((resolve, reject) => {
             const convert = (resolution: number, fps: number) => {
                 let scale = 'scale=iw:-1:flags=lanczos'
-                if (resolution < 360) {
+                if (resolution < 410) {
                     scale = `scale=${resolution}:-1:flags=lanczos`
                 }
                 ffmpeg()
