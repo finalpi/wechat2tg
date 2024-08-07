@@ -1,5 +1,5 @@
-import AbstractSqlService from './BaseSqlService.js'
-import {MessageItem, MessageItemUpdate} from '../models/MessageItem.js'
+import AbstractSqlService from './BaseSqlService'
+import {MessageItem, MessageItemUpdate} from '../models/MessageItem'
 
 export class MessageService extends AbstractSqlService {
     private static instance?: MessageService = undefined
@@ -33,7 +33,7 @@ export class MessageService extends AbstractSqlService {
         })
     }
 
-    public updateMessageByChatMsg(query: {chat_id: string, msg_text: string}, update: MessageItemUpdate) {
+    public updateMessageByChatMsg(query: { chat_id: string, msg_text: string }, update: MessageItemUpdate) {
         const logger = this._log
         this.db.serialize(() => {
             // 构建 SET 子句

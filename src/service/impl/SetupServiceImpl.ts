@@ -1,12 +1,12 @@
 import {Contact, log, Room} from 'wechaty'
-import {ISetupService} from '../SetupService.js'
+import {ISetupService} from '../SetupService'
 import {Api} from 'telegram'
-import {TelegramBotClient} from '../../client/TelegramBotClient.js'
-import AbstractSqlService from '../BaseSqlService.js'
-import DynamicService from '../DynamicService.js'
-import {TelegramUserClient} from '../../client/TelegramUserClient.js'
-import {TelegramClient} from '../../client/TelegramClient.js'
-import I18n from '../../i18n/i18n.js'
+import {TelegramBotClient} from '../../client/TelegramBotClient'
+import AbstractSqlService from '../BaseSqlService'
+import DynamicService from '../DynamicService'
+import {TelegramUserClient} from '../../client/TelegramUserClient'
+import {TelegramClient} from '../../client/TelegramClient'
+import I18n from '../../i18n/i18n'
 
 export class SetupServiceImpl extends AbstractSqlService implements ISetupService {
     private readonly userClient: TelegramUserClient = TelegramUserClient.getInstance()

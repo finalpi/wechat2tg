@@ -1,5 +1,5 @@
 import {Markup, Telegraf} from 'telegraf'
-import {config} from '../config.js'
+import {config} from '../config'
 
 const bot = new Telegraf(config.BOT_TOKEN)
 
@@ -150,7 +150,7 @@ bot.command('inline2', (ctx) => {
                 [{text: 'Next', callback_data: 'next2'}],
 
                 /* Also, we can have URL buttons. */
-                [{text: 'Open in browser', url: 'telegraf.js.org'}]
+                [{text: 'Open in browser', url: 'telegraf.org'}]
             ]
         }
     })

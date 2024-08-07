@@ -3,6 +3,9 @@ import * as fs from 'node:fs'
 import converter from 'lottie-converter'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const _7z = require('7zip-min')
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const renderLottie = require('puppeteer-lottie')
+import path from 'node:path'
 
 export default class TgsUtils {
     async tgsToGif(inputFile: string, outputFile: string, lottieConfig?: {
@@ -20,26 +23,31 @@ export default class TgsUtils {
 
                         const files = fs.readdirSync(tmpFilePath)
                         if (files.length === 1) {
-                            const file = fs.readFileSync(tmpFilePath + '/' + files[0])
-                            const converted = await converter({
-                                file: file,
-                                format: 'gif',
+                            // const file = fs.readFileSync(tmpFilePath + '/' + files[0])
+                            // const converted = await converter({
+                            //     file: file,
+                            //     format: 'gif',
+                            //     ...lottieConfig,
+                            // })
+                            await renderLottie({
+                                path: path.resolve(tmpFilePath + '/' + files[0]),
+                                output: outputFile,
                                 ...lottieConfig,
                             })
 
-                            fs.writeFileSync(outputFile, converted, 'base64')
+                            // fs.writeFileSync(outputFile, converted, 'base64')
                             const stats = fs.statSync(outputFile)
                             const fileSizeInBytes = stats.size
 
                             if (fileSizeInBytes > 1024 * 1024) {
-                                const converted = await converter({
-                                    file: file,
-                                    format: 'gif',
+                                await renderLottie({
+                                    path: path.resolve(tmpFilePath + '/' + files[0]),
+                                    output: outputFile,
                                     width: 100,
                                     height: 100
                                 })
 
-                                fs.writeFileSync(outputFile, converted, 'base64')
+                                // fs.writeFileSync(outputFile, converted, 'base64')
                             }
                         } else {
                             // 文件不止一个

@@ -1,17 +1,17 @@
-import {TelegramClient} from './TelegramClient.js'
-import {TelegramBotClient} from './TelegramBotClient.js'
-import * as authMethods from 'telegram/client/auth.js'
+import {TelegramClient} from './TelegramClient'
+import {TelegramBotClient} from './TelegramBotClient'
+import * as authMethods from 'telegram/client/auth'
 import {StoreSession} from 'telegram/sessions'
 import {Api} from 'telegram'
-import {config} from '../config.js'
-import {TelegramClient as GramClient} from 'telegram/client/TelegramClient.js'
+import {config} from '../config'
+import {TelegramClient as GramClient} from 'telegram/client/TelegramClient'
 import {BigInteger} from 'big-integer'
-import {CreateGroupInterface} from '../models/CreateGroupInterface.js'
-import {CustomFile} from 'telegram/client/uploads.js'
-import {SetupServiceImpl} from '../service/impl/SetupServiceImpl.js'
+import {CreateGroupInterface} from '../models/CreateGroupInterface'
+import {CustomFile} from 'telegram/client/uploads'
+import {SetupServiceImpl} from '../service/impl/SetupServiceImpl'
 import * as os from 'node:os'
 import {NewMessage} from 'telegram/events'
-import {MessageService} from '../service/MessageService.js'
+import {MessageService} from '../service/MessageService'
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -179,13 +179,13 @@ export class TelegramUserClient extends TelegramClient {
                 //         createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '',
                 //         '')
                 // } else {
-                    bindItem = this.telegramBotClient.bindItemService.bindGroup(
-                        createGroupInterface.contact?.payload?.name ? createGroupInterface.contact?.payload.name : '',
-                        TelegramUserClient.idConvert(id), createGroupInterface.type,
-                        createGroupInterface.bindId ? createGroupInterface.bindId : '',
-                        createGroupInterface.contact?.payload?.alias ? createGroupInterface.contact?.payload?.alias : '',
-                        createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '',
-                        createGroupInterface.contact?.payload?.avatar ? createGroupInterface.contact?.payload?.avatar : '')
+                bindItem = this.telegramBotClient.bindItemService.bindGroup(
+                    createGroupInterface.contact?.payload?.name ? createGroupInterface.contact?.payload.name : '',
+                    TelegramUserClient.idConvert(id), createGroupInterface.type,
+                    createGroupInterface.bindId ? createGroupInterface.bindId : '',
+                    createGroupInterface.contact?.payload?.alias ? createGroupInterface.contact?.payload?.alias : '',
+                    createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '',
+                    createGroupInterface.contact?.payload?.avatar ? createGroupInterface.contact?.payload?.avatar : '')
                 // }
             } else { // room
                 const topic = await createGroupInterface.room?.topic()

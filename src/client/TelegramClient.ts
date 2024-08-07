@@ -1,10 +1,10 @@
-import {config} from '../config.js'
+import {config} from '../config'
 import {TelegramClient as GramClient} from 'telegram'
-import {TelegramBotClient} from './TelegramBotClient.js'
+import {TelegramBotClient} from './TelegramBotClient'
 import os from 'node:os'
-import BaseClient from '../base/BaseClient.js'
-import {DeletedMessage} from 'telegram/events/DeletedMessage.js'
-import {MessageUtils} from '../utils/MessageUtils.js'
+import BaseClient from '../base/BaseClient'
+import {DeletedMessage} from 'telegram/events/DeletedMessage'
+import {MessageUtils} from '../utils/MessageUtils'
 import {StoreSession} from 'telegram/sessions'
 
 export class TelegramClient extends BaseClient {

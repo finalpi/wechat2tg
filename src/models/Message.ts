@@ -1,7 +1,7 @@
 import {FmtString} from 'telegraf/format'
 import {MessageInterface} from 'wechaty/impls'
-import {config} from '../config.js'
-import {TelegramBotClient} from '../client/TelegramBotClient.js'
+import {config} from '../config'
+import {TelegramBotClient} from '../client/TelegramBotClient'
 import {message} from 'telegraf/filters'
 import * as PUPPET from 'wechaty-puppet'
 
@@ -90,15 +90,15 @@ export class SimpleMessageSender implements MessageSender {
     static transformTitleStr(inputString: string, alias: string, name: string, topic: string): string {
         const alias_first = alias || name
         inputString = inputString.replace(this.NAME_REGEXP, (match, p1) => {
-            if (p1.includes('alias_first')){
-                return alias_first ? p1.replaceAll('alias_first',alias_first) : ''
-            } else if (p1.includes('alias')){
-                return alias ? p1.replaceAll('alias',alias) : ''
-            } else if (p1.includes('name')){
-                return name ? p1.replaceAll('name',name) : ''
-            } else if (p1.includes('topic')){
-                return topic ? p1.replaceAll('topic',topic) : ''
-            }else {
+            if (p1.includes('alias_first')) {
+                return alias_first ? p1.replaceAll('alias_first', alias_first) : ''
+            } else if (p1.includes('alias')) {
+                return alias ? p1.replaceAll('alias', alias) : ''
+            } else if (p1.includes('name')) {
+                return name ? p1.replaceAll('name', name) : ''
+            } else if (p1.includes('topic')) {
+                return topic ? p1.replaceAll('topic', topic) : ''
+            } else {
                 return match
             }
         })

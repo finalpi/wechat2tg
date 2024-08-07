@@ -1,5 +1,5 @@
 import {Md5} from 'ts-md5'
-import {ChatMapping} from '../models/BindItem.js'
+import {ChatMapping} from '../models/BindItem'
 import {Contact, Room} from 'wechaty'
 
 class DynamicService {

@@ -1,3 +1,6 @@
+FROM rust:buster as builder-gifski
+RUN cargo install --version 1.7.0 gifski
+
 FROM node:18-slim
 
 RUN apt-get update
@@ -5,6 +8,7 @@ RUN apt-get update
 RUN mkdir -p /app/storage /app/save-files
 
 WORKDIR /app
+COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
 COPY package*.json tsconfig.json ./
 
 ENV BOT_TOKEN=""

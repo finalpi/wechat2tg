@@ -1,6 +1,6 @@
 import log4js from 'log4js'
-import {LogUtils} from '../utils/LogUtils.js'
-import I18n from '../i18n/i18n.js'
+import {LogUtils} from '../utils/LogUtils'
+import I18n from '../i18n/i18n'
 
 abstract class BaseClient {
     protected _log: log4js.Logger
@@ -33,7 +33,7 @@ abstract class BaseClient {
     }
 
     protected t(key: string, ...args: (string | number)[]): string {
-        return this.i18n.t(key,...args)
+        return this.i18n.t(key, ...args)
     }
 }
 

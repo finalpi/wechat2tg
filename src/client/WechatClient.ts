@@ -11,24 +11,24 @@ import {
     RoomInvitationInterface,
     WechatyInterface
 } from 'wechaty/impls'
-import {TelegramBotClient} from './TelegramBotClient.js'
-import {EmojiConverter} from '../utils/EmojiUtils.js'
-import {MemberCacheType} from '../models/TgCache.js'
-import {SimpleMessage, SimpleMessageSender} from '../models/Message.js'
-import {TalkerEntity} from '../models/TalkerCache.js'
-import {UniqueIdGenerator} from '../utils/IdUtils.js'
-import {NotionMode, VariableType} from '../models/Settings.js'
-import {FriendshipItem} from '../models/FriendshipItem.js'
-import {MessageUtils} from '../utils/MessageUtils.js'
+import {TelegramBotClient} from './TelegramBotClient'
+import {EmojiConverter} from '../utils/EmojiUtils'
+import {MemberCacheType} from '../models/TgCache'
+import {SimpleMessage, SimpleMessageSender} from '../models/Message'
+import {TalkerEntity} from '../models/TalkerCache'
+import {UniqueIdGenerator} from '../utils/IdUtils'
+import {NotionMode, VariableType} from '../models/Settings'
+import {FriendshipItem} from '../models/FriendshipItem'
+import {MessageUtils} from '../utils/MessageUtils'
 import {FileBox, type FileBoxInterface} from 'file-box'
 import * as fs from 'fs'
-import {RoomItem} from '../models/RoomItem.js'
-import {ContactItem} from '../models/ContactItem.js'
-import BaseClient from '../base/BaseClient.js'
-import {MessageService} from '../service/MessageService.js'
-import {CacheHelper} from '../utils/CacheHelper.js'
-import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper.js'
-import {SenderFactory} from '../message/SenderFactory.js'
+import {RoomItem} from '../models/RoomItem'
+import {ContactItem} from '../models/ContactItem'
+import BaseClient from '../base/BaseClient'
+import {MessageService} from '../service/MessageService'
+import {CacheHelper} from '../utils/CacheHelper'
+import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper'
+import {SenderFactory} from '../message/SenderFactory'
 import {Snowflake} from 'nodejs-snowflake'
 import {Markup} from 'telegraf'
 
@@ -967,7 +967,7 @@ export class WeChatClient extends BaseClient {
 
     private clearCache() {
         return new Promise(resolve => {
-            const filePath = 'storage/wechat_bot.memory-card.json'
+            const filePath = 'storage/wechat_bot.memory-cardon'
             fs.access(filePath, fs.constants.F_OK, async (err) => {
                 if (!err) {
                     // 文件存在，删除文件

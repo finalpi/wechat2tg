@@ -1,6 +1,6 @@
 import ffmpegStatic from 'ffmpeg-static'
 import * as fs from 'node:fs'
-import TgsUtils from './TgsUtils.js'
+import TgsUtils from './TgsUtils'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ffmpeg = require('fluent-ffmpeg')
 
