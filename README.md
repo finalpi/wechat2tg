@@ -17,12 +17,15 @@ circumvent the issue where some accounts are unable to log in to the WeChat web 
 
 1. This project is intended only for technical research and learning and must not be used for illegal purposes.
 2. Please submit any issues you encounter to the issue tracker.
-3. Due to limitations in the Telegram Bot API, it is not possible to send files larger than 20MB or receive files larger than 50MB.(Configuring API_ID and API_HASH can solve this)
+3. Due to limitations in the Telegram Bot API, it is not possible to send files larger than 20MB or receive files larger
+   than 50MB.(Configuring API_ID and API_HASH can solve this)
 
 ## Installation
 
 ### Using in docker-compose
+
 create file `docker-compose.yml`:
+
 ```yaml
 version: '3'
 
@@ -103,7 +106,7 @@ docker run -itd --env BOT_TOKEN="" --env PROXY_HOST="" --env PROXY_PORT="" --env
 
 `/setting`: Program settings:
 
-Message mode switch:
+**Message mode switch**:
 
 Switch between blacklist or whitelist mode
 
@@ -111,21 +114,34 @@ Whitelist mode: Only receive messages from groups in the whitelist
 
 Blacklist mode: Do not receive messages from groups in the blacklist
 
-Feedback on successful delivery: Whether to provide feedback on the message delivery status
+**Send successful feedback**: Whether to provide feedback on the message delivery status
 
-Automatic contact switch: Automatically switches back to replying to a user or group if they reply. **Please note that having a message sent to you just before sending may result in an incorrectly sent message!**
+**Automatically switch contacts**: Automatically switches back to replying to a user or group if they reply. **Please
+note
+that
+having a message sent to you just before sending may result in an incorrectly sent message!**
 
-Receive official account messages: Whether to accept messages from official accounts
+**Receive official account messages**: Whether to accept messages from official accounts
+
+**Forward a message you sent on WeChat**: Whether to forward messages sent using the WeChat mobile client.
+
+**Media Quality Compression**: When enabled, all received media messages will be received as images or videos, which may
+result in a loss of the original media quality. If this option is turned off, all messages will be received as files.
 
 ## Special Response Instructions
-Messages sent within 2 minutes can be recalled. The recall method is to reply to your own sent message with the content "&rm".
+
+Messages sent within 2 minutes can be recalled. The recall method is to reply to your own sent message with the
+content "&rm".
 Media messages need to wait until they are successfully sent before they can be recalled.
 
 ## Configuration Explanation
+
 `BOT_TOKEN` (required): Telegram bot token, created via BotFather
 
 ### Using a Proxy
+
 Use a proxy to forward requests to the Telegram bot, leave blank if not using a proxy:
+
 ```
 # Proxy configuration (optional)
 # Protocol socks5, http, https
@@ -138,25 +154,34 @@ PROXY_PASSWORD=
 
 ### Receiving and Sending Large Files
 
-Due to Telegram Bot API limitations, files larger than 20MB cannot be sent, and files larger than 50MB cannot be received. If you need to send or receive larger files, please configure your `API_ID` and `API_HASH`.
+Due to Telegram Bot API limitations, files larger than 20MB cannot be sent, and files larger than 50MB cannot be
+received. If you need to send or receive larger files, please configure your `API_ID` and `API_HASH`.
 
-**!! Testing found that sending files over 25MB via the web protocol causes the server to return an error upon slicing upload.**
+**!! Testing found that sending files over 25MB via the web protocol causes the server to return an error upon slicing
+upload.**
 
 How to obtain `API_ID` and `API_HASH`:
 
 1. Log in to your [telegram account](https://my.telegram.org/)
 
-2. Click on "API development tools" and fill in your application details (only the application title and short name are required).
+2. Click on "API development tools" and fill in your application details (only the application title and short name are
+   required).
 
 3. Finally, click "Create application."
 
 ### Manual grouping of messages
 
-**Note:** Because wechaty-puppet-wechat4u changes the ID each time it logs in again, it is not possible to obtain a unique key for each contact and group. The method to determine whether it is the same contact or group is by the contact's remark and nickname. This method may incorrectly bind to contacts and groups upon the next login if the remarks or nicknames are not unique, or if the name of the contact or group changes, which might cause binding failure. In such cases, re-binding is required.
+**Note:** Because wechaty-puppet-wechat4u changes the ID each time it logs in again, it is not possible to obtain a
+unique key for each contact and group. The method to determine whether it is the same contact or group is by the
+contact's remark and nickname. This method may incorrectly bind to contacts and groups upon the next login if the
+remarks or nicknames are not unique, or if the name of the contact or group changes, which might cause binding failure.
+In such cases, re-binding is required.
 
-1. Turn off the bot's privacy mode. Open BotFather, enter /mybots, select your bot, click Bot Settings - Group Privacy - Turn off. When you see Privacy mode is disabled for xxx, it means it has been successfully turned off.
+1. Turn off the bot's privacy mode. Open BotFather, enter /mybots, select your bot, click Bot Settings - Group Privacy -
+   Turn off. When you see Privacy mode is disabled for xxx, it means it has been successfully turned off.
 
-2. Create a telegram group, add the bot to the group, and bind according to the prompts. Afterward, messages from the contact or group will be forwarded to the group.
+2. Create a telegram group, add the bot to the group, and bind according to the prompts. Afterward, messages from the
+   contact or group will be forwarded to the group.
 
 `/bind`: View the contacts or groups currently bound to the group.
 
@@ -167,12 +192,15 @@ How to obtain `API_ID` and `API_HASH`:
 ### Automatic Grouping of Messages
 
 1. Configure `API_ID` and `API_HASH`
-2. Turn off the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot, click `Bot Settings` -> `Group Privacy` -> `Turn off`. When you see the message `Privacy mode is disabled for xxx`, it means the privacy mode has been successfully turned off.
+2. Turn off the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot,
+   click `Bot Settings` -> `Group Privacy` -> `Turn off`. When you see the message `Privacy mode is disabled for xxx`,
+   it means the privacy mode has been successfully turned off.
 3. Use the `/autocg` command to enable automatic grouping mode. Follow the prompts to log in to Telegram.
 
 ### Custom Message Templates
 
-If you want to modify the format of message senders, you can adjust the environment variables in Docker or the .env file.
+If you want to modify the format of message senders, you can adjust the environment variables in Docker or the .env
+file.
 
 Custom message template placeholders:
 
@@ -184,8 +212,8 @@ Custom message template placeholders:
 
 `#[alias_first]`: Alias preferred; if alias is not available, displays contact nickname
 
-
 ## License
+
 MIT
 
 ## Thanks
