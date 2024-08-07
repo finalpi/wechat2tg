@@ -23,6 +23,7 @@
     "log4js": "^6.9.1",
     "lottie-converter": "^1.0.0",
     "nodejs-snowflake": "^2.0.1",
+    "puppeteer": "^22.15.0",
     "puppeteer-lottie": "^1.1.2",
     "qrcode": "^1.5.1",
     "simple-xml-to-json": "^1.2.2",
