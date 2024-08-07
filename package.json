@@ -5,7 +5,7 @@
   "main": "app.ts",
   "esModuleInterop": true,
   "scripts": {
-    "dev": "tsc && node dist/app.js NODE_ENV=development",
+    "dev": "ts-node src/app.ts NODE_ENV=development",
     "build": "tsc",
     "start": "tsc && node dist/app.js NODE_ENV=production"
   },

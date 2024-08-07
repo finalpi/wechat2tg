@@ -537,7 +537,16 @@ export class WeChatClient extends BaseClient {
                 })
             }
         } else { // 人
-            bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
+            if (message.self()) {
+                // 过滤掉自己所发送的消息 和没有绑定的群组才转发
+                if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF)) {
+                    bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(message.listener().id)
+                } else {
+                    return
+                }
+            } else {
+                bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
+            }
             // 找到bindId
             let bindId
             if (talker?.type() === PUPPET.types.Contact.Official) {
@@ -603,30 +612,21 @@ export class WeChatClient extends BaseClient {
             message: message,
             send_id: talker.id,
         }
-
         if (message.self()) {
-            // 过滤掉自己所发送的消息 和没有绑定的群组才转发
-            if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF) && !bindItem) {
-                // 不转发文件
-                if (messageType === PUPPET.types.Message.Attachment
-                    || messageType === PUPPET.types.Message.Audio
-                    || messageType === PUPPET.types.Message.Image
-                    || messageType === PUPPET.types.Message.Video) {
-                    return
-                }
+            // 过滤掉自己所发送的消息
+            if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF)) {
                 let toSender = ''
-                const to = message.listener()
-                if (to) {
-                    toSender = !to.payload?.alias ? `${to?.name()}` : `[${to.payload?.alias}] ${to?.name()}`
+                if (talker) {
+                    toSender = !talker.payload?.alias ? `${talker?.name()}` : `[${talker.payload?.alias}] ${talker?.name()}`
                 } else {
                     toSender = message.room()?.payload?.topic ? `${message.room()?.payload?.topic}` : '未知群组'
                 }
-                identityStr = roomEntity ? `👤${this.t('wechat.me')}->🌐${roomTopic}: ` : `👤${this.t('wechat.me')} -> 👤${toSender} : `
+                if (!bindItem) {
+                    identityStr = roomEntity ? `👤${this.t('wechat.me')}->🌐${roomTopic}: ` : `👤${this.t('wechat.me')} -> 👤${toSender} : `
+                }
                 const meTitle = `${this.t('wechat.me')} -> ${toSender}`
                 sendMessageBody.sender = meTitle
                 showSender = meTitle
-            } else {
-                return
             }
         }
         // 过滤公众号消息
