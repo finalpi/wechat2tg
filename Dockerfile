@@ -14,7 +14,6 @@ COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
 COPY package*.json tsconfig.json ./
 
 # Set environment variable to disable sandbox in Puppeteer
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV BOT_TOKEN=""
 ENV PROXY_PROTOCOL=""
 ENV PROXY_HOST=""
