@@ -616,8 +616,9 @@ export class WeChatClient extends BaseClient {
             // 过滤掉自己所发送的消息
             if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF)) {
                 let toSender = ''
-                if (talker) {
-                    toSender = !talker.payload?.alias ? `${talker?.name()}` : `[${talker.payload?.alias}] ${talker?.name()}`
+                const to = message.listener()
+                if (to) {
+                    toSender = !to.payload?.alias ? `${to?.name()}` : `[${to.payload?.alias}] ${to?.name()}`
                 } else {
                     toSender = message.room()?.payload?.topic ? `${message.room()?.payload?.topic}` : '未知群组'
                 }
