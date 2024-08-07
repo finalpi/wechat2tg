@@ -9,10 +9,6 @@ RUN apt-get update && \
 
 RUN mkdir -p /app/storage /app/save-files
 
-# Create a non-root user and switch to it
-RUN useradd -m wx2tg
-USER wx2tg
-
 WORKDIR /app
 COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
 COPY package*.json tsconfig.json ./

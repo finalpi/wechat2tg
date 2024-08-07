@@ -6,6 +6,7 @@ const _7z = require('7zip-min')
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const renderLottie = require('puppeteer-lottie')
 import path from 'node:path'
+import puppeteer from 'puppeteer'
 
 export default class TgsUtils {
     async tgsToGif(inputFile: string, outputFile: string, lottieConfig?: {
@@ -29,10 +30,14 @@ export default class TgsUtils {
                             //     format: 'gif',
                             //     ...lottieConfig,
                             // })
+                            const browser = await puppeteer.launch({
+                                args: ['--no-sandbox', '--disable-setuid-sandbox']
+                            })
                             await renderLottie({
                                 path: path.resolve(tmpFilePath + '/' + files[0]),
                                 output: outputFile,
                                 ...lottieConfig,
+                                browser: browser
                             })
 
                             // fs.writeFileSync(outputFile, converted, 'base64')
@@ -44,11 +49,13 @@ export default class TgsUtils {
                                     path: path.resolve(tmpFilePath + '/' + files[0]),
                                     output: outputFile,
                                     width: 100,
-                                    height: 100
+                                    height: 100,
+                                    browser: browser
                                 })
 
                                 // fs.writeFileSync(outputFile, converted, 'base64')
                             }
+                            await browser.close()
                         } else {
                             // 文件不止一个
                             reject('Tgs file is more than one file')
