@@ -41,8 +41,8 @@ export default class TgsUtils {
                             })
 
                             // fs.writeFileSync(outputFile, converted, 'base64')
-                            const stats = fs.statSync(outputFile)
-                            const fileSizeInBytes = stats.size
+                            let stats = fs.statSync(outputFile)
+                            let fileSizeInBytes = stats.size
 
                             if (fileSizeInBytes > 1024 * 1024) {
                                 await renderLottie({
@@ -52,8 +52,17 @@ export default class TgsUtils {
                                     height: lottieConfig.height / lottieConfig.width * 200,
                                     browser: browser
                                 })
-
-                                // fs.writeFileSync(outputFile, converted, 'base64')
+                                stats = fs.statSync(outputFile)
+                                fileSizeInBytes = stats.size
+                                if (fileSizeInBytes > 1024 * 1024) {
+                                    await renderLottie({
+                                        path: path.resolve(tmpFilePath + '/' + files[0]),
+                                        output: outputFile,
+                                        width: 100,
+                                        height: lottieConfig.height / lottieConfig.width * 100,
+                                        browser: browser
+                                    })
+                                }
                             }
                             await browser.close()
                         } else {
