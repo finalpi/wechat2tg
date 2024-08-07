@@ -900,14 +900,12 @@ export class TelegramBotClient extends BaseClient {
                             caption: identityStr
                         }, {parse_mode: 'HTML'}).catch(e => {
                             ctx.answerCbQuery('重新接收失败')
-                            this.weChatClient.editSendFailButton(chatId, msgId, this.t('wechat.fileReceivingFailed'))
                             return
                         })
                     }
                 })
             }).catch(() => {
                 ctx.answerCbQuery('重新接收失败')
-                this.weChatClient.editSendFailButton(chatId, msgId, this.t('wechat.fileReceivingFailed'))
                 return
             })
         })
