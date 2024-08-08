@@ -968,7 +968,7 @@ export class WeChatClient extends BaseClient {
 
     private clearCache() {
         return new Promise(resolve => {
-            const filePath = 'storage/wechat_bot.memory-cardon'
+            const filePath = 'storage/wechat_bot.memory-card.json'
             fs.access(filePath, fs.constants.F_OK, async (err) => {
                 if (!err) {
                     // 文件存在，删除文件

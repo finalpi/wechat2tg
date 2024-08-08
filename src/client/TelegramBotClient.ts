@@ -2114,7 +2114,7 @@ export class TelegramBotClient extends BaseClient {
         this.wechatStartFlag = false
         this._weChatClient.stop().then(() => {
             ctx.reply(this.t('command.stop.success')).then(() => this.loginCommandExecuted = false)
-            const filePath = 'storage/wechat_bot.memory-cardon'
+            const filePath = 'storage/wechat_bot.memory-card.json'
             fs.access(filePath, fs.constants.F_OK, async (err) => {
                 if (!err) {
                     // 文件存在，删除文件

@@ -5,7 +5,7 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 export const config = {
-    TG_PH_TOKEN_FILE: process.env.TG_PH_TOKEN?.toString() || 'storage/telegra.phon',
+    TG_PH_TOKEN_FILE: process.env.TG_PH_TOKEN?.toString() || 'storage/telegra.ph.json',
     BOT_TOKEN: process.env.BOT_TOKEN?.toString() || '', // tg bot father 申请的 bot token
     PROTOCOL: process.env.PROXY_PROTOCOL?.toString() || '', // 协议:socks5/http/https
     HOST: process.env.PROXY_HOST?.toString() || '', // 代理服务器地址
