@@ -1,6 +1,6 @@
 import ffmpegStatic from 'ffmpeg-static'
 import * as fs from 'node:fs'
-import TgsUtils from './TgsUtils.js'
+import TgsUtils from './TgsUtils'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ffmpeg = require('fluent-ffmpeg')
 
@@ -15,9 +15,13 @@ export class ConverterHelper {
 
         return new Promise((resolve, reject) => {
             const convert = (resolution: number, fps: number) => {
+                let scale = 'scale=iw:-1:flags=lanczos'
+                if (resolution < 410) {
+                    scale = `scale=${resolution}:-1:flags=lanczos`
+                }
                 ffmpeg()
                     .input(inputFile)
-                    .outputOptions('-vf', `fps=${fps},scale=${resolution}:-1`)
+                    .outputOptions('-vf', `fps=${fps},${scale}`)
                     .format('gif')
                     .save(outputFile)
                     .on('end', () => {
@@ -45,8 +49,8 @@ export class ConverterHelper {
             }
 
             // 初始参数
-            const initialResolution = 360
-            const initialFps = 16
+            const initialResolution = 360 + 50
+            const initialFps = 16 + 1
 
             // 开始转换
             convert(initialResolution, initialFps)

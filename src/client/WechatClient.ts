@@ -11,24 +11,24 @@ import {
     RoomInvitationInterface,
     WechatyInterface
 } from 'wechaty/impls'
-import {TelegramBotClient} from './TelegramBotClient.js'
-import {EmojiConverter} from '../utils/EmojiUtils.js'
-import {MemberCacheType} from '../models/TgCache.js'
-import {SimpleMessage, SimpleMessageSender} from '../models/Message.js'
-import {TalkerEntity} from '../models/TalkerCache.js'
-import {UniqueIdGenerator} from '../utils/IdUtils.js'
-import {NotionMode, VariableType} from '../models/Settings.js'
-import {FriendshipItem} from '../models/FriendshipItem.js'
-import {MessageUtils} from '../utils/MessageUtils.js'
+import {TelegramBotClient} from './TelegramBotClient'
+import {EmojiConverter} from '../utils/EmojiUtils'
+import {MemberCacheType} from '../models/TgCache'
+import {SimpleMessage, SimpleMessageSender} from '../models/Message'
+import {TalkerEntity} from '../models/TalkerCache'
+import {UniqueIdGenerator} from '../utils/IdUtils'
+import {NotionMode, VariableType} from '../models/Settings'
+import {FriendshipItem} from '../models/FriendshipItem'
+import {MessageUtils} from '../utils/MessageUtils'
 import {FileBox, type FileBoxInterface} from 'file-box'
 import * as fs from 'fs'
-import {RoomItem} from '../models/RoomItem.js'
-import {ContactItem} from '../models/ContactItem.js'
-import BaseClient from '../base/BaseClient.js'
-import {MessageService} from '../service/MessageService.js'
-import {CacheHelper} from '../utils/CacheHelper.js'
-import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper.js'
-import {SenderFactory} from '../message/SenderFactory.js'
+import {RoomItem} from '../models/RoomItem'
+import {ContactItem} from '../models/ContactItem'
+import BaseClient from '../base/BaseClient'
+import {MessageService} from '../service/MessageService'
+import {CacheHelper} from '../utils/CacheHelper'
+import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper'
+import {SenderFactory} from '../message/SenderFactory'
 import {Snowflake} from 'nodejs-snowflake'
 import {Markup} from 'telegraf'
 
@@ -537,7 +537,16 @@ export class WeChatClient extends BaseClient {
                 })
             }
         } else { // 人
-            bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
+            if (message.self()) {
+                // 过滤掉自己所发送的消息 和没有绑定的群组才转发
+                if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF)) {
+                    bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(message.listener().id)
+                } else {
+                    return
+                }
+            } else {
+                bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
+            }
             // 找到bindId
             let bindId
             if (talker?.type() === PUPPET.types.Contact.Official) {
@@ -603,17 +612,9 @@ export class WeChatClient extends BaseClient {
             message: message,
             send_id: talker.id,
         }
-
         if (message.self()) {
-            // 过滤掉自己所发送的消息 和没有绑定的群组才转发
-            if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF) && !bindItem) {
-                // 不转发文件
-                if (messageType === PUPPET.types.Message.Attachment
-                    || messageType === PUPPET.types.Message.Audio
-                    || messageType === PUPPET.types.Message.Image
-                    || messageType === PUPPET.types.Message.Video) {
-                    return
-                }
+            // 过滤掉自己所发送的消息
+            if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF)) {
                 let toSender = ''
                 const to = message.listener()
                 if (to) {
@@ -621,12 +622,12 @@ export class WeChatClient extends BaseClient {
                 } else {
                     toSender = message.room()?.payload?.topic ? `${message.room()?.payload?.topic}` : '未知群组'
                 }
-                identityStr = roomEntity ? `👤${this.t('wechat.me')}->🌐${roomTopic}: ` : `👤${this.t('wechat.me')} -> 👤${toSender} : `
+                if (!bindItem) {
+                    identityStr = roomEntity ? `👤${this.t('wechat.me')}->🌐${roomTopic}: ` : `👤${this.t('wechat.me')} -> 👤${toSender} : `
+                }
                 const meTitle = `${this.t('wechat.me')} -> ${toSender}`
                 sendMessageBody.sender = meTitle
                 showSender = meTitle
-            } else {
-                return
             }
         }
         // 过滤公众号消息

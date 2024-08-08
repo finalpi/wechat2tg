@@ -1,6 +1,6 @@
 import axios, {AxiosRequestConfig} from 'axios'
 import * as fs from 'fs'
-import {config} from '../config.js'
+import {config} from '../config'
 import {SocksProxyAgent} from 'socks-proxy-agent'
 
 export class FileUtils {

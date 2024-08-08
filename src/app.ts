@@ -1,5 +1,5 @@
-import {TelegramBotClient} from './client/TelegramBotClient.js'
-import {LogUtils} from './utils/LogUtils.js'
+import {TelegramBotClient} from './client/TelegramBotClient'
+import {LogUtils} from './utils/LogUtils'
 
 process.on('uncaughtException', (err) => {
     LogUtils.config().getLogger('error').error('wechat2Tg uncaughtException', err)

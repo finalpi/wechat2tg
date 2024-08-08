@@ -1,37 +1,37 @@
 import {Context, Markup, NarrowedContext, session, Telegraf} from 'telegraf'
-import {WeChatClient} from './WechatClient.js'
-import {config} from '../config.js'
+import {WeChatClient} from './WechatClient'
+import {config} from '../config'
 import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from 'https-proxy-agent'
 // @ts-ignore
-import * as tg from 'telegraf/src/core/types/typegram.js'
+import * as tg from 'telegraf/src/core/types/typegram'
 import {message} from 'telegraf/filters'
 import {FileBox, FileBoxType} from 'file-box'
 import * as fs from 'node:fs'
-import {NotionListType, NotionMode, StorageSettings, VariableContainer, VariableType} from '../models/Settings.js'
-import {ConverterHelper} from '../utils/FfmpegUtils.js'
-import {SelectedEntity} from '../models/TgCache.js'
-import {TalkerEntity} from '../models/TalkerCache.js'
-import {UniqueIdGenerator} from '../utils/IdUtils.js'
-import {Page} from '../models/Page.js'
-import {FileUtils} from '../utils/FileUtils.js'
+import {NotionListType, NotionMode, StorageSettings, VariableContainer, VariableType} from '../models/Settings'
+import {ConverterHelper} from '../utils/FfmpegUtils'
+import {SelectedEntity} from '../models/TgCache'
+import {TalkerEntity} from '../models/TalkerCache'
+import {UniqueIdGenerator} from '../utils/IdUtils'
+import {Page} from '../models/Page'
+import {FileUtils} from '../utils/FileUtils'
 import {ContactImpl, ContactInterface, MessageInterface, RoomInterface} from 'wechaty/impls'
-import {CacheHelper} from '../utils/CacheHelper.js'
+import {CacheHelper} from '../utils/CacheHelper'
 import * as PUPPET from 'wechaty-puppet'
-import {TelegramClient} from './TelegramClient.js'
-import {BindItemService} from '../service/BindItemService.js'
-import {RoomItem} from '../models/RoomItem.js'
-import {ContactItem} from '../models/ContactItem.js'
-import {BindItem} from '../models/BindItem.js'
-import {UserAuthParams} from 'telegram/client/auth.js'
+import {TelegramClient} from './TelegramClient'
+import {BindItemService} from '../service/BindItemService'
+import {RoomItem} from '../models/RoomItem'
+import {ContactItem} from '../models/ContactItem'
+import {BindItem} from '../models/BindItem'
+import {UserAuthParams} from 'telegram/client/auth'
 import {EventEmitter} from 'node:events'
-import {TelegramUserClient} from './TelegramUserClient.js'
-import BaseClient from '../base/BaseClient.js'
-import {MessageService} from '../service/MessageService.js'
-import {MessageSender} from '../message/MessageSender.js'
-import {SenderFactory} from '../message/SenderFactory.js'
-import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper.js'
-import {SimpleMessageSender} from '../models/Message.js'
+import {TelegramUserClient} from './TelegramUserClient'
+import BaseClient from '../base/BaseClient'
+import {MessageService} from '../service/MessageService'
+import {MessageSender} from '../message/MessageSender'
+import {SenderFactory} from '../message/SenderFactory'
+import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper'
+import {SimpleMessageSender} from '../models/Message'
 
 export class TelegramBotClient extends BaseClient {
     get sendQueueHelper(): SimpleMessageSendQueueHelper {
@@ -1437,22 +1437,21 @@ export class TelegramBotClient extends BaseClient {
                 const saveFile = `save-files/${fileName}`
                 const gifFile = `save-files/${fileName.slice(0, fileName.lastIndexOf('.'))}.gif`
 
-                let lottie_config = {
+                const lottie_config = {
                     width: 200,
                     height: 200
                 }
-
                 if (saveFile.endsWith('.tgs')) {
-                    lottie_config = {
-                        width: 200,
-                        height: ctx.message.sticker.height / ctx.message.sticker.width * lottie_config.width
-                    }
+                    lottie_config.width = ctx.message.sticker.width
+                    lottie_config.height = ctx.message.sticker.height
                 }
 
                 // gif 文件存在
                 if (fs.existsSync(gifFile)) {
                     this.sendGif(saveFile, gifFile, ctx, lottie_config)
                 } else {
+                    // 删除掉解压出来的文件夹
+                    fs.rmSync(saveFile, {recursive: true, force: true})
                     // 尝试使用代理下载tg文件
                     if (config.HOST !== '') {
                         FileUtils.downloadWithProxy(fileLink.toString(), saveFile).then(() => {

@@ -1,8 +1,8 @@
-import {MessageSender, Option, SendResult} from './MessageSender.js'
+import {MessageSender, Option, SendResult} from './MessageSender'
 import {Telegraf, TelegramError} from 'telegraf'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-import * as tt from 'telegraf/src/telegram-types.js'
+import * as tt from 'telegraf/src/telegram-types'
 
 export class TelegramBotApiMessageSender extends MessageSender {
     private sender: Telegraf

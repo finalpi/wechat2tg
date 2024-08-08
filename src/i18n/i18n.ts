@@ -1,5 +1,5 @@
-import en from './locales/en.js'
-import zh from './locales/zh.js'
+import en from './locales/en'
+import zh from './locales/zh'
 
 type Translations = typeof en; // 假设所有语言文件的结构相同
 

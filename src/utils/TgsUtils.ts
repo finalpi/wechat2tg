@@ -3,6 +3,10 @@ import * as fs from 'node:fs'
 import converter from 'lottie-converter'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const _7z = require('7zip-min')
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const renderLottie = require('puppeteer-lottie')
+import path from 'node:path'
+import puppeteer from 'puppeteer'
 
 export default class TgsUtils {
     async tgsToGif(inputFile: string, outputFile: string, lottieConfig?: {
@@ -20,27 +24,47 @@ export default class TgsUtils {
 
                         const files = fs.readdirSync(tmpFilePath)
                         if (files.length === 1) {
-                            const file = fs.readFileSync(tmpFilePath + '/' + files[0])
-                            const converted = await converter({
-                                file: file,
-                                format: 'gif',
+                            // const file = fs.readFileSync(tmpFilePath + '/' + files[0])
+                            // const converted = await converter({
+                            //     file: file,
+                            //     format: 'gif',
+                            //     ...lottieConfig,
+                            // })
+                            const browser = await puppeteer.launch({
+                                args: ['--no-sandbox', '--disable-setuid-sandbox']
+                            })
+                            await renderLottie({
+                                path: path.resolve(tmpFilePath + '/' + files[0]),
+                                output: outputFile,
                                 ...lottieConfig,
+                                browser: browser
                             })
 
-                            fs.writeFileSync(outputFile, converted, 'base64')
-                            const stats = fs.statSync(outputFile)
-                            const fileSizeInBytes = stats.size
+                            // fs.writeFileSync(outputFile, converted, 'base64')
+                            let stats = fs.statSync(outputFile)
+                            let fileSizeInBytes = stats.size
 
                             if (fileSizeInBytes > 1024 * 1024) {
-                                const converted = await converter({
-                                    file: file,
-                                    format: 'gif',
-                                    width: 100,
-                                    height: 100
+                                await renderLottie({
+                                    path: path.resolve(tmpFilePath + '/' + files[0]),
+                                    output: outputFile,
+                                    width: 200,
+                                    height: lottieConfig.height / lottieConfig.width * 200,
+                                    browser: browser
                                 })
-
-                                fs.writeFileSync(outputFile, converted, 'base64')
+                                stats = fs.statSync(outputFile)
+                                fileSizeInBytes = stats.size
+                                if (fileSizeInBytes > 1024 * 1024) {
+                                    await renderLottie({
+                                        path: path.resolve(tmpFilePath + '/' + files[0]),
+                                        output: outputFile,
+                                        width: 100,
+                                        height: lottieConfig.height / lottieConfig.width * 100,
+                                        browser: browser
+                                    })
+                                }
                             }
+                            await browser.close()
                         } else {
                             // 文件不止一个
                             reject('Tgs file is more than one file')
