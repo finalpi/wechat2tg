@@ -540,6 +540,10 @@ export class WeChatClient extends BaseClient {
             if (message.self()) {
                 // 过滤掉自己所发送的消息 和没有绑定的群组才转发
                 if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF)) {
+                    await new Promise(resolve => setTimeout(resolve, 200))
+                    if (CacheHelper.getInstances().getUndoMessageByWxMsgId(message.id)) {
+                        return
+                    }
                     bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(message.listener().id)
                 } else {
                     return
