@@ -3,7 +3,7 @@ import {WeChatClient} from './WechatClient'
 import {config} from '../config'
 import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from 'https-proxy-agent'
-// @ts-ignore
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 import * as tg from 'telegraf/src/core/types/typegram'
 import {message} from 'telegraf/filters'
 import {FileBox, FileBoxType} from 'file-box'
@@ -709,7 +709,6 @@ export class TelegramBotClient extends BaseClient {
             }
         })
 
-        // @ts-ignore
         bot.command('stop', this.onWeChatStop)
 
         bot.command('check', ctx => {
