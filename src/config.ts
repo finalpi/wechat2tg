@@ -23,3 +23,5 @@ export const config = {
     OFFICIAL_MESSAGE_GROUP: process.env.OFFICIAL_MESSAGE_GROUP?.toString() || '<b>📣#[name]: </b>',
     ROOM_MESSAGE_GROUP: process.env.ROOM_MESSAGE_GROUP?.toString() || '<b>👤#[(alias)] #[name]: </b>',
 }
+
+export const useProxy = config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== ''
