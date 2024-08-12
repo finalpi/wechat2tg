@@ -178,6 +178,7 @@ interface appMsgXmlSchema_mmreader_item {
   title: string;
   cover: string;
   url: string;
+  summary?: string;
 }
 
 export async function parseAppmsgMessagePayload (messageContent: string): Promise<AppMessagePayload> {
