@@ -871,10 +871,10 @@ export class WeChatClient extends BaseClient {
                 parseAppmsgMessagePayload(message.text()).then(res => {
                     if (res.items && res.items.length > 0) {
                         sendMessageBody.body = res.items.map((it, index) => {
-                            return `${index + 1}. <a href="${it.url}">${it.title}</a> <blockquote>${it.summary}</blockquote>`
+                            return `<a href="${it.url}">${it.title}</a> <blockquote expandable>${it.summary} ...</blockquote>`
                         }).join('\n')
                     } else {
-                        sendMessageBody.body = `<a href="${res.url}">${res.title}</a> <blockquote>${res.des}</blockquote>`
+                        sendMessageBody.body = `<a href="${res.url}">${res.title}</a> <blockquote expandable>${res.des} ...</blockquote>`
                     }
                     this.tgClient.sendQueueHelper.addMessageWithMsgId(uniqueId, {
                         ...sendMessageBody,
