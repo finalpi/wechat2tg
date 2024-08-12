@@ -31,6 +31,7 @@ import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelpe
 import {SenderFactory} from '../message/SenderFactory'
 import {Snowflake} from 'nodejs-snowflake'
 import {Markup} from 'telegraf'
+import {parseAppmsgMessagePayload} from '../utils/message-appmsg'
 
 
 export class WeChatClient extends BaseClient {
@@ -867,13 +868,26 @@ export class WeChatClient extends BaseClient {
             case PUPPET.types.Message.RedEnvelope: // 处理红包消息的逻辑 12
                 break
             case PUPPET.types.Message.Url: // 处理链接消息的逻辑
-                message.toUrlLink().then(url => {
-                    sendMessageBody.body = `${this.t('wechat.messageType.url')}: ${url.description()} <a href="${url.url()}">${url.title()}</a>`
+                parseAppmsgMessagePayload(message.text()).then(res => {
+                    if (res.items && res.items.length > 0) {
+                        sendMessageBody.body = res.items.map(it => {
+                            return `${this.t('wechat.messageType.url')}: <a href="${it.url}">${it.title}</a>`
+                        }).join('\n')
+                    } else {
+                            sendMessageBody.body = `${this.t('wechat.messageType.url')}: ${res.des} <a href="${res.url}">${res.title}</a>`
+                    }
                     this.tgClient.sendQueueHelper.addMessageWithMsgId(uniqueId, {
                         ...sendMessageBody,
                         not_escape_html: true
                     })
                 })
+                // message.toUrlLink().then(url => {
+                //     sendMessageBody.body = `${this.t('wechat.messageType.url')}: ${url.description()} <a href="${url.url()}">${url.title()}</a>`
+                //     this.tgClient.sendQueueHelper.addMessageWithMsgId(uniqueId, {
+                //         ...sendMessageBody,
+                //         not_escape_html: true
+                //     })
+                // })
                 break
             case PUPPET.types.Message.Transfer: // 处理转账消息的逻辑 11
                 sendMessageBody.body = `${this.t('wechat.getOne')}${this.t('wechat.messageType.transfer')}`
