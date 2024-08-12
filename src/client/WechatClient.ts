@@ -31,6 +31,7 @@ import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelpe
 import {SenderFactory} from '../message/SenderFactory'
 import {Snowflake} from 'nodejs-snowflake'
 import {Markup} from 'telegraf'
+import {parseAppmsgMessagePayload} from '../utils/message-appmsg'
 
 
 export class WeChatClient extends BaseClient {
@@ -168,21 +169,21 @@ export class WeChatClient extends BaseClient {
         chat_id: number
     }): Promise<void | MessageInterface> {
         const msgText = msg instanceof FileBox ? msg.name : msg.toString()
-        // 保存发送的消息到数据库
-        // this.logInfo('数据库保存', msgText)
-        MessageService.getInstance().updateMessageByChatMsg({
-            chat_id: extra.chat_id.toString(),
-            msg_text: msgText,
-        }, {
-            telegram_message_id: extra.msg_id,
-            type: msg instanceof FileBox ? 0 : 7,
-            sender_id: sayable.id,
-        })
-        // eslint-disable-next-line @typescript-eslint/no-this-alias
         return new Promise((resolve, reject) => {
             sayable.say(msg).then(msg => {
                 // 保存到undo消息缓存
                 if (msg) {
+                    // 更新消息插入返回的微信消息id
+                    MessageService.getInstance().updateMessageByChatMsg({
+                        chat_id: extra.chat_id.toString(),
+                        msg_text: msgText,
+                    }, {
+                        telegram_message_id: extra.msg_id,
+                        type: msg instanceof FileBox ? 0 : 7,
+                        sender_id: sayable.id,
+                        wechat_message_id: msg.id,
+                        send_by: msg.talker().name()
+                    })
                     CacheHelper.getInstances().addUndoMessage({
                         chat_id: extra.chat_id,
                         wx_msg_id: msg.id,
@@ -512,6 +513,20 @@ export class WeChatClient extends BaseClient {
                     return
                 }
             }
+
+            if (message.self()) {
+                // 过滤掉自己所发送的消息 和没有绑定的群组才转发
+                if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF)) {
+                    // FIXME: 临时方案
+                    await new Promise(resolve => setTimeout(resolve, 200))
+                    if (await MessageService.getInstance().findMessageByWechatMessageId(message.id)) {
+                        return
+                    }
+                    // bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(message.listener().id)
+                } else {
+                    return
+                }
+            }
             // 找到bindId
             let bindId
             for (const roomItem of this._roomList) {
@@ -536,12 +551,14 @@ export class WeChatClient extends BaseClient {
                     bindId: bindId
                 })
             }
-        } else { // 人
+        } else {
+            // 自己发送的消息
             if (message.self()) {
                 // 过滤掉自己所发送的消息 和没有绑定的群组才转发
                 if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF)) {
+                    // FIXME: 临时方案
                     await new Promise(resolve => setTimeout(resolve, 200))
-                    if (CacheHelper.getInstances().getUndoMessageByWxMsgId(message.id)) {
+                    if (await MessageService.getInstance().findMessageByWechatMessageId(message.id)) {
                         return
                     }
                     bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(message.listener().id)
@@ -851,13 +868,26 @@ export class WeChatClient extends BaseClient {
             case PUPPET.types.Message.RedEnvelope: // 处理红包消息的逻辑 12
                 break
             case PUPPET.types.Message.Url: // 处理链接消息的逻辑
-                message.toUrlLink().then(url => {
-                    sendMessageBody.body = `${this.t('wechat.messageType.url')}: ${url.description()} <a href="${url.url()}">${url.title()}</a>`
+                parseAppmsgMessagePayload(message.text()).then(res => {
+                    if (res.items && res.items.length > 0) {
+                        sendMessageBody.body = res.items.map((it, index) => {
+                            return `<a href="${it.url}">${it.title}</a> <blockquote expandable>${it.summary} ...</blockquote>`
+                        }).join('\n')
+                    } else {
+                        sendMessageBody.body = `<a href="${res.url}">${res.title}</a> <blockquote expandable>${res.des} ...</blockquote>`
+                    }
                     this.tgClient.sendQueueHelper.addMessageWithMsgId(uniqueId, {
                         ...sendMessageBody,
                         not_escape_html: true
                     })
                 })
+                // message.toUrlLink().then(url => {
+                //     sendMessageBody.body = `${this.t('wechat.messageType.url')}: ${url.description()} <a href="${url.url()}">${url.title()}</a>`
+                //     this.tgClient.sendQueueHelper.addMessageWithMsgId(uniqueId, {
+                //         ...sendMessageBody,
+                //         not_escape_html: true
+                //     })
+                // })
                 break
             case PUPPET.types.Message.Transfer: // 处理转账消息的逻辑 11
                 sendMessageBody.body = `${this.t('wechat.getOne')}${this.t('wechat.messageType.transfer')}`

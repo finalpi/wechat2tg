@@ -208,4 +208,4 @@ API的限制,不能发送超过20MB的文件,或者接收超过50MB的文件,如
 
 感谢Jetbrains对本项目的支持
 
-[<img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.png" width="200" height="200">](https://www.jetbrains.com)
+[<img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.png" width="200">](https://www.jetbrains.com)

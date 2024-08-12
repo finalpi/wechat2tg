@@ -1,9 +1,9 @@
 import {Context, Markup, NarrowedContext, session, Telegraf} from 'telegraf'
 import {WeChatClient} from './WechatClient'
-import {config} from '../config'
+import {config, useProxy} from '../config'
 import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from 'https-proxy-agent'
-// @ts-ignore
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 import * as tg from 'telegraf/src/core/types/typegram'
 import {message} from 'telegraf/filters'
 import {FileBox, FileBoxType} from 'file-box'
@@ -220,6 +220,12 @@ export class TelegramBotClient extends BaseClient {
 
 
     public init() {
+
+        // 判断文件夹是否存在
+        if (!fs.existsSync('save-files')) {
+            fs.mkdirSync('save-files')
+        }
+
         const bot = this._bot
 
         bot.use(session())
@@ -709,7 +715,6 @@ export class TelegramBotClient extends BaseClient {
             }
         })
 
-        // @ts-ignore
         bot.command('stop', this.onWeChatStop)
 
         bot.command('check', ctx => {
@@ -1428,10 +1433,6 @@ export class TelegramBotClient extends BaseClient {
             const fileId = ctx.message.sticker.file_id
             ctx.telegram.getFileLink(fileId).then(async fileLink => {
                 const uniqueId = ctx.message.sticker.file_unique_id
-                // 判断文件夹是否存在
-                if (!fs.existsSync('save-files')) {
-                    fs.mkdirSync('save-files')
-                }
                 const href = fileLink.href
                 const fileName = `${uniqueId}-${href.substring(href.lastIndexOf('/') + 1, href.length)}`
                 const saveFile = `save-files/${fileName}`
@@ -1453,7 +1454,7 @@ export class TelegramBotClient extends BaseClient {
                     // 删除掉解压出来的文件夹
                     fs.rmSync(saveFile, {recursive: true, force: true})
                     // 尝试使用代理下载tg文件
-                    if (config.HOST !== '') {
+                    if (useProxy) {
                         FileUtils.downloadWithProxy(fileLink.toString(), saveFile).then(() => {
                             this.sendGif(saveFile, gifFile, ctx, lottie_config)
                         }).catch(() => ctx.reply(this.t('common.sendFailMsg', this.t('common.saveOrgFileError'))))
@@ -2295,9 +2296,9 @@ export class TelegramBotClient extends BaseClient {
     }
 
     private async sendFile(ctx: any, fileBox: FileBox, fileLink?: string) {
-        if (config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== '' && fileBox.type === FileBoxType.Url && fileLink) {
+        if (useProxy && fileBox.type === FileBoxType.Url && fileLink) {
             // 使用代理的情况
-            const savePath = `./save-files/${fileBox.name}`
+            const savePath = `save-files/${fileBox.name}`
             FileUtils.downloadWithProxy(fileLink, savePath).then(() => {
                 this.sendFile(ctx, FileBox.fromFile(savePath, fileBox.name), savePath)
             }).catch(() => ctx.reply(this.t('common.sendFailMsg', this.t('common.saveOrgFileError'))))
