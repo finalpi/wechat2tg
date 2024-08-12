@@ -220,4 +220,4 @@ MIT
 
 Thanks to JetBrains for supporting this project
 
-[<img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.png" width="200" height="200">](https://www.jetbrains.com)
+[<img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.png" width="200">](https://www.jetbrains.com)

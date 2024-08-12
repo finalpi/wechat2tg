@@ -870,11 +870,11 @@ export class WeChatClient extends BaseClient {
             case PUPPET.types.Message.Url: // 处理链接消息的逻辑
                 parseAppmsgMessagePayload(message.text()).then(res => {
                     if (res.items && res.items.length > 0) {
-                        sendMessageBody.body = res.items.map(it => {
-                            return `${this.t('wechat.messageType.url')}: <a href="${it.url}">${it.title}</a>`
-                        }).join('\n')
+                        sendMessageBody.body = res.items.map((it, i) => {
+                            return `${res.items.length > 1 ? i + 1 + '.' : ''} <a href="${it.url}">${it.title}</a>`
+                        }).join('\n\n')
                     } else {
-                            sendMessageBody.body = `${this.t('wechat.messageType.url')}: ${res.des} <a href="${res.url}">${res.title}</a>`
+                        sendMessageBody.body = `${res.des} <a href="${res.url}">${res.title}</a>`
                     }
                     this.tgClient.sendQueueHelper.addMessageWithMsgId(uniqueId, {
                         ...sendMessageBody,
