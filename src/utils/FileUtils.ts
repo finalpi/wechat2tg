@@ -1,6 +1,6 @@
 import axios, {AxiosRequestConfig} from 'axios'
 import * as fs from 'fs'
-import {config} from '../config'
+import {config, useProxy} from '../config'
 import {SocksProxyAgent} from 'socks-proxy-agent'
 
 export class FileUtils {
@@ -12,28 +12,29 @@ export class FileUtils {
             url: fileUrl,
             responseType: 'stream'
         }
-
-        if (config.HOST !== '' && config.PROTOCOL === 'http' || config.PROTOCOL === 'https') {
-            axiosConfig.proxy = {
-                host: config.HOST,
-                port: Number.parseInt(config.PORT),
-                auth: {
+        if (useProxy) {
+            if (config.HOST !== '' && config.PROTOCOL === 'http' || config.PROTOCOL === 'https') {
+                axiosConfig.proxy = {
+                    host: config.HOST,
+                    port: Number.parseInt(config.PORT),
+                    auth: {
+                        username: config.USERNAME,
+                        password: config.PASSWORD
+                    }
+                }
+            } else if (config.PROTOCOL === 'socks5') {
+                const info = {
+                    hostname: config.HOST,
+                    port: config.PORT,
                     username: config.USERNAME,
                     password: config.PASSWORD
                 }
+                const agent = new SocksProxyAgent(info)
+                axiosConfig.httpAgent = agent
+                axiosConfig.httpsAgent = agent
+            } else {
+                throw new Error('Unsupported proxy protocol')
             }
-        } else if (config.PROTOCOL === 'socks5') {
-            const info = {
-                hostname: config.HOST,
-                port: config.PORT,
-                username: config.USERNAME,
-                password: config.PASSWORD
-            }
-            const agent = new SocksProxyAgent(info)
-            axiosConfig.httpAgent = agent
-            axiosConfig.httpsAgent = agent
-        } else {
-            throw new Error('Unsupported proxy protocol')
         }
 
         try {

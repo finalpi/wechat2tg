@@ -32,6 +32,7 @@ import {MessageSender} from '../message/MessageSender'
 import {SenderFactory} from '../message/SenderFactory'
 import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper'
 import {SimpleMessageSender} from '../models/Message'
+import sharp from 'sharp'
 
 export class TelegramBotClient extends BaseClient {
     get sendQueueHelper(): SimpleMessageSendQueueHelper {
@@ -2242,7 +2243,7 @@ export class TelegramBotClient extends BaseClient {
         if (ctx.message[fileType]) {
             let fileId = ctx.message[fileType].file_id
             let fileSize = ctx.message[fileType].file_size
-            const fileName = ctx.message[fileType].file_name
+            let fileName = ctx.message[fileType].file_name
             if (!fileId) {
                 fileId = ctx.message[fileType][ctx.message[fileType].length - 1].file_id
                 fileSize = ctx.message[fileType][ctx.message[fileType].length - 1].file_size
@@ -2281,6 +2282,39 @@ export class TelegramBotClient extends BaseClient {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             ctx.telegram.getFileLink(fileId).then(async fileLink => {
+                // 如果图片大小小于100k,则添加元数据使其大小达到100k,否则会被微信压缩质量
+                if (fileSize && fileSize < 100 * 1024 && (fileType === 'photo' || (fileName.endWith('jpg') || fileName.endWith('jpeg') || fileName.endWith('png')))) {
+                    if (!fileName) {
+                        fileName = new Date().getTime() + '.jpg'
+                    }
+                    const savePath = `save-files/${fileName}`
+                    FileUtils.downloadWithProxy(fileLink.toString(), savePath).then(() => {
+                        // 构造包含无用信息的 EXIF 元数据
+                        const exifData = {
+                            IFD0: {
+                                // 添加一个长字符串作为无用信息
+                                ImageDescription: '0'.repeat(110_000 - fileSize)
+                            }
+                        }
+
+                        // 保存带有新元数据的图片
+                        sharp(savePath)
+                            .withMetadata({exif: exifData})
+                            .toBuffer()
+                            .then(buff => {
+                                this.sendFile(ctx, FileBox.fromBuffer(buff, fileName)).then(() => {
+                                    setTimeout(() => {
+                                        fs.unlink(savePath, err => {
+                                            console.log(err)
+                                        })
+                                    }, 20000)
+                                })
+                            }).catch((err) => {
+                            ctx.reply(this.t('common.sendFailMsg', this.t('common.saveOrgFileError')))
+                        })
+                    }).catch(() => ctx.reply(this.t('common.sendFailMsg', this.t('common.saveOrgFileError'))))
+                    return
+                }
                 let fileBox
                 if (fileType === 'voice') {
                     const nowShangHaiZh = new Date().toLocaleString('zh', {
