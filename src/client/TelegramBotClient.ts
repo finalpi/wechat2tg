@@ -110,6 +110,8 @@ export class TelegramBotClient extends BaseClient {
     private telegramBotApiSender: MessageSender
     private _sendQueueHelper: SimpleMessageSendQueueHelper
 
+    private _commands = []
+
 
     private constructor() {
         super()
@@ -240,91 +242,7 @@ export class TelegramBotClient extends BaseClient {
         // 初始化配置
         this.forwardSetting.writeToFile()
 
-        const commands = [
-            {command: 'help', description: this.t('command.description.help')},
-            {command: 'start', description: this.t('command.description.start')},
-            {command: 'login', description: this.t('command.description.login')},
-            {command: 'user', description: this.t('command.description.user')},
-            {command: 'room', description: this.t('command.description.room')},
-            {command: 'recent', description: this.t('command.description.recent')},
-            {command: 'settings', description: this.t('command.description.settings')},
-            {command: 'check', description: this.t('command.description.check')},
-            {command: 'bind', description: this.t('command.description.bind')},
-            {command: 'unbind', description: this.t('command.description.unbind')},
-            {command: 'cgdata', description: this.t('command.description.cgdata')},
-            {command: 'reset', description: this.t('command.description.reset')},
-            {command: 'stop', description: this.t('command.description.stop')},
-            {command: 'lang', description: this.t('command.description.lang')},
-        ]
-        if (config.API_ID && config.API_HASH) {
-            // 启动tg client
-            if (!this._tgClient) {
-                this._tgClient = TelegramClient.getInstance()
-                this._tgUserClient = TelegramUserClient.getInstance()
-                this.telegramApiSender = new SenderFactory().createSender(this._tgClient.client)
-            }
-            // 设置command
-            commands.push({command: 'autocg', description: this.t('command.description.autocg')})
-        } else {
-            this.forwardSetting.setVariable(VariableType.SETTING_AUTO_GROUP, false)
-            // 修改后持成文件
-            this.forwardSetting.writeToFile()
-        }
-        bot.telegram.setMyCommands(commands)
-
-        bot.catch(error => {
-            // handle error
-            console.log(error)
-        })
-
-        bot.command('autocg', ctx => {
-            if (!config.API_ID || !config.API_HASH) {
-                ctx.reply(this.t('command.autocg.configApi'))
-                return
-            }
-            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
-                ctx.reply(this.t('common.plzLoginWeChat'))
-                return
-            }
-            const b = this.forwardSetting.getVariable(VariableType.SETTING_AUTO_GROUP)
-            const state = b ? this.t('common.open') : this.t('common.close')
-            ctx.reply(`${this.t('command.autocg.configApi')}(${state}):`, {
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            {text: this.t('common.clickChange'), callback_data: VariableType.SETTING_AUTO_GROUP},
-                        ]
-                    ]
-                }
-            })
-        })
-
-        bot.help((ctx) => ctx.replyWithMarkdownV2(this.t('command.helpText')))
-
-        bot.start(ctx => {
-            ctx.reply(this.t('command.startText'), Markup.removeKeyboard())
-        })
-
-        bot.on(message('group_chat_created'), ctx => {
-            if (this._tgUserClientLogin) {
-                return
-            }
-            ctx.reply(this.t('common.plzLoginWeChat'))
-        })
-
-        bot.on(message('left_chat_member'), ctx => {
-            if (ctx.message.left_chat_member.id === ctx.botInfo.id) {
-                this.bindItemService.removeBindItemByChatId(ctx.message.chat.id)
-            }
-        })
-
-        bot.on(message('new_chat_members'), ctx => {
-            for (const newChatMember of ctx.message.new_chat_members) {
-                if (newChatMember.id === ctx.botInfo.id) {
-                    ctx.reply(this.t('common.plzLoginWeChat'))
-                }
-            }
-        })
+        this.onBotCommand(bot)
 
         // 此方法需要放在所有监听方法之前,先拦截命令做处理
         bot.use(async (ctx, next) => {
@@ -359,6 +277,8 @@ export class TelegramBotClient extends BaseClient {
             }
         })
 
+        this.onBotMessage(bot)
+
         // 重启时判断是否有主人,如果存在主人则自动登录微信
         const variables = this.forwardSetting.getAllVariables()
         if (variables.chat_id && variables.chat_id !== '') {
@@ -381,13 +301,644 @@ export class TelegramBotClient extends BaseClient {
             }
         }
 
-        bot.settings(ctx => {
+        this.onBotAction(bot)
 
+        bot.catch((err, ctx) => {
+            this.logError('tg bot error: ', err, ctx.update)
+        })
+
+        this.botLaunch(bot)
+    }
+
+    private onBotCommand(bot: Telegraf) {
+        this._commands = [
+            {command: 'help', description: this.t('command.description.help')},
+            {command: 'start', description: this.t('command.description.start')},
+            {command: 'login', description: this.t('command.description.login')},
+            {command: 'user', description: this.t('command.description.user')},
+            {command: 'room', description: this.t('command.description.room')},
+            {command: 'recent', description: this.t('command.description.recent')},
+            {command: 'settings', description: this.t('command.description.settings')},
+            {command: 'check', description: this.t('command.description.check')},
+            {command: 'bind', description: this.t('command.description.bind')},
+            {command: 'unbind', description: this.t('command.description.unbind')},
+            {command: 'cgdata', description: this.t('command.description.cgdata')},
+            {command: 'reset', description: this.t('command.description.reset')},
+            {command: 'stop', description: this.t('command.description.stop')},
+            {command: 'lang', description: this.t('command.description.lang')},
+        ]
+        if (config.API_ID && config.API_HASH) {
+            // 启动tg client
+            if (!this._tgClient) {
+                this._tgClient = TelegramClient.getInstance()
+                this._tgUserClient = TelegramUserClient.getInstance()
+                this.telegramApiSender = new SenderFactory().createSender(this._tgClient.client)
+            }
+            // 设置command
+            this._commands.push({command: 'autocg', description: this.t('command.description.autocg')})
+        } else {
+            this.forwardSetting.setVariable(VariableType.SETTING_AUTO_GROUP, false)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
+        }
+        bot.telegram.setMyCommands(this._commands)
+
+        bot.help((ctx) => ctx.replyWithMarkdownV2(this.t('command.helpText')))
+
+        bot.start(ctx => {
+            ctx.reply(this.t('command.startText'), Markup.removeKeyboard())
+        })
+
+        bot.settings(ctx => {
             ctx.reply(this.t('command.settingsText'), {
                 reply_markup: this.getSettingButton()
             })
         })
 
+        bot.command('autocg', ctx => {
+            if (!config.API_ID || !config.API_HASH) {
+                ctx.reply(this.t('command.autocg.configApi'))
+                return
+            }
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
+                ctx.reply(this.t('common.plzLoginWeChat'))
+                return
+            }
+            const b = this.forwardSetting.getVariable(VariableType.SETTING_AUTO_GROUP)
+            const state = b ? this.t('common.open') : this.t('common.close')
+            ctx.reply(`${this.t('command.autocg.configApi')}(${state}):`, {
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            {text: this.t('common.clickChange'), callback_data: VariableType.SETTING_AUTO_GROUP},
+                        ]
+                    ]
+                }
+            })
+        })
+
+        bot.command('reset', (ctx) => {
+            this._weChatClient.resetValue()
+            ctx.reply(this.t('command.resetText'))
+        })
+
+        bot.command('cgdata', async (ctx) => {
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
+                if (!bindItem) {
+                    return ctx.reply(this.t('command.cgdata.notBind'))
+                }
+                // 获取群组管理员列表
+                const administrators = await ctx.telegram.getChatAdministrators(ctx.chat.id)
+
+                // 检查机器人是否在管理员列表中
+                const botId = ctx.botInfo.id
+                const isAdmin = administrators.some(admin => admin.user.id === botId)
+
+                if (!isAdmin) {
+                    return ctx.reply(this.t('command.cgdata.notAdmin'))
+                }
+                if (bindItem.type === 0) {
+                    const contact = this.getContactByBindItem(bindItem)
+                    if (contact) {
+                        await ctx.telegram.setChatTitle(ctx.chat.id, `${bindItem.alias}[${bindItem.name}]`)
+                        // 获取头像
+                        contact.avatar().then(fbox => {
+                            fbox.toBuffer().then(async buff => {
+                                await ctx.telegram.setChatPhoto(ctx.chat.id, {
+                                    source: buff
+                                })
+                            })
+                        })
+                    }
+                } else {
+                    await ctx.telegram.setChatTitle(ctx.chat.id, bindItem.name)
+                }
+            } else {
+                return ctx.reply(this.t('common.onlyInGroup'))
+            }
+        })
+
+        bot.command('bind', async (ctx) => {
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
+                if (bindItem) {
+                    if (bindItem.type === 0) {
+                        ctx.reply(`${this.t('command.bind.currentBindUser')}${bindItem.alias}[${bindItem.name}]`)
+                    } else {
+                        ctx.reply(`${this.t('command.bind.currentBindGroup')}${bindItem.alias}[${bindItem.name}]`)
+                    }
+                } else {
+                    ctx.reply(this.t('command.bind.noBinding'))
+                }
+            } else {
+                ctx.reply(this.t('common.onlyInGroup'))
+            }
+        })
+
+        bot.command('unbind', async (ctx) => {
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                await this.bindItemService.removeBindItemByChatId(ctx.chat.id)
+                ctx.reply(this.t('command.unbindText'))
+            } else {
+                ctx.reply(this.t('common.onlyInGroup'))
+            }
+        })
+
+        bot.command('login', async ctx => {
+            this.getUserId()
+            if (!this.wechatStartFlag) {
+                this.wechatStartFlag = true
+                this._weChatClient.start().then(() => {
+
+
+                    // 第一次输入的人当成bot的所有者
+                    this.loadOwnerChat(ctx)
+
+                    // 标记为已执行
+                    this.loginCommandExecuted = true
+
+                }).catch(() => {
+                    ctx.reply(this.t('command.login.fail'))
+                })
+            }
+        })
+
+        bot.command('stop', this.onWeChatStop)
+
+        bot.command('check', ctx => {
+            if (this.wechatStartFlag && this._weChatClient.client.isLoggedIn) {
+                ctx.reply(this.t('command.check.onLine'))
+            } else {
+                ctx.reply(this.t('command.check.offLine'))
+            }
+        })
+
+        // select language
+        bot.command('lang', ctx => {
+            ctx.reply(this.t('command.langText'), {
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            {text: '中文', callback_data: 'lang-zh'},
+                            {text: 'English', callback_data: 'lang-en'}
+                        ]
+                    ]
+                }
+            })
+        })
+
+        bot.command('recent', async ctx => {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
+                ctx.reply(this.t('common.plzLoginWeChat'))
+                return
+            }
+
+            if (this.recentUsers.length == 0) {
+                ctx.reply(this.t('command.recent.noUsers'))
+                return
+            }
+
+            const buttons: tg.InlineKeyboardButton[][] = []
+            this.recentUsers.forEach(item => {
+                buttons.push([Markup.button.callback(item.name, item.id)])
+            })
+            const inlineKeyboard = Markup.inlineKeyboard(buttons)
+            ctx.reply(this.t('command.recent.plzSelect'), inlineKeyboard)
+        })
+        // 选择群聊
+        const currentSelectRoomMap = new Map<string, RoomItem>()
+        let searchRooms: RoomItem [] = []
+        bot.command('room', async ctx => {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
+                await ctx.reply(this.t('common.plzLoginWeChat'))
+                return
+            }
+
+            if (!this._weChatClient.cacheMemberDone) {
+                await ctx.reply(this.t('command.user.onLoading'))
+                return
+            }
+
+            // 获取消息文本
+            const messageText = ctx.update.message.text
+
+            // 正则表达式用来分离命令后面的参数
+            const match = messageText.match(/\/room\s+([\p{L}\p{N}_]+)/u)
+            if (match) {
+                const topic = match[1]  // 提取用户名
+                const filterRoom = this._weChatClient.roomList.filter(room => {
+                    // const roomName = ;
+                    return room.room.payload?.topic?.includes(topic)
+                })
+                if (filterRoom && filterRoom.length > 0) {
+                    const buttons: tg.InlineKeyboardButton[][] = []
+                    this.searchList = []
+                    filterRoom.forEach(item => {
+                        const id = UniqueIdGenerator.getInstance().generateId('search')
+                        this.searchList.push({
+                            id: id,
+                            contact: item.room,
+                            type: 1
+                        })
+                    })
+                    const page = new Page(this.searchList, 1, TelegramBotClient.PAGE_SIZE)
+                    const pageList = page.getList(1)
+                    for (let i = 0; i < pageList.length; i += 2) {
+                        const item = pageList[i].contact
+                        const buttonRow = [Markup.button.callback(`🌐${await item.topic()}`, `${pageList[i].id}`)]
+                        if (i + 1 < pageList.length) {
+                            const item1 = pageList[i + 1].contact
+                            buttonRow.push(Markup.button.callback(`🌐${await item1.topic()}`, `${pageList[i + 1].id}`))
+                        }
+                        buttons.push(buttonRow)
+                    }
+                    if (page.hasNext()) {
+                        buttons.push([Markup.button.callback(this.t('common.nextPage'), 'search-2')])
+                    }
+                    ctx.reply(this.t('command.room.plzSelect'), Markup.inlineKeyboard(buttons))
+                } else {
+                    ctx.reply(this.t('command.room.notFound') + topic)
+                }
+                return
+            }
+
+            const count = 0
+            searchRooms = this._weChatClient.roomList
+            this.generateRoomButtons(searchRooms, currentSelectRoomMap, count).then(buttons => {
+                if (buttons.length === 0) {
+                    ctx.reply(this.t('command.room.notFound'))
+                } else {
+                    ctx.reply(this.t('command.room.plzSelect'), {
+                        ...Markup.inlineKeyboard(buttons)
+                    })
+                }
+            })
+        })
+        bot.action(/room-index-\d+/, async (ctx) => {
+            // this.logDebug(ctx.match.input)
+            const room = currentSelectRoomMap.get(ctx.match.input)
+            const roomTopic = await room?.room?.topic()
+            if (ctx.chat && ctx.chat.type.includes('group') && room) {
+                // 群组绑定
+                this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, room.id, '', room.room.id, '')
+                ctx.deleteMessage()
+                ctx.answerCbQuery()
+                return
+            }
+            this.selectRoom = room?.room
+            ctx.deleteMessage()
+            this.setPin('room', roomTopic)
+            ctx.answerCbQuery()
+        })
+        bot.action(/room-next-\d+/, async (ctx) => {
+            const nextPage = parseInt(ctx.match.input.slice(10))
+            this.generateRoomButtons(searchRooms, currentSelectRoomMap, nextPage).then(buttons => {
+                ctx.editMessageReplyMarkup({
+                    inline_keyboard: buttons
+                })
+            })
+            await ctx.answerCbQuery()
+        })
+        // 选择用户
+        let currentSearchWord = ''
+        bot.command('user', async ctx => {
+
+            // wait all contact loaded
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
+                ctx.reply(this.t('command.user.onLoading'))
+                return
+            }
+
+            if (!this.loginCommandExecuted) {
+                await ctx.reply(this.t('command.user.onLogin'))
+                return
+            }
+
+            if (!this._weChatClient.cacheMemberDone) {
+                await ctx.reply(this.t('command.user.onLoading'))
+                return
+            }
+
+            // 获取消息文本
+            const messageText = ctx.update.message.text
+
+            // 正则表达式用来分离命令后面的参数
+            const match = messageText.match(/\/user\s+([\p{L}\p{N}_]+)/u)
+            if (match) {
+                const username = match[1]  // 提取用户名
+                const individual = this._weChatClient.contactMap?.get(ContactImpl.Type.Individual)
+                const official = this._weChatClient.contactMap?.get(ContactImpl.Type.Official)
+                const individualFilter: ContactInterface[] = []
+                individual?.forEach(item => {
+                    const alias = item.contact.payload?.alias
+                    if (alias?.includes(username)) {
+                        individualFilter.push(item.contact)
+                        return
+                    }
+                    if (item.contact.name().includes(username)) {
+                        individualFilter.push(item.contact)
+                    }
+                })
+                const officialFilter: ContactInterface[] = []
+                official?.forEach(item => {
+                    const alias = item.contact.payload?.alias
+                    if (alias?.includes(username)) {
+                        officialFilter.push(item.contact)
+                        return
+                    }
+                    if (item.contact.name().includes(username)) {
+                        officialFilter.push(item.contact)
+                    }
+                })
+                if ((individualFilter && individualFilter.length > 0) || (officialFilter && officialFilter.length > 0)) {
+                    const buttons: tg.InlineKeyboardButton[][] = []
+                    this.searchList = [];
+                    [...officialFilter, ...individualFilter].forEach(item => {
+                        const id = UniqueIdGenerator.getInstance().generateId('search')
+                        this.searchList.push({
+                            id: id,
+                            contact: item,
+                            type: 0
+                        })
+                    })
+                    const page = new Page(this.searchList, 1, TelegramBotClient.PAGE_SIZE)
+                    const pageList = page.getList(1)
+                    for (let i = 0; i < pageList.length; i += 2) {
+                        const item = pageList[i].contact
+                        const buttonRow: tg.InlineKeyboardButton[] = []
+                        if (item.payload?.type === PUPPET.types.Contact.Official) {
+                            buttonRow.push(Markup.button.callback(`📣${item.name()}`, `${pageList[i].id}`))
+                        } else {
+                            if (item.payload?.alias) {
+                                buttonRow.push(Markup.button.callback(`👤${item.payload?.alias}[${item.name()}]`, `${pageList[i].id}`))
+                            } else {
+                                buttonRow.push(Markup.button.callback(`👤${item.name()}`, `${pageList[i].id}`))
+                            }
+                        }
+                        if (i + 1 < pageList.length) {
+                            const item1 = pageList[i + 1].contact
+                            if (item1.payload?.type === PUPPET.types.Contact.Official) {
+                                buttonRow.push(Markup.button.callback(`📣${item1.name()}`, `${pageList[i + 1].id}`))
+                            } else {
+                                if (item1.payload?.alias) {
+                                    buttonRow.push(Markup.button.callback(`👤${item1.payload?.alias}[${item1.name()}]`, `${pageList[i + 1].id}`))
+                                } else {
+                                    buttonRow.push(Markup.button.callback(`👤${item1.name()}`, `${pageList[i + 1].id}`))
+                                }
+                            }
+                        }
+                        buttons.push(buttonRow)
+                    }
+                    if (page.hasNext()) {
+                        buttons.push([Markup.button.callback(this.t('common.nextPage'), 'search-2')])
+                    }
+                    ctx.reply(this.t('command.user.plzSelect'), Markup.inlineKeyboard(buttons))
+                } else {
+                    ctx.reply(this.t('command.user.notFound') + username)
+                }
+                return
+            }
+
+            if (ctx.message.text) {
+                currentSearchWord = ctx.message.text.split(' ')[1]
+            } else {
+                currentSearchWord = ''
+            }
+
+
+            // Create inline keyboard
+            const inlineKeyboard = Markup.inlineKeyboard([
+                // Markup.button.callback('未知', 'UNKNOWN'),
+                Markup.button.callback(this.t('command.user.individual'), 'INDIVIDUAL'),
+                Markup.button.callback(this.t('command.user.official'), 'OFFICIAL'),
+                // Markup.button.callback('公司', 'CORPORATION')
+            ])
+
+            // Send message with inline keyboard
+            ctx.reply(this.t('command.user.plzSelectType'), inlineKeyboard)
+
+        })
+        // const unknownPage = 0;
+        const individualPage = 0
+        const officialPage = 0
+
+        bot.action('INDIVIDUAL', ctx => {
+            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Individual) || []].map(item => item.contact), individualPage, currentSearchWord)
+            ctx.answerCbQuery()
+        })
+        bot.action('OFFICIAL', ctx => {
+            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Official) || []].map(item => item.contact), officialPage, currentSearchWord)
+            ctx.answerCbQuery()
+        })
+    }
+
+    private onBotMessage(bot: Telegraf) {
+        bot.on(message('group_chat_created'), ctx => {
+            if (this._tgUserClientLogin) {
+                return
+            }
+            ctx.reply(this.t('common.plzLoginWeChat'))
+        })
+
+        bot.on(message('left_chat_member'), ctx => {
+            if (ctx.message.left_chat_member.id === ctx.botInfo.id) {
+                this.bindItemService.removeBindItemByChatId(ctx.message.chat.id)
+            }
+        })
+
+        bot.on(message('new_chat_members'), ctx => {
+            for (const newChatMember of ctx.message.new_chat_members) {
+                if (newChatMember.id === ctx.botInfo.id) {
+                    ctx.reply(this.t('common.plzLoginWeChat'))
+                }
+            }
+        })
+
+        bot.on(message('text'), async ctx => {
+            const text = ctx.message.text // 获取消息内容
+            const replyMessageId = ctx.update.message['reply_to_message']?.message_id
+            const chatId = ctx.chat.id
+            const msgId = ctx.message.message_id
+            // 处理等待用户输入的指令
+            if (await this.dealWithCommand(ctx, text)) {
+                return
+            }
+
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
+                ctx.reply(this.t('common.plzLoginWeChat'))
+                return
+            }
+            // 获取锁
+            // await this.lock.acquire()
+            // 如果是回复的消息 优先回复该发送的消息
+            if (replyMessageId) {
+                // 假设回复消息是撤回命令 撤回web协议获取不到消息id 放弃 更新上游代码可获取了
+                if (text === '&rm') {
+                    this.undoMessage(replyMessageId, ctx)
+                    // this.lock.release()
+                    return
+                }
+                const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId, chatId)
+                const weChatMessageId = messageItem?.wechat_message_id
+                // 设置别名(不可用)
+                // if (text.startsWith('&alias') && weChatMessageId) {
+                // this.setAlias(weChatMessageId, text, ctx)
+                // return
+                // }
+
+                if (weChatMessageId) {
+                    // 添加或者移除名单
+                    this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
+                        if (!message) {
+                            ctx.reply(this.t('common.sendFail'), {
+                                reply_parameters: {
+                                    message_id: msgId
+                                }
+                            })
+                            // this.lock.release()
+                            return
+                        }
+                        this.weChatClient.addMessage(message, text, {
+                            chat_id: chatId,
+                            msg_id: msgId
+                        })
+                    })
+                }
+                // this.lock.release()
+                return
+            }
+
+            // 如果是群组消息的情况
+            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
+                const bindItem = await this.bindItemService.getBindItemByChatId(chatId)
+                if (bindItem) {
+                    if (!this._weChatClient.cacheMemberDone) {
+                        await ctx.reply(`${this.t('common.sendFail')},${this.t('command.user.onLoading')}`, {
+                            reply_parameters: {
+                                message_id: ctx.message.message_id
+                            }
+                        })
+                        // this.lock.release()
+                        return
+                    }
+                    if (bindItem.type === 0) {
+                        const contact = this.getContactByBindItem(bindItem)
+                        if (contact) {
+                            this.weChatClient.addMessage(contact, text, {
+                                chat_id: chatId,
+                                msg_id: msgId
+                            })
+                        }
+                    } else {
+                        const room = this.getRoomByBindItem(bindItem)
+                        if (room) {
+                            this.weChatClient.addMessage(room, text, {
+                                chat_id: chatId,
+                                msg_id: msgId
+                            })
+                        }
+                    }
+                } else {
+                    await ctx.reply(this.t('common.sendFailNoBind'), {
+                        reply_parameters: {
+                            message_id: msgId
+                        }
+                    })
+                }
+                // this.lock.release()
+                return
+            }
+
+            // 当前有回复的'个人用户' 并且是选择了用户的情况下
+            if (this._flagPinMessageType === 'user' && this._currentSelectContact) {
+                this.weChatClient.addMessage(this._currentSelectContact, text, {
+                    chat_id: chatId,
+                    msg_id: msgId
+                })
+                // this.lock.release()
+                return
+            }
+
+            // 当前有回复的'群' 并且是选择了群的情况下
+            if (this._flagPinMessageType === 'room' && this.selectRoom) {
+                this.weChatClient.addMessage(this.selectRoom, text, {
+                    chat_id: chatId,
+                    msg_id: msgId
+                })
+                // this.lock.release()
+                return
+            }
+            // this.lock.release()
+            return
+        })
+
+        bot.on(message('voice'), ctx =>
+            this.handleFileMessage.call(this, ctx, 'voice'))
+
+        bot.on(message('audio'), ctx =>
+            this.handleFileMessage.call(this, ctx, 'audio'))
+
+        bot.on(message('video'), ctx =>
+            this.handleFileMessage.call(this, ctx, 'video'))
+
+        bot.on(message('document'), ctx =>
+            this.handleFileMessage.call(this, ctx, 'document'))
+
+        bot.on(message('photo'), ctx =>
+            this.handleFileMessage.call(this, ctx, 'photo'))
+
+        bot.on(message('sticker'), ctx => {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
+                ctx.reply(this.t('common.plzLoginWeChat'))
+                return
+            }
+            const fileId = ctx.message.sticker.file_id
+            ctx.telegram.getFileLink(fileId).then(async fileLink => {
+                const uniqueId = ctx.message.sticker.file_unique_id
+                const href = fileLink.href
+                const fileName = `${uniqueId}-${href.substring(href.lastIndexOf('/') + 1, href.length)}`
+                const saveFile = `save-files/${fileName}`
+                const gifFile = `save-files/${fileName.slice(0, fileName.lastIndexOf('.'))}.gif`
+
+                const lottie_config = {
+                    width: 200,
+                    height: 200
+                }
+                if (saveFile.endsWith('.tgs')) {
+                    lottie_config.width = ctx.message.sticker.width
+                    lottie_config.height = ctx.message.sticker.height
+                }
+
+                // gif 文件存在
+                if (fs.existsSync(gifFile)) {
+                    this.sendGif(saveFile, gifFile, ctx, lottie_config)
+                } else {
+                    // 删除掉解压出来的文件夹
+                    fs.rmSync(saveFile, {recursive: true, force: true})
+                    // 尝试使用代理下载tg文件
+                    if (useProxy) {
+                        FileUtils.downloadWithProxy(fileLink.toString(), saveFile).then(() => {
+                            this.sendGif(saveFile, gifFile, ctx, lottie_config)
+                        }).catch(() => ctx.reply(this.t('common.sendFailMsg', this.t('common.saveOrgFileError'))))
+                    } else {
+                        FileBox.fromUrl(fileLink.toString()).toFile(saveFile).then(() => {
+                            this.sendGif(saveFile, gifFile, ctx, lottie_config)
+                        }).catch(() => ctx.reply(this.t('common.sendFailMsg', this.t('common.saveOrgFileError'))))
+                    }
+                }
+            }).catch(e => {
+                ctx.reply(this.t('common.sendFailMsg', this.t('common.fileLarge')), {
+                    reply_parameters: {
+                        message_id: ctx.message.message_id
+                    }
+                })
+            })
+        })
+
+    }
+
+    private onBotAction(bot: Telegraf) {
         // 数字键盘点击
         bot.action(/num-(\d+)/, ctx => {
             const match = ctx.match[1]
@@ -631,224 +1182,13 @@ export class TelegramBotClient extends BaseClient {
             ctx.answerCbQuery()
         })
 
-
-        bot.command('reset', (ctx) => {
-            this._weChatClient.resetValue()
-            ctx.reply(this.t('command.resetText'))
-        })
-
-        bot.command('cgdata', async (ctx) => {
-            if (ctx.chat && ctx.chat.type.includes('group')) {
-                const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
-                if (!bindItem) {
-                    return ctx.reply(this.t('command.cgdata.notBind'))
-                }
-                // 获取群组管理员列表
-                const administrators = await ctx.telegram.getChatAdministrators(ctx.chat.id)
-
-                // 检查机器人是否在管理员列表中
-                const botId = ctx.botInfo.id
-                const isAdmin = administrators.some(admin => admin.user.id === botId)
-
-                if (!isAdmin) {
-                    return ctx.reply(this.t('command.cgdata.notAdmin'))
-                }
-                if (bindItem.type === 0) {
-                    const contact = this.getContactByBindItem(bindItem)
-                    if (contact) {
-                        await ctx.telegram.setChatTitle(ctx.chat.id, `${bindItem.alias}[${bindItem.name}]`)
-                        // 获取头像
-                        contact.avatar().then(fbox => {
-                            fbox.toBuffer().then(async buff => {
-                                await ctx.telegram.setChatPhoto(ctx.chat.id, {
-                                    source: buff
-                                })
-                            })
-                        })
-                    }
-                } else {
-                    await ctx.telegram.setChatTitle(ctx.chat.id, bindItem.name)
-                }
-            } else {
-                return ctx.reply(this.t('common.onlyInGroup'))
-            }
-        })
-
-        bot.command('bind', async (ctx) => {
-            if (ctx.chat && ctx.chat.type.includes('group')) {
-                const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
-                if (bindItem) {
-                    if (bindItem.type === 0) {
-                        ctx.reply(`${this.t('command.bind.currentBindUser')}${bindItem.alias}[${bindItem.name}]`)
-                    } else {
-                        ctx.reply(`${this.t('command.bind.currentBindGroup')}${bindItem.alias}[${bindItem.name}]`)
-                    }
-                } else {
-                    ctx.reply(this.t('command.bind.noBinding'))
-                }
-            } else {
-                ctx.reply(this.t('common.onlyInGroup'))
-            }
-        })
-
-        bot.command('unbind', async (ctx) => {
-            if (ctx.chat && ctx.chat.type.includes('group')) {
-                await this.bindItemService.removeBindItemByChatId(ctx.chat.id)
-                ctx.reply(this.t('command.unbindText'))
-            } else {
-                ctx.reply(this.t('common.onlyInGroup'))
-            }
-        })
-
-        bot.command('login', async ctx => {
-            this.getUserId()
-            if (!this.wechatStartFlag) {
-                this.wechatStartFlag = true
-                this._weChatClient.start().then(() => {
-
-
-                    // 第一次输入的人当成bot的所有者
-                    // @ts-ignore
-                    this.loadOwnerChat(ctx)
-
-                    // 标记为已执行
-                    this.loginCommandExecuted = true
-
-                }).catch(() => {
-                    ctx.reply(this.t('command.login.fail'))
-                })
-            }
-        })
-
-        bot.command('stop', this.onWeChatStop)
-
-        bot.command('check', ctx => {
-            if (this.wechatStartFlag && this._weChatClient.client.isLoggedIn) {
-                ctx.reply(this.t('command.check.onLine'))
-            } else {
-                ctx.reply(this.t('command.check.offLine'))
-            }
-        })
-
-        // select language
-        bot.command('lang', ctx => {
-            ctx.reply(this.t('command.langText'), {
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            {text: '中文', callback_data: 'lang-zh'},
-                            {text: 'English', callback_data: 'lang-en'}
-                        ]
-                    ]
-                }
-            })
-        })
-
         bot.action(/lang-/, async ctx => {
             this.setLanguage(ctx.match.input.slice(5))
-            await bot.telegram.setMyCommands(commands)
+            bot.telegram.setMyCommands(this._commands)
             this.forwardSetting.setVariable(VariableType.SETTING_LANGUAGE, ctx.match.input.slice(5))
             this.forwardSetting.writeToFile()
             ctx.reply(this.t('common.setSuccess'))
             ctx.answerCbQuery()
-        })
-
-        // 选择群聊
-        const currentSelectRoomMap = new Map<string, RoomItem>()
-        let searchRooms: RoomItem [] = []
-
-        bot.command('room', async ctx => {
-            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
-                await ctx.reply(this.t('common.plzLoginWeChat'))
-                return
-            }
-
-            if (!this._weChatClient.cacheMemberDone) {
-                await ctx.reply(this.t('command.user.onLoading'))
-                return
-            }
-
-            // 获取消息文本
-            const messageText = ctx.update.message.text
-
-            // 正则表达式用来分离命令后面的参数
-            const match = messageText.match(/\/room\s+([\p{L}\p{N}_]+)/u)
-            if (match) {
-                const topic = match[1]  // 提取用户名
-                const filterRoom = this._weChatClient.roomList.filter(room => {
-                    // const roomName = ;
-                    return room.room.payload?.topic?.includes(topic)
-                })
-                if (filterRoom && filterRoom.length > 0) {
-                    const buttons: tg.InlineKeyboardButton[][] = []
-                    this.searchList = []
-                    filterRoom.forEach(item => {
-                        const id = UniqueIdGenerator.getInstance().generateId('search')
-                        this.searchList.push({
-                            id: id,
-                            contact: item.room,
-                            type: 1
-                        })
-                    })
-                    const page = new Page(this.searchList, 1, TelegramBotClient.PAGE_SIZE)
-                    const pageList = page.getList(1)
-                    for (let i = 0; i < pageList.length; i += 2) {
-                        const item = pageList[i].contact
-                        const buttonRow = [Markup.button.callback(`🌐${await item.topic()}`, `${pageList[i].id}`)]
-                        if (i + 1 < pageList.length) {
-                            const item1 = pageList[i + 1].contact
-                            buttonRow.push(Markup.button.callback(`🌐${await item1.topic()}`, `${pageList[i + 1].id}`))
-                        }
-                        buttons.push(buttonRow)
-                    }
-                    if (page.hasNext()) {
-                        buttons.push([Markup.button.callback(this.t('common.nextPage'), 'search-2')])
-                    }
-                    ctx.reply(this.t('command.room.plzSelect'), Markup.inlineKeyboard(buttons))
-                } else {
-                    ctx.reply(this.t('command.room.notFound') + topic)
-                }
-                return
-            }
-
-            const count = 0
-            searchRooms = this._weChatClient.roomList
-            this.generateRoomButtons(searchRooms, currentSelectRoomMap, count).then(buttons => {
-                if (buttons.length === 0) {
-                    ctx.reply(this.t('command.room.notFound'))
-                } else {
-                    ctx.reply(this.t('command.room.plzSelect'), {
-                        ...Markup.inlineKeyboard(buttons)
-                    })
-                }
-            })
-        })
-
-        bot.action(/room-index-\d+/, async (ctx) => {
-            // this.logDebug(ctx.match.input)
-            const room = currentSelectRoomMap.get(ctx.match.input)
-            const roomTopic = await room?.room?.topic()
-            if (ctx.chat && ctx.chat.type.includes('group') && room) {
-                // 群组绑定
-                this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, room.id, '', room.room.id, '')
-                ctx.deleteMessage()
-                ctx.answerCbQuery()
-                return
-            }
-            this.selectRoom = room?.room
-            ctx.deleteMessage()
-            this.setPin('room', roomTopic)
-            ctx.answerCbQuery()
-        })
-
-        bot.action(/room-next-\d+/, async (ctx) => {
-            const nextPage = parseInt(ctx.match.input.slice(10))
-            this.generateRoomButtons(searchRooms, currentSelectRoomMap, nextPage).then(buttons => {
-                ctx.editMessageReplyMarkup({
-                    inline_keyboard: buttons
-                })
-            })
-            await ctx.answerCbQuery()
         })
 
         // 发送失败的消息重发
@@ -918,126 +1258,6 @@ export class TelegramBotClient extends BaseClient {
                 ctx.answerCbQuery('重新接收失败')
                 return
             })
-        })
-
-        let currentSearchWord = ''
-
-        bot.command('user', async ctx => {
-
-            // wait all contact loaded
-            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
-                ctx.reply(this.t('command.user.onLoading'))
-                return
-            }
-
-            if (!this.loginCommandExecuted) {
-                await ctx.reply(this.t('command.user.onLogin'))
-                return
-            }
-
-            if (!this._weChatClient.cacheMemberDone) {
-                await ctx.reply(this.t('command.user.onLoading'))
-                return
-            }
-
-            // 获取消息文本
-            const messageText = ctx.update.message.text
-
-            // 正则表达式用来分离命令后面的参数
-            const match = messageText.match(/\/user\s+([\p{L}\p{N}_]+)/u)
-            if (match) {
-                const username = match[1]  // 提取用户名
-                const individual = this._weChatClient.contactMap?.get(ContactImpl.Type.Individual)
-                const official = this._weChatClient.contactMap?.get(ContactImpl.Type.Official)
-                const individualFilter: ContactInterface[] = []
-                individual?.forEach(item => {
-                    const alias = item.contact.payload?.alias
-                    if (alias?.includes(username)) {
-                        individualFilter.push(item.contact)
-                        return
-                    }
-                    if (item.contact.name().includes(username)) {
-                        individualFilter.push(item.contact)
-                    }
-                })
-                const officialFilter: ContactInterface[] = []
-                official?.forEach(item => {
-                    const alias = item.contact.payload?.alias
-                    if (alias?.includes(username)) {
-                        officialFilter.push(item.contact)
-                        return
-                    }
-                    if (item.contact.name().includes(username)) {
-                        officialFilter.push(item.contact)
-                    }
-                })
-                if ((individualFilter && individualFilter.length > 0) || (officialFilter && officialFilter.length > 0)) {
-                    const buttons: tg.InlineKeyboardButton[][] = []
-                    this.searchList = [];
-                    [...officialFilter, ...individualFilter].forEach(item => {
-                        const id = UniqueIdGenerator.getInstance().generateId('search')
-                        this.searchList.push({
-                            id: id,
-                            contact: item,
-                            type: 0
-                        })
-                    })
-                    const page = new Page(this.searchList, 1, TelegramBotClient.PAGE_SIZE)
-                    const pageList = page.getList(1)
-                    for (let i = 0; i < pageList.length; i += 2) {
-                        const item = pageList[i].contact
-                        const buttonRow: tg.InlineKeyboardButton[] = []
-                        if (item.payload?.type === PUPPET.types.Contact.Official) {
-                            buttonRow.push(Markup.button.callback(`📣${item.name()}`, `${pageList[i].id}`))
-                        } else {
-                            if (item.payload?.alias) {
-                                buttonRow.push(Markup.button.callback(`👤${item.payload?.alias}[${item.name()}]`, `${pageList[i].id}`))
-                            } else {
-                                buttonRow.push(Markup.button.callback(`👤${item.name()}`, `${pageList[i].id}`))
-                            }
-                        }
-                        if (i + 1 < pageList.length) {
-                            const item1 = pageList[i + 1].contact
-                            if (item1.payload?.type === PUPPET.types.Contact.Official) {
-                                buttonRow.push(Markup.button.callback(`📣${item1.name()}`, `${pageList[i + 1].id}`))
-                            } else {
-                                if (item1.payload?.alias) {
-                                    buttonRow.push(Markup.button.callback(`👤${item1.payload?.alias}[${item1.name()}]`, `${pageList[i + 1].id}`))
-                                } else {
-                                    buttonRow.push(Markup.button.callback(`👤${item1.name()}`, `${pageList[i + 1].id}`))
-                                }
-                            }
-                        }
-                        buttons.push(buttonRow)
-                    }
-                    if (page.hasNext()) {
-                        buttons.push([Markup.button.callback(this.t('common.nextPage'), 'search-2')])
-                    }
-                    ctx.reply(this.t('command.user.plzSelect'), Markup.inlineKeyboard(buttons))
-                } else {
-                    ctx.reply(this.t('command.user.notFound') + username)
-                }
-                return
-            }
-
-            if (ctx.message.text) {
-                currentSearchWord = ctx.message.text.split(' ')[1]
-            } else {
-                currentSearchWord = ''
-            }
-
-
-            // Create inline keyboard
-            const inlineKeyboard = Markup.inlineKeyboard([
-                // Markup.button.callback('未知', 'UNKNOWN'),
-                Markup.button.callback(this.t('command.user.individual'), 'INDIVIDUAL'),
-                Markup.button.callback(this.t('command.user.official'), 'OFFICIAL'),
-                // Markup.button.callback('公司', 'CORPORATION')
-            ])
-
-            // Send message with inline keyboard
-            ctx.reply(this.t('command.user.plzSelectType'), inlineKeyboard)
-
         })
 
         bot.action(/search-(\d+)/, async (ctx) => {
@@ -1160,25 +1380,6 @@ export class TelegramBotClient extends BaseClient {
             ctx.answerCbQuery()
         })
 
-        bot.command('recent', async ctx => {
-            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
-                ctx.reply(this.t('common.plzLoginWeChat'))
-                return
-            }
-
-            if (this.recentUsers.length == 0) {
-                ctx.reply(this.t('command.recent.noUsers'))
-                return
-            }
-
-            const buttons: tg.InlineKeyboardButton[][] = []
-            this.recentUsers.forEach(item => {
-                buttons.push([Markup.button.callback(item.name, item.id)])
-            })
-            const inlineKeyboard = Markup.inlineKeyboard(buttons)
-            ctx.reply(this.t('command.recent.plzSelect'), inlineKeyboard)
-        })
-
         bot.action(/.*recent.*/, async (ctx) => {
             const data = this.recentUsers.find(item => item.id === ctx.match.input)
             if (data) {
@@ -1295,207 +1496,6 @@ export class TelegramBotClient extends BaseClient {
                 this.setPin('user', reply ? reply : '')
             }
             ctx.answerCbQuery()
-        })
-
-        bot.on(message('text'), async ctx => {
-            const text = ctx.message.text // 获取消息内容
-            const replyMessageId = ctx.update.message['reply_to_message']?.message_id
-            const chatId = ctx.chat.id
-            const msgId = ctx.message.message_id
-            // 处理等待用户输入的指令
-            if (await this.dealWithCommand(ctx, text)) {
-                return
-            }
-
-            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
-                ctx.reply(this.t('common.plzLoginWeChat'))
-                return
-            }
-            // 获取锁
-            // await this.lock.acquire()
-            // 如果是回复的消息 优先回复该发送的消息
-            if (replyMessageId) {
-                // 假设回复消息是撤回命令 撤回web协议获取不到消息id 放弃 更新上游代码可获取了
-                if (text === '&rm') {
-                    this.undoMessage(replyMessageId, ctx)
-                    // this.lock.release()
-                    return
-                }
-                const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId, chatId)
-                const weChatMessageId = messageItem?.wechat_message_id
-                // 设置别名(不可用)
-                // if (text.startsWith('&alias') && weChatMessageId) {
-                // this.setAlias(weChatMessageId, text, ctx)
-                // return
-                // }
-
-                if (weChatMessageId) {
-                    // 添加或者移除名单
-                    this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
-                        if (!message) {
-                            ctx.reply(this.t('common.sendFail'), {
-                                reply_parameters: {
-                                    message_id: msgId
-                                }
-                            })
-                            // this.lock.release()
-                            return
-                        }
-                        this.weChatClient.addMessage(message, text, {
-                            chat_id: chatId,
-                            msg_id: msgId
-                        })
-                    })
-                }
-                // this.lock.release()
-                return
-            }
-
-            // 如果是群组消息的情况
-            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
-                const bindItem = await this.bindItemService.getBindItemByChatId(chatId)
-                if (bindItem) {
-                    if (!this._weChatClient.cacheMemberDone) {
-                        await ctx.reply(`${this.t('common.sendFail')},${this.t('command.user.onLoading')}`, {
-                            reply_parameters: {
-                                message_id: ctx.message.message_id
-                            }
-                        })
-                        // this.lock.release()
-                        return
-                    }
-                    if (bindItem.type === 0) {
-                        const contact = this.getContactByBindItem(bindItem)
-                        if (contact) {
-                            this.weChatClient.addMessage(contact, text, {
-                                chat_id: chatId,
-                                msg_id: msgId
-                            })
-                        }
-                    } else {
-                        const room = this.getRoomByBindItem(bindItem)
-                        if (room) {
-                            this.weChatClient.addMessage(room, text, {
-                                chat_id: chatId,
-                                msg_id: msgId
-                            })
-                        }
-                    }
-                } else {
-                    await ctx.reply(this.t('common.sendFailNoBind'), {
-                        reply_parameters: {
-                            message_id: msgId
-                        }
-                    })
-                }
-                // this.lock.release()
-                return
-            }
-
-            // 当前有回复的'个人用户' 并且是选择了用户的情况下
-            if (this._flagPinMessageType === 'user' && this._currentSelectContact) {
-                this.weChatClient.addMessage(this._currentSelectContact, text, {
-                    chat_id: chatId,
-                    msg_id: msgId
-                })
-                // this.lock.release()
-                return
-            }
-
-            // 当前有回复的'群' 并且是选择了群的情况下
-            if (this._flagPinMessageType === 'room' && this.selectRoom) {
-                this.weChatClient.addMessage(this.selectRoom, text, {
-                    chat_id: chatId,
-                    msg_id: msgId
-                })
-                // this.lock.release()
-                return
-            }
-            // this.lock.release()
-            return
-        })
-
-        bot.on(message('voice'), ctx =>
-            this.handleFileMessage.call(this, ctx, 'voice'))
-
-        bot.on(message('audio'), ctx =>
-            this.handleFileMessage.call(this, ctx, 'audio'))
-
-        bot.on(message('video'), ctx =>
-            this.handleFileMessage.call(this, ctx, 'video'))
-
-        bot.on(message('document'), ctx =>
-            this.handleFileMessage.call(this, ctx, 'document'))
-
-        bot.on(message('photo'), ctx =>
-            this.handleFileMessage.call(this, ctx, 'photo'))
-
-        bot.on(message('sticker'), ctx => {
-            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
-                ctx.reply(this.t('common.plzLoginWeChat'))
-                return
-            }
-            const fileId = ctx.message.sticker.file_id
-            ctx.telegram.getFileLink(fileId).then(async fileLink => {
-                const uniqueId = ctx.message.sticker.file_unique_id
-                const href = fileLink.href
-                const fileName = `${uniqueId}-${href.substring(href.lastIndexOf('/') + 1, href.length)}`
-                const saveFile = `save-files/${fileName}`
-                const gifFile = `save-files/${fileName.slice(0, fileName.lastIndexOf('.'))}.gif`
-
-                const lottie_config = {
-                    width: 200,
-                    height: 200
-                }
-                if (saveFile.endsWith('.tgs')) {
-                    lottie_config.width = ctx.message.sticker.width
-                    lottie_config.height = ctx.message.sticker.height
-                }
-
-                // gif 文件存在
-                if (fs.existsSync(gifFile)) {
-                    this.sendGif(saveFile, gifFile, ctx, lottie_config)
-                } else {
-                    // 删除掉解压出来的文件夹
-                    fs.rmSync(saveFile, {recursive: true, force: true})
-                    // 尝试使用代理下载tg文件
-                    if (useProxy) {
-                        FileUtils.downloadWithProxy(fileLink.toString(), saveFile).then(() => {
-                            this.sendGif(saveFile, gifFile, ctx, lottie_config)
-                        }).catch(() => ctx.reply(this.t('common.sendFailMsg', this.t('common.saveOrgFileError'))))
-                    } else {
-                        FileBox.fromUrl(fileLink.toString()).toFile(saveFile).then(() => {
-                            this.sendGif(saveFile, gifFile, ctx, lottie_config)
-                        }).catch(() => ctx.reply(this.t('common.sendFailMsg', this.t('common.saveOrgFileError'))))
-                    }
-                }
-            }).catch(e => {
-                ctx.reply(this.t('common.sendFailMsg', this.t('common.fileLarge')), {
-                    reply_parameters: {
-                        message_id: ctx.message.message_id
-                    }
-                })
-            })
-        })
-
-        // const unknownPage = 0;
-        const individualPage = 0
-        const officialPage = 0
-
-        bot.action('INDIVIDUAL', ctx => {
-            // @ts-ignore
-            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Individual) || []].map(item => item.contact), individualPage, currentSearchWord)
-            ctx.answerCbQuery()
-        })
-        bot.action('OFFICIAL', ctx => {
-            // @ts-ignore
-            this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Official) || []].map(item => item.contact), officialPage, currentSearchWord)
-            ctx.answerCbQuery()
-        })
-        this.botLaunch(bot)
-
-        bot.catch((err, ctx) => {
-            this.logError('tg bot error: ', err, ctx.update)
         })
     }
 
