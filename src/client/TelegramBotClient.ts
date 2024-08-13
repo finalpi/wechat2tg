@@ -272,6 +272,11 @@ export class TelegramBotClient extends BaseClient {
         }
         bot.telegram.setMyCommands(commands)
 
+        bot.catch(error => {
+            // handle error
+            console.log(error)
+        })
+
         bot.command('autocg', ctx => {
             if (!config.API_ID || !config.API_HASH) {
                 ctx.reply(this.t('command.autocg.configApi'))

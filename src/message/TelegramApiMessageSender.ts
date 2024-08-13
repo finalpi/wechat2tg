@@ -41,13 +41,15 @@ export class TelegramApiMessageSender extends MessageSender {
             if (file.caption) {
                 sendParam.text = file.caption
             }
-            this.sender.editMessage(inputPeerChannelFromMessage, sendParam).then(res => {
-                resolve({
-                    message_id: res.id
+            if (sendParam.message) {
+                this.sender.editMessage(inputPeerChannelFromMessage, sendParam).then(res => {
+                    resolve({
+                        message_id: res.id
+                    })
+                }).catch(e => {
+                    reject(e)
                 })
-            }).catch(e => {
-                reject(e)
-            })
+            }
         })
     }
 
