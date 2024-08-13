@@ -1488,6 +1488,10 @@ export class TelegramBotClient extends BaseClient {
             ctx.answerCbQuery()
         })
         this.botLaunch(bot)
+
+        bot.catch((err, ctx) => {
+            this.logError('tg bot error: ', err, ctx.update)
+        })
     }
 
     private setAlias(weChatMessageId: string, text: string, ctx: any) {
@@ -1705,18 +1709,15 @@ export class TelegramBotClient extends BaseClient {
     }
 
     private async botLaunch(bot: Telegraf, retryCount = 5) {
-        try {
-            await bot.launch()
+        bot.launch().then(() => {
             this.logDebug('Telegram Bot started')
-        } catch (error) {
+        }).catch(error => {
             this.logError('Telegram Bot start failed', error)
-            if (retryCount > 0) {
-                this.logDebug(`Retrying launch... (${retryCount} attempts left)`)
-                await this.botLaunch(bot, retryCount - 1)
-            } else {
-                this.logError('Maximum retry attempts reached. Unable to start bot.')
-            }
-        }
+            this.botLaunch(bot, retryCount - 1)
+        })
+
+        process.once('SIGINT', () => bot.stop('SIGINT'))
+        process.once('SIGTERM', () => bot.stop('SIGTERM'))
     }
 
     private async sendGif(saveFile: string, gifFile: string, ctx: any,
