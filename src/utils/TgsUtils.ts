@@ -6,6 +6,7 @@
 // const renderLottie = require('puppeteer-lottie')
 import {spawn} from 'child_process'
 import {LogUtils} from './LogUtils'
+import * as fs from 'node:fs'
 
 export default class TgsUtils {
     // async tgsToGif(inputFile: string, outputFile: string, lottieConfig?: {
@@ -80,11 +81,11 @@ export default class TgsUtils {
     // }
 
     async tgsToGif(inputFile: string, outputFile: string, lottieConfig?: {
-        width?: number | 100,
-        height?: number | 100,
+        width?: number | 128,
+        height?: number | 128,
     }) {
         return new Promise((resolve, reject) => {
-            const args = []
+            const args = ['--output', outputFile]
             if (lottieConfig?.height) {
                 args.push('--height', lottieConfig.height.toString())
             }
@@ -94,7 +95,19 @@ export default class TgsUtils {
             args.push(inputFile)
             console.log('tgsToGif args: ' + args.join(' '))
             spawn('tgs_to_gif', args).on('exit', () => {
-                resolve(outputFile.replace('.tgs', ''))
+                const statSync = fs.statSync(outputFile)
+                if (statSync.size > 1024 * 1024) {
+                    const zoom = statSync.size / 1024 / 1024
+                    args.push('--quality', Math.floor(89 / zoom).toString())
+                    spawn('tgs_to_gif', args).on('exit', () => {
+                        resolve(outputFile)
+                    }).on('error', (error) => {
+                        reject(error)
+                        LogUtils.config().getLogger('error').error('tgsToGif happened: ' + error.message)
+                    })
+                } else {
+                    resolve(outputFile)
+                }
             }).on('error', (error) => {
                 reject(error)
                 LogUtils.config().getLogger('error').error('tgsToGif happened: ' + error.message)

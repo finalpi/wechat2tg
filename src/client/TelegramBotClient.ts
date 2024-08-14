@@ -900,19 +900,20 @@ export class TelegramBotClient extends BaseClient {
                 const href = fileLink.href
                 const fileName = `${uniqueId}-${href.substring(href.lastIndexOf('/') + 1, href.length)}`
                 const saveFile = `save-files/${fileName}`
-                let gifFile = `save-files/${fileName.slice(0, fileName.lastIndexOf('.'))}.gif`
+                const gifFile = `save-files/${fileName.slice(0, fileName.lastIndexOf('.'))}.gif`
 
-                if (saveFile.endsWith('.tgs')) {
-                    gifFile = gifFile.replace('.gif', '.tgs.gif')
-                }
+                // if (saveFile.endsWith('.tgs')) {
+                //     gifFile = gifFile.replace('.gif', '.tgs.gif')
+                // }
 
                 const lottie_config = {
-                    width: 200,
-                    height: 200
+                    width: 128,
+                    height: 128
                 }
+                // 微信不能发超过1Mb的gif文件
                 if (saveFile.endsWith('.tgs')) {
-                    lottie_config.width = ctx.message.sticker.width
-                    lottie_config.height = ctx.message.sticker.height
+                    lottie_config.width = ctx.message.sticker.width / 4
+                    lottie_config.height = ctx.message.sticker.height / 4
                 }
 
                 // gif 文件存在
