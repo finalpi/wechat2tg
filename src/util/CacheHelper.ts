@@ -71,12 +71,15 @@ export class CacheHelper {
         this.undoMessage.push({chat_id, msg_id, wx_msg_id, time: Date.now()})
     }
 
-    public getUndoMessage({chat_id, msg_id}: Pick<UndoMessageType, 'chat_id' | 'msg_id'>): UndoMessageType | undefined {
-        return this.undoMessage.find(item => item.chat_id === chat_id && item.msg_id === msg_id)
+    public getUndoMessage({
+                              chat_id,
+                              msg_id
+                          }: Pick<UndoMessageType, 'chat_id' | 'msg_id'>): UndoMessageType[] | undefined {
+        return this.undoMessage.filter(item => item.chat_id === chat_id && item.msg_id === msg_id)
     }
 
-    public getUndoMessageByMsgId({msg_id}: Pick<UndoMessageType, 'msg_id'>): UndoMessageType | undefined {
-        return this.undoMessage.find(item => item.msg_id === msg_id)
+    public getUndoMessageByMsgId({msg_id}: Pick<UndoMessageType, 'msg_id'>): UndoMessageType[] | undefined {
+        return this.undoMessage.filter(item => item.msg_id === msg_id)
     }
 
     public getUndoMessageByWxMsgId(wx_msg_id: string): UndoMessageType | undefined {

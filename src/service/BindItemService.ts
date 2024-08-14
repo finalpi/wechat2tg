@@ -1,13 +1,13 @@
-import {BindItem} from '../models/BindItem'
-import {RoomItem} from '../models/RoomItem'
-import {ContactItem} from '../models/ContactItem'
+import {BindItem} from '../model/BindItem'
+import {RoomItem} from '../model/RoomItem'
+import {ContactItem} from '../model/ContactItem'
 import {ContactImpl, WechatyInterface} from 'wechaty/impls'
 import {Telegraf} from 'telegraf'
 import AbstractSqlService from './BaseSqlService'
 import * as fs from 'fs'
 import {Contact, Room} from 'wechaty'
 import DynamicService from './DynamicService'
-import {CreateGroupInterface} from '../models/CreateGroupInterface'
+import {CreateGroupInterface} from '../model/CreateGroupInterface'
 
 export class BindItemService extends AbstractSqlService {
     private tgBotClient: Telegraf

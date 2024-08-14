@@ -49,7 +49,7 @@ export class SimpleMessageSendQueueHelper {
     private startSend(): void {
         setInterval(async () => {
             await this.processQueue()
-        }, this.interval)
+        }, this.loopTime)
     }
 
     private async processQueue(): Promise<void> {
@@ -58,11 +58,11 @@ export class SimpleMessageSendQueueHelper {
             const sendMessage = this.messageQueue.shift()
             if (sendMessage && sendMessage.success !== true && sendMessage.sending !== true) {
                 sendMessage.sending = true
-                await this.sendFunction(...sendMessage.message).then(() => {
+                this.sendFunction(...sendMessage.message).then(() => {
                     sendMessage.success = true
                     sendMessage.sending = false
                 }).catch(async () => {
-                    await this.sendFunction(...sendMessage.message).then(() => {
+                    this.sendFunction(...sendMessage.message).then(() => {
                         sendMessage.success = true
                         sendMessage.sending = false
                     })
@@ -70,7 +70,7 @@ export class SimpleMessageSendQueueHelper {
                     sendMessage.sending = false
                 })
                 // await sleep(this.interval)
-            } else if (!sendMessage.success && sendMessage.time.getTime() + this.interval * 7 < new Date().getTime()) {
+            } else if (!sendMessage.success && sendMessage.time.getTime() + this.interval < new Date().getTime()) {
                 // await sleep(this.interval)
                 this.messageQueue.push(sendMessage)
             }

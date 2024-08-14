@@ -1,6 +1,7 @@
 import ffmpegStatic from 'ffmpeg-static'
 import * as fs from 'node:fs'
 import TgsUtils from './TgsUtils'
+import WxLimitConstants from '../constant/WxLimitConstant'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ffmpeg = require('fluent-ffmpeg')
 
@@ -11,8 +12,6 @@ export class ConverterHelper {
     }
 
     async webmToGif(inputFile: string | Buffer, outputFile: string): Promise<void> {
-        const targetFileSize = 1 * 1024 * 1024 // 1MB
-
         return new Promise((resolve, reject) => {
             const convert = (resolution: number, fps: number) => {
                 let scale = 'scale=iw:-1:flags=lanczos'
@@ -29,7 +28,7 @@ export class ConverterHelper {
                         const stats = fs.statSync(outputFile)
                         const fileSizeInBytes = stats.size
 
-                        if (fileSizeInBytes > targetFileSize) {
+                        if (fileSizeInBytes > WxLimitConstants.MAX_GIF_SIZE) {
                             console.log(`文件大小 ${fileSizeInBytes} 超过 1MB，重新调整参数`)
                             if (resolution > 100 && fps > 1) {
                                 // 递归调用，降低分辨率和帧率
@@ -64,16 +63,11 @@ export class ConverterHelper {
         if (typeof inputFile === 'string') {
             return new TgsUtils().tgsToGif(inputFile, outputFile, lottie_config)
                 .then(() => {
-                    // 这里删除临时文件
-                    const tmpFilePath = outputFile.substring(0, outputFile.lastIndexOf('.'))
-                    fs.rm(tmpFilePath, {force: true, recursive: true},
-                        (err) => {
-                            if (err) throw err
-                        })
-                    // 删除tgs文件
                     fs.unlink(inputFile, (err) => {
                         if (err) throw err
                     })
+                }).catch((err) => {
+                    throw err
                 })
         }
         throw new Error('Input file must be a string')

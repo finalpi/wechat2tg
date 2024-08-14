@@ -1,5 +1,5 @@
 import AbstractSqlService from './BaseSqlService'
-import {MessageItem, MessageItemUpdate} from '../models/MessageItem'
+import {MessageItem, MessageItemUpdate} from '../model/MessageItem'
 
 export class MessageService extends AbstractSqlService {
     private static instance?: MessageService = undefined

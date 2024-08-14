@@ -12,26 +12,28 @@ import {
     WechatyInterface
 } from 'wechaty/impls'
 import {TelegramBotClient} from './TelegramBotClient'
-import {EmojiConverter} from '../utils/EmojiUtils'
-import {MemberCacheType} from '../models/TgCache'
-import {SimpleMessage, SimpleMessageSender} from '../models/Message'
-import {TalkerEntity} from '../models/TalkerCache'
-import {UniqueIdGenerator} from '../utils/IdUtils'
-import {NotionMode, VariableType} from '../models/Settings'
-import {FriendshipItem} from '../models/FriendshipItem'
-import {MessageUtils} from '../utils/MessageUtils'
+import {EmojiConverter} from '../util/EmojiUtils'
+import {MemberCacheType} from '../model/TgCache'
+import {SimpleMessage, SimpleMessageSender} from '../model/Message'
+import {TalkerEntity} from '../model/TalkerCache'
+import {UniqueIdGenerator} from '../util/IdUtils'
+import {NotionMode, VariableType} from '../model/Settings'
+import {FriendshipItem} from '../model/FriendshipItem'
+import {MessageUtils} from '../util/MessageUtils'
 import {FileBox, type FileBoxInterface} from 'file-box'
 import * as fs from 'fs'
-import {RoomItem} from '../models/RoomItem'
-import {ContactItem} from '../models/ContactItem'
+import {RoomItem} from '../model/RoomItem'
+import {ContactItem} from '../model/ContactItem'
 import BaseClient from '../base/BaseClient'
 import {MessageService} from '../service/MessageService'
-import {CacheHelper} from '../utils/CacheHelper'
-import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper'
+import {CacheHelper} from '../util/CacheHelper'
+import {SimpleMessageSendQueueHelper} from '../util/SimpleMessageSendQueueHelper'
 import {SenderFactory} from '../message/SenderFactory'
 import {Snowflake} from 'nodejs-snowflake'
 import {Markup} from 'telegraf'
-import {parseAppmsgMessagePayload} from '../utils/message-appmsg'
+import {parseAppmsgMessagePayload} from '../util/message-appmsg'
+import {Api} from 'telegram'
+import messages = Api.messages
 
 
 export class WeChatClient extends BaseClient {
@@ -519,7 +521,7 @@ export class WeChatClient extends BaseClient {
                 if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF)) {
                     // FIXME: 临时方案
                     await new Promise(resolve => setTimeout(resolve, 200))
-                    if (await MessageService.getInstance().findMessageByWechatMessageId(message.id)) {
+                    if (CacheHelper.getInstances().getUndoMessageByWxMsgId(message.id)) {
                         return
                     }
                     // bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(message.listener().id)
@@ -554,11 +556,14 @@ export class WeChatClient extends BaseClient {
         } else {
             // 自己发送的消息
             if (message.self()) {
+                if (message.type() === PUPPET.types.Message.Recalled) {
+                    return
+                }
                 // 过滤掉自己所发送的消息 和没有绑定的群组才转发
                 if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF)) {
                     // FIXME: 临时方案
                     await new Promise(resolve => setTimeout(resolve, 200))
-                    if (await MessageService.getInstance().findMessageByWechatMessageId(message.id)) {
+                    if (CacheHelper.getInstances().getUndoMessageByWxMsgId(message.id)) {
                         return
                     }
                     bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(message.listener().id)
@@ -634,6 +639,9 @@ export class WeChatClient extends BaseClient {
             send_id: talker.id,
         }
         if (message.self()) {
+            if (message.type() === PUPPET.types.Message.Recalled) {
+                return
+            }
             // 过滤掉自己所发送的消息
             if (this._tgClient.setting.getVariable(VariableType.SETTING_FORWARD_SELF)) {
                 let toSender = ''
@@ -1076,12 +1084,13 @@ export class WeChatClient extends BaseClient {
             // Telegram Too Many Requests
             if (e.response.error_code === 429) {
                 setTimeout(() => {
-                    this._tgClient.bot.telegram.sendMessage(message.chatId,
-                        SimpleMessageSender.send(
-                            {
-                                body: this.t('common.tooManyRequests', e.response.parameters.retry_after),
-                                chatId: message.chatId,
-                            }))
+                    // this._tgClient.bot.telegram.sendMessage(message.chatId,
+                    //     SimpleMessageSender.send(
+                    //         {
+                    //             body: this.t('common.tooManyRequests', e.response.parameters.retry_after),
+                    //             chatId: message.chatId,
+                    //         }))
+                    this.logError(this.t('common.tooManyRequests', e.response.parameters.retry_after))
                     this.tgClient.sendQueueHelper.addMessageWithMsgId(Number(this.snowflakeUtil.getUniqueID()),
                         message)
                 }, e.response.parameters.retry_after * 1000 || 20000)

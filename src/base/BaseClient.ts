@@ -1,5 +1,5 @@
 import log4js from 'log4js'
-import {LogUtils} from '../utils/LogUtils'
+import {LogUtils} from '../util/LogUtils'
 import I18n from '../i18n/i18n'
 
 abstract class BaseClient {
