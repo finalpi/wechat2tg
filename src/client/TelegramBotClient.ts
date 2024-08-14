@@ -900,7 +900,11 @@ export class TelegramBotClient extends BaseClient {
                 const href = fileLink.href
                 const fileName = `${uniqueId}-${href.substring(href.lastIndexOf('/') + 1, href.length)}`
                 const saveFile = `save-files/${fileName}`
-                const gifFile = `save-files/${fileName.slice(0, fileName.lastIndexOf('.'))}.gif`
+                let gifFile = `save-files/${fileName.slice(0, fileName.lastIndexOf('.'))}.gif`
+
+                if (saveFile.endsWith('.tgs')) {
+                    gifFile = gifFile.replace('.gif', '.tgs.gif')
+                }
 
                 const lottie_config = {
                     width: 200,
@@ -915,9 +919,7 @@ export class TelegramBotClient extends BaseClient {
                 if (fs.existsSync(gifFile)) {
                     this.sendGif(saveFile, gifFile, ctx, lottie_config)
                 } else {
-                    // 删除掉解压出来的文件夹
-                    fs.rmSync(saveFile, {recursive: true, force: true})
-                    // 尝试使用代理下载tg文件
+                    // 使用代理下载tg文件
                     if (useProxy) {
                         FileUtils.downloadWithProxy(fileLink.toString(), saveFile).then(() => {
                             this.sendGif(saveFile, gifFile, ctx, lottie_config)
@@ -1737,8 +1739,10 @@ export class TelegramBotClient extends BaseClient {
             if (!fs.existsSync(gifFile)) {
                 if (saveFile.endsWith('.tgs')) {
                     await new ConverterHelper().tgsToGif(saveFile, gifFile, lottie_config)
-                } else {
+                } else if (saveFile.endsWith('.webp')) {
                     await new ConverterHelper().webmToGif(saveFile, gifFile)
+                } else {
+                    throw new Error('文件格式暂时不支持转换')
                 }
             }
             if (!fs.existsSync(gifFile)) {
