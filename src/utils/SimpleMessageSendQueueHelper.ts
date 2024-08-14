@@ -51,9 +51,7 @@ export class SimpleMessageSendQueueHelper {
             Promise.race([
                 this.processQueue(),
                 new Promise(resolve => setTimeout(resolve, this.loopTime))
-            ]).finally(() => {
-                this.startSend()
-            })
+            ])
         }, this.interval)
     }
 
