@@ -6,7 +6,7 @@ export class SimpleMessageSendQueueHelper {
     private sendFunction: (...args) => Promise<any>
     private interval: number
     private messageQueue: SendMessageWarps[] = []
-    private loopTime = 503
+    private loopTime = 9973
     private processFlag = false
 
     constructor(sendFunction: (...args) => Promise<any>, interval: number) {
@@ -47,9 +47,9 @@ export class SimpleMessageSendQueueHelper {
     }
 
     private startSend(): void {
-        setInterval(async () => {
-            await this.processQueue()
-        }, this.interval)
+        setInterval(() => {
+            this.processQueue()
+        }, this.loopTime)
     }
 
     private async processQueue(): Promise<void> {

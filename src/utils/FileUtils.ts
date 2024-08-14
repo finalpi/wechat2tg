@@ -13,7 +13,7 @@ export class FileUtils {
             responseType: 'stream'
         }
         if (useProxy) {
-            if (config.HOST !== '' && config.PROTOCOL === 'http' || config.PROTOCOL === 'https') {
+            if (config.PROTOCOL === 'http' || config.PROTOCOL === 'https') {
                 axiosConfig.proxy = {
                     host: config.HOST,
                     port: Number.parseInt(config.PORT),
