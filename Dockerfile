@@ -18,6 +18,10 @@ FROM node:18-slim
 
 RUN mkdir -p /app/storage /app/save-files
 
+RUN apt update && apt-get --no-install-recommends install -y \
+    fonts-wqy-microhei \
+    libpixman-1-0 libcairo2 libpango1.0-0 libgif7 libjpeg62-turbo libpng16-16 librsvg2-2 libvips42 librlottie0-1
+
 WORKDIR /app
 COPY --from=tgs-to-gif-build /app/tgs_to_gif /usr/local/bin/tgs_to_gif
 COPY package*.json tsconfig.json ./
