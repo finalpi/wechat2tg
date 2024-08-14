@@ -5,14 +5,14 @@ import TgsUtils from './TgsUtils'
 const ffmpeg = require('fluent-ffmpeg')
 
 export class ConverterHelper {
+    private targetFileSize: number = 1024 * 1024
+
     constructor() {
         // 设置 ffmpeg-static 的路径
         ffmpeg.setFfmpegPath(ffmpegStatic)
     }
 
     async webmToGif(inputFile: string | Buffer, outputFile: string): Promise<void> {
-        const targetFileSize = 1 * 1024 * 1024 // 1MB
-
         return new Promise((resolve, reject) => {
             const convert = (resolution: number, fps: number) => {
                 let scale = 'scale=iw:-1:flags=lanczos'
@@ -29,7 +29,7 @@ export class ConverterHelper {
                         const stats = fs.statSync(outputFile)
                         const fileSizeInBytes = stats.size
 
-                        if (fileSizeInBytes > targetFileSize) {
+                        if (fileSizeInBytes > this.targetFileSize) {
                             console.log(`文件大小 ${fileSizeInBytes} 超过 1MB，重新调整参数`)
                             if (resolution > 100 && fps > 1) {
                                 // 递归调用，降低分辨率和帧率
@@ -71,9 +71,10 @@ export class ConverterHelper {
                     //         if (err) throw err
                     //     })
                     // 删除tgs文件
-                    fs.unlink(inputFile, (err) => {
-                        if (err) throw err
-                    })
+                    console.log('测试大小----')
+                    // fs.unlink(inputFile, (err) => {
+                    //     if (err) throw err
+                    // })
                 })
         }
         throw new Error('Input file must be a string')

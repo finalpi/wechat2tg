@@ -5,6 +5,7 @@
 // // eslint-disable-next-line @typescript-eslint/no-var-requires
 // const renderLottie = require('puppeteer-lottie')
 import {spawn} from 'child_process'
+import {LogUtils} from './LogUtils'
 
 export default class TgsUtils {
     // async tgsToGif(inputFile: string, outputFile: string, lottieConfig?: {
@@ -83,8 +84,17 @@ export default class TgsUtils {
         height?: number,
     }) {
         return new Promise(resolve => {
-            spawn('tgs_to_gif', [inputFile, '--width', lottieConfig.width.toString(), '--height', lottieConfig.height.toString()]).on('exit', () => {
-                resolve(outputFile)
+            const args = [inputFile]
+            if (lottieConfig?.height) {
+                args.push('--height', lottieConfig.height.toString())
+            }
+            if (lottieConfig?.width) {
+                args.push('--width', lottieConfig.width.toString())
+            }
+            spawn('tgs_to_gif', args).on('exit', () => {
+                resolve(outputFile.replace('.tgs', ''))
+            }).on('error', (error) => {
+                LogUtils.config().getLogger('error').error('tgsToGif happened: ' + error.message)
             })
         })
     }
