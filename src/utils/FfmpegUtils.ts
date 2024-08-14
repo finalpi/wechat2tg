@@ -65,11 +65,11 @@ export class ConverterHelper {
             return new TgsUtils().tgsToGif(inputFile, outputFile, lottie_config)
                 .then(() => {
                     // 这里删除临时文件
-                    const tmpFilePath = outputFile.substring(0, outputFile.lastIndexOf('.'))
-                    fs.rm(tmpFilePath, {force: true, recursive: true},
-                        (err) => {
-                            if (err) throw err
-                        })
+                    // const tmpFilePath = outputFile.substring(0, outputFile.lastIndexOf('.'))
+                    // fs.rm(tmpFilePath, {force: true, recursive: true},
+                    //     (err) => {
+                    //         if (err) throw err
+                    //     })
                     // 删除tgs文件
                     fs.unlink(inputFile, (err) => {
                         if (err) throw err

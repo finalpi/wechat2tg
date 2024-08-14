@@ -1,25 +1,29 @@
-FROM rust:buster as builder-gifski
-RUN cargo install --version 1.7.0 gifski
+FROM debian:bookworm-slim AS tgs-to-gif-build
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,target=/var/lib/apt,sharing=locked \
+  apt update && apt-get --no-install-recommends install -y \
+    python3 build-essential pkg-config cmake librlottie-dev zlib1g-dev
+
+ADD https://github.com/p-ranav/argparse.git#v3.0 /argparse
+WORKDIR /argparse/build
+RUN cmake -DARGPARSE_BUILD_SAMPLES=off -DARGPARSE_BUILD_TESTS=off .. && make && make install
+
+ADD https://github.com/ed-asriyan/lottie-converter.git#f626548ced4492235b535552e2449be004a3a435 /app
+WORKDIR /app
+RUN sed -i 's/\${CONAN_LIBS}/z/g' CMakeLists.txt && sed -i 's/include(conanbuildinfo.cmake)//g' CMakeLists.txt && sed -i 's/conan_basic_setup()//g' CMakeLists.txt
+
+RUN cmake CMakeLists.txt && make
 
 FROM node:18-slim
-
-RUN apt-get update && \
-    apt-get install -y wget gnupg libx11-6 libx11-dev libx11-xcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 libnss3 libatk-bridge2.0-0 libgbm1 libgtk-3-0 libasound2 && \
-    rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /app/storage /app/save-files
 
 WORKDIR /app
-COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
+COPY --from=tgs-to-gif-build /app/tgs_to_gif /usr/local/bin/tgs_to_gif
 COPY package*.json tsconfig.json ./
 
-# Set environment variable to disable sandbox in Puppeteer
-ENV BOT_TOKEN=""
-ENV PROXY_PROTOCOL=""
-ENV PROXY_HOST=""
-ENV PROXY_PORT=""
-ENV PROXY_USERNAME=""
-ENV PROXY_PASSWORD=""
+ENV TGS_TO_GIF=/usr/local/bin/tgs_to_gif
+
 RUN npm install -g npm@10.7.0 && npm install
 
 COPY . .

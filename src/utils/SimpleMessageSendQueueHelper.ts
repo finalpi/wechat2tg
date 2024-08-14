@@ -48,8 +48,13 @@ export class SimpleMessageSendQueueHelper {
 
     private startSend(): void {
         setInterval(() => {
-            this.processQueue()
-        }, this.loopTime)
+            Promise.race([
+                this.processQueue(),
+                new Promise(resolve => setTimeout(resolve, this.loopTime))
+            ]).finally(() => {
+                this.startSend()
+            })
+        }, this.interval)
     }
 
     private async processQueue(): Promise<void> {
