@@ -75,6 +75,8 @@ export class ConverterHelper {
                     // fs.unlink(inputFile, (err) => {
                     //     if (err) throw err
                     // })
+                }).catch((err) => {
+                    throw err
                 })
         }
         throw new Error('Input file must be a string')

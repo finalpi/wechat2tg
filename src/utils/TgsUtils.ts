@@ -80,20 +80,23 @@ export default class TgsUtils {
     // }
 
     async tgsToGif(inputFile: string, outputFile: string, lottieConfig?: {
-        width?: number,
-        height?: number,
+        width?: number | 100,
+        height?: number | 100,
     }) {
-        return new Promise(resolve => {
-            const args = [inputFile]
+        return new Promise((resolve, reject) => {
+            const args = []
             if (lottieConfig?.height) {
                 args.push('--height', lottieConfig.height.toString())
             }
             if (lottieConfig?.width) {
                 args.push('--width', lottieConfig.width.toString())
             }
+            args.push(inputFile)
+            console.log('tgsToGif args: ' + args.join(' '))
             spawn('tgs_to_gif', args).on('exit', () => {
                 resolve(outputFile.replace('.tgs', ''))
             }).on('error', (error) => {
+                reject(error)
                 LogUtils.config().getLogger('error').error('tgsToGif happened: ' + error.message)
             })
         })
