@@ -2,6 +2,7 @@ import {MyMessageContact} from '../models/MyContact'
 import {convertXML} from 'simple-xml-to-json'
 import {CacheHelper} from './CacheHelper'
 import {TelegramBotClient} from '../client/TelegramBotClient'
+import I18n from '../i18n/i18n'
 
 export class MessageUtils {
     private static instance: MessageUtils
@@ -35,32 +36,34 @@ export class MessageUtils {
      * @private
      */
     public static undoMessage(tgMsgId: number) {
-        const undoMessageCache = CacheHelper.getInstances().getUndoMessageByMsgId({msg_id: tgMsgId})
-        if (undoMessageCache) {
-            // 撤回消息
-            const wxMsgId = undoMessageCache?.wx_msg_id
-            TelegramBotClient.getInstance().weChatClient.client.Message.find({id: wxMsgId})
-                .then(message => {
-                    message?.recall().then((res) => {
-                        if (res) {
-                            if (wxMsgId) {
-                                CacheHelper.getInstances().removeUndoMessage(wxMsgId)
+        const undoMessageCaches = CacheHelper.getInstances().getUndoMessageByMsgId({msg_id: tgMsgId})
+        for (const undoMessageCache of undoMessageCaches) {
+            if (undoMessageCache) {
+                // 撤回消息
+                const wxMsgId = undoMessageCache?.wx_msg_id
+                TelegramBotClient.getInstance().weChatClient.client.Message.find({id: wxMsgId})
+                    .then(message => {
+                        message?.recall().then((res) => {
+                            if (res) {
+                                if (wxMsgId) {
+                                    CacheHelper.getInstances().removeUndoMessage(wxMsgId)
+                                }
+                                // if (undoMessageCache.chat_id) {
+                                TelegramBotClient.getInstance().bot.telegram.sendMessage(undoMessageCache.chat_id, I18n.grable().t('telegram.msg.recallSuccess'))
+                                // }
+                            } else {
+                                if (undoMessageCache.chat_id) {
+                                    TelegramBotClient.getInstance().bot.telegram.sendMessage(undoMessageCache.chat_id, I18n.grable().t('telegram.msg.recallFail'))
+                                }
                             }
-                            if (undoMessageCache.chat_id) {
-                                TelegramBotClient.getInstance().bot.telegram.sendMessage(undoMessageCache.chat_id, '撤回成功')
-                            }
-                        } else {
-                            if (undoMessageCache.chat_id) {
-                                TelegramBotClient.getInstance().bot.telegram.sendMessage(undoMessageCache.chat_id, '撤回失败')
-                            }
-                        }
 
-                    }).catch((e) => {
-                        if (undoMessageCache.chat_id) {
-                            TelegramBotClient.getInstance().bot.telegram.sendMessage(undoMessageCache.chat_id, '撤回失败')
-                        }
+                        }).catch((e) => {
+                            if (undoMessageCache.chat_id) {
+                                TelegramBotClient.getInstance().bot.telegram.sendMessage(undoMessageCache.chat_id, I18n.grable().t('telegram.msg.recallFail'))
+                            }
+                        })
                     })
-                })
+            }
         }
     }
 }

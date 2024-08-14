@@ -1528,44 +1528,46 @@ export class TelegramBotClient extends BaseClient {
      * @private
      */
     private undoMessage(replyMessageId: number, ctx: any) {
-        const undoMessageCache = CacheHelper.getInstances().getUndoMessage({
+        const undoMessageCaches = CacheHelper.getInstances().getUndoMessage({
             chat_id: ctx.message?.chat.id, msg_id: replyMessageId
         })
-        if (undoMessageCache) {
-            // 撤回消息
-            this.weChatClient.client.Message.find({id: undoMessageCache.wx_msg_id})
-                .then(message => {
-                    message?.recall().then((res) => {
-                        if (res) {
-                            ctx.reply(this.t('telegram.msg.recallSuccess'), {
-                                reply_parameters: {
-                                    message_id: replyMessageId
-                                }
-                            })
-                            CacheHelper.getInstances().removeUndoMessage(message.id)
-                        } else {
+        for (const undoMessageCache of undoMessageCaches) {
+            if (undoMessageCache) {
+                // 撤回消息
+                this.weChatClient.client.Message.find({id: undoMessageCache.wx_msg_id})
+                    .then(message => {
+                        message?.recall().then((res) => {
+                            if (res) {
+                                ctx.reply(this.t('telegram.msg.recallSuccess'), {
+                                    reply_parameters: {
+                                        message_id: replyMessageId
+                                    }
+                                })
+                                CacheHelper.getInstances().removeUndoMessage(message.id)
+                            } else {
+                                ctx.reply(this.t('telegram.msg.recallFail'), {
+                                    reply_parameters: {
+                                        message_id: replyMessageId
+                                    }
+                                })
+                            }
+
+                        }).catch((e) => {
+                            this.logError(this.t('telegram.msg.recallFail'), e)
                             ctx.reply(this.t('telegram.msg.recallFail'), {
                                 reply_parameters: {
                                     message_id: replyMessageId
                                 }
                             })
-                        }
-
-                    }).catch((e) => {
-                        this.logError(this.t('telegram.msg.recallFail'), e)
-                        ctx.reply(this.t('telegram.msg.recallFail'), {
-                            reply_parameters: {
-                                message_id: replyMessageId
-                            }
                         })
                     })
+            } else {
+                ctx.reply(this.t('telegram.msg.recallNotDone'), {
+                    reply_parameters: {
+                        message_id: replyMessageId
+                    }
                 })
-        } else {
-            ctx.reply(this.t('telegram.msg.recallNotDone'), {
-                reply_parameters: {
-                    message_id: replyMessageId
-                }
-            })
+            }
         }
         return
     }
@@ -2287,8 +2289,7 @@ export class TelegramBotClient extends BaseClient {
                     if (!fileName) {
                         fileName = new Date().getTime() + '.jpg'
                     }
-                    const savePath = `save-files/${fileName}`
-                    FileUtils.downloadWithProxy(fileLink.toString(), savePath).then(() => {
+                    FileUtils.downloadBufferWithProxy(fileLink.toString()).then(buffer => {
                         // 构造包含无用信息的 EXIF 元数据
                         const exifData = {
                             IFD0: {
@@ -2298,17 +2299,11 @@ export class TelegramBotClient extends BaseClient {
                         }
 
                         // 保存带有新元数据的图片
-                        sharp(savePath)
+                        sharp(buffer)
                             .withMetadata({exif: exifData})
                             .toBuffer()
                             .then(buff => {
-                                this.sendFile(ctx, FileBox.fromBuffer(buff, fileName)).then(() => {
-                                    setTimeout(() => {
-                                        fs.unlink(savePath, err => {
-                                            console.log(err)
-                                        })
-                                    }, 20000)
-                                })
+                                this.sendFile(ctx, FileBox.fromBuffer(buff, fileName))
                             }).catch((err) => {
                             ctx.reply(this.t('common.sendFailMsg', this.t('common.saveOrgFileError')))
                         })
