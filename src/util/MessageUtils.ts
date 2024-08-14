@@ -1,4 +1,4 @@
-import {MyMessageContact} from '../models/MyContact'
+import {MyMessageContact} from '../model/MyContact'
 import {convertXML} from 'simple-xml-to-json'
 import {CacheHelper} from './CacheHelper'
 import {TelegramBotClient} from '../client/TelegramBotClient'

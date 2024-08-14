@@ -1,12 +1,11 @@
 import ffmpegStatic from 'ffmpeg-static'
 import * as fs from 'node:fs'
 import TgsUtils from './TgsUtils'
+import WxLimitConstants from '../constant/WxLimitConstant'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ffmpeg = require('fluent-ffmpeg')
 
 export class ConverterHelper {
-    private targetFileSize: number = 1024 * 1024
-
     constructor() {
         // 设置 ffmpeg-static 的路径
         ffmpeg.setFfmpegPath(ffmpegStatic)
@@ -29,7 +28,7 @@ export class ConverterHelper {
                         const stats = fs.statSync(outputFile)
                         const fileSizeInBytes = stats.size
 
-                        if (fileSizeInBytes > this.targetFileSize) {
+                        if (fileSizeInBytes > WxLimitConstants.MAX_GIF_SIZE) {
                             console.log(`文件大小 ${fileSizeInBytes} 超过 1MB，重新调整参数`)
                             if (resolution > 100 && fps > 1) {
                                 // 递归调用，降低分辨率和帧率

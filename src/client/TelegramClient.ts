@@ -4,7 +4,7 @@ import {TelegramBotClient} from './TelegramBotClient'
 import os from 'node:os'
 import BaseClient from '../base/BaseClient'
 import {DeletedMessage} from 'telegram/events/DeletedMessage'
-import {MessageUtils} from '../utils/MessageUtils'
+import {MessageUtils} from '../util/MessageUtils'
 import {StoreSession} from 'telegram/sessions'
 
 export class TelegramClient extends BaseClient {

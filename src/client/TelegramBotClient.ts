@@ -8,21 +8,21 @@ import * as tg from 'telegraf/src/core/types/typegram'
 import {message} from 'telegraf/filters'
 import {FileBox, FileBoxType} from 'file-box'
 import * as fs from 'node:fs'
-import {NotionListType, NotionMode, StorageSettings, VariableContainer, VariableType} from '../models/Settings'
-import {ConverterHelper} from '../utils/FfmpegUtils'
-import {SelectedEntity} from '../models/TgCache'
-import {TalkerEntity} from '../models/TalkerCache'
-import {UniqueIdGenerator} from '../utils/IdUtils'
-import {Page} from '../models/Page'
-import {FileUtils} from '../utils/FileUtils'
+import {NotionListType, NotionMode, StorageSettings, VariableContainer, VariableType} from '../model/Settings'
+import {ConverterHelper} from '../util/FfmpegUtils'
+import {SelectedEntity} from '../model/TgCache'
+import {TalkerEntity} from '../model/TalkerCache'
+import {UniqueIdGenerator} from '../util/IdUtils'
+import {Page} from '../model/Page'
+import {FileUtils} from '../util/FileUtils'
 import {ContactImpl, ContactInterface, MessageInterface, RoomInterface} from 'wechaty/impls'
-import {CacheHelper} from '../utils/CacheHelper'
+import {CacheHelper} from '../util/CacheHelper'
 import * as PUPPET from 'wechaty-puppet'
 import {TelegramClient} from './TelegramClient'
 import {BindItemService} from '../service/BindItemService'
-import {RoomItem} from '../models/RoomItem'
-import {ContactItem} from '../models/ContactItem'
-import {BindItem} from '../models/BindItem'
+import {RoomItem} from '../model/RoomItem'
+import {ContactItem} from '../model/ContactItem'
+import {BindItem} from '../model/BindItem'
 import {UserAuthParams} from 'telegram/client/auth'
 import {EventEmitter} from 'node:events'
 import {TelegramUserClient} from './TelegramUserClient'
@@ -30,8 +30,8 @@ import BaseClient from '../base/BaseClient'
 import {MessageService} from '../service/MessageService'
 import {MessageSender} from '../message/MessageSender'
 import {SenderFactory} from '../message/SenderFactory'
-import {SimpleMessageSendQueueHelper} from '../utils/SimpleMessageSendQueueHelper'
-import {SimpleMessageSender} from '../models/Message'
+import {SimpleMessageSendQueueHelper} from '../util/SimpleMessageSendQueueHelper'
+import {SimpleMessageSender} from '../model/Message'
 import sharp from 'sharp'
 
 export class TelegramBotClient extends BaseClient {
@@ -902,10 +902,6 @@ export class TelegramBotClient extends BaseClient {
                 const saveFile = `save-files/${fileName}`
                 const gifFile = `save-files/${fileName.slice(0, fileName.lastIndexOf('.'))}.gif`
 
-                // if (saveFile.endsWith('.tgs')) {
-                //     gifFile = gifFile.replace('.gif', '.tgs.gif')
-                // }
-
                 const lottie_config = {
                     width: 128,
                     height: 128
@@ -919,7 +915,7 @@ export class TelegramBotClient extends BaseClient {
                 // gif 文件存在
                 if (fs.existsSync(gifFile)) {
                     this.sendGif(saveFile, gifFile, ctx, lottie_config)
-                } else {
+                } else if (!fs.existsSync(saveFile)) {
                     // 使用代理下载tg文件
                     if (useProxy) {
                         FileUtils.downloadWithProxy(fileLink.toString(), saveFile).then(() => {
@@ -930,6 +926,8 @@ export class TelegramBotClient extends BaseClient {
                             this.sendGif(saveFile, gifFile, ctx, lottie_config)
                         }).catch(() => ctx.reply(this.t('common.sendFailMsg', this.t('common.saveOrgFileError'))))
                     }
+                } else {
+                    this.sendGif(saveFile, gifFile, ctx, lottie_config)
                 }
             }).catch(e => {
                 ctx.reply(this.t('common.sendFailMsg', this.t('common.fileLarge')), {

@@ -1,7 +1,7 @@
 import {Database} from 'sqlite3'
 import {config} from '../config'
 import log4js from 'log4js'
-import {LogUtils} from '../utils/LogUtils'
+import {LogUtils} from '../util/LogUtils'
 
 abstract class AbstractSqlService {
     protected db: Database = new Database(config.DB_SQLITE_PATH)
