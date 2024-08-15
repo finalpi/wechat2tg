@@ -1738,7 +1738,7 @@ export class TelegramBotClient extends BaseClient {
             if (!fs.existsSync(gifFile)) {
                 if (saveFile.endsWith('.tgs')) {
                     await new ConverterHelper().tgsToGif(saveFile, gifFile, lottie_config)
-                } else if (saveFile.endsWith('.webp')) {
+                } else if (saveFile.endsWith('.webm') || saveFile.endsWith('.webp')) {
                     await new ConverterHelper().webmToGif(saveFile, gifFile)
                 } else {
                     throw new Error('文件格式暂时不支持转换')
