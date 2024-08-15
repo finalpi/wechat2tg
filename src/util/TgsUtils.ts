@@ -32,8 +32,7 @@ export default class TgsUtils {
                     console.log('tgsToGif 第二次转换 args: ' + args.join(' '))
                     spawn('tgs_to_gif', args).on('exit', () => {
                         // 修改名字为gif
-                        const gifName = inputFile.replace('save-files/', '').split('.')[0] + 'tgs.gif'
-                        fs.renameSync(gifName, outputFile)
+                        fs.renameSync(inputFile + '.gif', outputFile)
                         if (fs.statSync(outputFile).size > WxLimitConstants.MAX_GIF_SIZE) {
                             reject('不能压缩gif到1MB以下')
                         } else {
