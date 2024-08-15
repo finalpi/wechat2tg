@@ -8,7 +8,7 @@ ADD https://github.com/p-ranav/argparse.git#v3.0 /argparse
 WORKDIR /argparse/build
 RUN cmake -DARGPARSE_BUILD_SAMPLES=off -DARGPARSE_BUILD_TESTS=off .. && make && make install
 
-ADD https://github.com/ed-asriyan/lottie-converter.git#f626548ced4492235b535552e2449be004a3a435 /app
+ADD https://github.com/ed-asriyan/lottie-converter.git#v1.1.1 /app
 WORKDIR /app
 RUN sed -i 's/\${CONAN_LIBS}/z/g' CMakeLists.txt && sed -i 's/include(conanbuildinfo.cmake)//g' CMakeLists.txt && sed -i 's/conan_basic_setup()//g' CMakeLists.txt
 
