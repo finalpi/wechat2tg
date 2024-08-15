@@ -17,10 +17,6 @@ RUN conan install . --build=missing -s build_type=Release
 COPY CMakeLists.txt .
 COPY src src
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOTTIE_MODULE=OFF CMakeLists.txt && cmake --build . --config Release
-
-FROM debian:buster-slim as lottie-to-gif
-ADD https://github.com/ed-asriyan/lottie-converter.git /app
-WORKDIR /app
 COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
 COPY --from=builder-lottie-to-png /application/bin/lottie_to_png /usr/bin/lottie_to_png
 
@@ -31,10 +27,10 @@ RUN mkdir -p /app/storage /app/save-files
 RUN apt update && apt-get --no-install-recommends install -y
 
 WORKDIR /app
-COPY --from=lottie-to-gif /usr/bin/gifski /usr/bin/gifski
-COPY --from=lottie-to-gif /usr/bin/lottie_to_png /usr/bin/lottie_to_png
-COPY --from=lottie-to-gif /app/bin/lottie_common.sh /usr/bin/lottie_to_png
-COPY --from=lottie-to-gif /app/bin/lottie_to_gif.sh /usr/bin/lottie_to_png
+COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
+COPY --from=builder-lottie-to-png /application/bin/lottie_to_png /usr/bin/lottie_to_png
+COPY --from=builder-lottie-to-png /application/bin/lottie_common.sh /usr/bin
+COPY --from=builder-lottie-to-png /application/bin/lottie_to_gif.sh /usr/bin
 COPY package*.json tsconfig.json ./
 
 ENV TGS_TO_GIF=/usr/local/bin/tgs_to_gif
