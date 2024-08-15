@@ -19,9 +19,10 @@ export default class TgsUtils {
             }
             args.push(inputFile)
             console.log('tgsToGif args: ' + args.join(' '))
-            spawn('./lottie_to_gif.sh', args, {
+            const spawn1 = spawn('lottie_to_gif.sh', args, {
                 shell: true
-            }).on('exit', code => {
+            })
+            spawn1.on('exit', code => {
                 console.log('退出代码:', code)
                 const statSync = fs.statSync(outputFile)
                 if (statSync.size > WxLimitConstants.MAX_GIF_SIZE) {
@@ -52,6 +53,14 @@ export default class TgsUtils {
             }).on('error', (error) => {
                 reject(error)
                 LogUtils.config().getLogger('error').error('tgsToGif happened: ' + error.message)
+            })
+
+            spawn1.stderr.on('data', (data) => {
+                console.log(`stderr: ${data}`)
+            })
+
+            spawn1.stdout.on('data', (data) => {
+                console.log(`stdout: ${data}`)
             })
         })
     }
