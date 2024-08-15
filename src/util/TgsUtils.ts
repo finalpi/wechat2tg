@@ -10,7 +10,7 @@ export default class TgsUtils {
         height?: number | 128,
     }) {
         return new Promise((resolve, reject) => {
-            const args = ['lottie_to_gif.sh', '--output', outputFile]
+            const args = ['/usr/bin/lottie_to_gif.sh', '--output', outputFile]
             if (lottieConfig?.height) {
                 args.push('--height', lottieConfig.height.toString())
             }
@@ -32,7 +32,7 @@ export default class TgsUtils {
                     args.push('--fps', '24')
                     const zoom = statSync.size / 1024 / 1024
                     console.log('tgsToGif 第二次转换 args: ' + args.join(' '))
-                    spawn('./lottie_to_gif.sh', args, {
+                    spawn('bash', args, {
                         shell: true
                     }).on('exit', code => {
                         console.log('退出代码:', code)
