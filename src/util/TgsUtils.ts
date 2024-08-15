@@ -25,13 +25,14 @@ export default class TgsUtils {
             spawn1.on('exit', code => {
                 if (code !== 0) {
                     reject('转换失败')
+                    return
                 }
                 const statSync = fs.statSync(outputFile)
                 if (statSync.size > WxLimitConstants.MAX_GIF_SIZE) {
                     // 先删除原始gif文件
                     fs.unlinkSync(outputFile)
                     args.push('--fps', '24')
-                    const zoom = statSync.size / 17_000
+                    const zoom = 17_000 / statSync.size
                     args.push('--quality', Math.floor(70 * zoom).toString())
                     console.log('tgsToGif 第二次转换 args: ' + args.join(' '))
                     spawn('bash', args, {
@@ -39,6 +40,7 @@ export default class TgsUtils {
                     }).on('exit', code => {
                         if (code !== 0) {
                             reject('转换失败')
+                            return
                         }
                         // 修改名字为gif
                         if (fs.statSync(outputFile).size > WxLimitConstants.MAX_GIF_SIZE) {
