@@ -2,6 +2,7 @@ import {spawn} from 'child_process'
 import {LogUtils} from './LogUtils'
 import * as fs from 'node:fs'
 import WxLimitConstants from '../constant/WxLimitConstant'
+import {rename} from 'node-7z'
 
 export default class TgsUtils {
     async tgsToGif(inputFile: string, outputFile: string, lottieConfig?: {
@@ -16,8 +17,6 @@ export default class TgsUtils {
             if (lottieConfig?.width) {
                 args.push('--width', lottieConfig.width.toString())
             }
-            args.push('--quality', '70')
-            args.push('--fps', '24')
             args.push(inputFile)
             console.log('tgsToGif args: ' + args.join(' '))
             spawn('tgs_to_gif', args).on('exit', () => {
@@ -25,9 +24,16 @@ export default class TgsUtils {
                 if (statSync.size > WxLimitConstants.MAX_GIF_SIZE) {
                     // 先删除原始gif文件
                     fs.unlinkSync(outputFile)
+                    args.push('--quality', '70')
+                    args.push('--fps', '24')
+                    args.shift()
+                    args.shift()
                     const zoom = statSync.size / 1024 / 1024
                     console.log('tgsToGif 第二次转换 args: ' + args.join(' '))
                     spawn('tgs_to_gif', args).on('exit', () => {
+                        // 修改名字为gif
+                        const gifName = inputFile.replace('save-files/', '').split('.')[0] + 'tgs.gif'
+                        fs.renameSync(gifName, outputFile)
                         if (fs.statSync(outputFile).size > WxLimitConstants.MAX_GIF_SIZE) {
                             reject('不能压缩gif到1MB以下')
                         } else {
