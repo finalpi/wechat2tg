@@ -2242,10 +2242,10 @@ export class TelegramBotClient extends BaseClient {
     }
 
     private async handleFileMessage(ctx: any, fileType: string | 'audio' | 'video' | 'document' | 'photo' | 'voice') {
-        if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
-            ctx.reply(this.t('common.plzLoginWeChat'))
-            return
-        }
+        // if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
+        //     ctx.reply(this.t('common.plzLoginWeChat'))
+        //     return
+        // }
         if (ctx.message[fileType]) {
             let fileId = ctx.message[fileType].file_id
             let fileSize = ctx.message[fileType].file_size
@@ -2289,7 +2289,7 @@ export class TelegramBotClient extends BaseClient {
             // @ts-ignore
             ctx.telegram.getFileLink(fileId).then(async fileLink => {
                 // 如果图片大小小于100k,则添加元数据使其大小达到100k,否则会被微信压缩质量
-                if (fileSize && fileSize < 100 * 1024 && (fileType === 'photo' || (fileName.endWith('jpg') || fileName.endWith('jpeg') || fileName.endWith('png')))) {
+                if (fileSize && fileSize < 100 * 1024 && (fileType === 'photo' || (fileName.endsWith('jpg') || fileName.endsWith('jpeg') || fileName.endsWith('png')))) {
                     if (!fileName) {
                         fileName = new Date().getTime() + '.jpg'
                     }
