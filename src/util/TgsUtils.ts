@@ -32,7 +32,7 @@ export default class TgsUtils {
                     // 先删除原始gif文件
                     fs.unlinkSync(outputFile)
                     args.push('--fps', '24')
-                    const zoom = 17_000 / statSync.size
+                    const zoom = 17_000 / fs.statSync(inputFile).size
                     args.push('--quality', Math.floor(70 * zoom).toString())
                     console.log('tgsToGif 第二次转换 args: ' + args.join(' '))
                     spawn('bash', args, {
@@ -44,6 +44,7 @@ export default class TgsUtils {
                         }
                         // 修改名字为gif
                         if (fs.statSync(outputFile).size > WxLimitConstants.MAX_GIF_SIZE) {
+                            fs.unlinkSync(outputFile)
                             reject('不能压缩gif到1MB以下')
                         } else {
                             resolve(outputFile)
