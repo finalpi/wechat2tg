@@ -33,7 +33,13 @@ export default class TgsUtils {
                     fs.unlinkSync(outputFile)
                     args.push('--fps', '24')
                     const zoom = 17_000 / fs.statSync(inputFile).size
-                    args.push('--quality', Math.floor(70 * zoom).toString())
+                    let quality = Math.floor(70 * zoom)
+                    if (quality < 0) {
+                        quality = 1
+                    } else if (quality > 100) {
+                        quality = 99
+                    }
+                    args.push('--quality', quality.toString())
                     console.log('tgsToGif 第二次转换 args: ' + args.join(' '))
                     spawn('bash', args, {
                         shell: true
