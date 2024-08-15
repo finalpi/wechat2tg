@@ -10,7 +10,7 @@ export default class TgsUtils {
         height?: number | 128,
     }) {
         return new Promise((resolve, reject) => {
-            const args = ['--output', outputFile]
+            const args = ['lottie_to_gif.sh', '--output', outputFile]
             if (lottieConfig?.height) {
                 args.push('--height', lottieConfig.height.toString())
             }
@@ -19,7 +19,7 @@ export default class TgsUtils {
             }
             args.push(inputFile)
             console.log('tgsToGif args: ' + args.join(' '))
-            const spawn1 = spawn('lottie_to_gif.sh', args, {
+            const spawn1 = spawn('bash', args, {
                 shell: true
             })
             spawn1.on('exit', code => {
