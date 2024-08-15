@@ -21,6 +21,8 @@ export default class TgsUtils {
             spawn('tgs_to_gif', args).on('exit', () => {
                 const statSync = fs.statSync(outputFile)
                 if (statSync.size > WxLimitConstants.MAX_GIF_SIZE) {
+                    // 先删除原始gif文件
+                    fs.unlinkSync(outputFile)
                     const zoom = statSync.size / 1024 / 1024
                     args.push('--quality', '70')
                     args.push('--fps', '24')
