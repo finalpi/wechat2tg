@@ -1,33 +1,31 @@
-FROM debian:bookworm-slim AS tgs-to-gif-build
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-  --mount=type=cache,target=/var/lib/apt,sharing=locked \
-  apt update && apt-get --no-install-recommends install -y \
-    python3 build-essential pkg-config cmake librlottie-dev zlib1g-dev
+FROM rust:buster as builder-gifski
+RUN cargo install --version 1.7.0 gifski
 
-ADD https://github.com/p-ranav/argparse.git#v3.0 /argparse
-WORKDIR /argparse/build
-RUN cmake -DARGPARSE_BUILD_SAMPLES=off -DARGPARSE_BUILD_TESTS=off .. && make && make install
+FROM gcc:13 as builder-lottie-to-png
 
-ADD https://github.com/ed-asriyan/lottie-converter.git#f626548ced4492235b535552e2449be004a3a435 /app
-WORKDIR /app
-RUN sed -i 's/\${CONAN_LIBS}/z/g' CMakeLists.txt && sed -i 's/include(conanbuildinfo.cmake)//g' CMakeLists.txt && sed -i 's/conan_basic_setup()//g' CMakeLists.txt
+RUN apt update && \
+    apt install --assume-yes git cmake python3 python3-pip && \
+    rm -rf /var/lib/apt/lists/*
+RUN pip3 install --break-system-packages conan==2.0.10
+RUN git clone --branch v1.1.1 https://github.com/ed-asriyan/lottie-converter.git /application
 
-RUN cmake CMakeLists.txt && make
+WORKDIR /application
+RUN conan profile detect
+RUN conan install . --build=missing -s build_type=Release
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOTTIE_MODULE=OFF CMakeLists.txt && cmake --build . --config Release
+COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
 
 FROM node:18-slim
 
 RUN mkdir -p /app/storage /app/save-files
 
-RUN apt update && apt-get --no-install-recommends install -y \
-    fonts-wqy-microhei \
-    libpixman-1-0 libcairo2 libpango1.0-0 libgif7 libjpeg62-turbo libpng16-16 librsvg2-2 libvips42 librlottie0-1 \
-    python3 make gcc g++
-
 WORKDIR /app
-COPY --from=tgs-to-gif-build /app/tgs_to_gif /usr/local/bin/tgs_to_gif
+COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
+COPY --from=builder-lottie-to-png /application/bin/lottie_to_png /usr/bin/lottie_to_png
+COPY --from=builder-lottie-to-png /application/bin/lottie_common.sh /usr/bin
+COPY --from=builder-lottie-to-png /application/bin/lottie_to_gif.sh /usr/bin
+RUN chmod +x /usr/bin/lottie_to_png /usr/bin/lottie_common.sh /usr/bin/lottie_to_gif.sh
 COPY package*.json tsconfig.json ./
-
-ENV TGS_TO_GIF=/usr/local/bin/tgs_to_gif
 
 RUN npm install -g npm@10.7.0 && npm install
 

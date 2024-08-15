@@ -20,7 +20,7 @@
 
 ## 安装
 
-### docker-compose中使用
+### docker-compose中使用 (推荐)
 
 创建`docker-compose.yml`文件:
 
@@ -69,6 +69,12 @@ services:
 docker-compose up -d
 ```
 
+### docker中使用 (推荐)
+
+```shell
+docker run -itd --env BOT_TOKEN="" --env PROXY_HOST="" --env PROXY_PORT="" --env PROXY_USERNAME="" --env PROXY_PASSWORD="" --env PROXY_PROTOCOL="socks5" finalpi/wechat2tg:latest
+```
+
 ### Node.js v18以上的版本中使用
 
 1. 安装依赖：
@@ -86,14 +92,6 @@ docker-compose up -d
    ```
 
 4. tg 中机器人发送 `/start` 开始 或者 `/login` 登陆 。
-
-5. (可选)如需发送tgs表情需要安装[gifski](https://gif.ski),并配置系统环境变量
-
-### docker中使用
-
-```shell
-docker run -itd --env BOT_TOKEN="" --env PROXY_HOST="" --env PROXY_PORT="" --env PROXY_USERNAME="" --env PROXY_PASSWORD="" --env PROXY_PROTOCOL="socks5" finalpi/wechat2tg:latest
-```
 
 ## BOT命令说明
 

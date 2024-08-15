@@ -24,7 +24,7 @@ circumvent the issue where some accounts are unable to log in to the WeChat web 
 
 ## Installation
 
-### Using in docker-compose
+### Using in docker-compose (recommend)
 
 create file `docker-compose.yml`:
 
@@ -72,6 +72,12 @@ services:
 docker-compose up -d
 ```
 
+### Using in Docker (recommend)
+
+```shell
+docker run -itd --env BOT_TOKEN="" --env PROXY_HOST="" --env PROXY_PORT="" --env PROXY_USERNAME="" --env PROXY_PASSWORD="" --env PROXY_PROTOCOL="socks5" finalpi/wechat2tg:latest
+```
+
 ### Using in Node.js v18 or higher
 
 1. Install dependencies:
@@ -87,14 +93,6 @@ docker-compose up -d
    ```
 
 4. In Telegram, send `/start` to begin or `/login` to log in.
-
-5. (Optional) If you need to send tgs emojis, you need to install gifski and configure the system environment variables.
-
-### Using in Docker
-
-```shell
-docker run -itd --env BOT_TOKEN="" --env PROXY_HOST="" --env PROXY_PORT="" --env PROXY_USERNAME="" --env PROXY_PASSWORD="" --env PROXY_PROTOCOL="socks5" finalpi/wechat2tg:latest
-```
 
 ## BOT Commands Explanation
 

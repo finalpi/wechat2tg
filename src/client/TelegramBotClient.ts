@@ -908,8 +908,8 @@ export class TelegramBotClient extends BaseClient {
                 }
                 // 微信不能发超过1Mb的gif文件
                 if (saveFile.endsWith('.tgs')) {
-                    lottie_config.width = ctx.message.sticker.width / 4
-                    lottie_config.height = ctx.message.sticker.height / 4
+                    lottie_config.width = 512
+                    lottie_config.height = 512
                 }
 
                 // gif 文件存在
@@ -1738,10 +1738,11 @@ export class TelegramBotClient extends BaseClient {
             if (!fs.existsSync(gifFile)) {
                 if (saveFile.endsWith('.tgs')) {
                     await new ConverterHelper().tgsToGif(saveFile, gifFile, lottie_config)
-                } else if (saveFile.endsWith('.webp')) {
+                } else if (saveFile.endsWith('.webm') || saveFile.endsWith('.webp')) {
                     await new ConverterHelper().webmToGif(saveFile, gifFile)
                 } else {
-                    throw new Error('文件格式暂时不支持转换')
+                    // 直接发送原文件,不抛出异常
+                    // throw new Error('文件格式暂时不支持转换')
                 }
             }
             if (!fs.existsSync(gifFile)) {
@@ -2288,7 +2289,7 @@ export class TelegramBotClient extends BaseClient {
             // @ts-ignore
             ctx.telegram.getFileLink(fileId).then(async fileLink => {
                 // 如果图片大小小于100k,则添加元数据使其大小达到100k,否则会被微信压缩质量
-                if (fileSize && fileSize < 100 * 1024 && (fileType === 'photo' || (fileName.endWith('jpg') || fileName.endWith('jpeg') || fileName.endWith('png')))) {
+                if (fileSize && fileSize < 100 * 1024 && (fileType === 'photo' || (fileName.endsWith('jpg') || fileName.endsWith('jpeg') || fileName.endsWith('png')))) {
                     if (!fileName) {
                         fileName = new Date().getTime() + '.jpg'
                     }
