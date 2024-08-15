@@ -7,7 +7,7 @@ RUN apt update && \
     apt install --assume-yes git cmake python3 python3-pip && \
     rm -rf /var/lib/apt/lists/*
 RUN pip3 install --break-system-packages conan==2.0.10
-RUN git clone https://github.com/ed-asriyan/lottie-converter.git /application
+RUN git clone --branch v1.1.1 https://github.com/ed-asriyan/lottie-converter.git /application
 
 WORKDIR /application
 RUN conan profile detect
@@ -18,7 +18,6 @@ COPY CMakeLists.txt .
 COPY src src
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOTTIE_MODULE=OFF CMakeLists.txt && cmake --build . --config Release
 COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
-COPY --from=builder-lottie-to-png /application/bin/lottie_to_png /usr/bin/lottie_to_png
 
 FROM node:18-slim
 
