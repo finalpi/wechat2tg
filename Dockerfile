@@ -11,11 +11,7 @@ RUN git clone --branch v1.1.1 https://github.com/ed-asriyan/lottie-converter.git
 
 WORKDIR /application
 RUN conan profile detect
-COPY conanfile.txt .
 RUN conan install . --build=missing -s build_type=Release
-
-COPY CMakeLists.txt .
-COPY src src
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOTTIE_MODULE=OFF CMakeLists.txt && cmake --build . --config Release
 COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
 
