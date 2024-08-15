@@ -22,10 +22,10 @@ RUN mkdir -p /app/storage /app/save-files
 RUN apt update && apt-get --no-install-recommends install -y
 
 WORKDIR /app
-COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
-COPY --from=builder-lottie-to-png /application/bin/lottie_to_png /usr/bin/lottie_to_png
-COPY --from=builder-lottie-to-png /application/bin/lottie_common.sh /usr/bin
-COPY --from=builder-lottie-to-png /application/bin/lottie_to_gif.sh /usr/bin
+COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/local/bin/gifski
+COPY --from=builder-lottie-to-png /application/bin/lottie_to_png /usr/local/bin/lottie_to_png
+COPY --from=builder-lottie-to-png /application/bin/lottie_common.sh /usr/local/bin
+COPY --from=builder-lottie-to-png /application/bin/lottie_to_gif.sh /usr/local/bin
 COPY package*.json tsconfig.json ./
 
 RUN npm install -g npm@10.7.0 && npm install
