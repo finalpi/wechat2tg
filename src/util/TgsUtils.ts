@@ -19,7 +19,9 @@ export default class TgsUtils {
             }
             args.push(inputFile)
             console.log('tgsToGif args: ' + args.join(' '))
-            spawn('lottie_to_gif.sh', args).on('exit', code => {
+            spawn('lottie_to_gif.sh', args, {
+                shell: true
+            }).on('exit', code => {
                 console.log('退出代码:', code)
                 const statSync = fs.statSync(outputFile)
                 if (statSync.size > WxLimitConstants.MAX_GIF_SIZE) {
@@ -29,7 +31,9 @@ export default class TgsUtils {
                     args.push('--fps', '24')
                     const zoom = statSync.size / 1024 / 1024
                     console.log('tgsToGif 第二次转换 args: ' + args.join(' '))
-                    spawn('lottie_to_gif.sh', args).on('exit', code => {
+                    spawn('lottie_to_gif.sh', args, {
+                        shell: true
+                    }).on('exit', code => {
                         console.log('退出代码:', code)
 
                         // 修改名字为gif
