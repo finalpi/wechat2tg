@@ -22,7 +22,8 @@ export default class TgsUtils {
                 const statSync = fs.statSync(outputFile)
                 if (statSync.size > WxLimitConstants.MAX_GIF_SIZE) {
                     const zoom = statSync.size / 1024 / 1024
-                    args.push('--quality', Math.floor(89 / zoom).toString())
+                    args.push('--quality', '70')
+                    args.push('--fps', '24')
                     spawn('tgs_to_gif', args).on('exit', () => {
                         if (fs.statSync(outputFile).size > WxLimitConstants.MAX_GIF_SIZE) {
                             reject('不能压缩gif到1MB以下')
