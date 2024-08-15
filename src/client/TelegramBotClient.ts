@@ -2242,10 +2242,10 @@ export class TelegramBotClient extends BaseClient {
     }
 
     private async handleFileMessage(ctx: any, fileType: string | 'audio' | 'video' | 'document' | 'photo' | 'voice') {
-        // if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
-        //     ctx.reply(this.t('common.plzLoginWeChat'))
-        //     return
-        // }
+        if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
+            ctx.reply(this.t('common.plzLoginWeChat'))
+            return
+        }
         if (ctx.message[fileType]) {
             let fileId = ctx.message[fileType].file_id
             let fileSize = ctx.message[fileType].file_size

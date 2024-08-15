@@ -16,6 +16,8 @@ export default class TgsUtils {
             if (lottieConfig?.width) {
                 args.push('--width', lottieConfig.width.toString())
             }
+            args.push('--quality', '70')
+            args.push('--fps', '24')
             args.push(inputFile)
             console.log('tgsToGif args: ' + args.join(' '))
             spawn('tgs_to_gif', args).on('exit', () => {
@@ -24,8 +26,6 @@ export default class TgsUtils {
                     // 先删除原始gif文件
                     fs.unlinkSync(outputFile)
                     const zoom = statSync.size / 1024 / 1024
-                    args.push('--quality', '70')
-                    args.push('--fps', '24')
                     console.log('tgsToGif 第二次转换 args: ' + args.join(' '))
                     spawn('tgs_to_gif', args).on('exit', () => {
                         if (fs.statSync(outputFile).size > WxLimitConstants.MAX_GIF_SIZE) {
