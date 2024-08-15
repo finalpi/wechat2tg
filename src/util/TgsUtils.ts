@@ -2,7 +2,6 @@ import {spawn} from 'child_process'
 import {LogUtils} from './LogUtils'
 import * as fs from 'node:fs'
 import WxLimitConstants from '../constant/WxLimitConstant'
-import {rename} from 'node-7z'
 
 export default class TgsUtils {
     async tgsToGif(inputFile: string, outputFile: string, lottieConfig?: {
@@ -18,7 +17,7 @@ export default class TgsUtils {
                 args.push('--width', lottieConfig.width.toString())
             }
             args.push(inputFile)
-            console.log('tgsToGif args: ' + args.join(' '))
+            // console.log('tgsToGif args: ' + args.join(' '))
             const spawn1 = spawn('bash', args, {
                 shell: true
             })
@@ -29,8 +28,6 @@ export default class TgsUtils {
                 }
                 const statSync = fs.statSync(outputFile)
                 if (statSync.size > WxLimitConstants.MAX_GIF_SIZE) {
-                    // 先删除原始gif文件
-                    fs.unlinkSync(outputFile)
                     args.push('--fps', '24')
                     const zoom = 17_000 / fs.statSync(inputFile).size
                     let quality = Math.floor(70 * zoom)
@@ -40,11 +37,13 @@ export default class TgsUtils {
                         quality = 99
                     }
                     args.push('--quality', quality.toString())
-                    console.log('tgsToGif 第二次转换 args: ' + args.join(' '))
+                    // console.log('tgsToGif 第二次转换 args: ' + args.join(' '))
                     spawn('bash', args, {
                         shell: true
                     }).on('exit', code => {
                         if (code !== 0) {
+                            // 失败去删除第一次的gif文件
+                            fs.unlinkSync(outputFile)
                             reject('转换失败')
                             return
                         }
@@ -56,6 +55,8 @@ export default class TgsUtils {
                             resolve(outputFile)
                         }
                     }).on('error', (error) => {
+                        // 失败去删除第一次的gif文件
+                        fs.unlinkSync(outputFile)
                         reject(error)
                         LogUtils.config().getLogger('error').error('tgsToGif happened: ' + error.message)
                     })
@@ -65,14 +66,6 @@ export default class TgsUtils {
             }).on('error', (error) => {
                 reject(error)
                 LogUtils.config().getLogger('error').error('tgsToGif happened: ' + error.message)
-            })
-
-            spawn1.stderr.on('data', (data) => {
-                console.log(`stderr: ${data}`)
-            })
-
-            spawn1.stdout.on('data', (data) => {
-                console.log(`stdout: ${data}`)
             })
         })
     }

@@ -17,6 +17,11 @@ COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
 
 FROM node:18-slim
 
+RUN apt update && apt-get --no-install-recommends install -y \
+    fonts-wqy-microhei \
+    libpixman-1-0 libcairo2 libpango1.0-0 libgif7 libjpeg62-turbo libpng16-16 librsvg2-2 libvips42 librlottie0-1 \
+    python3 make gcc g++
+
 RUN mkdir -p /app/storage /app/save-files
 
 WORKDIR /app
