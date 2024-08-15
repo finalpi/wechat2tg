@@ -34,7 +34,7 @@ WORKDIR /app
 COPY --from=lottie-to-gif /usr/bin/gifski /usr/bin/gifski
 COPY --from=lottie-to-gif /usr/bin/lottie_to_png /usr/bin/lottie_to_png
 COPY --from=lottie-to-gif /app/bin/lottie_common.sh /usr/bin/lottie_to_png
-COPY --from=lottie-to-gif /usr/bin/lottie_to_png /usr/bin/lottie_to_png
+COPY --from=lottie-to-gif /app/bin/lottie_to_gif.sh /usr/bin/lottie_to_png
 COPY package*.json tsconfig.json ./
 
 ENV TGS_TO_GIF=/usr/local/bin/tgs_to_gif
