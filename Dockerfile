@@ -23,8 +23,6 @@ ADD https://github.com/ed-asriyan/lottie-converter.git /app
 WORKDIR /app
 COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
 COPY --from=builder-lottie-to-png /application/bin/lottie_to_png /usr/bin/lottie_to_png
-COPY bin/lottie_common.sh /usr/bin
-COPY bin/lottie_to_gif.sh /usr/bin
 
 FROM node:18-slim
 
