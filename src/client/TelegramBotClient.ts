@@ -245,39 +245,6 @@ export class TelegramBotClient extends BaseClient {
 
         this.onBotCommand(bot)
 
-        // 此方法需要放在所有监听方法之前,先拦截命令做处理
-        bot.use(async (ctx, next) => {
-            if (ctx.message) {
-                const messageDate = new Date(ctx.message?.date * 1000)
-                if (messageDate.getTime() < this.botStartTime.getTime()) {
-                    return
-                }
-            }
-            if (!this._chatId) {
-                return next()
-            }
-
-            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
-                return next()
-            }
-
-            if (ctx.chat && ctx.chat.type.includes('group') && ctx.callbackQuery && ctx.callbackQuery.from.id === this._chatId) {
-                return next()
-            }
-
-            if (ctx.chat && ctx.chat.type.includes('group') && !ctx.callbackQuery && !ctx.message) {
-                return
-            }
-
-            if (ctx.chat && this._chatId === ctx.chat.id) {
-                return next() // 如果用户授权，则继续处理下一个中间件或命令
-            }
-
-            if (!ctx.chat?.type.includes('group') && ctx.message && !ctx.message.from.is_bot) {
-                return ctx.reply('Sorry, you are not authorized to interact with this bot.') // 如果用户未授权，发送提示消息
-            }
-        })
-
         this.onBotMessage(bot)
 
         // 重启时判断是否有主人,如果存在主人则自动登录微信
@@ -345,6 +312,39 @@ export class TelegramBotClient extends BaseClient {
         bot.telegram.setMyCommands(this._commands)
 
         bot.help((ctx) => ctx.replyWithMarkdownV2(this.t('command.helpText')))
+
+        // 此方法需要放在所有监听方法之前,先拦截命令做处理
+        bot.use(async (ctx, next) => {
+            if (ctx.message) {
+                const messageDate = new Date(ctx.message?.date * 1000)
+                if (messageDate.getTime() < this.botStartTime.getTime()) {
+                    return
+                }
+            }
+            if (!this._chatId) {
+                return next()
+            }
+
+            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
+                return next()
+            }
+
+            if (ctx.chat && ctx.chat.type.includes('group') && ctx.callbackQuery && ctx.callbackQuery.from.id === this._chatId) {
+                return next()
+            }
+
+            if (ctx.chat && ctx.chat.type.includes('group') && !ctx.callbackQuery && !ctx.message) {
+                return
+            }
+
+            if (ctx.chat && this._chatId === ctx.chat.id) {
+                return next() // 如果用户授权，则继续处理下一个中间件或命令
+            }
+
+            if (!ctx.chat?.type.includes('group') && ctx.message && !ctx.message.from.is_bot) {
+                return ctx.reply('Sorry, you are not authorized to interact with this bot.') // 如果用户未授权，发送提示消息
+            }
+        })
 
         bot.start(ctx => {
             ctx.reply(this.t('command.startText'), Markup.removeKeyboard())
