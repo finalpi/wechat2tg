@@ -1738,11 +1738,10 @@ export class TelegramBotClient extends BaseClient {
             if (!fs.existsSync(gifFile)) {
                 if (saveFile.endsWith('.tgs')) {
                     await new ConverterHelper().tgsToGif(saveFile, gifFile, lottie_config)
-                } else if (saveFile.endsWith('.webm') || saveFile.endsWith('.webp')) {
+                } else if (saveFile.endsWith('.webm')) {
                     await new ConverterHelper().webmToGif(saveFile, gifFile)
-                } else {
-                    // 直接发送原文件,不抛出异常
-                    // throw new Error('文件格式暂时不支持转换')
+                } else if (saveFile.endsWith('.webp')) {
+                    await new ConverterHelper().webpToGif(saveFile, gifFile)
                 }
             }
             if (!fs.existsSync(gifFile)) {
