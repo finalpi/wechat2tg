@@ -1,18 +1,20 @@
 export interface BindItem {
-    name: string
-    chat_id: number
+    name?: string
+    chat_id?: number
     // 类型:0-用户,1-群组
-    type: number | 0 | 1
+    type?: number | 0 | 1
     // 绑定的id
-    bind_id: string
+    bind_id?: string
     // 别名
-    alias: string
+    alias?: string
     // 微信的动态id
-    wechat_id: string
+    wechat_id?: string
     // 头像
-    avatar: string
+    avatar?: string
     // 是否绑定成功:0-否,1-是
-    has_bound: 0 | 1
+    has_bound?: 0 | 1
+    // group forward message 0 否, 1 是 default 1
+    forward?: 0 | 1
 }
 
 export type ChatMapping = {

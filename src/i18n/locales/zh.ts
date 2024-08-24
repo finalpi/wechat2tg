@@ -11,6 +11,7 @@ const zh = {
             check: '微信登录状态',
             bind: '查询群组的绑定状态',
             unbind: '解绑群组',
+            gs: '群组消息转发',
             cgdata: '设置群组的头像和名称(需要管理员权限)',
             reset: '清空缓存重新登陆',
             stop: '停止微信客户端, 需要重新登陆',
@@ -92,6 +93,7 @@ const zh = {
         },
     },
     common: {
+        gs: '群组消息转发 {0}',
         open: '开启',
         close: '关闭',
         sendSuccess: '发送成功',

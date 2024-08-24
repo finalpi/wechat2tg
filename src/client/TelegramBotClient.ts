@@ -290,6 +290,7 @@ export class TelegramBotClient extends BaseClient {
             {command: 'check', description: this.t('command.description.check')},
             {command: 'bind', description: this.t('command.description.bind')},
             {command: 'unbind', description: this.t('command.description.unbind')},
+            {command: 'gs', description: this.t('command.description.gs')},
             {command: 'cgdata', description: this.t('command.description.cgdata')},
             {command: 'reset', description: this.t('command.description.reset')},
             {command: 'stop', description: this.t('command.description.stop')},
@@ -443,6 +444,19 @@ export class TelegramBotClient extends BaseClient {
                 ctx.reply(this.t('command.unbindText'))
             } else {
                 ctx.reply(this.t('common.onlyInGroup'))
+            }
+        })
+
+        bot.command('gs', async (ctx) => {
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                this.bindItemService.getBindItemByChatId(ctx.chat.id).then(bindItem => {
+                    const forward = bindItem.forward === 1 ? 0 : 1
+                    this.bindItemService.updateBindItem(ctx.chat.id.toString(), {forward: forward})
+                    ctx.reply(this.t('command.gs',
+                        forward === 1 ? this.t('common.open') : this.t('common.close')))
+                })
+            } else {
+               await ctx.reply(this.t('common.onlyInGroup'))
             }
         })
 
@@ -770,8 +784,14 @@ export class TelegramBotClient extends BaseClient {
                 ctx.reply(this.t('common.plzLoginWeChat'))
                 return
             }
-            // 获取锁
-            // await this.lock.acquire()
+
+            // 群组消息,判断是否转发
+            if (ctx.chat?.type.includes('group') && ctx.message?.from.id === this._chatId) {
+               const bind =  await this.bindItemService.getBindItemByChatId(ctx.message.chat.id)
+                if (bind.forward === 0) {
+                    return
+                }
+            }
             // 如果是回复的消息 优先回复该发送的消息
             if (replyMessageId) {
                 // 假设回复消息是撤回命令 撤回web协议获取不到消息id 放弃 更新上游代码可获取了
@@ -2244,6 +2264,13 @@ export class TelegramBotClient extends BaseClient {
         if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
             ctx.reply(this.t('common.plzLoginWeChat'))
             return
+        }
+        // 群组消息,判断是否转发
+        if (ctx.chat?.type.includes('group') && ctx.message?.from.id === this._chatId) {
+            const bind =  await this.bindItemService.getBindItemByChatId(ctx.message.chat.id)
+            if (bind.forward === 0) {
+                return
+            }
         }
         if (ctx.message[fileType]) {
             let fileId = ctx.message[fileType].file_id

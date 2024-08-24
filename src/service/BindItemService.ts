@@ -196,6 +196,68 @@ export class BindItemService extends AbstractSqlService {
         }
     }
 
+    // updateBindItem by groupId when bindItem has changed
+    public updateBindItem(groupId: string, bindItem: BindItem) {
+        this.db.serialize(() => {
+            let query = 'UPDATE tb_bind_item SET '
+            let params = []
+            let first = true
+
+            if (bindItem.name) {
+                query += first ? 'name=?' : ', name=?'
+                params.push(bindItem.name)
+                first = false
+            }
+            if (bindItem.chat_id) {
+                query += first ? 'chat_id=?' : ', chat_id=?'
+                params.push(bindItem.chat_id)
+                first = false
+            }
+            if (bindItem.type === 0 || bindItem.type === 1) {
+                query += first ? 'type=?' : ', type=?'
+                params.push(bindItem.type)
+                first = false
+            }
+            if (bindItem.bind_id) {
+                query += first ? 'bind_id=?' : ', bind_id=?'
+                params.push(bindItem.bind_id)
+                first = false
+            }
+            if (bindItem.alias) {
+                query += first ? 'alias=?' : ', alias=?'
+                params.push(bindItem.alias)
+                first = false
+            }
+            if (bindItem.wechat_id) {
+                query += first ? 'wechat_id=?' : ', wechat_id=?'
+                params.push(bindItem.wechat_id)
+                first = false
+            }
+            if (bindItem.avatar) {
+                query += first ? 'avatar=?' : ', avatar=?'
+                params.push(bindItem.avatar)
+                first = false
+            }
+            if (bindItem.has_bound === 1 || bindItem.has_bound === 0) {
+                query += first ? 'has_bound=?' : ', has_bound=?'
+                params.push(bindItem.has_bound)
+                first = false
+            }
+            if (bindItem.forward === 1 || bindItem.forward === 0) {
+                query += first ? 'forward=?' : ', forward=?'
+                params.push(bindItem.forward)
+                first = false
+            }
+
+            query += ' WHERE chat_id=?'
+            params.push(groupId)
+
+            const stmt = this.db.prepare(query)
+            stmt.run(...params)
+            stmt.finalize()
+        })
+    }
+
     public removeBindItemByChatId(chatId: number | string) {
         this.db.serialize(() => {
             const stmt = this.db.prepare('DELETE FROM tb_bind_item WHERE chat_id = ?')
@@ -293,7 +355,8 @@ export class BindItemService extends AbstractSqlService {
                         alias: alias,
                         wechat_id: wechatId,
                         avatar: avatar,
-                        has_bound: 1
+                        has_bound: 1,
+                        forward: 1
                     })
                 }
             })
@@ -301,7 +364,7 @@ export class BindItemService extends AbstractSqlService {
             stmt.run(wechatId, chatId)
             stmt.finalize()
 
-            const stmt1 = this.db.prepare('INSERT INTO tb_bind_item VALUES (?, ?, ?, ?, ?, ?, ?, 1)')
+            const stmt1 = this.db.prepare('INSERT INTO tb_bind_item VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1)')
             stmt1.run(name, chatId, type, bindId, alias, wechatId, avatar)
             stmt1.finalize()
         })
@@ -325,7 +388,8 @@ export class BindItemService extends AbstractSqlService {
             alias: alias,
             wechat_id: wechatId,
             avatar: avatar,
-            has_bound: 1
+            has_bound: 1,
+            forward: 1
         }
 
         // 返回对象
