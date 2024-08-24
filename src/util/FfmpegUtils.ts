@@ -2,6 +2,7 @@ import ffmpegStatic from 'ffmpeg-static'
 import * as fs from 'node:fs'
 import TgsUtils from './TgsUtils'
 import WxLimitConstants from '../constant/WxLimitConstant'
+import sharp from 'sharp'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ffmpeg = require('fluent-ffmpeg')
 
@@ -9,6 +10,18 @@ export class ConverterHelper {
     constructor() {
         // 设置 ffmpeg-static 的路径
         ffmpeg.setFfmpegPath(ffmpegStatic)
+    }
+
+    async webpToGif(inputFile: string | Buffer, outputFile: string): Promise<void> {
+        try {
+            const info = await sharp(inputFile)
+                .toFormat('gif')
+                .toFile(outputFile).then().catch().finally()
+            console.log('Conversion finished!', info)
+        } catch (err) {
+            console.error('Error during conversion:', err)
+            throw err
+        }
     }
 
     async webmToGif(inputFile: string | Buffer, outputFile: string): Promise<void> {
