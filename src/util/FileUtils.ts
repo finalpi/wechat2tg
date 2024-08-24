@@ -2,6 +2,7 @@ import axios, {AxiosRequestConfig} from 'axios'
 import * as fs from 'fs'
 import {config, useProxy} from '../config'
 import {SocksProxyAgent} from 'socks-proxy-agent'
+import {HttpsProxyAgent} from 'https-proxy-agent'
 
 export class FileUtils {
 
@@ -14,14 +15,9 @@ export class FileUtils {
         }
         if (useProxy) {
             if (config.PROTOCOL === 'http' || config.PROTOCOL === 'https') {
-                axiosConfig.proxy = {
-                    host: config.HOST,
-                    port: Number.parseInt(config.PORT),
-                    auth: {
-                        username: config.USERNAME,
-                        password: config.PASSWORD
-                    }
-                }
+                const agent = new HttpsProxyAgent(`${config.PROTOCOL}://${config.HOST}:${config.PORT}`)
+                axiosConfig.httpAgent = agent
+                axiosConfig.httpsAgent = agent
             } else if (config.PROTOCOL === 'socks5') {
                 const info = {
                     hostname: config.HOST,
@@ -58,15 +54,10 @@ export class FileUtils {
             responseType: 'stream'
         }
         if (useProxy) {
-            if (config.HOST !== '' && config.PROTOCOL === 'http' || config.PROTOCOL === 'https') {
-                axiosConfig.proxy = {
-                    host: config.HOST,
-                    port: Number.parseInt(config.PORT),
-                    auth: {
-                        username: config.USERNAME,
-                        password: config.PASSWORD
-                    }
-                }
+            if (config.PROTOCOL === 'http' || config.PROTOCOL === 'https') {
+                const agent = new HttpsProxyAgent(`${config.PROTOCOL}://${config.HOST}:${config.PORT}`)
+                axiosConfig.httpAgent = agent
+                axiosConfig.httpsAgent = agent
             } else if (config.PROTOCOL === 'socks5') {
                 const info = {
                     hostname: config.HOST,
