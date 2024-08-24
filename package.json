@@ -1,6 +1,6 @@
 {
   "name": "wechat2tg",
-  "version": "v1.1.9",
+  "version": "v1.2.0",
   "description": "simple kit send wechat message to telegram",
   "main": "app.ts",
   "esModuleInterop": true,
