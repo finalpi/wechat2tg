@@ -53,6 +53,15 @@ abstract class AbstractSqlService {
                             }
                         })
                     }
+                    if (!createTableSQL.includes('forward')) {
+                        this.db.run('ALTER TABLE tb_bind_item ADD COLUMN forward INT DEFAULT 1', (err) => {
+                            if (err) {
+                                console.error('Failed to add column:', err)
+                            } else {
+                                console.log('Column avatar added successfully.')
+                            }
+                        })
+                    }
                 }
             })
         })

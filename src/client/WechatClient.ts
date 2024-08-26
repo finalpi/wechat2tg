@@ -612,7 +612,6 @@ export class WeChatClient extends BaseClient {
             }
             if (!bindItem && this.cacheMemberDone && this._tgClient.tgUserClientLogin && !message.self() && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)) {
                 if (talker?.type() === PUPPET.types.Contact.Official && !this._tgClient.setting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT)) {
-                    // TODO: 公众号一个群组
                     bindItem = await this._tgClient.tgUserClient?.createGroup({
                         type: 0,
                         contact: talker,
@@ -736,9 +735,11 @@ export class WeChatClient extends BaseClient {
                 if (message.text() === `${this.t('wechat.get')}${this.t('wechat.messageType.redPacket')}, ${this.t('wechat.plzViewOnPhone')}`) {
                     sendMessageBody.body = `${this.t('wechat.get')}${this.t('wechat.messageType.redPacket')}, ${this.t('wechat.plzViewOnPhone')}`
                     this.tgClient.sendQueueHelper.addMessageWithMsgId(uniqueId, sendMessageBody)
-                }
-                if (message.text() === 'webwxvoipnotifymsg') {
+                } else if (message.text() === 'webwxvoipnotifymsg') {
                     sendMessageBody.body = `${this.t('wechat.get')}${this.t('wechat.audioOrVideo')}, ${this.t('wechat.plzViewOnPhone')}`
+                    this.tgClient.sendQueueHelper.addMessageWithMsgId(uniqueId, sendMessageBody)
+                } else {
+                    sendMessageBody.body = message.text().length > 4000 ? message.text().substring(0, 4000) : message.text()
                     this.tgClient.sendQueueHelper.addMessageWithMsgId(uniqueId, sendMessageBody)
                 }
                 break

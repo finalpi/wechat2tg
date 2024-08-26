@@ -11,6 +11,7 @@ const en = {
             check: 'Check WeChat login status',
             bind: 'Check group binding status',
             unbind: 'Unbind group',
+            gs: 'Forward group messages',
             cgdata: 'Set group avatar and name (requires admin permissions)',
             reset: 'Clear cache and re-login',
             stop: 'Stop WeChat client, requires re-login',
@@ -92,6 +93,7 @@ const en = {
         },
     },
     common: {
+        gs: 'Forward group messages {0}',
         open: 'Open',
         close: 'Close',
         sendSuccess: 'Send successful',
