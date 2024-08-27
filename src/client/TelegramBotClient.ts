@@ -437,13 +437,13 @@ export class TelegramBotClient extends BaseClient {
         })
 
         bot.action(/add-order-\d+/, async ctx => {
-            const pageNumber = parseInt(ctx.match[1])
+            const pageNumber = parseInt(ctx.match.input.split('-')[ctx.match.input.split('-').length - 1])
             const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
             const officialList = []
             official.forEach(item => officialList.push(item))
             const buttons: tg.InlineKeyboardButton[][] = []
-            const page = new Page(officialList, 1, TelegramBotClient.PAGE_SIZE)
-            const pageList = page.getList(1)
+            const page = new Page(officialList, pageNumber, TelegramBotClient.PAGE_SIZE)
+            const pageList = page.getList(pageNumber)
             for (let i = 0; i < pageList.length; i += 2) {
                 const item = pageList[i].contact
                 const buttonRow = [Markup.button.callback(item.payload.name, `ado-${pageList[i].id}`)]
@@ -462,6 +462,7 @@ export class TelegramBotClient extends BaseClient {
             }
             buttons.push(lastButton)
             ctx.reply(this.t('command.order.addOrderHint'), Markup.inlineKeyboard(buttons))
+            ctx.deleteMessage()
             ctx.answerCbQuery()
         })
 
