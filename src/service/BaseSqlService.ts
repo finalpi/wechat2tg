@@ -2,6 +2,7 @@ import {Database} from 'sqlite3'
 import {config} from '../config'
 import log4js from 'log4js'
 import {LogUtils} from '../util/LogUtils'
+import {OfficialOrderService} from './OfficialOrderService'
 
 abstract class AbstractSqlService {
     protected db: Database = new Database(config.DB_SQLITE_PATH)
@@ -32,7 +33,7 @@ abstract class AbstractSqlService {
         this.db.serialize(() => {
             this.db.get('SELECT * FROM sqlite_master WHERE type=\'table\' AND name=\'tb_bind_item\'', (err, row) => {
                 if (!row) {
-                    this.db.run('CREATE TABLE tb_bind_item (name TEXT, chat_id INT, type INT, bind_id TEXT, alias TEXT,wechat_id TEXT, avatar TEXT)')
+                    this.db.run('CREATE TABLE tb_bind_item (name TEXT, chat_id INT, type INT, bind_id TEXT, alias TEXT,wechat_id TEXT, avatar TEXT, has_bound TEXT, forward TEXT)')
                 } else {
                     const createTableSQL = (row as { sql: string }).sql
                     if (!createTableSQL.includes('avatar')) {
@@ -62,6 +63,16 @@ abstract class AbstractSqlService {
                             }
                         })
                     }
+                }
+            })
+        })
+    }
+
+    protected createOfficialOrderTable() {
+        this.db.serialize(() => {
+            this.db.get('SELECT * FROM sqlite_master WHERE type=\'table\' AND name=\'tb_official_order\'', (err, row) => {
+                if (!row) {
+                    this.db.run('CREATE TABLE tb_official_order (id TEXT,order_name TEXT, name TEXT, order_str TEXT)')
                 }
             })
         })

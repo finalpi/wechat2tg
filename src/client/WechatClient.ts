@@ -659,9 +659,14 @@ export class WeChatClient extends BaseClient {
             }
         }
         // 过滤公众号消息
-        if (this._tgClient.setting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) &&
-            talker?.type() === PUPPET.types.Contact.Official) {
-            return
+        if (talker?.type() === PUPPET.types.Contact.Official) {
+            if (this._tgClient.currentOrder && this._tgClient.currentOrder === talker.payload.name) {
+                this._tgClient.currentOrder = undefined
+            } else {
+                if (this._tgClient.setting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT)) {
+                    return
+                }
+            }
         }
 
         // 添加用户至最近联系人
@@ -740,6 +745,9 @@ export class WeChatClient extends BaseClient {
                     this.tgClient.sendQueueHelper.addMessageWithMsgId(uniqueId, sendMessageBody)
                 } else {
                     sendMessageBody.body = message.text().length > 4000 ? message.text().substring(0, 4000) : message.text()
+                    if (sendMessageBody.body === '') {
+                        return
+                    }
                     this.tgClient.sendQueueHelper.addMessageWithMsgId(uniqueId, sendMessageBody)
                 }
                 break

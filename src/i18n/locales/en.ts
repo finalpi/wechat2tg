@@ -12,6 +12,7 @@ const en = {
             bind: 'Check group binding status',
             unbind: 'Unbind group',
             gs: 'Forward group messages',
+            order: 'Set up public account shortcuts',
             cgdata: 'Set group avatar and name (requires admin permissions)',
             reset: 'Clear cache and re-login',
             stop: 'Stop WeChat client, requires re-login',
@@ -43,6 +44,19 @@ const en = {
         check: {
             onLine: 'WeChat online',
             offLine: 'WeChat offline',
+        },
+        order: {
+            addOrder: 'Add a new command',
+            removeOrder: 'Remove a command',
+            sendOrder: 'Send a command',
+            addOrderHint: 'Please select the public account to which you need to add a command:',
+            removeOrderHint: 'Please select the command to be deleted',
+            noRepeat: 'Please enter the command name, which cannot be repeated with other command names',
+            sendSuccess: 'Send the command successfully',
+            removeSuccess: 'Remove the command successfully',
+            nameExist: 'Failed to set the command, the command name already exists',
+            plzInput: 'Please enter the command',
+            addSuccess: 'Added the command successfully',
         },
         settings: {},
         cgdata: {
