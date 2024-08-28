@@ -33,8 +33,18 @@ import {SenderFactory} from '../message/SenderFactory'
 import {SimpleMessageSendQueueHelper} from '../util/SimpleMessageSendQueueHelper'
 import {SimpleMessageSender} from '../model/Message'
 import sharp from 'sharp'
+import {OfficialOrderService} from '../service/OfficialOrderService'
+import {Snowflake} from 'nodejs-snowflake'
 
 export class TelegramBotClient extends BaseClient {
+    get currentOrder(): string | undefined {
+        return this._currentOrder
+    }
+
+    set currentOrder(value: string | undefined) {
+        this._currentOrder = value
+    }
+
     get sendQueueHelper(): SimpleMessageSendQueueHelper {
         return this._sendQueueHelper
     }
@@ -85,15 +95,20 @@ export class TelegramBotClient extends BaseClient {
     private _selectedMember: SelectedEntity [] = []
     private _flagPinMessageType = ''
     private calcShowMemberListExecuted = false
+    private snowflakeUtil = new Snowflake()
     private selectRoom: ContactInterface | RoomInterface | undefined
     private _recentUsers: TalkerEntity [] = []
     private wechatStartFlag = false
+    private _currentOrder: undefined | string = undefined
     private searchList: any[] = []
     private botStartTime = new Date()
     private waitInputCommand: string | undefined = undefined
     private phoneNumber: string | undefined = undefined
     private password: string | undefined = undefined
     private phoneCode = ''
+    private contactName = ''
+    private orderName = ''
+    private order = ''
 
     private forwardSetting: VariableContainer = new VariableContainer()
 
@@ -106,6 +121,7 @@ export class TelegramBotClient extends BaseClient {
     // 置顶消息
     private pinnedMessageId: number | undefined
     private readonly _bindItemService: BindItemService
+    private readonly _officialOrderService: OfficialOrderService
     private addBlackOrWhite: any[] = []
     private telegramApiSender: MessageSender
     private telegramBotApiSender: MessageSender
@@ -119,6 +135,7 @@ export class TelegramBotClient extends BaseClient {
         this._weChatClient = new WeChatClient(this)
         this._bot = new Telegraf(config.BOT_TOKEN)
         this._bindItemService = new BindItemService(this._bot, this._weChatClient.client)
+        this._officialOrderService = new OfficialOrderService(this._bot, this._weChatClient.client)
         this._chatId = 0
         this._ownerId = 0
         this._chatId = 0
@@ -291,6 +308,7 @@ export class TelegramBotClient extends BaseClient {
             {command: 'bind', description: this.t('command.description.bind')},
             {command: 'unbind', description: this.t('command.description.unbind')},
             {command: 'gs', description: this.t('command.description.gs')},
+            {command: 'order', description: this.t('command.description.order')},
             {command: 'cgdata', description: this.t('command.description.cgdata')},
             {command: 'reset', description: this.t('command.description.reset')},
             {command: 'stop', description: this.t('command.description.stop')},
@@ -384,6 +402,137 @@ export class TelegramBotClient extends BaseClient {
             ctx.reply(this.t('command.resetText'))
         })
 
+        bot.command('order', async (ctx) => {
+            // wait all contact loaded
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
+                ctx.reply(this.t('command.user.onLoading'))
+                return
+            }
+
+            if (!this.loginCommandExecuted) {
+                await ctx.reply(this.t('command.user.onLogin'))
+                return
+            }
+
+            if (!this._weChatClient.cacheMemberDone) {
+                await ctx.reply(this.t('command.user.onLoading'))
+                return
+            }
+            const keyboard = []
+            const orderList = await this._officialOrderService.getAllOrder()
+            for (const officialOrder of orderList) {
+                keyboard.push([
+                    {text: officialOrder.order_name, callback_data: 'o-' + officialOrder.id}
+                ])
+            }
+            keyboard.push([
+                {text: this.t('command.order.addOrder'), callback_data: 'add-order-1'},
+                {text: this.t('command.order.removeOrder'), callback_data: 'remove-order'},
+            ])
+            ctx.reply(this.t('command.order.sendOrder'), {
+                reply_markup: {
+                    inline_keyboard: keyboard
+                }
+            })
+        })
+
+        bot.action(/add-order-\d+/, async ctx => {
+            const pageNumber = parseInt(ctx.match.input.split('-')[ctx.match.input.split('-').length - 1])
+            const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
+            const officialList = []
+            official.forEach(item => officialList.push(item))
+            const buttons: tg.InlineKeyboardButton[][] = []
+            const page = new Page(officialList, pageNumber, TelegramBotClient.PAGE_SIZE)
+            const pageList = page.getList(pageNumber)
+            for (let i = 0; i < pageList.length; i += 2) {
+                const item = pageList[i].contact
+                const buttonRow = [Markup.button.callback(item.payload.name, `ado-${pageList[i].id}`)]
+                if (i + 1 < pageList.length) {
+                    const item1 = pageList[i + 1].contact
+                    buttonRow.push(Markup.button.callback(item1.payload.name, `ado-${pageList[i + 1].id}`))
+                }
+                buttons.push(buttonRow)
+            }
+            const lastButton = []
+            if (page.hasLast()) {
+                lastButton.push(Markup.button.callback(this.t('common.prevPage'), `add-order-${pageNumber - 1}`))
+            }
+            if (page.hasNext()) {
+                lastButton.push(Markup.button.callback(this.t('common.nextPage'), `add-order-${pageNumber + 1}`))
+            }
+            buttons.push(lastButton)
+            ctx.reply(this.t('command.order.addOrderHint'), Markup.inlineKeyboard(buttons))
+            ctx.deleteMessage()
+            ctx.answerCbQuery()
+        })
+
+        bot.action(/remove-order/, async (ctx) => {
+            const keyboard = []
+            const orderList = await this._officialOrderService.getAllOrder()
+            for (const officialOrder of orderList) {
+                keyboard.push([
+                    {text: officialOrder.order_name, callback_data: 'r-' + officialOrder.id}
+                ])
+            }
+            ctx.reply(this.t('command.order.removeOrderHint'), {
+                reply_markup: {
+                    inline_keyboard: keyboard
+                }
+            })
+            ctx.deleteMessage()
+            ctx.answerCbQuery()
+        })
+
+        bot.action(/ado-(.+)/, (ctx) => {
+            const id = ctx.match[1]
+            let item = undefined
+            this.weChatClient.contactMap?.get(ContactImpl.Type.Official).forEach(it => {
+                if (it.id === id) {
+                    item = it
+                    return
+                }
+            })
+            if (item) {
+                this.contactName = item.contact.payload.name
+                ctx.reply(this.t('command.order.noRepeat'))
+                this.waitInputCommand = 'inputOrderName'
+                ctx.deleteMessage()
+            }
+            ctx.answerCbQuery()
+        })
+
+        bot.action(/o-(.+)/, async (ctx) => {
+            const id = ctx.match[1]
+            const officialOrder = await this._officialOrderService.getOfficialOrderById(id)
+            if (officialOrder) {
+                let item = undefined
+                this.weChatClient.contactMap?.get(ContactImpl.Type.Official).forEach(it => {
+                    if (it.contact.payload.name === officialOrder.name) {
+                        item = it
+                        return
+                    }
+                })
+                if (item) {
+                    item.contact.say(officialOrder.order_str)
+                    this._currentOrder = officialOrder.name
+                    ctx.reply(this.t('command.order.sendSuccess'))
+                }
+            }
+            ctx.deleteMessage()
+            ctx.answerCbQuery()
+        })
+
+        bot.action(/r-(.+)/, async (ctx) => {
+            const id = ctx.match[1]
+            const officialOrder = await this._officialOrderService.getOfficialOrderById(id)
+            if (officialOrder) {
+                this._officialOrderService.removeById(id)
+                ctx.reply(this.t('command.order.removeSuccess'))
+            }
+            ctx.deleteMessage()
+            ctx.answerCbQuery()
+        })
+
         bot.command('cgdata', async (ctx) => {
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 const bindItem = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
@@ -456,7 +605,7 @@ export class TelegramBotClient extends BaseClient {
                         forward === 1 ? this.t('common.open') : this.t('common.close')))
                 })
             } else {
-               await ctx.reply(this.t('common.onlyInGroup'))
+                await ctx.reply(this.t('common.onlyInGroup'))
             }
         })
 
@@ -787,7 +936,7 @@ export class TelegramBotClient extends BaseClient {
 
             // 群组消息,判断是否转发
             if (ctx.chat?.type.includes('group') && ctx.message?.from.id === this._chatId) {
-               const bind =  await this.bindItemService.getBindItemByChatId(ctx.message.chat.id)
+                const bind = await this.bindItemService.getBindItemByChatId(ctx.message.chat.id)
                 if (bind.forward === 0) {
                     return
                 }
@@ -2267,7 +2416,7 @@ export class TelegramBotClient extends BaseClient {
         }
         // 群组消息,判断是否转发
         if (ctx.chat?.type.includes('group') && ctx.message?.from.id === this._chatId) {
-            const bind =  await this.bindItemService.getBindItemByChatId(ctx.message.chat.id)
+            const bind = await this.bindItemService.getBindItemByChatId(ctx.message.chat.id)
             if (bind.forward === 0) {
                 return
             }
@@ -2500,6 +2649,36 @@ export class TelegramBotClient extends BaseClient {
     }
 
     private async dealWithCommand(ctx: Context, text: string) {
+        if (this.waitInputCommand === 'inputOrderName') {
+            // 等待指令名称
+            this.orderName = text
+            if (await this._officialOrderService.getOfficialOrderByOrderName(this.orderName)) {
+                this.waitInputCommand = undefined
+                ctx.reply(this.t('command.order.nameExist'))
+                await ctx.deleteMessage()
+                return true
+            }
+            await ctx.deleteMessage()
+            ctx.reply(this.t('command.order.plzInput'))
+            this.waitInputCommand = 'inputOrder'
+            return true
+        }
+
+        if (this.waitInputCommand === 'inputOrder') {
+            this.waitInputCommand = undefined
+            // 等待指令名称
+            this.order = text
+            await ctx.deleteMessage()
+            this._officialOrderService.addOfficialOrder({
+                id: this.snowflakeUtil.getUniqueID() + '',
+                order_name: this.orderName,
+                name: this.contactName,
+                order_str: this.order
+            })
+            ctx.reply(this.t('command.order.addSuccess'))
+            return true
+        }
+
         if (this.waitInputCommand === 'phoneNumber') {
             this.waitInputCommand = undefined
             // 等待输入手机号
