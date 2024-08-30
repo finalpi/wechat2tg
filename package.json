@@ -32,7 +32,7 @@
     "ts-md5": "^1.3.1",
     "ts-node": "^10.9.1",
     "wechaty": "^1.20.2",
-    "wechaty-puppet-wechat4u": "https://github.com/Nimbly8836/puppet-wechat4u/releases/download/v1.14.26/wechaty-puppet-wechat4u-1.14.26.tgz",
+    "wechaty-puppet-wechat4u": "https://github.com/Nimbly8836/puppet-wechat4u/releases/download/v1.14.27/wechaty-puppet-wechat4u-1.14.27.tgz",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
