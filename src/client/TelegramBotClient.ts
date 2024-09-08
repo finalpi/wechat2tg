@@ -2424,7 +2424,7 @@ export class TelegramBotClient extends BaseClient {
         if (ctx.message[fileType]) {
             let fileId = ctx.message[fileType].file_id
             let fileSize = ctx.message[fileType].file_size
-            let fileName = ctx.message[fileType].file_name
+            let fileName = ctx.message[fileType].file_name || ''
             if (!fileId) {
                 fileId = ctx.message[fileType][ctx.message[fileType].length - 1].file_id
                 fileSize = ctx.message[fileType][ctx.message[fileType].length - 1].file_size
