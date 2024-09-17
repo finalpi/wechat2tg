@@ -1017,6 +1017,16 @@ export class WeChatClient extends BaseClient {
         this.tgClient.reset()
     }
 
+    public async reloadContactCache () {
+        this._contactMap = new Map<number, Set<ContactItem>>([
+            [0, new Set<ContactItem>()],
+            [1, new Set<ContactItem>()],
+            [2, new Set<ContactItem>()],
+            [3, new Set<ContactItem>()]
+        ])
+        return this.cacheMember()
+    }
+
     private clearCache() {
         return new Promise(resolve => {
             const filePath = 'storage/wechat_bot.memory-card.json'
