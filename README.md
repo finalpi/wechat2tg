@@ -19,6 +19,8 @@ circumvent the issue where some accounts are unable to log in to the WeChat web 
 2. Please submit any issues you encounter to the issue tracker.
 3. Due to limitations in the Telegram Bot API, it is not possible to send files larger than 20MB or receive files larger
    than 50MB.(Configuring API_ID and API_HASH can solve this)
+4. This project can only ensure the support of messages that are supported by Web WeChat as much as possible. Messages that are not supported cannot be handled.
+5. Due to network or technical reasons, message loss may occur and cannot be completely avoided. Please be cautious with important messages!!
 
 ## Installation
 
