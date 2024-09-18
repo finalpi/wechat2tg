@@ -721,10 +721,6 @@ export class WeChatClient extends BaseClient {
                 }
             }
         }
-        //
-        if (bindItem) {
-            await this._tgClient.bot.telegram.getChat(bindItem.chat_id)
-        }
 
         const sendMessageWhenNoAvatar = (name?: string) => {
             const warpName = name ? name : this.t('common.unknown')

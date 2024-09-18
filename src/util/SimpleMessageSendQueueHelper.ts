@@ -1,7 +1,3 @@
-import {promisify} from 'util'
-
-const sleep = promisify(setTimeout)
-
 export class SimpleMessageSendQueueHelper {
     private sendFunction: (...args) => Promise<any>
     private interval: number
@@ -62,16 +58,13 @@ export class SimpleMessageSendQueueHelper {
                     sendMessage.success = true
                     sendMessage.sending = false
                 }).catch(async () => {
-                    this.sendFunction(...sendMessage.message).then(() => {
-                        sendMessage.success = true
-                        sendMessage.sending = false
-                    })
+                    sendMessage.success = false
+                    sendMessage.sending = false
+                    this.messageQueue.push(sendMessage)
                 }).finally(() => {
                     sendMessage.sending = false
                 })
-                // await sleep(this.interval)
             } else if (!sendMessage.success && sendMessage.time.getTime() + this.interval < new Date().getTime()) {
-                // await sleep(this.interval)
                 this.messageQueue.push(sendMessage)
             }
             this.processFlag = false
