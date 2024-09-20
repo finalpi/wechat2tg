@@ -1,7 +1,10 @@
 # [wechat2tg](https://github.com/finalpi/wechat2tg)
 
+English | [中文](https://github.com/finalpi/wechat2tg/blob/master/README_zh.md)
+
 This project forwards WeChat messages to a Telegram bot, based on [wechaty](https://github.com/wechaty/wechaty).  
-By using [puppet-wechat4u](https://github.com/wechaty/puppet-wechat4u) (which implements the UOS protocol), it circumvents the login issue with the WeChat Web version.
+By using [puppet-wechat4u](https://github.com/wechaty/puppet-wechat4u) (which implements the UOS protocol), it
+circumvents the login issue with the WeChat Web version.
 
 # Main Features
 
@@ -15,17 +18,22 @@ By using [puppet-wechat4u](https://github.com/wechaty/puppet-wechat4u) (which im
 
 1. This project is for research and educational purposes only. It should not be used for illegal activities.
 2. Feel free to submit issues for any problems encountered.
-3. Due to Telegram Bot API limitations, files larger than **20MB** cannot be sent, and files larger than **50MB** cannot be received (this can be resolved by configuring `API_ID` and `API_HASH`).
-4. This project attempts to support only messages compatible with **WeChat Web**. Unsupported messages are beyond its capabilities.
-5. Currently, message loss due to network or technical issues cannot be completely avoided, so please be cautious with important messages!
+3. Due to Telegram Bot API limitations, files larger than **20MB** cannot be sent, and files larger than **50MB** cannot
+   be received (this can be resolved by configuring `API_ID` and `API_HASH`).
+4. This project attempts to support only messages compatible with **WeChat Web**. Unsupported messages are beyond its
+   capabilities.
+5. Currently, message loss due to network or technical issues cannot be completely avoided, so please be cautious with
+   important messages!
 
 ## Main Bot Commands
 
 `/login`: Get a login QR code.
 
-`/user`: Get a user list with reply options (you can search by name or note, e.g., `/user Zhang` will find users with "Zhang" in their name or notes).
+`/user`: Get a user list with reply options (you can search by name or note, e.g., `/user Zhang` will find users with "
+Zhang" in their name or notes).
 
-`/room`: Get a group list with reply options (you can search by name or note, e.g., `/room Takeout` will find groups with "Takeout" in their name or notes).
+`/room`: Get a group list with reply options (you can search by name or note, e.g., `/room Takeout` will find groups
+with "Takeout" in their name or notes).
 
 `/recent`: Get a list of recent users or groups who sent messages, with reply options.
 
@@ -132,25 +140,31 @@ Whitelist Mode - Only accept messages from groups in the whitelist.
 
 Blacklist Mode - Do not accept messages from groups in the blacklist.
 
-**Send Success Feedback**: Whether to display a message send status feedback (leave off if not necessary, since failures will prompt by default).
+**Send Success Feedback**: Whether to display a message send status feedback (leave off if not necessary, since failures
+will prompt by default).
 
-**Automatic Contact Switching**: Automatically switches to the user or group who last replied. **Note: If a message is received right before sending, it could result in sending to the wrong recipient!**
+**Automatic Contact Switching**: Automatically switches to the user or group who last replied. **Note: If a message is
+received right before sending, it could result in sending to the wrong recipient!**
 
 **Receive Public Account Messages**: Whether to receive messages from public accounts.
 
 **Forward Self-Sent Messages**: Whether to forward messages you send using the WeChat mobile client.
 
-**Media Compression**: If enabled, all received media messages will be processed as images or videos, which may reduce the original quality. If disabled, all messages will be received as files.
+**Media Compression**: If enabled, all received media messages will be processed as images or videos, which may reduce
+the original quality. If disabled, all messages will be received as files.
 
 ## Special Notes
 
-Messages can be recalled within 2 minutes by replying to your own message with `&rm`. Media messages can only be recalled after the message has been successfully sent.
+Messages can be recalled within 2 minutes by replying to your own message with `&rm`. Media messages can only be
+recalled after the message has been successfully sent.
 
 ### Sending and Receiving Large Files
 
-Due to Telegram Bot API limitations, files larger than 20MB cannot be sent, and files larger than 50MB cannot be received. If you need to send or receive larger files, configure `API_ID` and `API_HASH`.
+Due to Telegram Bot API limitations, files larger than 20MB cannot be sent, and files larger than 50MB cannot be
+received. If you need to send or receive larger files, configure `API_ID` and `API_HASH`.
 
-**Note: Testing showed that the web protocol returns an error when sending files over 25MB using chunked uploads. (This has been fixed in the project.)**
+**Note: Testing showed that the web protocol returns an error when sending files over 25MB using chunked uploads. (This
+has been fixed in the project.)**
 
 To get `API_ID` and `API_HASH`:
 
@@ -168,14 +182,18 @@ Whether a contact or group is the same is determined by the contact's note and n
 If these aren't unique, or if their name changes, it may lead to incorrect binding after relogin.  
 In such cases, re-binding will be required.
 
-1. Disable the bot's privacy mode. Open BotFather, type `/mybots`, select your bot, click `Bot Settings` - `Group Privacy` - `Turn off`. If you see "Privacy mode is disabled for xxx", it was successful.
-2. Create a Telegram group, add the bot to it, and follow the prompts to bind contacts or groups. After binding, messages from those contacts or groups will be forwarded to the group.
+1. Disable the bot's privacy mode. Open BotFather, type `/mybots`, select your bot,
+   click `Bot Settings` - `Group Privacy` - `Turn off`. If you see "Privacy mode is disabled for xxx", it was
+   successful.
+2. Create a Telegram group, add the bot to it, and follow the prompts to bind contacts or groups. After binding,
+   messages from those contacts or groups will be forwarded to the group.
 
 `/bind`: View the current group’s bound contacts or groups.
 
 `/unbind`: Unbind contacts or groups from the current group.
 
-`/cgdata`: Set the group’s avatar and nickname to match the corresponding WeChat contact or group (requires admin rights).
+`/cgdata`: Set the group’s avatar and nickname to match the corresponding WeChat contact or group (requires admin
+rights).
 
 ### Automatic Grouping of Messages
 
