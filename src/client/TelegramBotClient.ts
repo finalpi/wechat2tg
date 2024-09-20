@@ -300,19 +300,20 @@ export class TelegramBotClient extends BaseClient {
             {command: 'help', description: this.t('command.description.help')},
             {command: 'start', description: this.t('command.description.start')},
             {command: 'login', description: this.t('command.description.login')},
+            {command: 'lang', description: this.t('command.description.lang')},
             {command: 'user', description: this.t('command.description.user')},
             {command: 'room', description: this.t('command.description.room')},
             {command: 'recent', description: this.t('command.description.recent')},
             {command: 'settings', description: this.t('command.description.settings')},
-            {command: 'check', description: this.t('command.description.check')},
             {command: 'bind', description: this.t('command.description.bind')},
             {command: 'unbind', description: this.t('command.description.unbind')},
-            {command: 'gs', description: this.t('command.description.gs')},
             {command: 'order', description: this.t('command.description.order')},
             {command: 'cgdata', description: this.t('command.description.cgdata')},
+            {command: 'gs', description: this.t('command.description.gs')},
             {command: 'reset', description: this.t('command.description.reset')},
+            {command: 'rcc', description: this.t('command.description.rcc')},
             {command: 'stop', description: this.t('command.description.stop')},
-            {command: 'lang', description: this.t('command.description.lang')},
+            {command: 'check', description: this.t('command.description.check')},
         ]
         if (config.API_ID && config.API_HASH) {
             // 启动tg client
@@ -629,6 +630,63 @@ export class TelegramBotClient extends BaseClient {
         })
 
         bot.command('stop', this.onWeChatStop)
+
+        // 重新加载所有联系人
+        bot.command('rcc', async ctx => {
+            await ctx.reply(this.t('wechat.loadingMembers'))
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                this.bindItemService.getBindItemByChatId(ctx.chat.id).then(bindItem => {
+                    const wechatId = bindItem.wechat_id
+                    this.weChatClient.client.Contact.find({id: wechatId}).then(async contact => {
+                        await contact?.sync()
+                        const copyBindItem = {...bindItem}
+                        copyBindItem.name = contact?.name()
+                        copyBindItem.alias = await contact?.alias()
+                        copyBindItem.avatar = contact?.payload.avatar
+                        await this.bindItemService.updateGroupData(bindItem, copyBindItem)
+                    })
+                }).catch(() => {
+                    ctx.reply(this.t('common.notBind'))
+                })
+            } else { // in the bot chat
+                const updateBindItem = async (contact: ContactInterface) => {
+                    this.bindItemService.getBindItemByWechatId(contact.id).then(async bindItem => {
+                        if (bindItem.chat_id) {
+                            const copyBindItem = {...bindItem}
+                            copyBindItem.name = contact?.name()
+                            copyBindItem.alias = await contact?.alias()
+                            copyBindItem.avatar = contact?.payload.avatar
+                            await this.bindItemService.updateGroupData(bindItem, copyBindItem)
+                        } else {
+                            this.logWarn('update bind item failed, chat id is null', bindItem.name)
+                        }
+                    })
+                }
+                if (ctx.args.length > 0) {
+                    ctx.args.forEach(name => {
+                        this.weChatClient.client.Contact.findAll({name: name}).then(contacts => {
+                            contacts.filter(it => it.name() && it.friend()).forEach(async contact => {
+                                await contact?.sync()
+                                await updateBindItem(contact)
+                            })
+                        })
+                    })
+                } else {
+                    this.weChatClient.client.Contact.findAll().then(contacts => {
+                        contacts.filter(it => it.name() && it.friend()).forEach(async fc => {
+                            await fc?.sync()
+                            await updateBindItem(fc)
+                        })
+                    })
+                }
+            }
+            // update cache member info
+            this.weChatClient.reloadContactCache().then(() => {
+                ctx.reply(this.t('wechat.contactFinished'))
+            }).catch(() => {
+                ctx.reply(this.t('wechat.contactFailed'))
+            })
+        })
 
         bot.command('check', ctx => {
             if (this.wechatStartFlag && this._weChatClient.client.isLoggedIn) {

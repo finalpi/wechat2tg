@@ -358,12 +358,19 @@ export class WeChatClient extends BaseClient {
         })
     }
 
-    private roomTopic(room: RoomInterface, topic: string, oldTopic: string, changer: ContactInterface) {
+    private async roomTopic(room: RoomInterface, topic: string, oldTopic: string, changer: ContactInterface) {
         const item = this._roomList.find(it => it.room.id === room.id)
         if (item) {
             if (item.room.payload?.topic !== topic) {
                 this._roomList[this._roomList.indexOf(item)].room.sync()
             }
+        }
+        // 如果绑定了群组,则更新群组名称和数据库的名称
+        const bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(room.id)
+        if (bindItem) {
+            bindItem.name = topic
+            this._tgClient.bindItemService.updateBindItem(bindItem.chat_id + '', bindItem)
+            await this.tgClient.bot.telegram.setChatTitle(bindItem.chat_id, topic)
         }
     }
 
@@ -714,10 +721,6 @@ export class WeChatClient extends BaseClient {
                 }
             }
         }
-        //
-        if (bindItem) {
-            await this._tgClient.bot.telegram.getChat(bindItem.chat_id)
-        }
 
         const sendMessageWhenNoAvatar = (name?: string) => {
             const warpName = name ? name : this.t('common.unknown')
@@ -1015,6 +1018,16 @@ export class WeChatClient extends BaseClient {
     public resetValue() {
         this.readyCount = 0
         this.tgClient.reset()
+    }
+
+    public async reloadContactCache() {
+        this._contactMap = new Map<number, Set<ContactItem>>([
+            [0, new Set<ContactItem>()],
+            [1, new Set<ContactItem>()],
+            [2, new Set<ContactItem>()],
+            [3, new Set<ContactItem>()]
+        ])
+        return this.cacheMember()
     }
 
     private clearCache() {

@@ -200,7 +200,7 @@ export class BindItemService extends AbstractSqlService {
     public updateBindItem(groupId: string, bindItem: BindItem) {
         this.db.serialize(() => {
             let query = 'UPDATE tb_bind_item SET '
-            let params = []
+            const params = []
             let first = true
 
             if (bindItem.name) {

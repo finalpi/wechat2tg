@@ -1,32 +1,59 @@
 # [wechat2tg](https://github.com/finalpi/wechat2tg)
 
-English | [中文](https://github.com/finalpi/wechat2tg/blob/master/README_zh.md)
-
-This project is based on [wechaty](https://github.com/wechaty/wechaty) and implements a WeChat message forwarding to
-Telegram bot using the [puppet-wechat4u](https://github.com/wechaty/puppet-wechat4u) protocol UOS. Thus, it can
-circumvent the issue where some accounts are unable to log in to the WeChat web version.
+This project forwards WeChat messages to a Telegram bot, based on [wechaty](https://github.com/wechaty/wechaty).  
+By using [puppet-wechat4u](https://github.com/wechaty/puppet-wechat4u) (which implements the UOS protocol), it circumvents the login issue with the WeChat Web version.
 
 # Main Features
 
-1. Forward WeChat individual messages, group messages, and official account messages to Telegram.
-2. Reply to messages on Telegram to specified users.
-3. Support group blacklist and whitelist modes.
-4. Support for sending videos, files, stickers, images, and voice messages.
+1. Forwards individual WeChat chat messages, group messages, and public account messages to Telegram.
+2. Allows Telegram to reply to specific WeChat users.
+3. Supports blacklisting and whitelisting modes for group chats.
+4. Supports sending videos, files, stickers, images, and voice messages.
+5. By configuring `API_ID` and `API_HASH`, it can automatically create a group chat for forwarding.
 
-## Notice
+# Notes
 
-**Around July 12, 2024, some users who used multiple instances or clones to log into WeChat were restricted, including but not limited to the inability to scan codes to join groups.**
+1. This project is for research and educational purposes only. It should not be used for illegal activities.
+2. Feel free to submit issues for any problems encountered.
+3. Due to Telegram Bot API limitations, files larger than **20MB** cannot be sent, and files larger than **50MB** cannot be received (this can be resolved by configuring `API_ID` and `API_HASH`).
+4. This project attempts to support only messages compatible with **WeChat Web**. Unsupported messages are beyond its capabilities.
+5. Currently, message loss due to network or technical issues cannot be completely avoided, so please be cautious with important messages!
 
-1. This project is intended only for technical research and learning and must not be used for illegal purposes.
-2. Please submit any issues you encounter to the issue tracker.
-3. Due to limitations in the Telegram Bot API, it is not possible to send files larger than 20MB or receive files larger
-   than 50MB.(Configuring API_ID and API_HASH can solve this)
+## Main Bot Commands
 
-## Installation
+`/login`: Get a login QR code.
 
-### Using in docker-compose (recommend)
+`/user`: Get a user list with reply options (you can search by name or note, e.g., `/user Zhang` will find users with "Zhang" in their name or notes).
 
-create file `docker-compose.yml`:
+`/room`: Get a group list with reply options (you can search by name or note, e.g., `/room Takeout` will find groups with "Takeout" in their name or notes).
+
+`/recent`: Get a list of recent users or groups who sent messages, with reply options.
+
+`/setting`: Program settings.
+
+# Usage
+
+## Configuration
+
+`BOT_TOKEN` **Required**: The token for your Telegram Bot, created via [BotFather](https://t.me/BotFather).
+
+### Using a Proxy
+
+Configure a Telegram proxy. Leave fields blank to not use a proxy:
+
+```
+# Proxy configuration (optional)
+# Protocol: socks5, http, https
+PROXY_PROTOCOL=socks5
+PROXY_HOST=
+PROXY_PORT=
+PROXY_USERNAME=
+PROXY_PASSWORD=
+```
+
+## docker-compose (Recommended)
+
+`docker-compose.yml` file:
 
 ```yaml
 version: '3'
@@ -37,17 +64,16 @@ services:
     container_name: wx2tg
     volumes:
       - ./config:/app/storage
-      - ./save-files:/app/save-files # After mounting the save folder, emojis do not need to be reconverted
-    # Use env file or you can just set environment here
+      - ./save-files:/app/save-files # Stickers won’t need to be re-converted once saved here
+    # use env file or you can just set environment here
     # env_file: ".env"
     environment:
-      BOT_TOKEN:
-      # Proxy settings (uncomment and fill in if needed)
+      BOT_TOKEN: ''
       # PROXY_HOST: ''
       # PROXY_PORT: ''
       # Proxy type: socks5, http, https
       # PROXY_PROTOCOL: 'socks5'
-      # Optional username and password
+      # Username and password (optional)
       # PROXY_USERNAME: ''
       # PROXY_PASSWORD: ''
       # Telegram API configuration for sending large files (optional)
@@ -59,32 +85,36 @@ services:
       OFFICIAL_MESSAGE: '<b>📣#[name]: </b>'
       # Contact message format
       CONTACT_MESSAGE: '<b>👤#[alias_first]: </b>'
-      # Group message format (under group context)
+      # Group message format (in groups)
       ROOM_MESSAGE_GROUP: '<b>👤#[(alias)] #[name]: </b>'
-      # Official account message format (under group context)
+      # Official account message format (in groups)
       OFFICIAL_MESSAGE_GROUP: '<b>📣#[name]: </b>'
-      # Contact message format (under group context)
+      # Contact message format (in groups)
       CONTACT_MESSAGE_GROUP: '<b>👤#[alias_first]: </b>'
     restart: unless-stopped
 ```
+
+Run
 
 ```shell
 docker-compose up -d
 ```
 
-### Using in Docker (recommend)
+## docker
 
 ```shell
 docker run -itd --env BOT_TOKEN="" --env PROXY_HOST="" --env PROXY_PORT="" --env PROXY_USERNAME="" --env PROXY_PASSWORD="" --env PROXY_PROTOCOL="socks5" finalpi/wechat2tg:latest
 ```
 
-### Using in Node.js v18 or higher
+## Node.js 18 or above
 
 1. Install dependencies:
+
    ```shell
    npm install
-    ```
-2. Configure the Telegram bot token and proxy information in the `.env` file.
+   ```
+
+2. Configure the Telegram Bot's token and proxy information in the `.env` file.
 
 3. Run the program:
 
@@ -92,132 +122,87 @@ docker run -itd --env BOT_TOKEN="" --env PROXY_HOST="" --env PROXY_PORT="" --env
    npm start
    ```
 
-4. In Telegram, send `/start` to begin or `/login` to log in.
+4. In Telegram, send `/start` to the bot to begin, or `/login` to log in.
 
-## BOT Commands Explanation
+### Message Mode Switching
 
-`/login`: Retrieve the login QR code
+Switch between blacklist mode and whitelist mode:
 
-`/user`: Fetch the user list, click to reply
+Whitelist Mode - Only accept messages from groups in the whitelist.
 
-`/room`: Fetch the group list, click to reply
+Blacklist Mode - Do not accept messages from groups in the blacklist.
 
-`/recent`: Fetch the most recent users or groups that have sent messages, click to reply
+**Send Success Feedback**: Whether to display a message send status feedback (leave off if not necessary, since failures will prompt by default).
 
-`/setting`: Program settings:
+**Automatic Contact Switching**: Automatically switches to the user or group who last replied. **Note: If a message is received right before sending, it could result in sending to the wrong recipient!**
 
-**Message mode switch**:
+**Receive Public Account Messages**: Whether to receive messages from public accounts.
 
-Switch between blacklist or whitelist mode
+**Forward Self-Sent Messages**: Whether to forward messages you send using the WeChat mobile client.
 
-Whitelist mode: Only receive messages from groups in the whitelist
+**Media Compression**: If enabled, all received media messages will be processed as images or videos, which may reduce the original quality. If disabled, all messages will be received as files.
 
-Blacklist mode: Do not receive messages from groups in the blacklist
+## Special Notes
 
-**Send successful feedback**: Whether to provide feedback on the message delivery status
+Messages can be recalled within 2 minutes by replying to your own message with `&rm`. Media messages can only be recalled after the message has been successfully sent.
 
-**Automatically switch contacts**: Automatically switches back to replying to a user or group if they reply. **Please
-note
-that
-having a message sent to you just before sending may result in an incorrectly sent message!**
+### Sending and Receiving Large Files
 
-**Receive official account messages**: Whether to accept messages from official accounts
+Due to Telegram Bot API limitations, files larger than 20MB cannot be sent, and files larger than 50MB cannot be received. If you need to send or receive larger files, configure `API_ID` and `API_HASH`.
 
-**Forward a message you sent on WeChat**: Whether to forward messages sent using the WeChat mobile client.
+**Note: Testing showed that the web protocol returns an error when sending files over 25MB using chunked uploads. (This has been fixed in the project.)**
 
-**Media Quality Compression**: When enabled, all received media messages will be received as images or videos, which may
-result in a loss of the original media quality. If this option is turned off, all messages will be received as files.
+To get `API_ID` and `API_HASH`:
 
-## Special Response Instructions
+1. Log in to your [Telegram account](https://my.telegram.org/).
 
-Messages sent within 2 minutes can be recalled. The recall method is to reply to your own sent message with the
-content "&rm".
-Media messages need to wait until they are successfully sent before they can be recalled.
+2. Click "API development tools" and fill in your application details (only the app title and short name are required).
 
-## Configuration Explanation
+3. Click "Create application" to complete.
 
-`BOT_TOKEN` (required): Telegram bot token, created via BotFather
+### Manual Grouping of Messages
 
-### Using a Proxy
+**Note:** Since `wechaty-puppet-wechat4u` changes the ID with each login,  
+there's no way to get a unique key for each contact and group.  
+Whether a contact or group is the same is determined by the contact's note and nickname.  
+If these aren't unique, or if their name changes, it may lead to incorrect binding after relogin.  
+In such cases, re-binding will be required.
 
-Use a proxy to forward requests to the Telegram bot, leave blank if not using a proxy:
+1. Disable the bot's privacy mode. Open BotFather, type `/mybots`, select your bot, click `Bot Settings` - `Group Privacy` - `Turn off`. If you see "Privacy mode is disabled for xxx", it was successful.
+2. Create a Telegram group, add the bot to it, and follow the prompts to bind contacts or groups. After binding, messages from those contacts or groups will be forwarded to the group.
 
-```
-# Proxy configuration (optional)
-# Protocol socks5, http, https
-PROXY_PROTOCOL=socks5
-PROXY_HOST=
-PROXY_PORT=
-PROXY_USERNAME=
-PROXY_PASSWORD=
-```
+`/bind`: View the current group’s bound contacts or groups.
 
-### Receiving and Sending Large Files
+`/unbind`: Unbind contacts or groups from the current group.
 
-Due to Telegram Bot API limitations, files larger than 20MB cannot be sent, and files larger than 50MB cannot be
-received. If you need to send or receive larger files, please configure your `API_ID` and `API_HASH`.
-
-**!! Testing found that sending files over 25MB via the web protocol causes the server to return an error upon slicing
-upload.**
-
-How to obtain `API_ID` and `API_HASH`:
-
-1. Log in to your [telegram account](https://my.telegram.org/)
-
-2. Click on "API development tools" and fill in your application details (only the application title and short name are
-   required).
-
-3. Finally, click "Create application."
-
-### Manual grouping of messages
-
-**Note:** Because wechaty-puppet-wechat4u changes the ID each time it logs in again, it is not possible to obtain a
-unique key for each contact and group. The method to determine whether it is the same contact or group is by the
-contact's remark and nickname. This method may incorrectly bind to contacts and groups upon the next login if the
-remarks or nicknames are not unique, or if the name of the contact or group changes, which might cause binding failure.
-In such cases, re-binding is required.
-
-1. Turn off the bot's privacy mode. Open BotFather, enter /mybots, select your bot, click Bot Settings - Group Privacy -
-   Turn off. When you see Privacy mode is disabled for xxx, it means it has been successfully turned off.
-
-2. Create a telegram group, add the bot to the group, and bind according to the prompts. Afterward, messages from the
-   contact or group will be forwarded to the group.
-
-`/bind`: View the contacts or groups currently bound to the group.
-
-`/unbind`: Unbind the contacts or groups currently bound to the group.
-
-`/cgdata`: Set the group avatar and nickname to the WeChat contact or group (requires admin privileges).
+`/cgdata`: Set the group’s avatar and nickname to match the corresponding WeChat contact or group (requires admin rights).
 
 ### Automatic Grouping of Messages
 
-1. Configure `API_ID` and `API_HASH`
-2. Turn off the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot,
-   click `Bot Settings` -> `Group Privacy` -> `Turn off`. When you see the message `Privacy mode is disabled for xxx`,
-   it means the privacy mode has been successfully turned off.
-3. Use the `/autocg` command to enable automatic grouping mode. Follow the prompts to log in to Telegram.
+1. Configure `API_ID` and `API_HASH`.
+2. Disable the bot's privacy mode.
+3. Use the `/autocg` command to enable automatic grouping, and follow the prompts to log in to Telegram.
 
 ### Custom Message Templates
 
-If you want to modify the format of message senders, you can adjust the environment variables in Docker or the .env
-file.
+If you want to modify the sender's format, you can change the environment variables in docker or the `.env` file.
 
 Custom message template placeholders:
 
-`#[alias]`: Contact alias
+`#[alias]`: Contact note.
 
-`#[name]`: Contact nickname
+`#[name]`: Contact nickname.
 
-`#[topic]`: Group chat nickname
+`#[topic]`: Group chat nickname.
 
-`#[alias_first]`: Alias preferred; if alias is not available, displays contact nickname
+`#[alias_first]`: Note first; if there’s no note, the contact's nickname will be shown.
 
 ## License
 
-MIT
+[MIT](LICENSE)
 
 ## Thanks
 
-Thanks to JetBrains for supporting this project
+Thanks to JetBrains for supporting this project.
 
 [<img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.png" width="200">](https://www.jetbrains.com)
