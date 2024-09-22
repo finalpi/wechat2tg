@@ -6,4 +6,4 @@ process.on('uncaughtException', (err) => {
 })
 
 const bot = TelegramBotClient.getInstance()
-bot.init()
+bot.start()
