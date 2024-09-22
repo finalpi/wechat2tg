@@ -238,6 +238,38 @@ export class TelegramBotClient extends BaseClient {
         return this._recentUsers
     }
 
+    public start() {
+        this.init()
+        const bot = this._bot
+        bot.use(session())
+
+        if (config.API_ID && config.API_HASH) {
+            // 启动tg client
+            if (!this._tgClient) {
+                this._tgClient = TelegramClient.getInstance() // ? 这是什么意思？？
+                this._tgUserClient = TelegramUserClient.getInstance()
+                this.telegramApiSender = new SenderFactory().createSender(this._tgClient.client)
+            }
+            // 设置command
+            this._commands.push({command: 'autocg', description: this.t('command.description.autocg')})
+        } else {
+            this.forwardSetting.setVariable(VariableType.SETTING_AUTO_GROUP, false)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
+        }
+
+        this.onBotCommand(bot)
+
+        this.onBotMessage(bot)
+
+        this.onBotAction(bot)
+
+        bot.catch((err, ctx) => {
+            this.logError('tg bot error: ', err, ctx.update)
+        })
+
+        this.botLaunch(bot)
+    }
 
     public init() {
 
@@ -246,10 +278,6 @@ export class TelegramBotClient extends BaseClient {
             fs.mkdirSync('save-files')
         }
 
-        const bot = this._bot
-
-        bot.use(session())
-
         // 加载转发配置
         this.loadForwardSettings()
 
@@ -257,12 +285,7 @@ export class TelegramBotClient extends BaseClient {
         const language = this.forwardSetting.getVariable(VariableType.SETTING_LANGUAGE)
         this.setLanguage(language)
 
-        // 初始化配置
         this.forwardSetting.writeToFile()
-
-        this.onBotCommand(bot)
-
-        this.onBotMessage(bot)
 
         // 重启时判断是否有主人,如果存在主人则自动登录微信
         const variables = this.forwardSetting.getAllVariables()
@@ -285,14 +308,6 @@ export class TelegramBotClient extends BaseClient {
                 })
             }
         }
-
-        this.onBotAction(bot)
-
-        bot.catch((err, ctx) => {
-            this.logError('tg bot error: ', err, ctx.update)
-        })
-
-        this.botLaunch(bot)
     }
 
     private onBotCommand(bot: Telegraf) {
@@ -315,20 +330,6 @@ export class TelegramBotClient extends BaseClient {
             {command: 'stop', description: this.t('command.description.stop')},
             {command: 'check', description: this.t('command.description.check')},
         ]
-        if (config.API_ID && config.API_HASH) {
-            // 启动tg client
-            if (!this._tgClient) {
-                this._tgClient = TelegramClient.getInstance()
-                this._tgUserClient = TelegramUserClient.getInstance()
-                this.telegramApiSender = new SenderFactory().createSender(this._tgClient.client)
-            }
-            // 设置command
-            this._commands.push({command: 'autocg', description: this.t('command.description.autocg')})
-        } else {
-            this.forwardSetting.setVariable(VariableType.SETTING_AUTO_GROUP, false)
-            // 修改后持成文件
-            this.forwardSetting.writeToFile()
-        }
         bot.telegram.setMyCommands(this._commands)
 
         bot.help((ctx) => ctx.replyWithMarkdownV2(this.t('command.helpText')))

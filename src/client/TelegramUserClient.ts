@@ -16,6 +16,7 @@ import {MessageService} from '../service/MessageService'
 
 export class TelegramUserClient extends TelegramClient {
     private static telegramUserInstance: TelegramUserClient
+    private readonly setupServiceImpl = new SetupServiceImpl()
 
     private constructor(telegramBotClient: TelegramBotClient) {
         super(telegramBotClient)
@@ -28,7 +29,7 @@ export class TelegramUserClient extends TelegramClient {
         return TelegramUserClient.telegramUserInstance
     }
 
-    protected init() {
+    protected async init() {
         // 子类重写init方法
         if (this.apiId && this.apiHash) {
 
@@ -49,6 +50,14 @@ export class TelegramUserClient extends TelegramClient {
 
             // this._client.logger.setLevel(LogLevel.DEBUG)
 
+            await this.setupServiceImpl.createFolder().then(() => {
+                this.logInfo('create folder success')
+            }).catch((e) => {
+                this.logError('create folder error', e)
+            }).finally(() => {
+                this.logInfo('user client init create folder finally')
+            })
+
         }
     }
 
@@ -56,20 +65,17 @@ export class TelegramUserClient extends TelegramClient {
         if (this._client?.disconnected) {
             this._client?.start(authParams).then(async () => {
                 this.telegramBotClient.tgUserClientLogin = true
-                const setupServiceImpl = new SetupServiceImpl()
-                setupServiceImpl.createFolder().then(() => {
-                    TelegramBotClient.getInstance().bindItemService.getAllBindItems().then(async (bindItems) => {
-                        for (const bindItem of bindItems) {
-                            await setupServiceImpl.addToFolder(bindItem.chat_id)
-                        }
-                        this.telegramBotClient.bot.telegram.sendMessage(this.telegramBotClient.chatId, this.t('common.tgLoginSuccess')).then(msg => {
-                            setTimeout(() => {
-                                this.telegramBotClient.bot.telegram.deleteMessage(this.telegramBotClient.chatId, msg.message_id)
-                            }, 10000)
-                        })
+                TelegramBotClient.getInstance().bindItemService.getAllBindItems().then(async (bindItems) => {
+                    for (const bindItem of bindItems) {
+                        await this.setupServiceImpl.addToFolder(bindItem.chat_id)
+                    }
+                    this.telegramBotClient.bot.telegram.sendMessage(this.telegramBotClient.chatId, this.t('common.tgLoginSuccess')).then(msg => {
+                        setTimeout(() => {
+                            this.telegramBotClient.bot.telegram.deleteMessage(this.telegramBotClient.chatId, msg.message_id)
+                        }, 10000)
                     })
-
                 })
+
                 this.client?.getMe().then(me => {
                     this.client.addEventHandler(async event => {
                         // 我发送的消息

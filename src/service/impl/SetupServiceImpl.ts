@@ -88,6 +88,7 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
         const dialogFilter: Api.TypeDialogFilter = result?.filters.find(it => it.title === this.folderName)
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
+        // TODO: #42 Cannot read properties of undefined (reading 'id')
         const id = dialogFilter.id
         const entity = await this.userClient.client?.getInputEntity(chatId)
         if (entity && dialogFilter) {
