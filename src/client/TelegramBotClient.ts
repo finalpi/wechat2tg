@@ -35,7 +35,7 @@ import {SimpleMessageSender} from '../model/Message'
 import sharp from 'sharp'
 import {OfficialOrderService} from '../service/OfficialOrderService'
 import {Snowflake} from 'nodejs-snowflake'
-import {SetupServiceImpl} from "../service/impl/SetupServiceImpl";
+import {SetupServiceImpl} from '../service/impl/SetupServiceImpl'
 
 export class TelegramBotClient extends BaseClient {
     get currentOrder(): string | undefined {
@@ -139,7 +139,6 @@ export class TelegramBotClient extends BaseClient {
         this._officialOrderService = new OfficialOrderService(this._bot, this._weChatClient.client)
         this._chatId = 0
         this._ownerId = 0
-        this._chatId = 0
         this.telegramBotApiSender = new SenderFactory().createSender(this._bot)
         if (config.PROTOCOL === 'socks5' && config.HOST !== '' && config.PORT !== '') {
             const info = {
@@ -311,6 +310,9 @@ export class TelegramBotClient extends BaseClient {
             {command: 'order', description: this.t('command.description.order')},
             {command: 'cgdata', description: this.t('command.description.cgdata')},
             {command: 'gs', description: this.t('command.description.gs')},
+            {command: 'aad', description: this.t('command.description.aad')},
+            {command: 'als', description: this.t('command.description.als')},
+            {command: 'arm', description: this.t('command.description.arm')},
             {command: 'reset', description: this.t('command.description.reset')},
             {command: 'rcc', description: this.t('command.description.rcc')},
             {command: 'stop', description: this.t('command.description.stop')},
@@ -360,6 +362,7 @@ export class TelegramBotClient extends BaseClient {
                 return
             }
 
+            //
             if (ctx.chat && this._chatId === ctx.chat.id) {
                 return next() // 如果用户授权，则继续处理下一个中间件或命令
             }
@@ -613,6 +616,15 @@ export class TelegramBotClient extends BaseClient {
             }
         })
 
+        bot.command('aad', async (ctx) => {
+          // 在bot的聊天使用添加到全部的群组
+          if (ctx.chat.id === this._chatId) {
+              this.bindItemService.getAllBindItems().then(binds => {
+                  // this.bindItemService.addAllowEntityByChat(null, )
+              })
+          }
+        })
+
         bot.command('login', async ctx => {
             this.getUserId()
             if (!this.wechatStartFlag) {
@@ -806,7 +818,15 @@ export class TelegramBotClient extends BaseClient {
             const roomTopic = await room?.room?.topic()
             if (ctx.chat && ctx.chat.type.includes('group') && room) {
                 // 群组绑定
-                this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, room.id, '', room.room.id, '')
+                this.bindItemService.bindGroup({
+                    name: roomTopic ? roomTopic : '',
+                    chat_id: ctx.chat?.id,
+                    type: 1,
+                    bind_id: room.id,
+                    alias: '',
+                    wechat_id: room.room.id,
+                    avatar: ''
+                })
                 ctx.deleteMessage()
                 ctx.answerCbQuery()
                 return
@@ -1557,7 +1577,15 @@ export class TelegramBotClient extends BaseClient {
                         if (contactList) {
                             for (const contactListElement of contactList) {
                                 if (contactListElement.contact.id === element.contact.id) {
-                                    this.bindItemService.bindGroup(element.contact.payload?.name ? element.contact.payload?.name : '', ctx.chat?.id, 0, contactListElement.id, element.contact.payload?.alias ? element.contact.payload?.alias : '', element.contact.id, element.contact.payload?.avatar ? element.contact.payload?.avatar : '')
+                                    this.bindItemService.bindGroup({
+                                        name: element.contact.payload?.name ? element.contact.payload?.name : '',
+                                        chat_id: ctx.chat?.id,
+                                        type: 0,
+                                        bind_id: contactListElement.id,
+                                        alias: element.contact.payload?.alias ? element.contact.payload?.alias : '',
+                                        wechat_id: element.contact.id,
+                                        avatar: element.contact.payload?.avatar ? element.contact.payload?.avatar : ''
+                                    })
                                     break
                                 }
                             }
@@ -1579,7 +1607,15 @@ export class TelegramBotClient extends BaseClient {
                         if (contactList) {
                             for (const contactListElement of contactList) {
                                 if (contactListElement.contact.id === talker.id) {
-                                    this.bindItemService.bindGroup(talker.payload?.name ? talker.payload?.name : '', ctx.chat?.id, 0, contactListElement.id, talker.payload?.alias ? talker.payload?.alias : '', talker.id, talker.payload?.avatar ? talker.payload?.avatar : '')
+                                    this.bindItemService.bindGroup({
+                                        name: talker.payload?.name ? talker.payload?.name : '',
+                                        chat_id: ctx.chat?.id,
+                                        type: 0,
+                                        bind_id: contactListElement.id,
+                                        alias: talker.payload?.alias ? talker.payload?.alias : '',
+                                        wechat_id: talker.id,
+                                        avatar: talker.payload?.avatar ? talker.payload?.avatar : ''
+                                    })
                                     break
                                 }
                             }
@@ -1600,7 +1636,15 @@ export class TelegramBotClient extends BaseClient {
                         // 群组绑定
                         const roomItem = this.weChatClient.roomList.find(item => item.room.id === room.id)
                         if (roomItem) {
-                            this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, roomItem.id, '', room.id, '')
+                            this.bindItemService.bindGroup({
+                                name: roomTopic ? roomTopic : '',
+                                chat_id: ctx.chat?.id,
+                                type: 1,
+                                bind_id: roomItem.id,
+                                alias: '',
+                                wechat_id: room.id,
+                                avatar: ''
+                            })
                         }
                         ctx.answerCbQuery()
                         return
@@ -1621,7 +1665,15 @@ export class TelegramBotClient extends BaseClient {
                         const roomItem = this.weChatClient.roomList.find(item => item.room.id === data.talker?.id)
                         const roomTopic = await roomItem?.room.topic()
                         if (roomItem && data.talker) {
-                            this.bindItemService.bindGroup(roomTopic ? roomTopic : '', ctx.chat?.id, 1, roomItem.id, '', data.talker.id, '')
+                            this.bindItemService.bindGroup({
+                                name: roomTopic ? roomTopic : '',
+                                chat_id: ctx.chat?.id,
+                                type: 1,
+                                bind_id: roomItem.id,
+                                alias: '',
+                                wechat_id: data.talker.id,
+                                avatar: ''
+                            })
                         }
                         ctx.deleteMessage()
                         ctx.answerCbQuery()
@@ -1642,7 +1694,15 @@ export class TelegramBotClient extends BaseClient {
                             if (list) {
                                 for (const listElement of list) {
                                     if (listElement.contact.id === talker.id) {
-                                        this.bindItemService.bindGroup(talker.payload?.name ? talker.payload?.name : '', ctx.chat?.id, 0, listElement.id, talker.payload?.alias ? talker.payload?.alias : '', talker.id, talker.payload?.avatar ? talker.payload?.avatar : '')
+                                        this.bindItemService.bindGroup({
+                                            name: talker.payload?.name ? talker.payload?.name : '',
+                                            chat_id: ctx.chat?.id,
+                                            type: 0,
+                                            bind_id: listElement.id,
+                                            alias: talker.payload?.alias ? talker.payload?.alias : '',
+                                            wechat_id: talker.id,
+                                            avatar: talker.payload?.avatar ? talker.payload?.avatar : ''
+                                        })
                                         break
                                     }
                                 }
@@ -1710,7 +1770,15 @@ export class TelegramBotClient extends BaseClient {
                     if (list) {
                         for (const listElement of list) {
                             if (listElement.contact.id === contact.id) {
-                                this.bindItemService.bindGroup(contact.payload?.name ? contact.payload?.name : '', ctx.chat?.id, 0, listElement.id, contact.payload?.alias ? contact.payload?.alias : '', contact.id, contact.payload?.avatar ? contact.payload?.avatar : '')
+                                this.bindItemService.bindGroup({
+                                    name: contact.payload?.name ? contact.payload?.name : '',
+                                    chat_id: ctx.chat?.id,
+                                    type: 0,
+                                    bind_id: listElement.id,
+                                    alias: contact.payload?.alias ? contact.payload?.alias : '',
+                                    wechat_id: contact.id,
+                                    avatar: contact.payload?.avatar ? contact.payload?.avatar : ''
+                                })
                                 break
                             }
                         }

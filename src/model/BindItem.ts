@@ -15,6 +15,10 @@ export interface BindItem {
     has_bound?: 0 | 1
     // group forward message 0 否, 1 是 default 1
     forward?: 0 | 1
+    // 头像hash
+    avatar_hash?: string
+    // 允许的实体
+    allow_entities?: string
 }
 
 export type ChatMapping = {

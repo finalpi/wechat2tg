@@ -63,6 +63,24 @@ abstract class AbstractSqlService {
                             }
                         })
                     }
+                    if (!createTableSQL.includes('avatar_hash')) {
+                        this.db.run('ALTER TABLE tb_bind_item ADD COLUMN avatar_hash TEXT', (err) => {
+                            if (err) {
+                                console.error('Failed to add column:', err)
+                            } else {
+                                console.log('Column avatar_hash added successfully.')
+                            }
+                        })
+                    }
+                    if (!createTableSQL.includes('allow_entities')) {
+                        this.db.run('ALTER TABLE tb_bind_item ADD COLUMN allow_entities TEXT', (err) => {
+                            if (err) {
+                                console.error('Failed to add column:', err)
+                            } else {
+                                console.log('Column allow_entities added successfully.')
+                            }
+                        })
+                    }
                 }
             })
         })

@@ -37,6 +37,23 @@ export class BindItemService extends AbstractSqlService {
         })
     }
 
+    /**
+     * 更新 chatId 的 allow_entities ！！注意没有 chatId 会更新所有的
+     * @param chatId 群聊id
+     * @param bindItem 允许转发的实体
+     */
+    public async addAllowEntityByChat(chatId: number, bindItem: BindItem) {
+        this.db.serialize(() => {
+            const updateAllowEntitiesSql = 'concat(substr(allow_entities, 0, length(allow_entities) - 1),\', \', ? ,\']\')'
+            const sql = chatId ? `UPDATE tb_bind_item
+                                  SET allow_entities = ${updateAllowEntitiesSql}
+                                  WHERE chat_id = ?`
+                : `UPDATE tb_bind_item SET allow_entities = ${updateAllowEntitiesSql}`
+            const params = chatId ? [bindItem.allow_entities, chatId] : [bindItem.allow_entities]
+            this.db.prepare(sql, params).run()
+        })
+    }
+
     public async updateItem(roomList: RoomItem[], contactMap: Map<number, Set<ContactItem>> | undefined) {
         const allBindItem = await this.getAllBindItems()
         const individual = contactMap?.get(ContactImpl.Type.Individual)
@@ -53,7 +70,15 @@ export class BindItemService extends AbstractSqlService {
                     }
                     if (find) {
                         const name = find.contact.payload?.name
-                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id, find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
+                        this.bindGroup({
+                            name: name ? name : '',
+                            chat_id: bindItem.chat_id,
+                            type: bindItem.type,
+                            bind_id: find.id,
+                            alias: find.contact.payload?.alias ? find.contact.payload.alias : '',
+                            wechat_id: find.contact.id,
+                            avatar: find.contact.payload?.avatar ? find.contact.payload?.avatar : ''
+                        })
                         continue
                     }
                     if (bindItem.alias && bindItem.alias !== '') {
@@ -77,7 +102,15 @@ export class BindItemService extends AbstractSqlService {
                                 }
                             }
                             const name = find.contact.payload?.name
-                            this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id, find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
+                            this.bindGroup({
+                                name: name ? name : '',
+                                chat_id: bindItem.chat_id,
+                                type: bindItem.type,
+                                bind_id: find.id,
+                                alias: find.contact.payload?.alias ? find.contact.payload.alias : '',
+                                wechat_id: find.contact.id,
+                                avatar: find.contact.payload?.avatar ? find.contact.payload?.avatar : ''
+                            })
                             continue
                         }
                     }
@@ -89,7 +122,15 @@ export class BindItemService extends AbstractSqlService {
                     }
                     if (find) {
                         const name = find.contact.payload?.name
-                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id, find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
+                        this.bindGroup({
+                            name: name ? name : '',
+                            chat_id: bindItem.chat_id,
+                            type: bindItem.type,
+                            bind_id: find.id,
+                            alias: find.contact.payload?.alias ? find.contact.payload.alias : '',
+                            wechat_id: find.contact.id,
+                            avatar: find.contact.payload?.avatar ? find.contact.payload?.avatar : ''
+                        })
                         continue
                     }
                 }
@@ -103,7 +144,15 @@ export class BindItemService extends AbstractSqlService {
                     }
                     if (find) {
                         const name = find.contact.payload?.name
-                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id, find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
+                        this.bindGroup({
+                            name: name ? name : '',
+                            chat_id: bindItem.chat_id,
+                            type: bindItem.type,
+                            bind_id: find.id,
+                            alias: find.contact.payload?.alias ? find.contact.payload.alias : '',
+                            wechat_id: find.contact.id,
+                            avatar: find.contact.payload?.avatar ? find.contact.payload?.avatar : ''
+                        })
                         continue
                     }
                     if (bindItem.alias && bindItem.alias != '') {
@@ -115,7 +164,15 @@ export class BindItemService extends AbstractSqlService {
                         }
                         if (find) {
                             const name = find.contact.payload?.name
-                            this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id, find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
+                            this.bindGroup({
+                                name: name ? name : '',
+                                chat_id: bindItem.chat_id,
+                                type: bindItem.type,
+                                bind_id: find.id,
+                                alias: find.contact.payload?.alias ? find.contact.payload.alias : '',
+                                wechat_id: find.contact.id,
+                                avatar: find.contact.payload?.avatar ? find.contact.payload?.avatar : ''
+                            })
                             continue
                         }
                     }
@@ -127,7 +184,15 @@ export class BindItemService extends AbstractSqlService {
                     }
                     if (find) {
                         const name = find.contact.payload?.name
-                        this.bindGroup(name ? name : '', bindItem.chat_id, bindItem.type, find.id, find.contact.payload?.alias ? find.contact.payload.alias : '', find.contact.id, find.contact.payload?.avatar ? find.contact.payload?.avatar : '')
+                        this.bindGroup({
+                            name: name ? name : '',
+                            chat_id: bindItem.chat_id,
+                            type: bindItem.type,
+                            bind_id: find.id,
+                            alias: find.contact.payload?.alias ? find.contact.payload.alias : '',
+                            wechat_id: find.contact.id,
+                            avatar: find.contact.payload?.avatar ? find.contact.payload?.avatar : ''
+                        })
                         continue
                     }
                 }
@@ -136,14 +201,28 @@ export class BindItemService extends AbstractSqlService {
                 let room = roomList.find(item => item.room.id === bindItem.wechat_id)
                 if (room) {
                     const topic = room.room.payload?.topic
-                    this.bindGroup(topic ? topic : '', bindItem.chat_id, bindItem.type, room.id, '', room.room.id, '')
+                    this.bindGroup({
+                        name: topic ? topic : '',
+                        chat_id: bindItem.chat_id,
+                        type: bindItem.type,
+                        bind_id: room.id,
+                        alias: '',
+                        wechat_id: room.room.id,
+                    })
                     continue
                 }
                 // room不存在根据名称重新绑定room
                 room = roomList.find(item => item.room.payload?.topic === bindItem.name)
                 if (room) {
                     const topic = room.room.payload?.topic
-                    this.bindGroup(topic ? topic : '', bindItem.chat_id, bindItem.type, room.id, '', room.room.id, '')
+                    this.bindGroup({
+                        name: topic ? topic : '',
+                        chat_id: bindItem.chat_id,
+                        type: bindItem.type,
+                        bind_id: room.id,
+                        alias: '',
+                        wechat_id: room.room.id,
+                    })
                     continue
                 }
                 // 如果找不到则删除该元素
@@ -248,7 +327,16 @@ export class BindItemService extends AbstractSqlService {
                 params.push(bindItem.forward)
                 first = false
             }
-
+            if (bindItem.avatar_hash) {
+                query += first ? 'avatar_hash=?' : ', avatar_hash=?'
+                params.push(bindItem.avatar_hash)
+                first = false
+            }
+            if (bindItem.allow_entities) {
+                query += first ? 'allow_entities=?' : ', allow_entities=?'
+                params.push(bindItem.allow_entities)
+                first = false
+            }
             query += ' WHERE chat_id=?'
             params.push(groupId)
 
@@ -305,7 +393,15 @@ export class BindItemService extends AbstractSqlService {
                             console.log(err)
                         }
                         if (row) {
-                            this.bindGroup(name, row.chat_id, createGroupInterface.type, createGroupInterface.bindId ? createGroupInterface.bindId : '', alias, wechatId, avatar)
+                            this.bindGroup({
+                                name: name,
+                                chat_id: row.chat_id,
+                                type: createGroupInterface.type,
+                                bind_id: createGroupInterface.bindId ? createGroupInterface.bindId : '',
+                                alias: alias,
+                                wechat_id: wechatId,
+                                avatar: avatar
+                            })
                             resolve(row)
                         } else {
                             this.db.get('SELECT * FROM tb_bind_item WHERE type= ? AND name=? AND has_bound=0', [createGroupInterface.type, name], (err, row: BindItem) => {
@@ -313,7 +409,15 @@ export class BindItemService extends AbstractSqlService {
                                     console.log(err)
                                 }
                                 if (row) {
-                                    this.bindGroup(name, row.chat_id, createGroupInterface.type, createGroupInterface.bindId ? createGroupInterface.bindId : '', alias, wechatId, avatar)
+                                    this.bindGroup({
+                                        name: name,
+                                        chat_id: row.chat_id,
+                                        type: createGroupInterface.type,
+                                        bind_id: createGroupInterface.bindId ? createGroupInterface.bindId : '',
+                                        alias: alias,
+                                        wechat_id: wechatId,
+                                        avatar: avatar
+                                    })
                                     resolve(row)
                                 } else {
                                     resolve(undefined)
@@ -327,7 +431,15 @@ export class BindItemService extends AbstractSqlService {
                             console.log(err)
                         }
                         if (row) {
-                            this.bindGroup(name, row.chat_id, createGroupInterface.type, createGroupInterface.bindId ? createGroupInterface.bindId : '', alias, wechatId, avatar)
+                            this.bindGroup({
+                                name: name,
+                                chat_id: row.chat_id,
+                                type: createGroupInterface.type,
+                                bind_id: createGroupInterface.bindId ? createGroupInterface.bindId : '',
+                                alias: alias,
+                                wechat_id: wechatId,
+                                avatar: avatar
+                            })
                             resolve(row)
                         } else {
                             resolve(undefined)
@@ -338,34 +450,32 @@ export class BindItemService extends AbstractSqlService {
         })
     }
 
-    public bindGroup(name: string, chatId: number, type: number, bindId: string, alias: string, wechatId: string, avatar: string) {
+    // 你在写你妈呢 草！！
+    public bindGroup(bind: BindItem) {
         // 群组绑定
-        avatar = this.getseq(avatar)
+        bind.avatar = this.getseq(bind.avatar)
         this.db.serialize(() => {
-            this.db.get('SELECT * FROM tb_bind_item WHERE chat_id= ?', [chatId], (err, row: BindItem) => {
+            this.db.get('SELECT * FROM tb_bind_item WHERE chat_id= ?', [bind.chat_id], (err, row: BindItem) => {
                 if (err) {
                     console.log(err)
                 }
                 if (row) {
                     this.updateGroupData(row, {
-                        name: name,
-                        chat_id: chatId,
-                        type: type,
-                        bind_id: bindId,
-                        alias: alias,
-                        wechat_id: wechatId,
-                        avatar: avatar,
+                        ...bind,
                         has_bound: 1,
                         forward: 1
                     })
                 }
             })
             const stmt = this.db.prepare('DELETE FROM tb_bind_item WHERE wechat_id = ? OR chat_id = ?')
-            stmt.run(wechatId, chatId)
+            stmt.run(bind.wechat_id, bind.chat_id)
             stmt.finalize()
 
-            const stmt1 = this.db.prepare('INSERT INTO tb_bind_item VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1)')
-            stmt1.run(name, chatId, type, bindId, alias, wechatId, avatar)
+            const stmt1 = this.db.prepare('INSERT INTO tb_bind_item VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?)')
+            stmt1.run(
+                bind.name, bind.chat_id, bind.type,
+                bind.bind_id, bind.alias, bind.wechat_id, bind.avatar, bind.avatar_hash, bind.allow_entities
+            )
             stmt1.finalize()
         })
 
@@ -381,13 +491,7 @@ export class BindItemService extends AbstractSqlService {
 
         // 创建对象
         const bindItem: BindItem = {
-            name: name,
-            chat_id: chatId,
-            type: type,
-            bind_id: bindId,
-            alias: alias,
-            wechat_id: wechatId,
-            avatar: avatar,
+            ...bind,
             has_bound: 1,
             forward: 1
         }

@@ -180,21 +180,27 @@ export class TelegramUserClient extends TelegramClient {
                 //         '')
                 // } else {
                 bindItem = this.telegramBotClient.bindItemService.bindGroup(
-                    createGroupInterface.contact?.payload?.name ? createGroupInterface.contact?.payload.name : '',
-                    TelegramUserClient.idConvert(id), createGroupInterface.type,
-                    createGroupInterface.bindId ? createGroupInterface.bindId : '',
-                    createGroupInterface.contact?.payload?.alias ? createGroupInterface.contact?.payload?.alias : '',
-                    createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '',
-                    createGroupInterface.contact?.payload?.avatar ? createGroupInterface.contact?.payload?.avatar : '')
+                    {
+                        name: createGroupInterface.contact?.payload?.name ? createGroupInterface.contact?.payload.name : '',
+                        chat_id: TelegramUserClient.idConvert(id),
+                        type: createGroupInterface.type,
+                        bind_id: createGroupInterface.bindId ? createGroupInterface.bindId : '',
+                        alias: createGroupInterface.contact?.payload?.alias ? createGroupInterface.contact?.payload?.alias : '',
+                        wechat_id: createGroupInterface.contact?.id ? createGroupInterface.contact?.id : '',
+                        avatar: createGroupInterface.contact?.payload?.avatar ? createGroupInterface.contact?.payload?.avatar : ''
+                    })
                 // }
             } else { // room
                 const topic = await createGroupInterface.room?.topic()
-                bindItem = this.telegramBotClient.bindItemService.bindGroup(topic ? topic : '', TelegramUserClient.idConvert(id),
-                    createGroupInterface.type,
-                    createGroupInterface.bindId ? createGroupInterface.bindId : '',
-                    '',
-                    createGroupInterface.room?.id ? createGroupInterface.room?.id : '',
-                    '')
+                bindItem = this.telegramBotClient.bindItemService.bindGroup({
+                    name: topic ? topic : '',
+                    chat_id: TelegramUserClient.idConvert(id),
+                    type: createGroupInterface.type,
+                    bind_id: createGroupInterface.bindId ? createGroupInterface.bindId : '',
+                    alias: '',
+                    wechat_id: createGroupInterface.room?.id ? createGroupInterface.room?.id : '',
+                    avatar: ''
+                })
             }
         }
         return bindItem
