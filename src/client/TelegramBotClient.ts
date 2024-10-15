@@ -254,12 +254,14 @@ export class TelegramBotClient extends BaseClient {
         // 加载转发配置
         this.loadForwardSettings()
 
+        // 初始化配置
+        this.forwardSetting.writeToFile()
+
+        this.loadForwardSettings()
+
         // language
         const language = this.forwardSetting.getVariable(VariableType.SETTING_LANGUAGE)
         this.setLanguage(language)
-
-        // 初始化配置
-        this.forwardSetting.writeToFile()
 
         this.onBotCommand(bot)
 
@@ -394,7 +396,7 @@ export class TelegramBotClient extends BaseClient {
             }
             const b = this.forwardSetting.getVariable(VariableType.SETTING_AUTO_GROUP)
             const state = b ? this.t('common.open') : this.t('common.close')
-            ctx.reply(`${this.t('command.autocg.configApi')}(${state}):`, {
+            ctx.reply(this.t('command.autocg.modelAutoCreate', state), {
                 reply_markup: {
                     inline_keyboard: [
                         [
@@ -650,7 +652,7 @@ export class TelegramBotClient extends BaseClient {
         })
 
         bot.command('login', async ctx => {
-            this.getUserId()
+            // this.getUserId()
             if (!this.wechatStartFlag) {
                 this.wechatStartFlag = true
                 this._weChatClient.start().then(() => {

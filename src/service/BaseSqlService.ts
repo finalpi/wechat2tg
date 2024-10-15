@@ -33,7 +33,7 @@ abstract class AbstractSqlService {
         this.db.serialize(() => {
             this.db.get('SELECT * FROM sqlite_master WHERE type=\'table\' AND name=\'tb_bind_item\'', (err, row) => {
                 if (!row) {
-                    this.db.run('CREATE TABLE tb_bind_item (name TEXT, chat_id INT, type INT, bind_id TEXT, alias TEXT,wechat_id TEXT, avatar TEXT, has_bound TEXT, forward TEXT)')
+                    this.db.run('CREATE TABLE tb_bind_item (name TEXT, chat_id INT, type INT, bind_id TEXT, alias TEXT,wechat_id TEXT, avatar TEXT, has_bound TEXT, forward TEXT,avatar_hash TEXT,allow_entities TEXT)')
                 } else {
                     const createTableSQL = (row as { sql: string }).sql
                     if (!createTableSQL.includes('avatar')) {
@@ -100,7 +100,7 @@ abstract class AbstractSqlService {
         this.db.serialize(() => {
             this.db.get('SELECT * FROM sqlite_master WHERE type=\'table\' AND name=\'tb_message\'', (err, row) => {
                 if (!row) {
-                    this.db.run('CREATE TABLE tb_message (wechat_message_id TEXT, chat_id INT, telegram_message_id TEXT, type INT, msg_text TEXT,send_by TEXT, create_time TEXT)')
+                    this.db.run('CREATE TABLE tb_message (wechat_message_id TEXT, chat_id INT, telegram_message_id TEXT, type INT, msg_text TEXT,send_by TEXT, create_time TEXT,telegram_user_message_id TEXT,sender_id TEXT)')
                 } else {
                     const createTableSQL = (row as { sql: string }).sql
                     if (!createTableSQL.includes('telegram_user_message_id')) {

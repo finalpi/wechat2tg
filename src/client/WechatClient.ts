@@ -498,6 +498,8 @@ export class WeChatClient extends BaseClient {
     }
 
     private async message(message: MessageInterface) {
+        // todo 测试用日志,后续删除
+        this.logInfo('收到新消息')
         const talker = message.talker()
         const [roomEntity] = await Promise.all([message.room()])
         const messageType = message.type()
@@ -617,7 +619,7 @@ export class WeChatClient extends BaseClient {
                     })
                 }
             }
-            if (!bindItem && this.cacheMemberDone && this._tgClient.tgUserClientLogin && !message.self() && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)) {
+            if (!bindItem && this.cacheMemberDone && this._tgClient.tgUserClientLogin && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)) {
                 if (talker?.type() === PUPPET.types.Contact.Official && !this._tgClient.setting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT)) {
                     bindItem = await this._tgClient.tgUserClient?.createGroup({
                         type: 0,
@@ -634,6 +636,8 @@ export class WeChatClient extends BaseClient {
             }
         }
         let identityStr = SimpleMessageSender.getTitle(message, bindItem ? true : false)
+        // todo 测试用日志,后续删除
+        this.logInfo('收到新消息,准备发送')
         const sendMessageBody: SimpleMessage = {
             sender: showSender,
             body: `${this.t('wechat.getOne')} ${this.t('wechat.messageType.unknown')}`,

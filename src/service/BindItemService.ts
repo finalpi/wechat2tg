@@ -471,7 +471,11 @@ export class BindItemService extends AbstractSqlService {
     // 你在写你妈呢 草！！
     public bindGroup(bind: BindItem) {
         // 群组绑定
-        bind.avatar = this.getseq(bind.avatar)
+        if (bind.avatar) {
+            bind.avatar = this.getseq(bind.avatar)
+        } else {
+            bind.avatar = ''
+        }
         this.db.serialize(() => {
             this.db.get('SELECT * FROM tb_bind_item WHERE chat_id= ?', [bind.chat_id], (err, row: BindItem) => {
                 if (err) {
