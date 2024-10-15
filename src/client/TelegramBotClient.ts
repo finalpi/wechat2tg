@@ -36,6 +36,7 @@ import sharp from 'sharp'
 import {OfficialOrderService} from '../service/OfficialOrderService'
 import {Snowflake} from 'nodejs-snowflake'
 import {SetupServiceImpl} from '../service/impl/SetupServiceImpl'
+import {Entity} from 'telegram/define'
 
 export class TelegramBotClient extends BaseClient {
     get currentOrder(): string | undefined {
@@ -362,8 +363,8 @@ export class TelegramBotClient extends BaseClient {
                 return
             }
 
-            //
-            if (ctx.chat && this._chatId === ctx.chat.id) {
+            // const bind = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
+            if (ctx.chat && (this._chatId === ctx.chat.id)) {
                 return next() // 如果用户授权，则继续处理下一个中间件或命令
             }
 
@@ -616,13 +617,36 @@ export class TelegramBotClient extends BaseClient {
             }
         })
 
+        // 只允许 id 和 username
         bot.command('aad', async (ctx) => {
-          // 在bot的聊天使用添加到全部的群组
-          if (ctx.chat.id === this._chatId) {
-              this.bindItemService.getAllBindItems().then(binds => {
-                  // this.bindItemService.addAllowEntityByChat(null, )
-              })
-          }
+            // 转换为实体
+            const allows = await Promise.all(ctx.args.flatMap(async it => {
+                if (parseInt(it)) {
+                    return it
+                } else {
+                    const username = it.trim().replace('@', '')
+                    const en = await this.tgClient.client.getEntity(username)
+                    return en?.id.toString()
+                }
+            }))
+            if (allows.length === 0) {
+                await ctx.reply(this.t('command.aad.noUser'))
+                return
+            }
+            // 在bot的聊天使用添加到全部的群组
+            if (ctx.chat.id === this._chatId) {
+                this.bindItemService.addAllowEntityByChat(null, allows).then(() => {
+                    ctx.reply(this.t('command.aad.success'))
+                }).catch(() => {
+                    ctx.reply(this.t('command.aad.fail'))
+                })
+            } else {
+                this.bindItemService.addAllowEntityByChat(ctx.chat.id, allows).then(() => {
+                    ctx.reply(this.t('command.aad.success'))
+                }).catch(() => {
+                    ctx.reply(this.t('command.aad.fail'))
+                })
+            }
         })
 
         bot.command('login', async ctx => {
@@ -1016,8 +1040,12 @@ export class TelegramBotClient extends BaseClient {
             }
 
             // 群组消息,判断是否转发
-            if (ctx.chat?.type.includes('group') && ctx.message?.from.id === this._chatId) {
-                const bind = await this.bindItemService.getBindItemByChatId(ctx.message.chat.id)
+            const bind = await this.bindItemService.getBindItemByChatId(ctx?.message?.chat.id)
+            const forwardMessage = ctx.chat?.type.includes('group') &&
+                (ctx.message?.from.id === this._chatId
+                    || (Array.isArray(bind?.allow_entities)
+                        && bind?.allow_entities.includes(ctx?.message?.from?.id.toString())))
+            if (forwardMessage) {
                 if (bind.forward === 0) {
                     return
                 }
@@ -1061,7 +1089,7 @@ export class TelegramBotClient extends BaseClient {
             }
 
             // 如果是群组消息的情况
-            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === this._chatId) {
+            if (forwardMessage) {
                 const bindItem = await this.bindItemService.getBindItemByChatId(chatId)
                 if (bindItem) {
                     if (!this._weChatClient.cacheMemberDone) {
@@ -1107,7 +1135,6 @@ export class TelegramBotClient extends BaseClient {
                     chat_id: chatId,
                     msg_id: msgId
                 })
-                // this.lock.release()
                 return
             }
 
@@ -1117,10 +1144,8 @@ export class TelegramBotClient extends BaseClient {
                     chat_id: chatId,
                     msg_id: msgId
                 })
-                // this.lock.release()
                 return
             }
-            // this.lock.release()
             return
         })
 
@@ -2544,8 +2569,12 @@ export class TelegramBotClient extends BaseClient {
             return
         }
         // 群组消息,判断是否转发
-        if (ctx.chat?.type.includes('group') && ctx.message?.from.id === this._chatId) {
-            const bind = await this.bindItemService.getBindItemByChatId(ctx.message.chat.id)
+        const bind = await this.bindItemService.getBindItemByChatId(ctx.message.chat.id)
+        const forwardMessage = ctx.chat?.type.includes('group') &&
+            (ctx.message?.from.id === this._chatId
+                || (Array.isArray(bind?.allow_entities)
+                    && bind?.allow_entities.includes(ctx?.message?.from?.id.toString())))
+        if (forwardMessage) {
             if (bind.forward === 0) {
                 return
             }

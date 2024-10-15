@@ -40,17 +40,35 @@ export class BindItemService extends AbstractSqlService {
     /**
      * 更新 chatId 的 allow_entities ！！注意没有 chatId 会更新所有的
      * @param chatId 群聊id
-     * @param bindItem 允许转发的实体
+     * @param allows
      */
-    public async addAllowEntityByChat(chatId: number, bindItem: BindItem) {
+    public async addAllowEntityByChat(chatId: number, allows: string[]) {
         this.db.serialize(() => {
-            const updateAllowEntitiesSql = 'concat(substr(allow_entities, 0, length(allow_entities) - 1),\', \', ? ,\']\')'
+            let allowEntitiesJsonArraySql = ''
+            const params = []
+            for (let i = 0; i < allows.length; i++) {
+                const sql = `'$[' || (json_array_length(allow_entities) + ${i}) || ']', ?`
+                params.push(allows[i])
+                if (i !== allows.length - 1) {
+                    allowEntitiesJsonArraySql += sql + ','
+                } else {
+                    allowEntitiesJsonArraySql += sql
+                }
+            }
+            const updateAllowEntitiesSql = `json_insert(allow_entities, ${allowEntitiesJsonArraySql})`
             const sql = chatId ? `UPDATE tb_bind_item
                                   SET allow_entities = ${updateAllowEntitiesSql}
                                   WHERE chat_id = ?`
-                : `UPDATE tb_bind_item SET allow_entities = ${updateAllowEntitiesSql}`
-            const params = chatId ? [bindItem.allow_entities, chatId] : [bindItem.allow_entities]
-            this.db.prepare(sql, params).run()
+                : `UPDATE tb_bind_item
+                   SET allow_entities = ${updateAllowEntitiesSql}`
+            if (chatId) {
+                params.push(chatId)
+            }
+            console.log('SQL:', sql)
+            console.log('Params:', params)
+            this.db.prepare(sql, params).run().finalize((err) => {
+                this.logError('addAllowEntityByChat Error: ', err)
+            })
         })
     }
 

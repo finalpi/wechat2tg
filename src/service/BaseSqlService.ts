@@ -73,7 +73,7 @@ abstract class AbstractSqlService {
                         })
                     }
                     if (!createTableSQL.includes('allow_entities')) {
-                        this.db.run('ALTER TABLE tb_bind_item ADD COLUMN allow_entities TEXT', (err) => {
+                        this.db.run('ALTER TABLE tb_bind_item ADD COLUMN allow_entities TEXT default \'[]\'', (err) => {
                             if (err) {
                                 console.error('Failed to add column:', err)
                             } else {

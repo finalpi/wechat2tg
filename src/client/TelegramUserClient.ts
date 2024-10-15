@@ -99,6 +99,26 @@ export class TelegramUserClient extends TelegramClient {
         return this._client
     }
 
+    private async onMessage() {
+        const binds = await TelegramBotClient.getInstance().bindItemService.getAllBindItems()
+        const allows = binds.flatMap(it => it.allow_entities)
+        this.client?.addEventHandler(async event => {
+            // 我发送的消息
+            const msg = event.message
+            const msgChatId = msg.chatId?.toJSNumber()
+            if (msgChatId == this.telegramBotClient.chatId || binds.find(it => it.chat_id == msgChatId)) {
+                MessageService.getInstance().addMessage({
+                    chat_id: msgChatId?.toString(),
+                    msg_text: msg.text,
+                    create_time: Date.now(),
+                    telegram_user_message_id: msg.id,
+                    sender_id: this.telegramBotClient.weChatClient.client.currentUser.id,
+                })
+            }
+
+        }, new NewMessage({fromUsers: [...allows]}))
+    }
+
     /**
      * 获取用户名
      */
@@ -130,7 +150,7 @@ export class TelegramUserClient extends TelegramClient {
             }
             // TODO: ROOM NOT READY
             if (!name) {
-                name = '微信内-未命名群'
+                name = '微信-未命名群'
             }
             this.logDebug('createGroup id  ', this.telegramBotClient.chatId, this.telegramBotClient.bot.botInfo?.id)
             const result = await this.client?.invoke(
