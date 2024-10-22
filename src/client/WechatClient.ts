@@ -498,8 +498,6 @@ export class WeChatClient extends BaseClient {
     }
 
     private async message(message: MessageInterface) {
-        // todo 测试用日志,后续删除
-        this.logInfo('收到新消息')
         const talker = message.talker()
         const [roomEntity] = await Promise.all([message.room()])
         const messageType = message.type()
@@ -642,8 +640,6 @@ export class WeChatClient extends BaseClient {
             }
         }
         let identityStr = SimpleMessageSender.getTitle(message, bindItem ? true : false)
-        // todo 测试用日志,后续删除
-        this.logInfo('收到新消息,准备发送')
         const sendMessageBody: SimpleMessage = {
             sender: showSender,
             body: `${this.t('wechat.getOne')} ${this.t('wechat.messageType.unknown')}`,
