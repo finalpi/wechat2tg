@@ -40,7 +40,7 @@ export class TelegramClient extends BaseClient {
         if (this.apiId && this.apiHash) {
 
             this._client = new GramClient(this.storeSession, this.apiId, this.apiHash, {
-                connectionRetries: 20,
+                connectionRetries: 1000000,
                 deviceModel: `${config.APP_NAME} Bot On ${os.hostname()}`,
                 appVersion: 'rainbowcat',
                 proxy: config.HOST ? {

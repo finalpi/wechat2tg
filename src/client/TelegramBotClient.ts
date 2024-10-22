@@ -313,9 +313,10 @@ export class TelegramBotClient extends BaseClient {
             {command: 'order', description: this.t('command.description.order')},
             {command: 'cgdata', description: this.t('command.description.cgdata')},
             {command: 'gs', description: this.t('command.description.gs')},
-            {command: 'aad', description: this.t('command.description.aad')},
-            {command: 'als', description: this.t('command.description.als')},
-            {command: 'arm', description: this.t('command.description.arm')},
+            // todo 暂未实现
+            // {command: 'aad', description: this.t('command.description.aad')},
+            // {command: 'als', description: this.t('command.description.als')},
+            // {command: 'arm', description: this.t('command.description.arm')},
             {command: 'reset', description: this.t('command.description.reset')},
             {command: 'rcc', description: this.t('command.description.rcc')},
             {command: 'stop', description: this.t('command.description.stop')},

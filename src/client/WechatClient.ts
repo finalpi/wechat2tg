@@ -771,7 +771,7 @@ export class WeChatClient extends BaseClient {
                 messageTxt = messageTxt.replaceAll(/</g, '&lt;')
                     .replaceAll(/>/g, '&gt;')
                 if (messageTxt) {
-                    if (mentionSelf && this._tgClient.tgUserClientLogin) {
+                    if (mentionSelf) {
                         const tgId = this._tgClient.chatId
                         if (tgId) {
                             const me = this.client.currentUser

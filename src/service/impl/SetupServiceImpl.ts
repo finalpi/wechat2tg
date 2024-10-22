@@ -22,7 +22,6 @@ export class SetupServiceImpl extends AbstractSqlService implements ISetupServic
         // 初始化表
         this.createAutoBindTable()
         this.createMessageTable()
-        this.userClient.client?.connect()
     }
 
 
