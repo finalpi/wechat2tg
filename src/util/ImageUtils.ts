@@ -7,10 +7,16 @@ export class ImageUtils {
             const metadata = await image.metadata()
 
             // 检查宽度是否大于 1200px，如果是，则调整宽度为 1200px
-            if (metadata.width && metadata.width > 1200) {
-                return await image
-                    .resize({width: 1200})
-                    .toBuffer()
+            if ((metadata.width && metadata.width > 1200) || (metadata.height && metadata.height > 1200)) {
+                if (metadata.width > metadata.height) {
+                    return await image
+                        .resize({width: 1200})
+                        .toBuffer()
+                } else {
+                    return await image
+                        .resize({height: 1200})
+                        .toBuffer()
+                }
             } else {
                 return buff
             }
