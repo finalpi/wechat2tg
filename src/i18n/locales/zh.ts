@@ -12,6 +12,7 @@ const zh = {
             bind: '查询群组的绑定状态',
             unbind: '解绑群组',
             gs: '群组消息转发',
+            source: '获取原始文件,需要回复微信文件消息',
             aad: '添加允许转发的实体，多个空格隔开。在 bot 聊天使用会给所有的群聊添加',
             als: '列出允许转发的实体',
             arm: '移除允许转发的实体',
@@ -80,6 +81,11 @@ const zh = {
             official: '公众号',
             plzSelectType: '请选择类型:',
         },
+        source: {
+            hint: '请使用 /source 命令回复一个文件消息',
+            needFile: '请回复一个文件消息',
+            fail: '接收原图失败'
+        },
         order: {
             addOrder: '新增指令',
             removeOrder: '移除指令',
@@ -132,6 +138,8 @@ const zh = {
         chooseGroup: '请选择群组(点击添加):',
         blackListRemove: '黑名单列表(点击移除):',
         loginHint: '请输入你的手机号码（需要带国家区号，例如：+8613355558888）',
+        messageExpire: '消息已过期',
+        failReceive: '重新接收失败',
         transFail: '文件转换失败',
         sendFailMsg: '发送失败, {0}',
         sendFailFailMsg: '文件发送失败, {0}',

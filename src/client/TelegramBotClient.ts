@@ -37,6 +37,7 @@ import {OfficialOrderService} from '../service/OfficialOrderService'
 import {Snowflake} from 'nodejs-snowflake'
 import {SetupServiceImpl} from '../service/impl/SetupServiceImpl'
 import {Entity} from 'telegram/define'
+import {ImageUtils} from '../util/ImageUtils'
 
 export class TelegramBotClient extends BaseClient {
     get currentOrder(): string | undefined {
@@ -313,6 +314,7 @@ export class TelegramBotClient extends BaseClient {
             {command: 'order', description: this.t('command.description.order')},
             {command: 'cgdata', description: this.t('command.description.cgdata')},
             {command: 'gs', description: this.t('command.description.gs')},
+            {command: 'source', description: this.t('command.description.source')},
             // todo 暂未实现
             // {command: 'aad', description: this.t('command.description.aad')},
             // {command: 'als', description: this.t('command.description.als')},
@@ -411,6 +413,70 @@ export class TelegramBotClient extends BaseClient {
         bot.command('reset', (ctx) => {
             this._weChatClient.resetValue()
             ctx.reply(this.t('command.resetText'))
+        })
+
+        // 获取原图
+        bot.command('source', async (ctx) => {
+            const msgId = ctx.update.message['reply_to_message']?.message_id
+            if (!msgId) {
+                await ctx.reply(this.t('command.source.hint'))
+                return
+            }
+            const chatId = ctx.chat.id
+            const messageObj = await MessageService.getInstance().findMessageByTelegramMessageId(msgId, chatId)
+            if (!messageObj) {
+                await ctx.reply(this.t('common.messageExpire'), {
+                    reply_parameters: {
+                        message_id: msgId
+                    }
+                })
+                return
+            }
+            const message = await this._weChatClient.client.Message.find({id: messageObj.wechat_message_id})
+            if (!message) {
+                await ctx.reply(this.t('common.messageExpire'), {
+                    reply_parameters: {
+                        message_id: msgId
+                    }
+                })
+                return
+            }
+            if (message.type() === PUPPET.types.Message.Text || message.type() === PUPPET.types.Message.Unknown) {
+                await ctx.reply(this.t('command.source.needFile'))
+                return
+            }
+            // 尝试重新接收
+            let sender = new SenderFactory().createSender(this.bot)
+            const identityStr = SimpleMessageSender.getTitle(message, chatId !== this.chatId)
+            message.toFileBox().then(fBox => {
+                const fileName = fBox.name
+                fBox.toBuffer().then(async buff => {
+                    // 配置了 tg api 尝试发送大文件
+                    if (this.tgClient && fBox.size > 1024 * 1024 * 50) {
+                        sender = new SenderFactory().createSender(this.tgClient.client)
+                    }
+                    sender.sendFile(chatId, {
+                        buff: buff,
+                        filename: fileName,
+                        fileType: 'document',
+                        caption: identityStr
+                    }, {parse_mode: 'HTML', reply_id: msgId}).catch(e => {
+                        ctx.reply(this.t('command.source.fail'), {
+                            reply_parameters: {
+                                message_id: msgId
+                            }
+                        })
+                        return
+                    })
+                })
+            }).catch(() => {
+                ctx.reply(this.t('command.source.fail'), {
+                    reply_parameters: {
+                        message_id: msgId
+                    }
+                })
+                return
+            })
         })
 
         bot.command('order', async (ctx) => {
@@ -1478,12 +1544,12 @@ export class TelegramBotClient extends BaseClient {
             const chatId = ctx.update.callback_query.message.chat.id
             const messageObj = await MessageService.getInstance().findMessageByTelegramMessageId(msgId, chatId)
             if (!messageObj) {
-                await ctx.answerCbQuery('消息已过期')
+                await ctx.answerCbQuery(this.t('common.messageExpire'))
                 return
             }
             const message = await this._weChatClient.client.Message.find({id: messageObj.wechat_message_id})
             if (!message) {
-                await ctx.answerCbQuery('消息已过期')
+                await ctx.answerCbQuery(this.t('common.messageExpire'))
                 return
             }
             ctx.editMessageCaption(this.t('wechat.receivingFile'))
@@ -1503,7 +1569,8 @@ export class TelegramBotClient extends BaseClient {
                         messageType = PUPPET.types.Message.Attachment
                     }
                     if (this.setting.getVariable(VariableType.SETTING_COMPRESSION)) { // 需要判断类型压缩
-                        //
+                        // 压缩图片
+                        const imageUtils = new ImageUtils()
                         switch (messageType) {
                             case PUPPET.types.Message.Image:
                             case PUPPET.types.Message.Audio:
@@ -1511,12 +1578,12 @@ export class TelegramBotClient extends BaseClient {
                             case PUPPET.types.Message.Emoticon:
                             case PUPPET.types.Message.Attachment:
                                 sender.editFile(chatId, msgId, {
-                                    buff: buff,
+                                    buff: messageType === PUPPET.types.Message.Image ? await imageUtils.compressPicture(buff) : buff,
                                     filename: fileName,
                                     fileType: this._weChatClient.getSendTgFileMethodString(messageType),
                                     caption: identityStr
                                 }, {parse_mode: 'HTML'}).catch(e => {
-                                    ctx.answerCbQuery('重新接收失败')
+                                    ctx.answerCbQuery(this.t('common.failReceive'))
                                     this.weChatClient.editSendFailButton(chatId, msgId, this.t('wechat.fileReceivingFailed'))
                                     return
                                 })
@@ -1529,13 +1596,13 @@ export class TelegramBotClient extends BaseClient {
                             fileType: 'document',
                             caption: identityStr
                         }, {parse_mode: 'HTML'}).catch(e => {
-                            ctx.answerCbQuery('重新接收失败')
+                            ctx.answerCbQuery(this.t('common.failReceive'))
                             return
                         })
                     }
                 })
             }).catch(() => {
-                ctx.answerCbQuery('重新接收失败')
+                ctx.answerCbQuery(this.t('common.failReceive'))
                 return
             })
         })

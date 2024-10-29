@@ -34,6 +34,7 @@ import {Markup} from 'telegraf'
 import {parseAppmsgMessagePayload} from '../util/message-appmsg'
 import {Api} from 'telegram'
 import messages = Api.messages
+import {ImageUtils} from '../util/ImageUtils'
 
 
 export class WeChatClient extends BaseClient {
@@ -1212,7 +1213,8 @@ export class WeChatClient extends BaseClient {
                                 messageType = PUPPET.types.Message.Attachment
                             }
                             if (this.tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) { // 需要判断类型压缩
-                                //
+                                // 压缩图片
+                                const imageUtils = new ImageUtils()
                                 switch (messageType) {
                                     case PUPPET.types.Message.Image:
                                     case PUPPET.types.Message.Audio:
@@ -1220,7 +1222,7 @@ export class WeChatClient extends BaseClient {
                                     case PUPPET.types.Message.Emoticon:
                                     case PUPPET.types.Message.Attachment:
                                         sender.editFile(tgMessage.chatId, tempRes.message_id, {
-                                            buff: buff,
+                                            buff: messageType === PUPPET.types.Message.Image ? await imageUtils.compressPicture(buff) : buff,
                                             filename: fileName,
                                             fileType: this.getSendTgFileMethodString(messageType),
                                             caption: identityStr

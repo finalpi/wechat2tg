@@ -12,6 +12,7 @@ const en = {
             bind: 'Check group binding status',
             unbind: 'Unbind group',
             gs: 'Forward group messages',
+            source: 'To get the original file, you need to reply to the WeChat file message',
             order: 'Set up public account shortcuts',
             cgdata: 'Set group avatar and name (requires admin permissions)',
             rcc: 'Reload current contacts (update currently bind user in group chat, bot can add names separated by spaces; if not, update all users ⚠️ may be slow)',
@@ -90,6 +91,11 @@ const en = {
             official: 'Official account',
             plzSelectType: 'Please select a type:',
         },
+        source: {
+            hint: 'Please reply to a file message with the /source command',
+            needFile: 'Please reply to a file message',
+            fail: 'Failed to receive the original image'
+        },
         setting: {
             messageMode: 'Message mode switch({0})',
             messageFallback: 'Send successful feedback({0})',
@@ -129,6 +135,8 @@ const en = {
         chooseGroup: 'Please select a group (click to add):',
         blackListRemove: 'Blacklist (click to remove):',
         loginHint: 'Please enter your mobile phone number (with country code, for example: +18312118576)',
+        messageExpire: 'The message has expired',
+        failReceive: 'Re-receive failed',
         transFail: 'File conversion failed',
         sendFailMsg: 'Send failed, {0}',
         sendFailFailMsg: 'File send failed, {0}',
