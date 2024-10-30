@@ -1337,7 +1337,7 @@ export class TelegramBotClient extends BaseClient {
                 return
             } else {
                 await friend.accept()
-                ctx.deleteMessage().then(() => ctx.reply(this.t('wechat.addSuccess')))
+                ctx.deleteMessage().then(() => ctx.reply(friend.contact().payload.name + this.t('wechat.addSuccess')))
             }
             ctx.answerCbQuery()
         })
