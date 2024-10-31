@@ -627,7 +627,7 @@ export class TelegramBotClient extends BaseClient {
                     return ctx.reply(this.t('command.cgdata.notAdmin'))
                 }
                 if (bindItem.type === 0) {
-                    const contact = this.getContactByBindItem(bindItem)
+                    const contact = await this.getContactByBindItem(bindItem)
                     if (contact) {
                         await ctx.telegram.setChatTitle(ctx.chat.id, `${bindItem.alias}[${bindItem.name}]`)
                         // 获取头像
@@ -1129,10 +1129,10 @@ export class TelegramBotClient extends BaseClient {
                 }
                 const messageItem = await MessageService.getInstance().findMessageByTelegramMessageId(replyMessageId, chatId)
                 const weChatMessageId = messageItem?.wechat_message_id
-                // 设置别名(不可用)
+                // 设置别名(不可用,猜测可能是微信接口发生了变化,调用后的响应是正常的但是未生效) 调用后提示:WARN Contact alias(abccc) sync with server fail: set(abc) is not equal to get()
                 // if (text.startsWith('&alias') && weChatMessageId) {
-                // this.setAlias(weChatMessageId, text, ctx)
-                // return
+                //     this.setAlias(weChatMessageId, text, ctx)
+                //     return
                 // }
 
                 if (weChatMessageId) {
@@ -1171,7 +1171,7 @@ export class TelegramBotClient extends BaseClient {
                         return
                     }
                     if (bindItem.type === 0) {
-                        const contact = this.getContactByBindItem(bindItem)
+                        const contact = await this.getContactByBindItem(bindItem)
                         if (contact) {
                             this.weChatClient.addMessage(contact, text, {
                                 chat_id: chatId,
@@ -1179,7 +1179,7 @@ export class TelegramBotClient extends BaseClient {
                             })
                         }
                     } else {
-                        const room = this.getRoomByBindItem(bindItem)
+                        const room = await this.getRoomByBindItem(bindItem)
                         if (room) {
                             this.weChatClient.addMessage(room, text, {
                                 chat_id: chatId,
@@ -2074,40 +2074,12 @@ export class TelegramBotClient extends BaseClient {
         this._tgUserClient?.start(authParams)
     }
 
-    public getRoomByBindItem(bindItem: BindItem) {
-        const room = this.weChatClient.roomList.find(value => value.id === bindItem.bind_id)
-        if (room) {
-            return room.room
-        }
-        return null
+    public async getRoomByBindItem(bindItem: BindItem) {
+        return await this.weChatClient.client.Room.find({id: bindItem.wechat_id})
     }
 
-    public getContactByBindItem(bindItem: BindItem) {
-        let findItem: ContactItem | undefined = undefined
-        const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
-        if (individual) {
-            for (const contactItem of individual) {
-                if (contactItem.id === bindItem.bind_id) {
-                    findItem = contactItem
-                    break
-                }
-            }
-        }
-        const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
-        if (!findItem) {
-            if (official) {
-                for (const contactItem of official) {
-                    if (contactItem.id === bindItem.bind_id) {
-                        findItem = contactItem
-                        break
-                    }
-                }
-            }
-        }
-        if (findItem) {
-            return findItem.contact
-        }
-        return null
+    public async getContactByBindItem(bindItem: BindItem) {
+        return await this.weChatClient.client.Contact.find({id: bindItem.wechat_id})
     }
 
     private async botLaunch(bot: Telegraf, retryCount = 5) {
@@ -2154,7 +2126,6 @@ export class TelegramBotClient extends BaseClient {
                 const weChatMessageId = messageItem.wechat_message_id
                 if (weChatMessageId) {
                     // 添加或者移除名单
-
                     this.weChatClient.client.Message.find({id: weChatMessageId}).then(message => {
                         if (!message) {
                             ctx.reply(this.t('common.sendFail'), {
@@ -2185,36 +2156,34 @@ export class TelegramBotClient extends BaseClient {
                         return
                     }
                     if (bindItem.type === 0) {
-                        const findItem: ContactInterface | undefined = undefined
-                        const individual = this.weChatClient.contactMap?.get(ContactImpl.Type.Individual)
-                        individual?.forEach(value => {
-                            if (value.id === bindItem.bind_id) {
-                                this.weChatClient.addMessage(value.contact, fileBox, {
-                                    chat_id: ctx.chat.id,
-                                    msg_id: ctx.message.message_id
-                                })
-                                return
-                            }
-                        })
-                        const official = this.weChatClient.contactMap?.get(ContactImpl.Type.Official)
-                        if (!findItem) {
-                            official?.forEach(value => {
-                                if (value.id === bindItem.bind_id) {
-                                    this.weChatClient.addMessage(value.contact, fileBox, {
-                                        chat_id: ctx.chat.id,
-                                        msg_id: ctx.message.message_id
-                                    })
-                                    return
-                                }
-                            })
-                        }
-                    } else {
-                        const room = this.weChatClient.roomList.find(value => value.id === bindItem.bind_id)
-                        if (room) {
-                            this.weChatClient.addMessage(room.room, fileBox, {
+                        const contact = await this.getContactByBindItem(bindItem)
+                        if (contact) {
+                            this.weChatClient.addMessage(contact, fileBox, {
                                 chat_id: ctx.chat.id,
                                 msg_id: ctx.message.message_id
                             })
+                            const text = ctx.message.caption
+                            if (text) {
+                                this.weChatClient.addMessage(contact, text, {
+                                    chat_id: ctx.chat.id,
+                                    msg_id: ctx.message.message_id
+                                })
+                            }
+                        }
+                    } else {
+                        const room = await this.getRoomByBindItem(bindItem)
+                        if (room) {
+                            this.weChatClient.addMessage(room, fileBox, {
+                                chat_id: ctx.chat.id,
+                                msg_id: ctx.message.message_id
+                            })
+                            const text = ctx.message.caption
+                            if (text) {
+                                this.weChatClient.addMessage(room, text, {
+                                    chat_id: ctx.chat.id,
+                                    msg_id: ctx.message.message_id
+                                })
+                            }
                         }
                     }
                 } else {
@@ -2796,7 +2765,7 @@ export class TelegramBotClient extends BaseClient {
                     return
                 }
                 if (bindItem.type === 0) {
-                    const contact = this.getContactByBindItem(bindItem)
+                    const contact = await this.getContactByBindItem(bindItem)
                     if (contact) {
                         this.weChatClient.addMessage(contact, fileBox, {
                             chat_id: ctx.chat.id,
@@ -2816,7 +2785,7 @@ export class TelegramBotClient extends BaseClient {
                         }
                     }
                 } else {
-                    const room = this.getRoomByBindItem(bindItem)
+                    const room = await this.getRoomByBindItem(bindItem)
                     if (room) {
                         this.weChatClient.addMessage(room, fileBox, {
                             chat_id: ctx.chat.id,

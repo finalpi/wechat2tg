@@ -5,7 +5,7 @@ export class SimpleMessageSendQueueHelper {
     private loopTime = 503
     private processFlag = false
     // 消息最大重试次数
-    private messageMaxRetries = 3
+    private messageMaxRetries = 2
 
     constructor(sendFunction: (...args) => Promise<any>, interval: number) {
         this.sendFunction = sendFunction

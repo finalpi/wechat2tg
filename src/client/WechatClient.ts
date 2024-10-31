@@ -220,7 +220,7 @@ export class WeChatClient extends BaseClient {
                     }
                 }
                 resolve(msg)
-            }).catch(() => {
+            }).catch(e => {
                 if (this.tgClient.tgUserClientLogin) {
                     MessageService.getInstance().findMessageByTelegramMessageId(extra.msg_id, extra.chat_id).then(item => {
                         if (item && item.telegram_user_message_id) {
@@ -244,7 +244,7 @@ export class WeChatClient extends BaseClient {
                     })
                 }
 
-                reject()
+                reject(e)
             })
         })
     }
