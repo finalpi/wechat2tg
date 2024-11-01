@@ -316,7 +316,7 @@ export class TelegramBotClient extends BaseClient {
             {command: 'gs', description: this.t('command.description.gs')},
             {command: 'source', description: this.t('command.description.source')},
             // todo 暂未实现
-            // {command: 'aad', description: this.t('command.description.aad')},
+            {command: 'aad', description: this.t('command.description.aad')},
             // {command: 'als', description: this.t('command.description.als')},
             // {command: 'arm', description: this.t('command.description.arm')},
             {command: 'reset', description: this.t('command.description.reset')},
@@ -694,7 +694,7 @@ export class TelegramBotClient extends BaseClient {
                     return it
                 } else {
                     const username = it.trim().replace('@', '')
-                    const en = await this.tgClient.client.getEntity(username)
+                    const en = await this.tgUserClient.client.getEntity(username)
                     return en?.id.toString()
                 }
             }))
@@ -1096,6 +1096,10 @@ export class TelegramBotClient extends BaseClient {
 
         bot.on(message('text'), async ctx => {
             const text = ctx.message.text // 获取消息内容
+            // 其他 bot 的命令会进来，不处理
+            if (text.match(/^\/\w+/)) {
+                return
+            }
             const replyMessageId = ctx.update.message['reply_to_message']?.message_id
             const chatId = ctx.chat.id
             const msgId = ctx.message.message_id

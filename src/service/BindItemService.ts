@@ -44,30 +44,42 @@ export class BindItemService extends AbstractSqlService {
      */
     public async addAllowEntityByChat(chatId: number, allows: string[]) {
         this.db.serialize(() => {
-            let allowEntitiesJsonArraySql = ''
-            const params = []
-            for (let i = 0; i < allows.length; i++) {
-                const sql = `'$[' || (json_array_length(allow_entities) + ${i}) || ']', ?`
-                params.push(allows[i])
-                if (i !== allows.length - 1) {
-                    allowEntitiesJsonArraySql += sql + ','
-                } else {
-                    allowEntitiesJsonArraySql += sql
-                }
-            }
-            const updateAllowEntitiesSql = `json_insert(allow_entities, ${allowEntitiesJsonArraySql})`
-            const sql = chatId ? `UPDATE tb_bind_item
-                                  SET allow_entities = ${updateAllowEntitiesSql}
-                                  WHERE chat_id = ?`
-                : `UPDATE tb_bind_item
-                   SET allow_entities = ${updateAllowEntitiesSql}`
-            if (chatId) {
-                params.push(chatId)
-            }
-            console.log('SQL:', sql)
-            console.log('Params:', params)
-            this.db.prepare(sql, params).run().finalize((err) => {
+            // 查询已经存在的 allow_entities
+            this.db.get('SELECT json_array(allow_entities) FROM tb_bind_item WHERE chat_id = ?', [chatId], (err, row) => {
                 this.logError('addAllowEntityByChat Error: ', err)
+                let exitAllows: string[] = []
+                if (row) {
+                    exitAllows = row as string[]
+                }
+                exitAllows.push(...allows)
+                // 去处重复元素
+                const insertAllows = Array.from(new Set(exitAllows))
+
+                let allowEntitiesJsonArraySql = ''
+                const params = []
+                for (let i = 0; i < insertAllows.length; i++) {
+                    const sql = `'$[' || (json_array_length(allow_entities) + ${i}) || ']', ?`
+                    params.push(insertAllows[i])
+                    if (i !== insertAllows.length - 1) {
+                        allowEntitiesJsonArraySql += sql + ','
+                    } else {
+                        allowEntitiesJsonArraySql += sql
+                    }
+                }
+                const updateAllowEntitiesSql = `json_insert(allow_entities, ${allowEntitiesJsonArraySql})`
+                const sql = chatId ? `UPDATE tb_bind_item
+                                      SET allow_entities = ${updateAllowEntitiesSql}
+                                      WHERE chat_id = ?`
+                    : `UPDATE tb_bind_item
+                       SET allow_entities = ${updateAllowEntitiesSql}`
+                if (chatId) {
+                    params.push(chatId)
+                }
+                // console.log('SQL:', sql)
+                // console.log('Params:', params)
+                this.db.prepare(sql, params).run().finalize((err) => {
+                    this.logError('addAllowEntityByChat Error: ', err)
+                })
             })
         })
     }
