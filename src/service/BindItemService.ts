@@ -210,7 +210,7 @@ export class BindItemService extends AbstractSqlService {
                 // 更新群组名称
                 await this.tgBotClient.telegram.setChatTitle(bindItem.chat_id, `${newBindItem.alias}[${newBindItem.name}]`)
             }
-            if (bindItem.avatar !== newBindItem.avatar) {
+            if (bindItem.avatar !== newBindItem.avatar && bindItem.type === 0) {
                 // 更新头像
                 const contact = await this.wechatyInterface.Contact.find({
                     id: newBindItem.wechat_id

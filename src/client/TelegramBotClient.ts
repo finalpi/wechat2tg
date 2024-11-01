@@ -1116,7 +1116,7 @@ export class TelegramBotClient extends BaseClient {
                     || (Array.isArray(bind?.allow_entities)
                         && bind?.allow_entities.includes(ctx?.message?.from?.id.toString())))
             if (forwardMessage) {
-                if (bind.forward === 0) {
+                if (bind && bind.forward === 0) {
                     return
                 }
             }
