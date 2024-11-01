@@ -77,6 +77,7 @@ export class BindItemService extends AbstractSqlService {
         const individual = contactMap?.get(ContactImpl.Type.Individual)
         const official = contactMap?.get(ContactImpl.Type.Official)
         for (const bindItem of allBindItem) {
+            // 绑定联系人
             if (bindItem.type === 0) {
                 if (individual) {
                     let find
@@ -86,6 +87,7 @@ export class BindItemService extends AbstractSqlService {
                             break
                         }
                     }
+                    // 先根据 wechat_id 绑定
                     if (find) {
                         const name = find.contact.payload?.name
                         this.bindGroup({
@@ -99,6 +101,7 @@ export class BindItemService extends AbstractSqlService {
                         })
                         continue
                     }
+                    // 再根据备注绑定
                     if (bindItem.alias && bindItem.alias !== '') {
                         const aliasList = []
                         for (const contactItem of individual) {
@@ -110,7 +113,7 @@ export class BindItemService extends AbstractSqlService {
                             }
                         }
                         if (find) {
-                            // 处理同别名的情况
+                            // 如果存在多个别名相同的用户,再根据微信名绑定
                             if (aliasList.length > 1) {
                                 for (const aliasListElement of aliasList) {
                                     if (aliasListElement.contact.payload?.name === bindItem.name) {
@@ -138,6 +141,7 @@ export class BindItemService extends AbstractSqlService {
                             break
                         }
                     }
+                    // 最后根据昵称进行绑定
                     if (find) {
                         const name = find.contact.payload?.name
                         this.bindGroup({
@@ -152,6 +156,7 @@ export class BindItemService extends AbstractSqlService {
                         continue
                     }
                 }
+                // 公众号绑定
                 if (official) {
                     let find
                     for (const contactItem of official) {
@@ -216,6 +221,7 @@ export class BindItemService extends AbstractSqlService {
                 }
                 this.bindErr(bindItem.chat_id)
             } else {
+                // 群组绑定
                 let room = roomList.find(item => item.room.id === bindItem.wechat_id)
                 if (room) {
                     const topic = room.room.payload?.topic
@@ -243,13 +249,6 @@ export class BindItemService extends AbstractSqlService {
                     })
                     continue
                 }
-                // 如果找不到则删除该元素
-                // await this.tgBotClient.telegram.sendMessage(bindItem.chat_id, '找不到对应的绑定信息,请使用 /room 或者 /user 命令将联系人或者群组绑定').catch(e=>{
-                //     if (e.response.error_code === 403 && bindItem){
-                //         this.removeBindItemByChatId(bindItem.chat_id)
-                //         return
-                //     }
-                // })
                 this.bindErr(bindItem.chat_id)
             }
         }
@@ -261,8 +260,8 @@ export class BindItemService extends AbstractSqlService {
         stmt.finalize()
     }
 
+    // 如果item别名或者头像变化则更新
     public async updateGroupData(bindItem: BindItem, newBindItem: BindItem) {
-        // 如果item别名或者头像变化则更新
         // 获取群组管理员列表
         const administrators = await this.tgBotClient.telegram.getChatAdministrators(bindItem.chat_id)
 
@@ -388,7 +387,7 @@ export class BindItemService extends AbstractSqlService {
         })
     }
 
-
+    // 重新绑定,如果之前有绑定失败的群组,那么下次接受到消息就会重新绑定,防止多次创建群组
     public reBind(createGroupInterface: CreateGroupInterface): Promise<BindItem | undefined> {
         return new Promise(resolve => {
             let alias = ''
@@ -468,9 +467,9 @@ export class BindItemService extends AbstractSqlService {
         })
     }
 
-    // 你在写你妈呢 草！！
+    // 绑定到tg群组
     public bindGroup(bind: BindItem) {
-        // 群组绑定
+        // 提取头像的特征码存到数据库
         if (bind.avatar) {
             bind.avatar = this.getseq(bind.avatar)
         } else {
@@ -500,16 +499,6 @@ export class BindItemService extends AbstractSqlService {
             )
             stmt1.finalize()
         })
-
-        // this.tgBotClient.telegram.sendMessage(chatId, `绑定成功:${name}`,{disable_notification: true}).then(ctx => {
-        //     setTimeout(() => {
-        //         this.tgBotClient.telegram.deleteMessage(chatId, ctx.message_id)
-        //     }, 10 * 1000)
-        // }).catch(e => {
-        //     if (e.response.error_code === 403) {
-        //         this.removeBindItemByChatId(chatId)
-        //     }
-        // })
 
         // 创建对象
         const bindItem: BindItem = {
@@ -570,8 +559,8 @@ export class BindItemService extends AbstractSqlService {
     }
 
     /**
-     * 根据微信Id查询BindItem （这是item实例的id...）
-     * @param bindId
+     * 根据微信Id查询BindItem
+     * @param wechatId 微信id
      */
     public getBindItemByWechatId(wechatId: string): Promise<BindItem> {
         return new Promise((resolve, reject) => {

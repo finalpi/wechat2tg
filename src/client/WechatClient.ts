@@ -537,21 +537,18 @@ export class WeChatClient extends BaseClient {
                     return
                 }
             }
-            // 找到bindId
+            // 在缓存中查找群组 bindId已弃用
+            const roomItemFind = this._roomList.find(i => i.room.id === roomEntity.id)
             let bindId
-            for (const roomItem of this._roomList) {
-                if (roomItem.room.id === roomEntity.id) {
-                    bindId = roomItem.id
-                    break
-                }
-            }
-            if (!bindId) {
+            if (!roomItemFind) {
                 // 找不到该群组,直接将群组加进缓存生成新id
                 bindId = UniqueIdGenerator.getInstance().generateId('room')
                 this._roomList.push({
                     id: bindId,
                     room: roomEntity
                 })
+            } else {
+                bindId = roomItemFind.id
             }
             bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(roomEntity.id)
             if (!bindItem && this.cacheMemberDone && this._tgClient.tgUserClientLogin && message.text() !== '' && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)) {
@@ -581,7 +578,7 @@ export class WeChatClient extends BaseClient {
             } else {
                 bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
             }
-            // 找到bindId
+            // 在缓存中查找公众号
             let bindId
             if (talker?.type() === PUPPET.types.Contact.Official) {
                 const official = this.contactMap?.get(ContactImpl.Type.Official)
