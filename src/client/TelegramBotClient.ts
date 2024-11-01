@@ -676,9 +676,9 @@ export class TelegramBotClient extends BaseClient {
         bot.command('gs', async (ctx) => {
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 this.bindItemService.getBindItemByChatId(ctx.chat.id).then(bindItem => {
-                    const forward = bindItem.forward === 1 ? 0 : 1
+                    const forward = Number(bindItem.forward) === 1 ? 0 : 1
                     this.bindItemService.updateBindItem(ctx.chat.id.toString(), {forward: forward})
-                    ctx.reply(this.t('command.gs',
+                    ctx.reply(this.t('common.gs',
                         forward === 1 ? this.t('common.open') : this.t('common.close')))
                 })
             } else {
@@ -1120,7 +1120,7 @@ export class TelegramBotClient extends BaseClient {
                     || (Array.isArray(bind?.allow_entities)
                         && bind?.allow_entities.includes(ctx?.message?.from?.id.toString())))
             if (forwardMessage) {
-                if (bind && bind.forward === 0) {
+                if (Number(bind?.forward) === 0) {
                     return
                 }
             }

@@ -38,12 +38,12 @@ export default class I18n {
     }
 
     public t(key: string, ...args: (string | number)[]): string {
-        return this.getNestedTranslation(this.translations, key.split('.')).replace(/{(\d+)}/g, (match, index) => {
+        return this.getNestedTranslation(this.translations, key?.split('.')).replace(/{(\d+)}/g, (match, index) => {
             return typeof args[index] !== 'undefined' ? args[index].toString() : match
         }) || key
     }
 
     private getNestedTranslation(translations: Translations, keys: string[]): any {
-        return keys.reduce((result, key) => result ? result[key] : undefined, translations)
+        return keys?.reduce((result, key) => result ? result[key] : undefined, translations)
     }
 }
