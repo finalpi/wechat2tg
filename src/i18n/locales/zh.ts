@@ -1,5 +1,11 @@
 const zh = {
     command: {
+        aad: {
+            success: '添加成功',
+            fail: '添加失败',
+            exist: '已存在',
+            noUser: '没有用户',
+        },
         description: {
             help: '使用说明',
             start: '开始',

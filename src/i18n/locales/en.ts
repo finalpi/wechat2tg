@@ -1,5 +1,11 @@
 const en = {
     command: {
+        aad: {
+            success: 'add successfully',
+            fail: 'add failed',
+            exist: 'exists',
+            noUser: 'there is no user',
+        },
         description: {
             help: 'Help',
             start: 'Start',

@@ -39,14 +39,17 @@ export class BindItemService extends AbstractSqlService {
 
     /**
      * 更新 chatId 的 allow_entities ！！注意没有 chatId 会更新所有的
-     * @param chatId 群聊id
+     * @param chatId 群聊id -1 为更新所有
      * @param allows
      */
     public async addAllowEntityByChat(chatId: number, allows: string[]) {
         this.db.serialize(() => {
             // 查询已经存在的 allow_entities
             this.db.get('SELECT json_array(allow_entities) FROM tb_bind_item WHERE chat_id = ?', [chatId], (err, row) => {
-                this.logError('addAllowEntityByChat Error: ', err)
+                if (err) {
+                    this.logError('addAllowEntityByChat Error: ', err)
+                    throw err
+                }
                 let exitAllows: string[] = []
                 if (row) {
                     exitAllows = row as string[]
@@ -58,7 +61,7 @@ export class BindItemService extends AbstractSqlService {
                 let allowEntitiesJsonArraySql = ''
                 const params = []
                 for (let i = 0; i < insertAllows.length; i++) {
-                    const sql = `'$[' || (json_array_length(allow_entities) + ${i}) || ']', ?`
+                    const sql = `'$[' || (json_array_length(COALESCE(allow_entities, '[]')) + ${i}) || ']', ?`
                     params.push(insertAllows[i])
                     if (i !== insertAllows.length - 1) {
                         allowEntitiesJsonArraySql += sql + ','
@@ -66,19 +69,23 @@ export class BindItemService extends AbstractSqlService {
                         allowEntitiesJsonArraySql += sql
                     }
                 }
-                const updateAllowEntitiesSql = `json_insert(allow_entities, ${allowEntitiesJsonArraySql})`
-                const sql = chatId ? `UPDATE tb_bind_item
+                // json_array_append(COALESCE(allow_entities, '[]'), '$', ?)
+                const updateAllowEntitiesSql = `json_insert(COALESCE(allow_entities, '[]'), ${allowEntitiesJsonArraySql})`
+                const sql = chatId !== -1 ? `UPDATE tb_bind_item
                                       SET allow_entities = ${updateAllowEntitiesSql}
                                       WHERE chat_id = ?`
                     : `UPDATE tb_bind_item
                        SET allow_entities = ${updateAllowEntitiesSql}`
-                if (chatId) {
+                if (chatId !== -1) {
                     params.push(chatId)
                 }
                 // console.log('SQL:', sql)
                 // console.log('Params:', params)
                 this.db.prepare(sql, params).run().finalize((err) => {
-                    this.logError('addAllowEntityByChat Error: ', err)
+                    if (err) {
+                        this.logError('addAllowEntityByChat Error: ', err)
+                        throw err
+                    }
                 })
             })
         })
@@ -445,11 +452,10 @@ export class BindItemService extends AbstractSqlService {
             stmt.run(bind.wechat_id, bind.chat_id)
             stmt.finalize()
 
-            const stmt1 = this.db.prepare(`INSERT INTO tb_bind_item (
-                name, chat_id, type, bind_id, alias, wechat_id, 
-                avatar, has_bound, forward, avatar_hash, allow_entities, room_number
-            ) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?)`)
+            const stmt1 = this.db.prepare(`INSERT INTO tb_bind_item (name, chat_id, type, bind_id, alias, wechat_id,
+                                                                     avatar, has_bound, forward, avatar_hash,
+                                                                     allow_entities, room_number)
+                                           VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?)`)
             stmt1.run(
                 bind.name, bind.chat_id, bind.type,
                 bind.bind_id, bind.alias, bind.wechat_id, bind.avatar, bind.avatar_hash, bind.allow_entities, bind.room_number

@@ -704,7 +704,7 @@ export class TelegramBotClient extends BaseClient {
             }
             // 在bot的聊天使用添加到全部的群组
             if (ctx.chat.id === this._chatId) {
-                this.bindItemService.addAllowEntityByChat(null, allows).then(() => {
+                this.bindItemService.addAllowEntityByChat(-1, allows).then(() => {
                     ctx.reply(this.t('command.aad.success'))
                 }).catch(() => {
                     ctx.reply(this.t('command.aad.fail'))
