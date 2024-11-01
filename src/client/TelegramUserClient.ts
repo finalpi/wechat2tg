@@ -223,7 +223,8 @@ export class TelegramUserClient extends TelegramClient {
                     bind_id: createGroupInterface.bindId ? createGroupInterface.bindId : '',
                     alias: '',
                     wechat_id: createGroupInterface.room?.id ? createGroupInterface.room?.id : '',
-                    avatar: ''
+                    avatar: createGroupInterface.room?.payload.avatar,
+                    room_number: createGroupInterface.room?.payload.memberIdList.length
                 })
             }
         }

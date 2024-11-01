@@ -918,7 +918,8 @@ export class TelegramBotClient extends BaseClient {
                     bind_id: room.id,
                     alias: '',
                     wechat_id: room.room.id,
-                    avatar: ''
+                    avatar: room.room.payload.avatar,
+                    room_number: room.room.payload.memberIdList.length
                 })
                 ctx.deleteMessage()
                 ctx.answerCbQuery()
@@ -1738,7 +1739,8 @@ export class TelegramBotClient extends BaseClient {
                                 bind_id: roomItem.id,
                                 alias: '',
                                 wechat_id: room.id,
-                                avatar: ''
+                                avatar: room.room.payload.avatar,
+                                room_number: room.room.payload.memberIdList.length
                             })
                         }
                         ctx.answerCbQuery()
@@ -1767,7 +1769,8 @@ export class TelegramBotClient extends BaseClient {
                                 bind_id: roomItem.id,
                                 alias: '',
                                 wechat_id: data.talker.id,
-                                avatar: ''
+                                avatar: roomItem.room.payload.avatar,
+                                room_number: roomItem.room.payload.memberIdList.length
                             })
                         }
                         ctx.deleteMessage()
