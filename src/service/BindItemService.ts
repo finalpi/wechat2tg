@@ -8,6 +8,8 @@ import * as fs from 'fs'
 import {Contact, Room} from 'wechaty'
 import DynamicService from './DynamicService'
 import {CreateGroupInterface} from '../model/CreateGroupInterface'
+import {Api} from 'telegram'
+import Contacts = Api.contacts.Contacts
 
 export class BindItemService extends AbstractSqlService {
     private tgBotClient: Telegraf
@@ -119,20 +121,46 @@ export class BindItemService extends AbstractSqlService {
                 if (find) {
                     // 如果存在多个别名相同的用户,再根据微信名绑定
                     if (aliasList.length > 1) {
-                        find = aliasList.find(i => i.contact.payload?.name === bindItem.name)
+                        const nameContactList: ContactItem[] = []
+                        for (const contactItem of aliasList) {
+                            if (contactItem.contact.payload?.name === bindItem.name) {
+                                nameContactList.push(contactItem)
+                            }
+                        }
+                        // 根据昵称进行绑定,如果昵称一样,则根据头像绑定
+                        if (nameContactList.length === 1) {
+                            find = nameContactList[0]
+                            this.bindContact(find, bindItem)
+                            return find
+                        } else if (nameContactList.length > 1) {
+                            find = nameContactList.find(i => this.getseq(i.contact.payload.avatar) === bindItem.avatar)
+                            if (!find) {
+                                find = nameContactList[0]
+                            }
+                            this.bindContact(find, bindItem)
+                            return find
+                        }
                     }
                     this.bindContact(find, bindItem)
                     return find
                 }
             }
+            const nameContactList: ContactItem[] = []
             for (const contactItem of contacts) {
                 if (contactItem.contact.payload?.name === bindItem.name) {
-                    find = contactItem
-                    break
+                    nameContactList.push(contactItem)
                 }
             }
-            // 最后根据昵称进行绑定
-            if (find) {
+            // 最后根据昵称进行绑定,如果昵称一样,则根据头像绑定
+            if (nameContactList.length === 1) {
+                find = nameContactList[0]
+                this.bindContact(find, bindItem)
+                return find
+            } else if (nameContactList.length > 1) {
+                find = nameContactList.find(i => this.getseq(i.contact.payload.avatar) === bindItem.avatar)
+                if (!find) {
+                    find = nameContactList[0]
+                }
                 this.bindContact(find, bindItem)
                 return find
             }
