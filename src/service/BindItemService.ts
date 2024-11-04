@@ -39,36 +39,117 @@ export class BindItemService extends AbstractSqlService {
 
     /**
      * 更新 chatId 的 allow_entities ！！注意没有 chatId 会更新所有的
-     * @param chatId 群聊id
+     * @param chatId 群聊id -1 为更新所有
      * @param allows
      */
     public async addAllowEntityByChat(chatId: number, allows: string[]) {
         this.db.serialize(() => {
-            let allowEntitiesJsonArraySql = ''
-            const params = []
-            for (let i = 0; i < allows.length; i++) {
-                const sql = `'$[' || (json_array_length(allow_entities) + ${i}) || ']', ?`
-                params.push(allows[i])
-                if (i !== allows.length - 1) {
-                    allowEntitiesJsonArraySql += sql + ','
-                } else {
-                    allowEntitiesJsonArraySql += sql
+            // 查询已经存在的 allow_entities
+            this.db.get('SELECT json_array(allow_entities) FROM tb_bind_item WHERE chat_id = ?', [chatId], (err, row) => {
+                if (err) {
+                    this.logError('addAllowEntityByChat Error: ', err)
+                    throw err
+                }
+                let exitAllows: string[] = []
+                if (row) {
+                    exitAllows = row as string[]
+                }
+                exitAllows.push(...allows)
+                // 去处重复元素
+                const insertAllows = Array.from(new Set(exitAllows))
+
+                let allowEntitiesJsonArraySql = ''
+                const params = []
+                for (let i = 0; i < insertAllows.length; i++) {
+                    const sql = `'$[' || (json_array_length(COALESCE(allow_entities, '[]')) + ${i}) || ']', ?`
+                    params.push(insertAllows[i])
+                    if (i !== insertAllows.length - 1) {
+                        allowEntitiesJsonArraySql += sql + ','
+                    } else {
+                        allowEntitiesJsonArraySql += sql
+                    }
+                }
+                // json_array_append(COALESCE(allow_entities, '[]'), '$', ?)
+                const updateAllowEntitiesSql = `json_insert(COALESCE(allow_entities, '[]'), ${allowEntitiesJsonArraySql})`
+                const sql = chatId !== -1 ? `UPDATE tb_bind_item
+                                      SET allow_entities = ${updateAllowEntitiesSql}
+                                      WHERE chat_id = ?`
+                    : `UPDATE tb_bind_item
+                       SET allow_entities = ${updateAllowEntitiesSql}`
+                if (chatId !== -1) {
+                    params.push(chatId)
+                }
+                // console.log('SQL:', sql)
+                // console.log('Params:', params)
+                this.db.prepare(sql, params).run().finalize((err) => {
+                    if (err) {
+                        this.logError('addAllowEntityByChat Error: ', err)
+                        throw err
+                    }
+                })
+            })
+        })
+    }
+
+    public bindContacts(bindItem: BindItem, contacts: Set<ContactItem>): ContactItem | undefined {
+        if (contacts) {
+            let find
+            for (const contactItem of contacts) {
+                if (contactItem.contact.id === bindItem.wechat_id) {
+                    find = contactItem
+                    break
                 }
             }
-            const updateAllowEntitiesSql = `json_insert(allow_entities, ${allowEntitiesJsonArraySql})`
-            const sql = chatId ? `UPDATE tb_bind_item
-                                  SET allow_entities = ${updateAllowEntitiesSql}
-                                  WHERE chat_id = ?`
-                : `UPDATE tb_bind_item
-                   SET allow_entities = ${updateAllowEntitiesSql}`
-            if (chatId) {
-                params.push(chatId)
+            // 先根据 wechat_id 绑定
+            if (find) {
+                this.bindContact(find, bindItem)
+                return find
             }
-            console.log('SQL:', sql)
-            console.log('Params:', params)
-            this.db.prepare(sql, params).run().finalize((err) => {
-                this.logError('addAllowEntityByChat Error: ', err)
-            })
+            // 再根据备注绑定
+            if (bindItem.alias && bindItem.alias !== '') {
+                const aliasList = []
+                for (const contactItem of contacts) {
+                    if (contactItem.contact.payload?.alias === bindItem.alias) {
+                        if (!find) {
+                            find = contactItem
+                        }
+                        aliasList.push(contactItem)
+                    }
+                }
+                if (find) {
+                    // 如果存在多个别名相同的用户,再根据微信名绑定
+                    if (aliasList.length > 1) {
+                        find = aliasList.find(i => i.contact.payload?.name === bindItem.name)
+                    }
+                    this.bindContact(find, bindItem)
+                    return find
+                }
+            }
+            for (const contactItem of contacts) {
+                if (contactItem.contact.payload?.name === bindItem.name) {
+                    find = contactItem
+                    break
+                }
+            }
+            // 最后根据昵称进行绑定
+            if (find) {
+                this.bindContact(find, bindItem)
+                return find
+            }
+            this.bindErr(bindItem.chat_id)
+        }
+    }
+
+    private bindContact(find, bindItem: BindItem) {
+        const name = find.contact.payload?.name
+        this.bindGroup({
+            name: name ? name : '',
+            chat_id: bindItem.chat_id,
+            type: bindItem.type,
+            bind_id: find.id,
+            alias: find.contact.payload?.alias ? find.contact.payload.alias : '',
+            wechat_id: find.contact.id,
+            avatar: find.contact.payload?.avatar ? find.contact.payload?.avatar : ''
         })
     }
 
@@ -77,182 +158,55 @@ export class BindItemService extends AbstractSqlService {
         const individual = contactMap?.get(ContactImpl.Type.Individual)
         const official = contactMap?.get(ContactImpl.Type.Official)
         for (const bindItem of allBindItem) {
+            // 绑定联系人
             if (bindItem.type === 0) {
-                if (individual) {
-                    let find
-                    for (const contactItem of individual) {
-                        if (contactItem.contact.id === bindItem.wechat_id) {
-                            find = contactItem
-                            break
-                        }
-                    }
-                    if (find) {
-                        const name = find.contact.payload?.name
-                        this.bindGroup({
-                            name: name ? name : '',
-                            chat_id: bindItem.chat_id,
-                            type: bindItem.type,
-                            bind_id: find.id,
-                            alias: find.contact.payload?.alias ? find.contact.payload.alias : '',
-                            wechat_id: find.contact.id,
-                            avatar: find.contact.payload?.avatar ? find.contact.payload?.avatar : ''
-                        })
-                        continue
-                    }
-                    if (bindItem.alias && bindItem.alias !== '') {
-                        const aliasList = []
-                        for (const contactItem of individual) {
-                            if (contactItem.contact.payload?.alias === bindItem.alias) {
-                                if (!find) {
-                                    find = contactItem
-                                }
-                                aliasList.push(contactItem)
-                            }
-                        }
-                        if (find) {
-                            // 处理同别名的情况
-                            if (aliasList.length > 1) {
-                                for (const aliasListElement of aliasList) {
-                                    if (aliasListElement.contact.payload?.name === bindItem.name) {
-                                        find = aliasListElement
-                                        break
-                                    }
-                                }
-                            }
-                            const name = find.contact.payload?.name
-                            this.bindGroup({
-                                name: name ? name : '',
-                                chat_id: bindItem.chat_id,
-                                type: bindItem.type,
-                                bind_id: find.id,
-                                alias: find.contact.payload?.alias ? find.contact.payload.alias : '',
-                                wechat_id: find.contact.id,
-                                avatar: find.contact.payload?.avatar ? find.contact.payload?.avatar : ''
-                            })
-                            continue
-                        }
-                    }
-                    for (const contactItem of individual) {
-                        if (contactItem.contact.payload?.name === bindItem.name) {
-                            find = contactItem
-                            break
-                        }
-                    }
-                    if (find) {
-                        const name = find.contact.payload?.name
-                        this.bindGroup({
-                            name: name ? name : '',
-                            chat_id: bindItem.chat_id,
-                            type: bindItem.type,
-                            bind_id: find.id,
-                            alias: find.contact.payload?.alias ? find.contact.payload.alias : '',
-                            wechat_id: find.contact.id,
-                            avatar: find.contact.payload?.avatar ? find.contact.payload?.avatar : ''
-                        })
-                        continue
-                    }
+                const find = this.bindContacts(bindItem, individual)
+                if (!find) {
+                    this.bindContacts(bindItem, official)
                 }
-                if (official) {
-                    let find
-                    for (const contactItem of official) {
-                        if (contactItem.contact.id === bindItem.wechat_id) {
-                            find = contactItem
-                            break
-                        }
-                    }
-                    if (find) {
-                        const name = find.contact.payload?.name
-                        this.bindGroup({
-                            name: name ? name : '',
-                            chat_id: bindItem.chat_id,
-                            type: bindItem.type,
-                            bind_id: find.id,
-                            alias: find.contact.payload?.alias ? find.contact.payload.alias : '',
-                            wechat_id: find.contact.id,
-                            avatar: find.contact.payload?.avatar ? find.contact.payload?.avatar : ''
-                        })
-                        continue
-                    }
-                    if (bindItem.alias && bindItem.alias != '') {
-                        for (const contactItem of official) {
-                            if (contactItem.contact.payload?.alias === bindItem.alias) {
-                                find = contactItem
-                                break
-                            }
-                        }
-                        if (find) {
-                            const name = find.contact.payload?.name
-                            this.bindGroup({
-                                name: name ? name : '',
-                                chat_id: bindItem.chat_id,
-                                type: bindItem.type,
-                                bind_id: find.id,
-                                alias: find.contact.payload?.alias ? find.contact.payload.alias : '',
-                                wechat_id: find.contact.id,
-                                avatar: find.contact.payload?.avatar ? find.contact.payload?.avatar : ''
-                            })
-                            continue
-                        }
-                    }
-                    for (const contactItem of official) {
-                        if (contactItem.contact.payload?.name === bindItem.name) {
-                            find = contactItem
-                            break
-                        }
-                    }
-                    if (find) {
-                        const name = find.contact.payload?.name
-                        this.bindGroup({
-                            name: name ? name : '',
-                            chat_id: bindItem.chat_id,
-                            type: bindItem.type,
-                            bind_id: find.id,
-                            alias: find.contact.payload?.alias ? find.contact.payload.alias : '',
-                            wechat_id: find.contact.id,
-                            avatar: find.contact.payload?.avatar ? find.contact.payload?.avatar : ''
-                        })
-                        continue
-                    }
-                }
-                this.bindErr(bindItem.chat_id)
             } else {
+                // 群组绑定,先根据wechat_id绑定
                 let room = roomList.find(item => item.room.id === bindItem.wechat_id)
                 if (room) {
-                    const topic = room.room.payload?.topic
-                    this.bindGroup({
-                        name: topic ? topic : '',
-                        chat_id: bindItem.chat_id,
-                        type: bindItem.type,
-                        bind_id: room.id,
-                        alias: '',
-                        wechat_id: room.room.id,
-                    })
+                    this.bindRoom(room, bindItem)
                     continue
                 }
                 // room不存在根据名称重新绑定room
-                room = roomList.find(item => item.room.payload?.topic === bindItem.name)
-                if (room) {
-                    const topic = room.room.payload?.topic
-                    this.bindGroup({
-                        name: topic ? topic : '',
-                        chat_id: bindItem.chat_id,
-                        type: bindItem.type,
-                        bind_id: room.id,
-                        alias: '',
-                        wechat_id: room.room.id,
-                    })
+                const roomResult = roomList.filter(item => item.room.payload?.topic === bindItem.name)
+                if (roomResult.length === 1) {
+                    room = roomResult[0]
+                    this.bindRoom(room, bindItem)
                     continue
+                } else if (roomResult.length > 1) {
+                    // 说明有重名,先根据seq判断如果匹配不上,则根据与群人数做差取绝对值最小的绑定
+                    room = roomResult.find(i => this.getseq(i.room.payload.avatar) === bindItem.avatar)
+                    if (room) {
+                        this.bindRoom(room, bindItem)
+                        continue
+                    } else {
+                        const roomResultSort = roomResult.sort((a, b) => ((Math.abs(a.room.payload.memberIdList.length - bindItem.room_number)) - (Math.abs(b.room.payload.memberIdList.length - bindItem.room_number))))
+                        room = roomResultSort[0]
+                        this.bindRoom(room, bindItem)
+                        continue
+                    }
                 }
-                // 如果找不到则删除该元素
-                // await this.tgBotClient.telegram.sendMessage(bindItem.chat_id, '找不到对应的绑定信息,请使用 /room 或者 /user 命令将联系人或者群组绑定').catch(e=>{
-                //     if (e.response.error_code === 403 && bindItem){
-                //         this.removeBindItemByChatId(bindItem.chat_id)
-                //         return
-                //     }
-                // })
                 this.bindErr(bindItem.chat_id)
             }
         }
+    }
+
+    private bindRoom(room: RoomItem, bindItem: BindItem) {
+        const topic = room.room.payload?.topic
+        this.bindGroup({
+            name: topic ? topic : '',
+            chat_id: bindItem.chat_id,
+            type: bindItem.type,
+            bind_id: room.id,
+            alias: '',
+            wechat_id: room.room.id,
+            avatar: room.room.payload.avatar,
+            room_number: room.room.payload.memberIdList.length
+        })
     }
 
     public bindErr(chatId: number) {
@@ -261,8 +215,8 @@ export class BindItemService extends AbstractSqlService {
         stmt.finalize()
     }
 
+    // 如果item别名或者头像变化则更新
     public async updateGroupData(bindItem: BindItem, newBindItem: BindItem) {
-        // 如果item别名或者头像变化则更新
         // 获取群组管理员列表
         const administrators = await this.tgBotClient.telegram.getChatAdministrators(bindItem.chat_id)
 
@@ -275,7 +229,7 @@ export class BindItemService extends AbstractSqlService {
                 // 更新群组名称
                 await this.tgBotClient.telegram.setChatTitle(bindItem.chat_id, `${newBindItem.alias}[${newBindItem.name}]`)
             }
-            if (bindItem.avatar !== newBindItem.avatar) {
+            if (bindItem.avatar !== newBindItem.avatar && bindItem.type === 0) {
                 // 更新头像
                 const contact = await this.wechatyInterface.Contact.find({
                     id: newBindItem.wechat_id
@@ -355,6 +309,11 @@ export class BindItemService extends AbstractSqlService {
                 params.push(bindItem.allow_entities)
                 first = false
             }
+            if (bindItem.room_number) {
+                query += first ? 'room_number=?' : ', room_number=?'
+                params.push(bindItem.room_number)
+                first = false
+            }
             query += ' WHERE chat_id=?'
             params.push(groupId)
 
@@ -388,7 +347,7 @@ export class BindItemService extends AbstractSqlService {
         })
     }
 
-
+    // 重新绑定,如果之前有绑定失败的群组,那么下次接受到消息就会重新绑定,防止多次创建群组
     public reBind(createGroupInterface: CreateGroupInterface): Promise<BindItem | undefined> {
         return new Promise(resolve => {
             let alias = ''
@@ -468,9 +427,9 @@ export class BindItemService extends AbstractSqlService {
         })
     }
 
-    // 你在写你妈呢 草！！
+    // 绑定到tg群组
     public bindGroup(bind: BindItem) {
-        // 群组绑定
+        // 提取头像的特征码存到数据库
         if (bind.avatar) {
             bind.avatar = this.getseq(bind.avatar)
         } else {
@@ -493,23 +452,16 @@ export class BindItemService extends AbstractSqlService {
             stmt.run(bind.wechat_id, bind.chat_id)
             stmt.finalize()
 
-            const stmt1 = this.db.prepare('INSERT INTO tb_bind_item VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?)')
+            const stmt1 = this.db.prepare(`INSERT INTO tb_bind_item (name, chat_id, type, bind_id, alias, wechat_id,
+                                                                     avatar, has_bound, forward, avatar_hash,
+                                                                     allow_entities, room_number)
+                                           VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?)`)
             stmt1.run(
                 bind.name, bind.chat_id, bind.type,
-                bind.bind_id, bind.alias, bind.wechat_id, bind.avatar, bind.avatar_hash, bind.allow_entities
+                bind.bind_id, bind.alias, bind.wechat_id, bind.avatar, bind.avatar_hash, bind.allow_entities, bind.room_number
             )
             stmt1.finalize()
         })
-
-        // this.tgBotClient.telegram.sendMessage(chatId, `绑定成功:${name}`,{disable_notification: true}).then(ctx => {
-        //     setTimeout(() => {
-        //         this.tgBotClient.telegram.deleteMessage(chatId, ctx.message_id)
-        //     }, 10 * 1000)
-        // }).catch(e => {
-        //     if (e.response.error_code === 403) {
-        //         this.removeBindItemByChatId(chatId)
-        //     }
-        // })
 
         // 创建对象
         const bindItem: BindItem = {
@@ -570,8 +522,8 @@ export class BindItemService extends AbstractSqlService {
     }
 
     /**
-     * 根据微信Id查询BindItem （这是item实例的id...）
-     * @param bindId
+     * 根据微信Id查询BindItem
+     * @param wechatId 微信id
      */
     public getBindItemByWechatId(wechatId: string): Promise<BindItem> {
         return new Promise((resolve, reject) => {

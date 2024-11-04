@@ -34,6 +34,7 @@ import {Markup} from 'telegraf'
 import {parseAppmsgMessagePayload} from '../util/message-appmsg'
 import {Api} from 'telegram'
 import messages = Api.messages
+import {ImageUtils} from '../util/ImageUtils'
 
 
 export class WeChatClient extends BaseClient {
@@ -219,7 +220,7 @@ export class WeChatClient extends BaseClient {
                     }
                 }
                 resolve(msg)
-            }).catch(() => {
+            }).catch(e => {
                 if (this.tgClient.tgUserClientLogin) {
                     MessageService.getInstance().findMessageByTelegramMessageId(extra.msg_id, extra.chat_id).then(item => {
                         if (item && item.telegram_user_message_id) {
@@ -243,7 +244,7 @@ export class WeChatClient extends BaseClient {
                     })
                 }
 
-                reject()
+                reject(e)
             })
         })
     }
@@ -536,21 +537,18 @@ export class WeChatClient extends BaseClient {
                     return
                 }
             }
-            // 找到bindId
+            // 在缓存中查找群组 bindId已弃用
+            const roomItemFind = this._roomList.find(i => i.room.id === roomEntity.id)
             let bindId
-            for (const roomItem of this._roomList) {
-                if (roomItem.room.id === roomEntity.id) {
-                    bindId = roomItem.id
-                    break
-                }
-            }
-            if (!bindId) {
+            if (!roomItemFind) {
                 // 找不到该群组,直接将群组加进缓存生成新id
                 bindId = UniqueIdGenerator.getInstance().generateId('room')
                 this._roomList.push({
                     id: bindId,
                     room: roomEntity
                 })
+            } else {
+                bindId = roomItemFind.id
             }
             bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(roomEntity.id)
             if (!bindItem && this.cacheMemberDone && this._tgClient.tgUserClientLogin && message.text() !== '' && this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_GROUP)) {
@@ -580,7 +578,7 @@ export class WeChatClient extends BaseClient {
             } else {
                 bindItem = await this._tgClient.bindItemService.getBindItemByWechatId(talker.id)
             }
-            // 找到bindId
+            // 在缓存中查找公众号
             let bindId
             if (talker?.type() === PUPPET.types.Contact.Official) {
                 const official = this.contactMap?.get(ContactImpl.Type.Official)
@@ -1078,52 +1076,142 @@ export class WeChatClient extends BaseClient {
     }
 
     private async sendTextToTg(message: SimpleMessage) {
-        this._tgClient.bot.telegram.sendMessage(message.chatId, SimpleMessageSender.send(message), {
-            parse_mode: 'HTML',
-            reply_parameters: message.replay_msg_id ? {
-                message_id: message.replay_msg_id
-            } : undefined
-        }).then(res => {
-            if (message.message && message.id) {
-                MessageService.getInstance().addMessage({
-                    wechat_message_id: message.id,
-                    chat_id: message.chatId ? message.chatId + '' : '',
-                    telegram_message_id: res.message_id,
-                    type: message.message.type(),
-                    msg_text: message.body + '',
-                    send_by: message.sender ? message.sender : '',
-                    create_time: new Date().getTime(),
-                    sender_id: message.send_id,
-                })
+        const html = SimpleMessageSender.send(message) + ''
+        const maxLength = 9000
+
+        if (html.length > 9000) {
+            // 分割长文本,分多次发送
+            const result = []
+            let currentLength = 0
+            let currentChunk = ''
+
+            // 使用正则表达式匹配HTML标签
+            const regex = /(<[^>]+>|[^<]+)/g
+            let match
+
+            while ((match = regex.exec(html)) !== null) {
+                const chunk = match[0] // 获取当前匹配的片段
+                const chunkLength = chunk.length
+
+                // 检查当前片段加上当前块的长度是否超过最大长度
+                if (currentLength + chunkLength > maxLength) {
+                    // 如果超过最大长度，先将当前块存入结果
+                    result.push(currentChunk)
+                    // 重置当前块和当前长度
+                    currentChunk = ''
+                    currentLength = 0
+                }
+
+                // 将当前片段添加到当前块
+                currentChunk += chunk
+                currentLength += chunkLength
             }
-        }).catch(e => {
-            this.logError(e.message)
-            // group deleted
-            if (e.response.error_code === 403) {
-                this._tgClient.bindItemService.removeBindItemByChatId(parseInt(message.chatId + ''))
-                this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, SimpleMessageSender.send(message), {
-                    parse_mode: 'HTML'
+
+            // 添加最后一块（如果有）
+            if (currentChunk) {
+                result.push(currentChunk)
+            }
+
+            for (let i = 0; i < result.length; i++) {
+                let sendMsg = result[i]
+                if (result.length > 1) {
+                    sendMsg = `<b>part${i + 1}:</b>` + sendMsg
+                }
+                await this._tgClient.bot.telegram.sendMessage(message.chatId, sendMsg, {
+                    parse_mode: 'HTML',
+                    reply_parameters: message.replay_msg_id ? {
+                        message_id: message.replay_msg_id
+                    } : undefined
                 }).then(res => {
-                    if (message.id) {
-                        this._tgClient.messageMap.set(res.message_id, message.id)
+                    if (message.message && message.id && i === 0) {
+                        MessageService.getInstance().addMessage({
+                            wechat_message_id: message.id,
+                            chat_id: message.chatId ? message.chatId + '' : '',
+                            telegram_message_id: res.message_id,
+                            type: message.message.type(),
+                            msg_text: message.body + '',
+                            send_by: message.sender ? message.sender : '',
+                            create_time: new Date().getTime(),
+                            sender_id: message.send_id,
+                        })
+                    }
+                }).catch(e => {
+                    this.logError(e.message)
+                    // group deleted
+                    if (e.response.error_code === 403) {
+                        this._tgClient.bindItemService.removeBindItemByChatId(parseInt(message.chatId + ''))
+                        this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, SimpleMessageSender.send(message), {
+                            parse_mode: 'HTML'
+                        }).then(res => {
+                            if (message.id) {
+                                this._tgClient.messageMap.set(res.message_id, message.id)
+                            }
+                        })
+                    }
+                    // Telegram Too Many Requests
+                    if (e.response.error_code === 429) {
+                        setTimeout(() => {
+                            // this._tgClient.bot.telegram.sendMessage(message.chatId,
+                            //     SimpleMessageSender.send(
+                            //         {
+                            //             body: this.t('common.tooManyRequests', e.response.parameters.retry_after),
+                            //             chatId: message.chatId,
+                            //         }))
+                            this.logError(this.t('common.tooManyRequests', e.response.parameters.retry_after))
+                            this.tgClient.sendQueueHelper.addMessageWithMsgId(Number(this.snowflakeUtil.getUniqueID()),
+                                message)
+                        }, e.response.parameters.retry_after * 1000 || 20000)
                     }
                 })
             }
-            // Telegram Too Many Requests
-            if (e.response.error_code === 429) {
-                setTimeout(() => {
-                    // this._tgClient.bot.telegram.sendMessage(message.chatId,
-                    //     SimpleMessageSender.send(
-                    //         {
-                    //             body: this.t('common.tooManyRequests', e.response.parameters.retry_after),
-                    //             chatId: message.chatId,
-                    //         }))
-                    this.logError(this.t('common.tooManyRequests', e.response.parameters.retry_after))
-                    this.tgClient.sendQueueHelper.addMessageWithMsgId(Number(this.snowflakeUtil.getUniqueID()),
-                        message)
-                }, e.response.parameters.retry_after * 1000 || 20000)
-            }
-        })
+        } else {
+            await this._tgClient.bot.telegram.sendMessage(message.chatId, html, {
+                parse_mode: 'HTML',
+                reply_parameters: message.replay_msg_id ? {
+                    message_id: message.replay_msg_id
+                } : undefined
+            }).then(res => {
+                if (message.message && message.id) {
+                    MessageService.getInstance().addMessage({
+                        wechat_message_id: message.id,
+                        chat_id: message.chatId ? message.chatId + '' : '',
+                        telegram_message_id: res.message_id,
+                        type: message.message.type(),
+                        msg_text: message.body + '',
+                        send_by: message.sender ? message.sender : '',
+                        create_time: new Date().getTime(),
+                        sender_id: message.send_id,
+                    })
+                }
+            }).catch(e => {
+                this.logError(e.message)
+                // group deleted
+                if (e.response.error_code === 403) {
+                    this._tgClient.bindItemService.removeBindItemByChatId(parseInt(message.chatId + ''))
+                    this._tgClient.bot.telegram.sendMessage(this._tgClient.chatId, SimpleMessageSender.send(message), {
+                        parse_mode: 'HTML'
+                    }).then(res => {
+                        if (message.id) {
+                            this._tgClient.messageMap.set(res.message_id, message.id)
+                        }
+                    })
+                }
+                // Telegram Too Many Requests
+                if (e.response.error_code === 429) {
+                    setTimeout(() => {
+                        // this._tgClient.bot.telegram.sendMessage(message.chatId,
+                        //     SimpleMessageSender.send(
+                        //         {
+                        //             body: this.t('common.tooManyRequests', e.response.parameters.retry_after),
+                        //             chatId: message.chatId,
+                        //         }))
+                        this.logError(this.t('common.tooManyRequests', e.response.parameters.retry_after))
+                        this.tgClient.sendQueueHelper.addMessageWithMsgId(Number(this.snowflakeUtil.getUniqueID()),
+                            message)
+                    }, e.response.parameters.retry_after * 1000 || 20000)
+                }
+            })
+        }
     }
 
     private async sendFileToTg(message: MessageInterface, identityStr: string, tgMessage: SimpleMessage) {
@@ -1212,7 +1300,8 @@ export class WeChatClient extends BaseClient {
                                 messageType = PUPPET.types.Message.Attachment
                             }
                             if (this.tgClient.setting.getVariable(VariableType.SETTING_COMPRESSION)) { // 需要判断类型压缩
-                                //
+                                // 压缩图片
+                                const imageUtils = new ImageUtils()
                                 switch (messageType) {
                                     case PUPPET.types.Message.Image:
                                     case PUPPET.types.Message.Audio:
@@ -1220,7 +1309,7 @@ export class WeChatClient extends BaseClient {
                                     case PUPPET.types.Message.Emoticon:
                                     case PUPPET.types.Message.Attachment:
                                         sender.editFile(tgMessage.chatId, tempRes.message_id, {
-                                            buff: buff,
+                                            buff: messageType === PUPPET.types.Message.Image ? await imageUtils.compressPicture(buff) : buff,
                                             filename: fileName,
                                             fileType: this.getSendTgFileMethodString(messageType),
                                             caption: identityStr

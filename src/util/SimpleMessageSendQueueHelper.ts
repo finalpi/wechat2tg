@@ -4,6 +4,8 @@ export class SimpleMessageSendQueueHelper {
     private messageQueue: SendMessageWarps[] = []
     private loopTime = 503
     private processFlag = false
+    // 消息最大重试次数
+    private messageMaxRetries = 2
 
     constructor(sendFunction: (...args) => Promise<any>, interval: number) {
         this.sendFunction = sendFunction
@@ -17,6 +19,7 @@ export class SimpleMessageSendQueueHelper {
             time: new Date(),
             message: message,
             sending: false,
+            retries_number: 0
         }
         this.messageQueue.push(sendMessage)
     }
@@ -28,6 +31,7 @@ export class SimpleMessageSendQueueHelper {
             message: message,
             sending: false,
             msg_id: msgId,
+            retries_number: 0
         }
         let left = 0
         let right = this.messageQueue.length - 1
@@ -57,10 +61,14 @@ export class SimpleMessageSendQueueHelper {
                 this.sendFunction(...sendMessage.message).then(() => {
                     sendMessage.success = true
                     sendMessage.sending = false
-                }).catch(async () => {
+                }).catch(async e => {
+                    console.error(e)
                     sendMessage.success = false
                     sendMessage.sending = false
-                    this.messageQueue.push(sendMessage)
+                    if (sendMessage.retries_number < this.messageMaxRetries) {
+                        sendMessage.retries_number++
+                        this.messageQueue.push(sendMessage)
+                    }
                 }).finally(() => {
                     sendMessage.sending = false
                 })
@@ -79,4 +87,6 @@ export interface SendMessageWarps {
     time: Date,
     message: any[],
     msg_id?: number,
+    // 重试次数
+    retries_number: number
 }

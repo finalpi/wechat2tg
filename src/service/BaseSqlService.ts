@@ -33,7 +33,7 @@ abstract class AbstractSqlService {
         this.db.serialize(() => {
             this.db.get('SELECT * FROM sqlite_master WHERE type=\'table\' AND name=\'tb_bind_item\'', (err, row) => {
                 if (!row) {
-                    this.db.run('CREATE TABLE tb_bind_item (name TEXT, chat_id INT, type INT, bind_id TEXT, alias TEXT,wechat_id TEXT, avatar TEXT, has_bound TEXT, forward TEXT,avatar_hash TEXT,allow_entities TEXT)')
+                    this.db.run('CREATE TABLE tb_bind_item (name TEXT, chat_id INT, type INT, bind_id TEXT, alias TEXT,wechat_id TEXT, avatar TEXT, has_bound TEXT, forward TEXT,avatar_hash TEXT,allow_entities TEXT,room_number TEXT)')
                 } else {
                     const createTableSQL = (row as { sql: string }).sql
                     if (!createTableSQL.includes('avatar')) {
@@ -78,6 +78,15 @@ abstract class AbstractSqlService {
                                 console.error('Failed to add column:', err)
                             } else {
                                 console.log('Column allow_entities added successfully.')
+                            }
+                        })
+                    }
+                    if (!createTableSQL.includes('room_number')) {
+                        this.db.run('ALTER TABLE tb_bind_item ADD COLUMN room_number TEXT', (err) => {
+                            if (err) {
+                                console.error('Failed to add column:', err)
+                            } else {
+                                console.log('Column room_number added successfully.')
                             }
                         })
                     }

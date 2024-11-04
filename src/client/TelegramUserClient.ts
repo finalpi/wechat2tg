@@ -12,6 +12,7 @@ import {SetupServiceImpl} from '../service/impl/SetupServiceImpl'
 import * as os from 'node:os'
 import {NewMessage} from 'telegram/events'
 import {MessageService} from '../service/MessageService'
+import {Snowflake} from 'nodejs-snowflake'
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -97,23 +98,35 @@ export class TelegramUserClient extends TelegramClient {
                 })
             }, new NewMessage({fromUsers: [me]}))
         })
+        this.onMessage()
     }
 
     private async onMessage() {
         const binds = await TelegramBotClient.getInstance().bindItemService.getAllBindItems()
-        const allows = binds.flatMap(it => it.allow_entities)
+        const allows = binds.flatMap(it => [...JSON.parse(it.allow_entities ?? '[]')])
         this.client?.addEventHandler(async event => {
-            // 我发送的消息
             const msg = event.message
             const msgChatId = msg.chatId?.toJSNumber()
-            if (msgChatId == this.telegramBotClient.chatId || binds.find(it => it.chat_id == msgChatId)) {
-                MessageService.getInstance().addMessage({
-                    chat_id: msgChatId?.toString(),
-                    msg_text: msg.text,
-                    create_time: Date.now(),
-                    telegram_user_message_id: msg.id,
-                    sender_id: this.telegramBotClient.weChatClient.client.currentUser.id,
-                })
+            const bindItem = binds.find(it => it.chat_id == msgChatId)
+            if (msgChatId == this.telegramBotClient.chatId || bindItem) {
+                // this.telegramBotClient.weChatClient.addMessage()
+                const wechatClient = this.telegramBotClient.weChatClient
+                if (bindItem.type === 0) {
+                    wechatClient.client.Contact.find({id: bindItem.wechat_id}).then(contact => {
+                        wechatClient.addMessage(contact, msg.message, {
+                            msg_id: msg.id,
+                            chat_id: msgChatId,
+                        })
+                    })
+                }
+                if (bindItem.type === 1) {
+                    wechatClient.client.Room.find({id: bindItem.wechat_id}).then(room => {
+                        wechatClient.addMessage(room, msg.message, {
+                            msg_id: msg.id,
+                            chat_id: msgChatId,
+                        })
+                    })
+                }
             }
 
         }, new NewMessage({fromUsers: [...allows]}))
@@ -223,7 +236,8 @@ export class TelegramUserClient extends TelegramClient {
                     bind_id: createGroupInterface.bindId ? createGroupInterface.bindId : '',
                     alias: '',
                     wechat_id: createGroupInterface.room?.id ? createGroupInterface.room?.id : '',
-                    avatar: ''
+                    avatar: createGroupInterface.room?.payload.avatar,
+                    room_number: createGroupInterface.room?.payload.memberIdList.length
                 })
             }
         }

@@ -18,7 +18,9 @@ export interface BindItem {
     // 头像hash
     avatar_hash?: string
     // 允许的实体
-    allow_entities?: string
+    allow_entities?: string,
+    // 群组人数
+    room_number?: number
 }
 
 export type ChatMapping = {
