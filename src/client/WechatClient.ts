@@ -1262,7 +1262,7 @@ export class WeChatClient extends BaseClient {
         } else {
             sender.sendFile(tgMessage.chatId, {
                 buff: Buffer.from('0'),
-                filename: 'tempFile',
+                filename: 'temp_file',
                 caption: this.t('wechat.receivingFile'),
                 fileType: 'document'
             }).then(tempRes => {

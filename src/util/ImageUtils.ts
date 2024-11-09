@@ -3,7 +3,7 @@ import sharp from 'sharp'
 export class ImageUtils {
     public async compressPicture(buff: Buffer): Promise<Buffer> {
         try {
-            const image = sharp(buff)
+            const image = sharp(buff).rotate()
             const metadata = await image.metadata()
 
             // 检查宽度是否大于 1200px，如果是，则调整宽度为 1200px
