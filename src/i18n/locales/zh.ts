@@ -110,6 +110,7 @@ const zh = {
             messageFallback: '发送成功反馈({0})',
             autoSwitchContact: '自动切换联系人({0})',
             receiveOfficial: '接收公众号消息({0})',
+            blockEmoticon: '屏蔽表情包({0})',
             forwardSelf: '转发自己在微信发送的消息({0})',
             mediaQualityCompression: '媒体质量压缩({0})',
             blackMode: '黑名单模式',

@@ -10,6 +10,7 @@ export class VariableContainer {
         [VariableType.SETTING_AUTO_SWITCH]: boolean,
         [VariableType.SETTING_CHAT_ID]: string,
         [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: boolean,
+        [VariableType.SETTING_BLOCK_EMOTICON]: boolean,
         [VariableType.SETTING_FORWARD_SELF]: boolean,
         [VariableType.SETTING_COMPRESSION]: boolean,
         [VariableType.SETTING_AUTO_GROUP]: boolean,
@@ -22,6 +23,7 @@ export class VariableContainer {
         [VariableType.SETTING_AUTO_SWITCH]: true,
         [VariableType.SETTING_CHAT_ID]: '',
         [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: false,
+        [VariableType.SETTING_BLOCK_EMOTICON]: false,
         [VariableType.SETTING_FORWARD_SELF]: false,
         [VariableType.SETTING_COMPRESSION]: false,
         [VariableType.SETTING_AUTO_GROUP]: false,
@@ -67,6 +69,7 @@ export class VariableContainer {
                 [VariableType.SETTING_FORWARD_SELF]: this.variables[VariableType.SETTING_FORWARD_SELF] ? this.variables[VariableType.SETTING_FORWARD_SELF] : false,
                 [VariableType.SETTING_COMPRESSION]: this.variables[VariableType.SETTING_COMPRESSION] ? this.variables[VariableType.SETTING_COMPRESSION] : false,
                 [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: this.variables[VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT] ? this.variables[VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT] : false,
+                [VariableType.SETTING_BLOCK_EMOTICON]: this.variables[VariableType.SETTING_BLOCK_EMOTICON] ? this.variables[VariableType.SETTING_BLOCK_EMOTICON] : false,
                 [VariableType.SETTING_AUTO_GROUP]: this.variables[VariableType.SETTING_AUTO_GROUP] ? this.variables[VariableType.SETTING_AUTO_GROUP] : false,
                 [VariableType.SETTING_LANGUAGE]: this.variables[VariableType.SETTING_LANGUAGE] ? this.variables[VariableType.SETTING_LANGUAGE] : 'zh',
             }
@@ -93,6 +96,8 @@ export enum VariableType {
     SETTING_CHAT_ID = 'chat_id',
     // 接受公众号消息
     SETTING_ACCEPT_OFFICIAL_ACCOUNT = 'Setting_Accept_Official_Account',
+    // 屏蔽表情包
+    SETTING_BLOCK_EMOTICON = 'SETTING_BLOCK_EMOTICON',
     // 转发自己发的消息
     SETTING_FORWARD_SELF = 'Setting_Forward_Self',
     // 媒体是否压缩
@@ -117,6 +122,7 @@ type VariableMap = {
     [VariableType.SETTING_AUTO_SWITCH]: boolean,
     [VariableType.SETTING_CHAT_ID]: string,
     [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: boolean,
+    [VariableType.SETTING_BLOCK_EMOTICON]: boolean,
     [VariableType.SETTING_FORWARD_SELF]: boolean,
     [VariableType.SETTING_COMPRESSION]: boolean,
     [VariableType.SETTING_AUTO_GROUP]: boolean,

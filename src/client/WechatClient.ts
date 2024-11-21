@@ -856,10 +856,13 @@ export class WeChatClient extends BaseClient {
                 })
                 // console.log('contact message', message)
                 break
+            case PUPPET.types.Message.Emoticon: // 处理表情消息的逻辑
+                if (this._tgClient.setting.getVariable(VariableType.SETTING_BLOCK_EMOTICON)) {
+                    break
+                }
             case PUPPET.types.Message.Attachment:
             case PUPPET.types.Message.Image:
             case PUPPET.types.Message.Audio:
-            case PUPPET.types.Message.Emoticon: // 处理表情消息的逻辑
             case PUPPET.types.Message.Video:
                 if (messageType === PUPPET.types.Message.Attachment && !message.payload?.filename) {
                     this.tgClient.sendQueueHelper.addMessageWithMsgId(uniqueId, {

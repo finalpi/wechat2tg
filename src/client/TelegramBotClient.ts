@@ -1426,7 +1426,19 @@ export class TelegramBotClient extends BaseClient {
             return ctx.answerCbQuery(answerText)
         })
 
-        // 接受公众号消息
+        // 屏蔽表情包
+        bot.action(VariableType.SETTING_BLOCK_EMOTICON, ctx => {
+            const b = !this.forwardSetting.getVariable(VariableType.SETTING_BLOCK_EMOTICON)
+            const answerText = b ? this.t('common.open') : this.t('common.close')
+            this.forwardSetting.setVariable(VariableType.SETTING_BLOCK_EMOTICON, b)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
+            // 点击后修改上面按钮
+            ctx.editMessageReplyMarkup(this.getSettingButton())
+            return ctx.answerCbQuery(answerText)
+        })
+
+        // 转发自己发的消息
         bot.action(VariableType.SETTING_FORWARD_SELF, ctx => {
             const b = !this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF)
             const answerText = b ? this.t('common.open') : this.t('common.close')
@@ -2583,6 +2595,7 @@ export class TelegramBotClient extends BaseClient {
                 [Markup.button.callback(this.t('command.setting.messageFallback', this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_REPLY_SUCCESS),],
                 [Markup.button.callback(this.t('command.setting.autoSwitchContact', this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_AUTO_SWITCH),],
                 [Markup.button.callback(this.t('command.setting.receiveOfficial', this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) ? this.t('common.close') : this.t('common.open')), VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT),],
+                [Markup.button.callback(this.t('command.setting.blockEmoticon', this.forwardSetting.getVariable(VariableType.SETTING_BLOCK_EMOTICON) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_BLOCK_EMOTICON),],
                 [Markup.button.callback(this.t('command.setting.forwardSelf', this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_FORWARD_SELF),],
                 [Markup.button.callback(this.t('command.setting.mediaQualityCompression', this.forwardSetting.getVariable(VariableType.SETTING_COMPRESSION) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_COMPRESSION),],
                 [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE ?

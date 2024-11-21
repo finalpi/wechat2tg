@@ -107,6 +107,7 @@ const en = {
             messageFallback: 'Send successful feedback({0})',
             autoSwitchContact: 'Automatically switch contacts({0})',
             receiveOfficial: 'Receive official account messages({0})',
+            blockEmoticon: 'Block emoticon messages({0})',
             forwardSelf: 'Forward a message you sent on WeChat({0})',
             mediaQualityCompression: 'Media Quality Compression({0})',
             blackMode: 'Blacklist Mode',
