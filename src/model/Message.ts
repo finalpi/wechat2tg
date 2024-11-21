@@ -38,7 +38,7 @@ export class SimpleMessageSender implements MessageSender {
             const title = simpleMessage.message ?
                 SimpleMessageSender.getTitle(simpleMessage.message, simpleMessage.chatId !== TelegramBotClient.getInstance().chatId)
                 : simpleMessage.sender
-            return `${title}\n${!simpleMessage.not_escape_html ? this.escapeHTML(typeof simpleMessage.body === 'string' ? simpleMessage.body : '') : simpleMessage.body}`
+            return `${!simpleMessage.not_escape_html ? this.escapeHTML(typeof simpleMessage.body === 'string' ? simpleMessage.body : '') : simpleMessage.body}\n${title}`
         } else {
             return simpleMessage.body
         }
