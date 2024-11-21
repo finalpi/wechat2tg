@@ -20,7 +20,6 @@
 4. 本项目只能尽量保证实现 **Web微信** 支持的消息，不支持的消息无能为力
 5. 目前，由于网络或者技术原因可能导致的消息丢失无法完全避免，如有重要的消息时请注意！！
 
-
 ## 主要BOT命令
 
 `/login`：获取登录二维码
@@ -93,6 +92,12 @@ services:
       OFFICIAL_MESSAGE_GROUP: '<b>📣#[name]: </b>'
       # 联系人消息格式(群组下)
       CONTACT_MESSAGE_GROUP: '<b>👤#[alias_first]: </b>'
+      # 自动创建微信群组的名称格式
+      CREATE_ROOM_NAME: '#[topic]'
+      # 自动创建联系人群组的名称格式
+      CREATE_CONTACT_NAME: '#[alias]#[[name]]'
+      # 文字消息显示格式:#[identity]身份文本,#[body]:消息文本,#[br]换行
+      MESSAGE_DISPLAY: '#[identity]#[br]#[body]'
     restart: unless-stopped
 ```
 
@@ -126,7 +131,6 @@ docker run -itd --env BOT_TOKEN="" --env PROXY_HOST="" --env PROXY_PORT="" --env
 
 4. TG 中机器人发送 `/start` 开始 或者 `/login` 登录 。
 
-
 ### 消息模式切换
 
 切换黑名单模式或者白名单模式
@@ -137,7 +141,7 @@ docker run -itd --env BOT_TOKEN="" --env PROXY_HOST="" --env PROXY_PORT="" --env
 
 **反馈发送成功**：是否反馈消息的发送状态（如果不是很需要请勿开启，因为默认失败会有提示）
 
-**自动切换联系人**：如果有用户或群组回复,则会自动切换回复到该用户或者群组。**请注意，发送前刚好有消息发给你可能会导致错误发送消息！
+**自动切换联系人**：如果有用户或群组回复,则会自动切换回复到该用户或者群组。**请注意，发送前刚好有消息发给你可能会导致错误发送消息
 **
 
 **接受公众号消息**：是否接受公众号消息
@@ -151,7 +155,6 @@ docker run -itd --env BOT_TOKEN="" --env PROXY_HOST="" --env PROXY_PORT="" --env
 2分钟内发送的消息能撤回 撤回方式是回复自己发送的消息 内容为 `&rm`
 媒体消息需要等待发送成功才能撤回
 （删除2分钟以内的会撤回）
-
 
 ### 大文件的接受和发送
 
@@ -170,7 +173,7 @@ API 的限制，不能发送超过20MB的文件，或者接收超过50MB的文�
 
 ### 手动对消息进行分组
 
-**注意：** 因为 `wechaty-puppet-wechat4u` 
+**注意：** 因为 `wechaty-puppet-wechat4u`
 每次重新登录的时候，id都会变化。  
 所以没办法获取每个联系人和群组的唯一key。  
 判断是否是同一个联系人和群组的方式是通过联系人的备注和昵称进行判断的。  
@@ -178,7 +181,7 @@ API 的限制，不能发送超过20MB的文件，或者接收超过50MB的文�
 或者当联系人或者群组的名称发生变化的时候，有可能会出现绑定失败的情况，此情况需要重新绑定。
 
 1. 关闭掉机器人的隐私模式，打开 BotFather，输入 `/mybots`，选择你的bot。点击 `Bot Settings` - `Group Privacy` - `Turn off`
-，出现 `Privacy mode is disabled for xxx` 就说明关闭成功了
+   ，出现 `Privacy mode is disabled for xxx` 就说明关闭成功了
 2. 创建 Telegram group，将 Bot 拉入该群组然后按照提示绑定即可，之后该联系人或者群组的消息就会转发到该group里面
 
 `/bind`：查看当前group绑定的联系人或者群组
@@ -206,6 +209,12 @@ API 的限制，不能发送超过20MB的文件，或者接收超过50MB的文�
 `#[topic]`：群聊昵称
 
 `#[alias_first]`：备注优先，如果没有备注就显示联系人的昵称
+
+`#[identity]`：身份信息文本
+
+`#[body]`：消息体文本
+
+`#[br]`：换行
 
 ## License
 
