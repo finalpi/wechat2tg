@@ -629,7 +629,7 @@ export class TelegramBotClient extends BaseClient {
                 if (bindItem.type === 0) {
                     const contact = await this.getContactByBindItem(bindItem)
                     if (contact) {
-                        await ctx.telegram.setChatTitle(ctx.chat.id, `${bindItem.alias}[${bindItem.name}]`)
+                        await ctx.telegram.setChatTitle(ctx.chat.id, SimpleMessageSender.transformTitleStr(config.CREATE_CONTACT_NAME, bindItem.alias, bindItem.name, ''))
                         // 获取头像
                         contact.avatar().then(fbox => {
                             fbox.toBuffer().then(async buff => {
@@ -640,7 +640,7 @@ export class TelegramBotClient extends BaseClient {
                         })
                     }
                 } else {
-                    await ctx.telegram.setChatTitle(ctx.chat.id, bindItem.name)
+                    await ctx.telegram.setChatTitle(ctx.chat.id, SimpleMessageSender.transformTitleStr(config.CREATE_ROOM_NAME, '', '', bindItem.name))
                 }
             } else {
                 return ctx.reply(this.t('common.onlyInGroup'))

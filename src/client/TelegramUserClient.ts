@@ -13,6 +13,7 @@ import * as os from 'node:os'
 import {NewMessage} from 'telegram/events'
 import {MessageService} from '../service/MessageService'
 import {Snowflake} from 'nodejs-snowflake'
+import {SimpleMessageSender} from '../model/Message'
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -153,12 +154,12 @@ export class TelegramUserClient extends TelegramClient {
             let avatar
             if (createGroupInterface.type === 0) {
                 if (createGroupInterface.contact?.payload) {
-                    name = `${createGroupInterface.contact?.payload.alias}[${createGroupInterface.contact?.payload.name}]`
+                    name = SimpleMessageSender.transformTitleStr(config.CREATE_CONTACT_NAME, createGroupInterface.contact?.payload.alias, createGroupInterface.contact?.payload.name, '')
                     avatar = createGroupInterface.contact?.avatar()
                 }
             } else {
                 if (createGroupInterface.room?.payload) {
-                    name = createGroupInterface.room.payload.topic
+                    name = SimpleMessageSender.transformTitleStr(config.CREATE_ROOM_NAME, '', '', createGroupInterface.room.payload.topic)
                 }
             }
             // TODO: ROOM NOT READY

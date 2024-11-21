@@ -99,6 +99,12 @@ services:
       OFFICIAL_MESSAGE_GROUP: '<b>📣#[name]: </b>'
       # Contact message format (in groups)
       CONTACT_MESSAGE_GROUP: '<b>👤#[alias_first]: </b>'
+      # Automatically create the name format of WeChat groups
+      CREATE_ROOM_NAME: '#[topic]'
+      # Name format for automatically creating contact groups
+      CREATE_CONTACT_NAME: '#[alias]#[[name]]'
+      # Text message display format: #[identity] identity text, #[body]: message text, #[br] line break
+      MESSAGE_DISPLAY: '#[identity]#[br]#[body]'
     restart: unless-stopped
 ```
 
@@ -214,6 +220,12 @@ Custom message template placeholders:
 `#[topic]`: Group chat nickname.
 
 `#[alias_first]`: Note first; if there’s no note, the contact's nickname will be shown.
+
+`#[identity]`：Identity information text
+
+`#[body]`：Message body text
+
+`#[br]`：Line break
 
 ## License
 

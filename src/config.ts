@@ -22,6 +22,9 @@ export const config = {
     CONTACT_MESSAGE_GROUP: process.env.CONTACT_MESSAGE_GROUP?.toString() || '<b>👤#[alias_first]: </b>',
     OFFICIAL_MESSAGE_GROUP: process.env.OFFICIAL_MESSAGE_GROUP?.toString() || '<b>📣#[name]: </b>',
     ROOM_MESSAGE_GROUP: process.env.ROOM_MESSAGE_GROUP?.toString() || '<b>👤#[(alias)] #[name]: </b>',
+    CREATE_ROOM_NAME: process.env.CREATE_ROOM_NAME?.toString() || '#[topic]',
+    CREATE_CONTACT_NAME: process.env.CREATE_CONTACT_NAME?.toString() || '#[alias]#[[name]]',
+    MESSAGE_DISPLAY: process.env.MESSAGE_DISPLAY?.toString() || '#[identity]#[br]#[body]',
 }
 
 export const useProxy = config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== ''

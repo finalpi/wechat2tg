@@ -38,7 +38,7 @@ export class SimpleMessageSender implements MessageSender {
             const title = simpleMessage.message ?
                 SimpleMessageSender.getTitle(simpleMessage.message, simpleMessage.chatId !== TelegramBotClient.getInstance().chatId)
                 : simpleMessage.sender
-            return `${title}\n${!simpleMessage.not_escape_html ? this.escapeHTML(typeof simpleMessage.body === 'string' ? simpleMessage.body : '') : simpleMessage.body}`
+            return SimpleMessageSender.transformIdentityBodyStr(config.MESSAGE_DISPLAY, title, `${!simpleMessage.not_escape_html ? this.escapeHTML(typeof simpleMessage.body === 'string' ? simpleMessage.body : '') : simpleMessage.body}`)
         } else {
             return simpleMessage.body
         }
@@ -98,6 +98,22 @@ export class SimpleMessageSender implements MessageSender {
                 return name ? p1.replaceAll('name', name) : ''
             } else if (p1.includes('topic')) {
                 return topic ? p1.replaceAll('topic', topic) : ''
+            } else {
+                return match
+            }
+        })
+
+        return inputString
+    }
+
+    static transformIdentityBodyStr(inputString: string, identity: string, body: string): string {
+        inputString = inputString.replace(this.NAME_REGEXP, (match, p1) => {
+            if (p1.includes('identity')) {
+                return identity ? p1.replaceAll('identity', identity) : ''
+            } else if (p1.includes('body')) {
+                return body ? p1.replaceAll('body', body) : ''
+            } else if (p1.includes('br')) {
+                return p1.replaceAll('br', '\n')
             } else {
                 return match
             }
