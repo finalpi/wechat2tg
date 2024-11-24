@@ -108,6 +108,7 @@ const en = {
             autoSwitchContact: 'Automatically switch contacts({0})',
             receiveOfficial: 'Receive official account messages({0})',
             blockEmoticon: 'Block emoticon messages({0})',
+            autoTranscript: 'Auto speech-to-text({0})',
             forwardSelf: 'Forward a message you sent on WeChat({0})',
             mediaQualityCompression: 'Media Quality Compression({0})',
             blackMode: 'Blacklist Mode',
@@ -158,6 +159,7 @@ const en = {
         addGroupToFolderFail: 'Failed to add group to folder',
         tooManyRequests: 'Too many requests, please wait {0} seconds before trying again',
         reReceive: 'Re-receive',
+        setTencentCloud: 'Please configure the secretId and secretKey of Tencent Cloud first',
     },
     wechat: {
         requestAddFriend: 'Request to add you as a friend:',
@@ -206,6 +208,8 @@ const en = {
         contactFailed: 'Failed to load contacts',
         fileReceivingFailed: 'Failed to receive file',
         receivingFile: 'Receiving file...Please wait',
+        transcripting: 'Transcripting...',
+        audioTranscriptFailed: 'Audio transcript failed',
     },
     telegram: {
         btn: {

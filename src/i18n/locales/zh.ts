@@ -111,6 +111,7 @@ const zh = {
             autoSwitchContact: '自动切换联系人({0})',
             receiveOfficial: '接收公众号消息({0})',
             blockEmoticon: '屏蔽表情包({0})',
+            autoTranscript: '自动语音转文字({0})',
             forwardSelf: '转发自己在微信发送的消息({0})',
             mediaQualityCompression: '媒体质量压缩({0})',
             blackMode: '黑名单模式',
@@ -161,6 +162,7 @@ const zh = {
         addGroupToFolderFail: '添加群组进文件夹失败',
         tooManyRequests: '请求过多,请等待{0}秒再试',
         reReceive: '重新接收',
+        setTencentCloud: '请先配置腾讯云的secretId和secretKey',
     },
     wechat: {
         requestAddFriend: '请求添加您为好友:',
@@ -209,6 +211,8 @@ const zh = {
         contactFailed: '联系人加载失败',
         fileReceivingFailed: '接收文件失败',
         receivingFile: '文件接收中...请稍候',
+        transcripting: '语音转文字中...',
+        audioTranscriptFailed: '语音转文字失败',
     },
     telegram: {
         btn: {

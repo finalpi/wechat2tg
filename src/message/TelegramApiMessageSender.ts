@@ -53,6 +53,24 @@ export class TelegramApiMessageSender extends MessageSender {
         })
     }
 
+    async editAudio(chatId: string | number, msgId: string | number, caption: string): Promise<SendResult> {
+        this.sendAction(Number(chatId), 'typing')
+        const inputPeerChannelFromMessage = await this.sender.getInputEntity(chatId) || chatId
+        const sendParam: messageMethods.EditMessageParams = {
+            message: parseInt(msgId + ''),
+            text: caption
+        }
+        return new Promise((resolve, reject) => {
+            this.sender.editMessage(inputPeerChannelFromMessage, sendParam).then(res => {
+                resolve({
+                    message_id: res.id
+                })
+            }).catch(e => {
+                reject(e)
+            })
+        })
+    }
+
     async deleteMessage(chatId: undefined | number, msgId: number) {
         const inputPeerChannelFromMessage = await this.sender.getInputEntity(chatId) || chatId
         await this.sender.deleteMessages(inputPeerChannelFromMessage, [msgId], {})

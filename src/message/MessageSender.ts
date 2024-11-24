@@ -18,6 +18,8 @@ export abstract class MessageSender {
         fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
     }, option?: Option): Promise<SendResult>
 
+    abstract editAudio(chatId: string | number, msgId: string | number, caption: string): Promise<SendResult>
+
     abstract deleteMessage(chatId: undefined | number, msgId: number)
 
     sendAction(chatId: number, action: ChatAction) {

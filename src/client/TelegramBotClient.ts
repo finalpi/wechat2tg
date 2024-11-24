@@ -1438,6 +1438,22 @@ export class TelegramBotClient extends BaseClient {
             return ctx.answerCbQuery(answerText)
         })
 
+        // 自动转文字
+        bot.action(VariableType.SETTING_AUTO_TRANSCRIPT, ctx => {
+            // 检查是否配置了腾讯云的secretId和secretKey
+            if (process.env.TENCENT_SECRET_ID == '' || process.env.TENCENT_SECRET_KEY == '') {
+                return ctx.answerCbQuery(this.t('common.setTencentCloud'))
+            }
+            const b = !this.forwardSetting.getVariable(VariableType.SETTING_AUTO_TRANSCRIPT)
+            const answerText = b ? this.t('common.open') : this.t('common.close')
+            this.forwardSetting.setVariable(VariableType.SETTING_AUTO_TRANSCRIPT, b)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
+            // 点击后修改上面按钮
+            ctx.editMessageReplyMarkup(this.getSettingButton())
+            return ctx.answerCbQuery(answerText)
+        })
+
         // 转发自己发的消息
         bot.action(VariableType.SETTING_FORWARD_SELF, ctx => {
             const b = !this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF)
@@ -2598,6 +2614,7 @@ export class TelegramBotClient extends BaseClient {
                 [Markup.button.callback(this.t('command.setting.blockEmoticon', this.forwardSetting.getVariable(VariableType.SETTING_BLOCK_EMOTICON) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_BLOCK_EMOTICON),],
                 [Markup.button.callback(this.t('command.setting.forwardSelf', this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_FORWARD_SELF),],
                 [Markup.button.callback(this.t('command.setting.mediaQualityCompression', this.forwardSetting.getVariable(VariableType.SETTING_COMPRESSION) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_COMPRESSION),],
+                [Markup.button.callback(this.t('command.setting.autoTranscript', this.forwardSetting.getVariable(VariableType.SETTING_AUTO_TRANSCRIPT) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_AUTO_TRANSCRIPT),],
                 [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE ?
                     Markup.button.callback(this.t('command.setting.whiteGroup'), VariableType.SETTING_WHITE_LIST) :
                     Markup.button.callback(this.t('command.setting.blackGroup'), VariableType.SETTING_BLACK_LIST)]
