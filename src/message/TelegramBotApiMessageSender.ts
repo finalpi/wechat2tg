@@ -35,6 +35,15 @@ export class TelegramBotApiMessageSender extends MessageSender {
         })
     }
 
+    editAudio(chatId: string | number, msgId: string | number, caption: string): Promise<SendResult> {
+        this.sendAction(Number(chatId), 'typing')
+        return new Promise<SendResult>((resolve, reject) => {
+            this.sender.telegram.editMessageCaption(chatId, parseInt(msgId + ''), undefined, caption, {}).then(() => {
+                resolve({message_id: msgId})
+            }).catch(e => reject(e))
+        })
+    }
+
     deleteMessage(chatId: undefined | number, msgId: number) {
         this.sender.telegram.deleteMessage(chatId, msgId)
     }

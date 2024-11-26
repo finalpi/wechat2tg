@@ -35,7 +35,7 @@ import {parseAppmsgMessagePayload} from '../util/message-appmsg'
 import {Api} from 'telegram'
 import messages = Api.messages
 import {ImageUtils} from '../util/ImageUtils'
-
+import { SpeechService } from '../service/SpeechService'
 
 export class WeChatClient extends BaseClient {
 
@@ -1236,7 +1236,9 @@ export class WeChatClient extends BaseClient {
                         sender.sendFile(tgMessage.chatId, {
                             buff: buffer,
                             filename: fileName,
-                            caption: identityStr,
+                            caption: this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_TRANSCRIPT)
+                                ? `${identityStr}${this.t('wechat.transcripting')}`
+                                : `${identityStr}`,
                             fileType: this.getSendTgFileMethodString(messageType),
                         }, {parse_mode: 'HTML'}).then(res => {
                             MessageService.getInstance().addMessage({
@@ -1248,6 +1250,13 @@ export class WeChatClient extends BaseClient {
                                 send_by: tgMessage.sender ? tgMessage.sender : '',
                                 create_time: new Date().getTime(),
                             })
+                            if (this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_TRANSCRIPT)) {
+                                SpeechService.getInstance().getTranscript(buffer).then(audioTranscript => {
+                                    sender.editAudio(tgMessage.chatId, res.message_id, `${identityStr}${audioTranscript}`)
+                                }).catch(() => {
+                                    sender.editAudio(tgMessage.chatId, res.message_id, `${identityStr}${this.t('wechat.audioTranscriptFailed')}, ${this.t('wechat.plzViewOnPhone')}`)
+                                })
+                            }
                         }).catch(() => {
                             this.sendMessageToTg({
                                 ...tgMessage,

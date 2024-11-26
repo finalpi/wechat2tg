@@ -14,6 +14,7 @@ export class VariableContainer {
         [VariableType.SETTING_FORWARD_SELF]: boolean,
         [VariableType.SETTING_COMPRESSION]: boolean,
         [VariableType.SETTING_AUTO_GROUP]: boolean,
+        [VariableType.SETTING_AUTO_TRANSCRIPT]: boolean,
         [VariableType.SETTING_LANGUAGE]: string,
     } = {
         [VariableType.SETTING_NOTION_MODE]: NotionMode.BLACK,
@@ -27,6 +28,7 @@ export class VariableContainer {
         [VariableType.SETTING_FORWARD_SELF]: false,
         [VariableType.SETTING_COMPRESSION]: false,
         [VariableType.SETTING_AUTO_GROUP]: false,
+        [VariableType.SETTING_AUTO_TRANSCRIPT]: false,
         [VariableType.SETTING_LANGUAGE]: 'zh',
     }
 
@@ -98,6 +100,8 @@ export enum VariableType {
     SETTING_ACCEPT_OFFICIAL_ACCOUNT = 'Setting_Accept_Official_Account',
     // 屏蔽表情包
     SETTING_BLOCK_EMOTICON = 'SETTING_BLOCK_EMOTICON',
+    // 是否自动转文字
+    SETTING_AUTO_TRANSCRIPT = 'Setting_Auto_Transcript',
     // 转发自己发的消息
     SETTING_FORWARD_SELF = 'Setting_Forward_Self',
     // 媒体是否压缩
@@ -126,6 +130,7 @@ type VariableMap = {
     [VariableType.SETTING_FORWARD_SELF]: boolean,
     [VariableType.SETTING_COMPRESSION]: boolean,
     [VariableType.SETTING_AUTO_GROUP]: boolean,
+    [VariableType.SETTING_AUTO_TRANSCRIPT]: boolean,
     [VariableType.SETTING_LANGUAGE]: string,
 };
 
