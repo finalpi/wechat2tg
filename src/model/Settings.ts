@@ -1,4 +1,6 @@
 import * as fs from 'node:fs'
+import log4js from 'log4js'
+import {LogUtils} from '../util/LogUtils'
 
 export class VariableContainer {
 
@@ -62,23 +64,16 @@ export class VariableContainer {
     // 将内容写入文件
     writeToFile(filePath = `${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`): void {
         try {
-            const data = {
-                [VariableType.SETTING_NOTION_MODE]: this.variables[VariableType.SETTING_NOTION_MODE] ? this.variables[VariableType.SETTING_NOTION_MODE] : NotionMode.BLACK,
-                [VariableType.SETTING_WHITE_LIST]: this.variables[VariableType.SETTING_WHITE_LIST] ? this.variables[VariableType.SETTING_WHITE_LIST] : [],
-                [VariableType.SETTING_BLACK_LIST]: this.variables[VariableType.SETTING_BLACK_LIST] ? this.variables[VariableType.SETTING_BLACK_LIST] : [],
-                [VariableType.SETTING_REPLY_SUCCESS]: this.variables[VariableType.SETTING_REPLY_SUCCESS] ? this.variables[VariableType.SETTING_REPLY_SUCCESS] : false,
-                [VariableType.SETTING_AUTO_SWITCH]: this.variables[VariableType.SETTING_AUTO_SWITCH] ? this.variables[VariableType.SETTING_AUTO_SWITCH] : false,
-                [VariableType.SETTING_FORWARD_SELF]: this.variables[VariableType.SETTING_FORWARD_SELF] ? this.variables[VariableType.SETTING_FORWARD_SELF] : false,
-                [VariableType.SETTING_COMPRESSION]: this.variables[VariableType.SETTING_COMPRESSION] ? this.variables[VariableType.SETTING_COMPRESSION] : false,
-                [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: this.variables[VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT] ? this.variables[VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT] : false,
-                [VariableType.SETTING_BLOCK_EMOTICON]: this.variables[VariableType.SETTING_BLOCK_EMOTICON] ? this.variables[VariableType.SETTING_BLOCK_EMOTICON] : false,
-                [VariableType.SETTING_AUTO_GROUP]: this.variables[VariableType.SETTING_AUTO_GROUP] ? this.variables[VariableType.SETTING_AUTO_GROUP] : false,
-                [VariableType.SETTING_LANGUAGE]: this.variables[VariableType.SETTING_LANGUAGE] ? this.variables[VariableType.SETTING_LANGUAGE] : 'zh',
+            const data: { [key: string]: any } = {}
+            for (const key in this.variables) {
+                if (Object.prototype.hasOwnProperty.call(this.variables, key)) {
+                    data[key] = this.variables[key]
+                }
             }
             fs.writeFileSync(filePath, JSON.stringify(data), 'utf8')
-            console.log('File written successfully.')
+            LogUtils.debugLog().debug('Write to file:', data)
         } catch (error) {
-            console.error('Error writing to file:', error)
+            LogUtils.errorLog().error('Write to file error:', error)
         }
     }
 }
