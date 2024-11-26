@@ -1,1 +1,1 @@
-.github/workflows/build-and-push-docker-image.yml merge=ours
+build-and-push-docker-image.yml
