@@ -12,11 +12,11 @@ export class SpeechService {
                 secretId: process.env.TENCENT_SECRET_ID,
                 secretKey: process.env.TENCENT_SECRET_KEY,
             },
-            region: "ap-guangzhou",
+            region: 'ap-guangzhou',
             profile: {
-                signMethod: "TC3-HMAC-SHA256",
+                signMethod: 'TC3-HMAC-SHA256',
                 httpProfile: {
-                    reqMethod: "POST",
+                    reqMethod: 'POST',
                     reqTimeout: 30,
                 },
             },
@@ -33,13 +33,13 @@ export class SpeechService {
 
     public async getTranscript(audioBuffer: Buffer): Promise<string> {
         const base64Audio = audioBuffer.toString('base64')
-        
+
         const params: SentenceRecognitionRequest = {
-            EngSerViceType: "16k_zh",
+            EngSerViceType: '16k_zh',
             SourceType: 1,
             Data: base64Audio,
             DataLen: audioBuffer.length,
-            VoiceFormat: "mp3",
+            VoiceFormat: 'mp3',
         }
 
         const result = await this.client.SentenceRecognition(params)

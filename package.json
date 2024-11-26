@@ -5,9 +5,9 @@
   "main": "app.ts",
   "esModuleInterop": true,
   "scripts": {
-    "dev": "ts-node src/app.ts NODE_ENV=development",
+    "dev": " NODE_ENV=development ts-node src/app.ts",
     "build": "tsc",
-    "start": "tsc && node dist/app.js NODE_ENV=production"
+    "start": "NODE_ENV=production tsc && node dist/app.js"
   },
   "keywords": [],
   "author": "",

@@ -58,7 +58,8 @@ export class TelegramApiMessageSender extends MessageSender {
         const inputPeerChannelFromMessage = await this.sender.getInputEntity(chatId) || chatId
         const sendParam: messageMethods.EditMessageParams = {
             message: parseInt(msgId + ''),
-            text: caption
+            text: caption,
+            parseMode: 'html'
         }
         return new Promise((resolve, reject) => {
             this.sender.editMessage(inputPeerChannelFromMessage, sendParam).then(res => {

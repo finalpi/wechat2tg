@@ -1251,20 +1251,25 @@ export class WeChatClient extends BaseClient {
                                 create_time: new Date().getTime(),
                             })
                             if (this._tgClient.setting.getVariable(VariableType.SETTING_AUTO_TRANSCRIPT)) {
+                                this.logInfo('audio file to buffer success')
                                 SpeechService.getInstance().getTranscript(buffer).then(audioTranscript => {
-                                    sender.editAudio(tgMessage.chatId, res.message_id, `${identityStr}${audioTranscript}`)
-                                }).catch(() => {
-                                    sender.editAudio(tgMessage.chatId, res.message_id, `${identityStr}${this.t('wechat.audioTranscriptFailed')}, ${this.t('wechat.plzViewOnPhone')}`)
+                                    this.logDebug('audioTranscript text: ', audioTranscript)
+                                    sender.editAudio(tgMessage.chatId, res.message_id, `${identityStr}\n${audioTranscript}`)
+                                }).catch((reason) => {
+                                    this.logInfo('audioTranscript error: ', reason)
+                                    sender.editAudio(tgMessage.chatId, res.message_id, `${identityStr}\n${this.t('wechat.audioTranscriptFailed')}, ${this.t('wechat.plzViewOnPhone')}`)
                                 })
                             }
-                        }).catch(() => {
+                        }).catch((reason) => {
+                            this.logInfo('send file error:', reason)
                             this.sendMessageToTg({
                                 ...tgMessage,
                                 body: `${this.t('wechat.get')}[${this.getMessageName(message.type())}]${this.t('common.error')}, ${this.t('wechat.plzViewOnPhone')}`
                             })
                         })
                     })
-                }).catch(() => {
+                }).catch((reason) => {
+                    this.logInfo('file to buffer error:', reason)
                     this.sendMessageToTg({
                         ...tgMessage,
                         body: `${this.t('wechat.get')}[${this.getMessageName(message.type())}]${this.t('common.error')}, ${this.t('wechat.plzViewOnPhone')}`

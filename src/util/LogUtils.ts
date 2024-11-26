@@ -1,4 +1,4 @@
-import log4js from 'log4js'
+import log4js, {Logger} from 'log4js'
 
 export class LogUtils {
 
@@ -25,5 +25,17 @@ export class LogUtils {
                 error: {appenders: ['errorFile'], level: 'error'}
             }
         })
+    }
+
+    public static errorLog(): Logger {
+        return LogUtils.config().getLogger('error')
+    }
+
+    public static infoLog(): Logger {
+        return LogUtils.config().getLogger('info')
+    }
+
+    public static debugLog(): Logger {
+        return LogUtils.config().getLogger('debug')
     }
 }
