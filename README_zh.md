@@ -11,6 +11,7 @@
 3. 支持群组黑名单白名单模式
 4. 支持视频、文件、贴纸、图片、语音消息的发送
 5. 配置 `API_ID` 和 `API_HASH` 可以自动创建群聊转发
+6. 语音转文字功能
 
 # 注意事项
 
@@ -78,8 +79,8 @@ services:
       # PROXY_USERNAME: ''
       # PROXY_PASSWORD: ''
       # 发送大文件所需的Telegram API配置(可选)
-      # API_ID: ''
-      # API_HASH: ''
+      API_ID: ''
+      API_HASH: ''
       # 群消息格式
       ROOM_MESSAGE: '<i>🌐#[topic]</i> ---- <b>👤#[(alias)] #[name]: </b>'
       # 公众号消息格式
@@ -98,6 +99,9 @@ services:
       CREATE_CONTACT_NAME: '#[alias]#[[name]]'
       # 文字消息显示格式:#[identity]身份文本,#[body]:消息文本,#[br]换行
       MESSAGE_DISPLAY: '#[identity]#[br]#[body]'
+      # 腾讯语音识别控制台申请的API_KEY(可选)
+      TENCENT_SECRET_ID: ''
+      TENCENT_SECRET_KEY: ''
     restart: unless-stopped
 ```
 
@@ -150,7 +154,7 @@ docker run -itd --env BOT_TOKEN="" --env PROXY_HOST="" --env PROXY_PORT="" --env
 
 **媒体质量压缩**：开启后所有接收到的媒体消息以图片，视频的方式接收，可能会损失媒体的原始质量。如果关闭该选项，则所有的消息都会以文件的方式接收
 
-## 特殊说明
+### 特殊说明
 
 2分钟内发送的消息能撤回 撤回方式是回复自己发送的消息 内容为 `&rm`
 媒体消息需要等待发送成功才能撤回
@@ -195,6 +199,12 @@ API 的限制，不能发送超过20MB的文件，或者接收超过50MB的文�
 1. 配置 `API_ID` 和 `API_HASH`
 2. 关闭掉机器人的隐私模式。
 3. 用 `/autocg` 命令开启自动分组模式，按提示登录 Telegram 即可
+
+### 语音转文字
+
+1. 配置`TENCENT_SECRET_ID`和`TENCENT_SECRET_KEY`,API 可在腾讯[语音识别控制台](https://console.cloud.tencent.com/asr)开通
+   ,有免费的使用额度
+2. 在`/setting`中开启自动文字转语音功能
 
 ### 自定义消息模板
 

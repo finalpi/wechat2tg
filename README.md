@@ -13,6 +13,7 @@ circumvents the login issue with the WeChat Web version.
 3. Supports blacklisting and whitelisting modes for group chats.
 4. Supports sending videos, files, stickers, images, and voice messages.
 5. By configuring `API_ID` and `API_HASH`, it can automatically create a group chat for forwarding.
+6. Speech-to-text
 
 # Notes
 
@@ -105,6 +106,9 @@ services:
       CREATE_CONTACT_NAME: '#[alias]#[[name]]'
       # Text message display format: #[identity] identity text, #[body]: message text, #[br] line break
       MESSAGE_DISPLAY: '#[identity]#[br]#[body]'
+      # API_KEY applied for in the Tencent Speech Recognition Console (optional)
+      TENCENT_SECRET_ID: ''
+      TENCENT_SECRET_KEY: ''
     restart: unless-stopped
 ```
 
@@ -159,7 +163,7 @@ received right before sending, it could result in sending to the wrong recipient
 **Media Compression**: If enabled, all received media messages will be processed as images or videos, which may reduce
 the original quality. If disabled, all messages will be received as files.
 
-## Special Notes
+### Special Notes
 
 Messages can be recalled within 2 minutes by replying to your own message with `&rm`. Media messages can only be
 recalled after the message has been successfully sent.
@@ -206,6 +210,13 @@ rights).
 1. Configure `API_ID` and `API_HASH`.
 2. Disable the bot's privacy mode.
 3. Use the `/autocg` command to enable automatic grouping, and follow the prompts to log in to Telegram.
+
+### Speech-to-text
+
+1. Configure 'TENCENT_SECRET_ID' and 'TENCENT_SECRET_KEY', and the API can be activated in
+   Tencent [Speech Recognition Console](https://console.cloud.tencent.com/asr)
+   , with a free usage credit
+2. Turn on the automatic text-to-speech feature in '/setting'
 
 ### Custom Message Templates
 

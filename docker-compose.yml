@@ -20,8 +20,8 @@ services:
       # PROXY_USERNAME: ''
       # PROXY_PASSWORD: ''
       # 发送大文件所需Telegram API配置(可选)
-      # API_ID: ''
-      # API_HASH: ''
+      API_ID: ''
+      API_HASH: ''
       # 群消息格式
       ROOM_MESSAGE: '<i>🌐#[topic]</i> ---- <b>👤#[(alias)] #[name]: </b>'
       # 公众号消息格式
@@ -40,4 +40,7 @@ services:
       CREATE_CONTACT_NAME: '#[alias]#[[name]]'
       # 文字消息显示格式:#[identity]身份文本,#[body]:消息文本,#[br]换行
       MESSAGE_DISPLAY: '#[identity]#[br]#[body]'
+      # 腾讯语音识别控制台申请的API_KEY(可选)
+      TENCENT_SECRET_ID: ''
+      TENCENT_SECRET_KEY: ''
     restart: unless-stopped
