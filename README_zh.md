@@ -226,6 +226,11 @@ API 的限制，不能发送超过20MB的文件，或者接收超过50MB的文�
 
 `#[br]`：换行
 
+# 参与开发
+
+1. fork 项目,切换到`refactor/ts-single-dev`分支,或者新建一个分支,请不要直接提交代码到 master 分支
+2. 提交 Pull Request
+
 ## License
 
 [MIT](LICENSE)
