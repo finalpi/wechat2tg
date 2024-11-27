@@ -7,3 +7,4 @@ avatar/*
 dist
 storage/**
 logs
+.github
