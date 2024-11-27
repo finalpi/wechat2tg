@@ -35,7 +35,7 @@ import {parseAppmsgMessagePayload} from '../util/message-appmsg'
 import {Api} from 'telegram'
 import messages = Api.messages
 import {ImageUtils} from '../util/ImageUtils'
-import { SpeechService } from '../service/SpeechService'
+import {SpeechService} from '../service/SpeechService'
 
 export class WeChatClient extends BaseClient {
 
@@ -622,7 +622,7 @@ export class WeChatClient extends BaseClient {
                         contact: message.to(),
                         bindId: bindId
                     })
-                } else if (talker?.type() === PUPPET.types.Contact.Official && !this._tgClient.setting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT)) {
+                } else if (talker?.type() === PUPPET.types.Contact.Official && !this._tgClient.setting.getVariable(VariableType.SETTING_BLOCK_OFFICIAL_ACCOUNT)) {
                     bindItem = await this._tgClient.tgUserClient?.createGroup({
                         type: 0,
                         contact: talker,
@@ -674,7 +674,7 @@ export class WeChatClient extends BaseClient {
             if (this._tgClient.currentOrder && this._tgClient.currentOrder === talker.payload.name) {
                 this._tgClient.currentOrder = undefined
             } else {
-                if (this._tgClient.setting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT)) {
+                if (this._tgClient.setting.getVariable(VariableType.SETTING_BLOCK_OFFICIAL_ACCOUNT)) {
                     return
                 }
             }

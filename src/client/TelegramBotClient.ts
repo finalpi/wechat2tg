@@ -1415,10 +1415,10 @@ export class TelegramBotClient extends BaseClient {
         })
 
         // 接受公众号消息
-        bot.action(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT, ctx => {
-            const b = !this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT)
+        bot.action(VariableType.SETTING_BLOCK_OFFICIAL_ACCOUNT, ctx => {
+            const b = !this.forwardSetting.getVariable(VariableType.SETTING_BLOCK_OFFICIAL_ACCOUNT)
             const answerText = b ? this.t('common.close') : this.t('common.open')
-            this.forwardSetting.setVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT, b)
+            this.forwardSetting.setVariable(VariableType.SETTING_BLOCK_OFFICIAL_ACCOUNT, b)
             // 修改后持成文件
             this.forwardSetting.writeToFile()
             // 点击后修改上面按钮
@@ -2610,7 +2610,7 @@ export class TelegramBotClient extends BaseClient {
                 [Markup.button.callback(this.t('command.setting.messageMode', this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK ? this.t('command.setting.blackMode') : this.t('command.setting.whiteMode')), VariableType.SETTING_NOTION_MODE),],
                 [Markup.button.callback(this.t('command.setting.messageFallback', this.forwardSetting.getVariable(VariableType.SETTING_REPLY_SUCCESS) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_REPLY_SUCCESS),],
                 [Markup.button.callback(this.t('command.setting.autoSwitchContact', this.forwardSetting.getVariable(VariableType.SETTING_AUTO_SWITCH) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_AUTO_SWITCH),],
-                [Markup.button.callback(this.t('command.setting.receiveOfficial', this.forwardSetting.getVariable(VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT) ? this.t('common.close') : this.t('common.open')), VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT),],
+                [Markup.button.callback(this.t('command.setting.receiveOfficial', this.forwardSetting.getVariable(VariableType.SETTING_BLOCK_OFFICIAL_ACCOUNT) ? this.t('common.close') : this.t('common.open')), VariableType.SETTING_BLOCK_OFFICIAL_ACCOUNT),],
                 [Markup.button.callback(this.t('command.setting.blockEmoticon', this.forwardSetting.getVariable(VariableType.SETTING_BLOCK_EMOTICON) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_BLOCK_EMOTICON),],
                 [Markup.button.callback(this.t('command.setting.forwardSelf', this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_FORWARD_SELF),],
                 [Markup.button.callback(this.t('command.setting.mediaQualityCompression', this.forwardSetting.getVariable(VariableType.SETTING_COMPRESSION) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_COMPRESSION),],

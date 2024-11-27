@@ -1,5 +1,4 @@
 import * as fs from 'node:fs'
-import log4js from 'log4js'
 import {LogUtils} from '../util/LogUtils'
 
 export class VariableContainer {
@@ -11,7 +10,7 @@ export class VariableContainer {
         [VariableType.SETTING_REPLY_SUCCESS]: boolean,
         [VariableType.SETTING_AUTO_SWITCH]: boolean,
         [VariableType.SETTING_CHAT_ID]: string,
-        [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: boolean,
+        [VariableType.SETTING_BLOCK_OFFICIAL_ACCOUNT]: boolean,
         [VariableType.SETTING_BLOCK_EMOTICON]: boolean,
         [VariableType.SETTING_FORWARD_SELF]: boolean,
         [VariableType.SETTING_COMPRESSION]: boolean,
@@ -23,12 +22,12 @@ export class VariableContainer {
         [VariableType.SETTING_WHITE_LIST]: [],
         [VariableType.SETTING_BLACK_LIST]: [],
         [VariableType.SETTING_REPLY_SUCCESS]: false,
-        [VariableType.SETTING_AUTO_SWITCH]: true,
+        [VariableType.SETTING_AUTO_SWITCH]: false,
         [VariableType.SETTING_CHAT_ID]: '',
-        [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: false,
+        [VariableType.SETTING_BLOCK_OFFICIAL_ACCOUNT]: false,
         [VariableType.SETTING_BLOCK_EMOTICON]: false,
-        [VariableType.SETTING_FORWARD_SELF]: false,
-        [VariableType.SETTING_COMPRESSION]: false,
+        [VariableType.SETTING_FORWARD_SELF]: true,
+        [VariableType.SETTING_COMPRESSION]: true,
         [VariableType.SETTING_AUTO_GROUP]: false,
         [VariableType.SETTING_AUTO_TRANSCRIPT]: false,
         [VariableType.SETTING_LANGUAGE]: 'zh',
@@ -55,7 +54,7 @@ export class VariableContainer {
             const wechatParsedData = fs.existsSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`) ? JSON.parse(fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.SETTING_FILE_NAME}`, 'utf8')) : {}
             const tgParsedData = fs.existsSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.OWNER_FILE_NAME}`) ? JSON.parse(fs.readFileSync(`${StorageSettings.STORAGE_FOLDER}/${StorageSettings.OWNER_FILE_NAME}`, 'utf8')) : {}
 
-            this.variables = {...wechatParsedData, ...tgParsedData}
+            this.variables = {...this.variables, ...wechatParsedData, ...tgParsedData}
         } catch (error) {
             console.error('Error parsing file:', error)
         }
@@ -91,8 +90,8 @@ export enum VariableType {
     SETTING_AUTO_SWITCH = 'Setting_Auto_Switch',
     // tg的chatID
     SETTING_CHAT_ID = 'chat_id',
-    // 接受公众号消息
-    SETTING_ACCEPT_OFFICIAL_ACCOUNT = 'Setting_Accept_Official_Account',
+    // 禁止公众号消息
+    SETTING_BLOCK_OFFICIAL_ACCOUNT = 'Setting_Block_Official_Account',
     // 屏蔽表情包
     SETTING_BLOCK_EMOTICON = 'SETTING_BLOCK_EMOTICON',
     // 是否自动转文字
@@ -120,7 +119,7 @@ type VariableMap = {
     [VariableType.SETTING_REPLY_SUCCESS]: boolean,
     [VariableType.SETTING_AUTO_SWITCH]: boolean,
     [VariableType.SETTING_CHAT_ID]: string,
-    [VariableType.SETTING_ACCEPT_OFFICIAL_ACCOUNT]: boolean,
+    [VariableType.SETTING_BLOCK_OFFICIAL_ACCOUNT]: boolean,
     [VariableType.SETTING_BLOCK_EMOTICON]: boolean,
     [VariableType.SETTING_FORWARD_SELF]: boolean,
     [VariableType.SETTING_COMPRESSION]: boolean,
@@ -128,10 +127,6 @@ type VariableMap = {
     [VariableType.SETTING_AUTO_TRANSCRIPT]: boolean,
     [VariableType.SETTING_LANGUAGE]: string,
 };
-
-export class GroupListSave {
-
-}
 
 export enum StorageSettings {
     STORAGE_FOLDER = 'storage',
@@ -142,6 +137,4 @@ export enum StorageSettings {
 export type NotionListType = {
     id: string,
     name: string,
-    // shot_id: string,
-    // type: string,
 }
