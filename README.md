@@ -238,6 +238,11 @@ Custom message template placeholders:
 
 `#[br]`：Line break
 
+# Development Steps
+
+1. Fork the project, switch to the `refactor/ts-single-dev` branch, or create a new branch. Please do not submit code directly to the master branch.
+2. Submit a Pull Request.
+
 ## License
 
 [MIT](LICENSE)
