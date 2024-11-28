@@ -20,6 +20,28 @@ This project, based on [wechaty](https://github.com/wechaty/wechaty) , enables s
 
 7. Voice-to-text conversion for WeChat voice messages.
 
+
+## Supported Features
+
+### Supported WeChat Message Types
+
++ [x] Text messages (emojis within text can be converted to Telegram emojis, but many mappings are not available)
++ [x] Non-official stickers
++ [x] Image messages
++ [x] Audio/Video calls (only message notifications)
++ [x] File messages
++ [x] Voice messages
++ [x] Message recall
++ [x] Link messages
++ [x] Mini program messages (partially supported)
++ [x] Location messages (converted to location text)
++ [x] Red packet messages (notification only, cannot retrieve red packet content)
++ [x] Group chat messages
++ [x] Group chat @ messages (@all and @you will be converted to Telegram @you)
++ [x] Official account messages
++ [ ] Store stickers
++ [ ] Messages sent by WeChat Work users
+
 ## Notes
 
 1. This project is for technical research and learning purposes only and must not be used for illegal purposes.
@@ -192,15 +214,12 @@ npm start
    Blocks WeChat emoji messages.
 
 
----
-
 
 ### Message Recall
 Messages sent within 2 minutes can be recalled by replying `&rm` to the message.
 Media messages must be successfully sent before recall.
 If `API_ID` and `API_HASH` are configured, deleting a message will also recall it.
 
----
 
 Obtaining `API_ID` and `API_HASH`
 1. Log in to your [Telegram account](https://my.telegram.org/) .
@@ -209,8 +228,6 @@ Obtaining `API_ID` and `API_HASH`
 
 3. Click **Create application**  to generate the credentials.
 
-
----
 
 
 ### Handling Large Files
@@ -222,8 +239,6 @@ Due to Telegram Bot API limitations:
 - Files larger than 50MB cannot be received.
   To handle larger files, configure `API_ID` and `API_HASH`.
   **Note:**  Web protocol testing shows uploads beyond 25MB may fail. This project includes a fix for this issue.
-
----
 
 
 ### Manual Message Grouping
@@ -252,8 +267,6 @@ Commands:
 - `/cgdata`: Update group avatar and nickname to match the corresponding WeChat contact or group (requires admin permissions).
 
 
----
-
 
 ### Auto Message Grouping
 
@@ -264,8 +277,6 @@ Commands:
 3. Use the `/autocg` command to enable auto-grouping mode, and follow prompts to log in to Telegram.
 
 
----
-
 
 ### Voice-to-Text Conversion
 
@@ -274,8 +285,6 @@ Commands:
 
 2. Enable auto voice-to-text conversion in `/setting`.
 
-
----
 
 
 ### Custom Message Templates
