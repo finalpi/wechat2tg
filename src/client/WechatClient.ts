@@ -1172,7 +1172,8 @@ export class WeChatClient extends BaseClient {
                 parse_mode: 'HTML',
                 reply_parameters: message.replay_msg_id ? {
                     message_id: message.replay_msg_id
-                } : undefined
+                } : undefined,
+                ...message.extraReplyMessage
             }).then(res => {
                 if (message.message && message.id) {
                     MessageService.getInstance().addMessage({

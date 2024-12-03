@@ -16,7 +16,7 @@ import {Snowflake} from 'nodejs-snowflake'
 import {SimpleMessageSender} from '../model/Message'
 import AllowForwardService from '../service/AllowForawrdService'
 import {FileBox} from 'file-box'
-import {returnBigInt} from "telegram/Helpers";
+import {returnBigInt} from 'telegram/Helpers'
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -107,77 +107,77 @@ export class TelegramUserClient extends TelegramClient {
 
     public async onMessage() {
         const allowForwardService = AllowForwardService.getInstance()
-        const allAllowForward = await allowForwardService.all()
-        const chatIds = allAllowForward.map(it => it.chat_id)
-        const me = await this.client?.getMe()
-        const meId = me.id
-        const botId = returnBigInt(TelegramBotClient.getInstance().bot.botInfo.id)
-        this.client.addEventHandler(async event => {
-            const msg = event.message
-            const msgChatId = msg.chatId?.toJSNumber()
-            if (msg.fromId instanceof Api.PeerUser && !msg.fromId.userId.eq(meId) && !msg.fromId.userId.eq(botId) && chatIds.includes(msgChatId)) {
-                const allowForward = allAllowForward.find(it => it.chat_id == msgChatId)
-                const sendMessage = TelegramBotClient.getInstance().bindItemService.getBindItemByChatId(allowForward.chat_id).then(bindItem => {
-                    const wechatClient = this.telegramBotClient.weChatClient
-                    if (bindItem.type === 0) {
-                        wechatClient.client.Contact.find({id: bindItem.wechat_id}).then(contact => {
-                            wechatClient.addMessage(contact, msg.message, {
-                                msg_id: msg.id,
-                                chat_id: msgChatId,
-                            })
-                            if (msg.media) {
-                                const fileName = msg.document?.attributes?.find(attr => attr instanceof Api.DocumentAttributeFilename)?.fileName
-                                msg.downloadMedia().then((buff) => {
-                                    const sendFile = FileBox.fromBuffer(Buffer.from(buff), fileName)
-                                    wechatClient.addMessage(contact, sendFile, {
-                                        msg_id: msg.id,
-                                        chat_id: msgChatId,
-                                    })
+        allowForwardService.all().then(allAllowForward => {
+            const chatIds = allAllowForward.map(it => it.chat_id)
+            const botId = returnBigInt(TelegramBotClient.getInstance().bot.botInfo.id)
+            this.client.addEventHandler(async event => {
+                const msg = event.message
+                const msgChatId = msg.chatId?.toJSNumber()
+                if (msg.fromId instanceof Api.PeerUser && !msg.fromId.userId.eq(botId) && chatIds.includes(msgChatId)) {
+                    // if (chatIds.includes(msgChatId)) {
+                    const allowForward = allAllowForward.find(it => it.chat_id == msgChatId)
+                    const sendMessage = TelegramBotClient.getInstance().bindItemService.getBindItemByChatId(allowForward.chat_id).then(bindItem => {
+                        const wechatClient = this.telegramBotClient.weChatClient
+                        if (bindItem.type === 0) {
+                            wechatClient.client.Contact.find({id: bindItem.wechat_id}).then(contact => {
+                                wechatClient.addMessage(contact, msg.message, {
+                                    msg_id: msg.id,
+                                    chat_id: msgChatId,
                                 })
-                            }
-                        })
-                    }
-                    if (bindItem.type === 1) {
-                        wechatClient.client.Room.find({id: bindItem.wechat_id}).then(room => {
-                            wechatClient.addMessage(room, msg.message, {
-                                msg_id: msg.id,
-                                chat_id: msgChatId,
-                            })
-                            if (msg.media) {
-                                const fileName = msg.document?.attributes?.find(attr => attr instanceof Api.DocumentAttributeFilename)?.fileName
-                                msg.downloadMedia().then((buff) => {
-                                    const sendFile = FileBox.fromBuffer(Buffer.from(buff),fileName)
-                                    wechatClient.addMessage(room, sendFile, {
-                                        msg_id: msg.id,
-                                        chat_id: msgChatId,
+                                if (msg.media) {
+                                    const fileName = msg.document?.attributes?.find(attr => attr instanceof Api.DocumentAttributeFilename)?.fileName
+                                    msg.downloadMedia().then((buff) => {
+                                        const sendFile = FileBox.fromBuffer(Buffer.from(buff), fileName)
+                                        wechatClient.addMessage(contact, sendFile, {
+                                            msg_id: msg.id,
+                                            chat_id: msgChatId,
+                                        })
                                     })
-                                })
-                            }
-                        })
-                    }
-                })
-                if (allowForward?.all_allow) {
-                    sendMessage
-                } else if (allowForward?.id) {
-                    allowForwardService.listEntities(allowForward.id).then(entities => {
-                        const entityIds = entities.map(en => en.entity_id)
-                        const searchElement = msg.toId
-                        let searchElementId
-                        if (searchElement.className === 'PeerUser') {
-                            searchElementId = searchElement.userId
-                        } else if (searchElement.className === 'PeerChat') {
-                            searchElementId = searchElement.chatId
-                        } else if (searchElement.className === 'PeerChannel') {
-                            searchElementId = searchElement.channelId
+                                }
+                            })
                         }
-                        if (entityIds.includes(searchElementId)) {
-                            sendMessage
+                        if (bindItem.type === 1) {
+                            wechatClient.client.Room.find({id: bindItem.wechat_id}).then(room => {
+                                wechatClient.addMessage(room, msg.message, {
+                                    msg_id: msg.id,
+                                    chat_id: msgChatId,
+                                })
+                                if (msg.media) {
+                                    const fileName = msg.document?.attributes?.find(attr => attr instanceof Api.DocumentAttributeFilename)?.fileName
+                                    msg.downloadMedia().then((buff) => {
+                                        const sendFile = FileBox.fromBuffer(Buffer.from(buff), fileName)
+                                        wechatClient.addMessage(room, sendFile, {
+                                            msg_id: msg.id,
+                                            chat_id: msgChatId,
+                                        })
+                                    })
+                                }
+                            })
                         }
                     })
-                }
+                    if (allowForward?.all_allow) {
+                        sendMessage
+                    } else if (allowForward?.id) {
+                        allowForwardService.listEntities(allowForward.id).then(entities => {
+                            const entityIds = entities.map(en => en.entity_id)
+                            const searchElement = msg.toId
+                            let searchElementId
+                            if (searchElement.className === 'PeerUser') {
+                                searchElementId = searchElement.userId
+                            } else if (searchElement.className === 'PeerChat') {
+                                searchElementId = searchElement.chatId
+                            } else if (searchElement.className === 'PeerChannel') {
+                                searchElementId = searchElement.channelId
+                            }
+                            if (entityIds.includes(searchElementId)) {
+                                sendMessage
+                            }
+                        })
+                    }
 
-            }
-        }, new NewMessage())
+                }
+            }, new NewMessage({chats: chatIds, func: (event) => event.isGroup}))
+        })
     }
 
     /**

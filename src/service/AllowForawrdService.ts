@@ -124,4 +124,20 @@ export default class AllowForwardService extends BaseSqlService {
             })
         })
     }
+
+    public rmEntities({chatId, entityIds}: { chatId?: number, entityIds: number[] }) {
+        return new Promise((resolve, reject) => {
+            const sql = chatId ? 'DELETE FROM allow_forward_entities WHERE allow_forward_id = ? AND entity_id IN (?)'
+                : 'DELETE FROM allow_forward_entities WHERE entity_id IN (?)'
+            const stmt = this.db.prepare(sql)
+            stmt.run(chatId ? [chatId, entityIds] : [entityIds], function (err) {
+                if (err) {
+                    reject(err)
+                } else {
+                    resolve(this.changes)
+                }
+            })
+            stmt.finalize()
+        })
+    }
 }

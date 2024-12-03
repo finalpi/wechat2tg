@@ -736,7 +736,13 @@ export class TelegramBotClient extends BaseClient {
                         items.map(it => {
                             return {chat_id: it.chat_id, all_allow: YesOrNo.NO} as AllowForward
                         }).forEach(al => {
-                            allowForwardService.createOrUpdate(al).then(id => {
+                            allowForwardService.one(al.chat_id).then(async exit => {
+                                let id
+                                if (!exit) {
+                                    id = await allowForwardService.add(al)
+                                } else {
+                                    id = exit.id
+                                }
                                 allowForwardService.addEntitiesList(allows.map(allow => {
                                     return {
                                         allow_forward_id: id,
@@ -757,7 +763,13 @@ export class TelegramBotClient extends BaseClient {
                     allowForwardService.createOrUpdate({chat_id: ctx.chat.id, all_allow: YesOrNo.YES})
                     ctx.reply(this.t('command.aad.success'))
                 } else {
-                    allowForwardService.createOrUpdate({chat_id: ctx.chat.id, all_allow: YesOrNo.NO}).then(id => {
+                    allowForwardService.one(ctx.chat.id).then(async exit => {
+                        let id
+                        if (!exit) {
+                            id = await allowForwardService.add({chat_id: ctx.chat.id, all_allow: YesOrNo.NO})
+                        } else {
+                            id = exit.id
+                        }
                         allowForwardService.addEntitiesList(allows.map(allow => {
                             return {
                                 allow_forward_id: id,
@@ -765,13 +777,34 @@ export class TelegramBotClient extends BaseClient {
                             } as AllowForwardEntities
                         }))
                         ctx.reply(this.t('command.aad.success'))
-                    }).catch(() => {
-                        ctx.reply(this.t('command.aad.fail'))
                     })
                 }
             }
 
             // this.tgUserClient.onMessage()
+        })
+
+        // TODO 暂未实现
+        bot.command('als', async (ctx) => {
+            // in bot chat
+            if (ctx.chat.id === this._chatId) {
+                const allowForwardService = AllowForwardService.getInstance()
+                allowForwardService.listAllEntities().then(allowForwards => {
+                    // const list = allowForwards.map(it => {
+                    // })
+                    // ctx.reply(this.t('command.als.success', list))
+                })
+            }
+        })
+        // TODO 暂未实现
+        bot.command('arm', async (ctx) => {
+            // in bot chat
+            const allowForwardService = AllowForwardService.getInstance()
+            if (ctx.chat.id === this._chatId) {
+                allowForwardService.rmEntities({entityIds: ctx.args.map(it => Number.parseInt(it))})
+            } else {
+                allowForwardService.rmEntities({chatId: ctx.chat.id, entityIds: [ctx.chat.id]})
+            }
         })
 
         bot.command('login', async ctx => {
