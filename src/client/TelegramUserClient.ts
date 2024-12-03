@@ -10,10 +10,11 @@ import {CreateGroupInterface} from '../model/CreateGroupInterface'
 import {CustomFile} from 'telegram/client/uploads'
 import {SetupServiceImpl} from '../service/impl/SetupServiceImpl'
 import * as os from 'node:os'
-import {NewMessage} from 'telegram/events'
+import {NewMessage, NewMessageEvent} from 'telegram/events'
 import {MessageService} from '../service/MessageService'
 import {Snowflake} from 'nodejs-snowflake'
 import {SimpleMessageSender} from '../model/Message'
+import AllowForwardService from '../service/AllowForawrdService'
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -99,38 +100,90 @@ export class TelegramUserClient extends TelegramClient {
                 })
             }, new NewMessage({fromUsers: [me]}))
         })
-        this.onMessage()
+        this.onMessage
     }
 
-    private async onMessage() {
-        const binds = await TelegramBotClient.getInstance().bindItemService.getAllBindItems()
-        const allows = binds.flatMap(it => [...JSON.parse(it.allow_entities ?? '[]')])
-        this.client?.addEventHandler(async event => {
-            const msg = event.message
-            const msgChatId = msg.chatId?.toJSNumber()
-            const bindItem = binds.find(it => it.chat_id == msgChatId)
-            if (msgChatId == this.telegramBotClient.chatId || bindItem) {
-                // this.telegramBotClient.weChatClient.addMessage()
-                const wechatClient = this.telegramBotClient.weChatClient
-                if (bindItem.type === 0) {
-                    wechatClient.client.Contact.find({id: bindItem.wechat_id}).then(contact => {
-                        wechatClient.addMessage(contact, msg.message, {
-                            msg_id: msg.id,
-                            chat_id: msgChatId,
-                        })
+    public async onMessage() {
+        const allowForwardService = AllowForwardService.getInstance()
+        const allEntities = await allowForwardService.listAllEntities()
+        const entityIds = new Set(allEntities.map(it => it.entity_id))
+        allowForwardService.all().then(chats => {
+            const chatIds = chats.map(it => it.chat_id)
+            this.client.addEventHandler(async event => {
+                const msg = event.message
+                const msgChatId = msg.chatId?.toJSNumber()
+                if (chatIds.includes(msgChatId)) {
+                    const allowForward = chats.find(it => it.chat_id == msgChatId)
+                    const sendMessage = TelegramBotClient.getInstance().bindItemService.getBindItemByChatId(allowForward.chat_id).then(bindItem => {
+                        const wechatClient = this.telegramBotClient.weChatClient
+                        if (bindItem.type === 0) {
+                            wechatClient.client.Contact.find({id: bindItem.wechat_id}).then(contact => {
+                                wechatClient.addMessage(contact, msg.message, {
+                                    msg_id: msg.id,
+                                    chat_id: msgChatId,
+                                })
+                            })
+                        }
+                        if (bindItem.type === 1) {
+                            wechatClient.client.Room.find({id: bindItem.wechat_id}).then(room => {
+                                wechatClient.addMessage(room, msg.message, {
+                                    msg_id: msg.id,
+                                    chat_id: msgChatId,
+                                })
+                            })
+                        }
                     })
-                }
-                if (bindItem.type === 1) {
-                    wechatClient.client.Room.find({id: bindItem.wechat_id}).then(room => {
-                        wechatClient.addMessage(room, msg.message, {
-                            msg_id: msg.id,
-                            chat_id: msgChatId,
+                    if (allowForward?.all_allow) {
+                        sendMessage
+                    } else if (allowForward?.id) {
+                        allowForwardService.listEntities(allowForward.id).then(entities => {
+                            const entityIds = entities.map(en => en.entity_id)
+                            const searchElement = msg.toId
+                            let searchElementId
+                            if (searchElement.className === 'PeerUser') {
+                                searchElementId = searchElement.userId
+                            } else if (searchElement.className === 'PeerChat') {
+                                searchElementId = searchElement.chatId
+                            } else if (searchElement.className === 'PeerChannel') {
+                                searchElementId = searchElement.channelId
+                            }
+                            if (entityIds.includes(searchElementId)) {
+                                sendMessage
+                            }
                         })
-                    })
-                }
-            }
+                    }
 
-        }, new NewMessage({fromUsers: [...allows]}))
+                }
+            }, new NewMessage({fromUsers: [...entityIds]}))
+        })
+        // const binds = await TelegramBotClient.getInstance().bindItemService.getAllBindItems()
+        // const allows = binds.flatMap(it => [...JSON.parse(it.allow_entities ?? '[]')])
+        // this.client?.addEventHandler(async event => {
+        //     const msg = event.message
+        //     const msgChatId = msg.chatId?.toJSNumber()
+        //     const bindItem = binds.find(it => it.chat_id == msgChatId)
+        //     if (msgChatId == this.telegramBotClient.chatId || bindItem) {
+        //         // this.telegramBotClient.weChatClient.addMessage()
+        //         const wechatClient = this.telegramBotClient.weChatClient
+        //         if (bindItem.type === 0) {
+        //             wechatClient.client.Contact.find({id: bindItem.wechat_id}).then(contact => {
+        //                 wechatClient.addMessage(contact, msg.message, {
+        //                     msg_id: msg.id,
+        //                     chat_id: msgChatId,
+        //                 })
+        //             })
+        //         }
+        //         if (bindItem.type === 1) {
+        //             wechatClient.client.Room.find({id: bindItem.wechat_id}).then(room => {
+        //                 wechatClient.addMessage(room, msg.message, {
+        //                     msg_id: msg.id,
+        //                     chat_id: msgChatId,
+        //                 })
+        //             })
+        //         }
+        //     }
+        //
+        // }, new NewMessage({fromUsers: [...allows]}))
     }
 
     /**

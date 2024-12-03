@@ -38,6 +38,9 @@ import {Snowflake} from 'nodejs-snowflake'
 import {SetupServiceImpl} from '../service/impl/SetupServiceImpl'
 import {Entity} from 'telegram/define'
 import {ImageUtils} from '../util/ImageUtils'
+import AllowForwardService from '../service/AllowForawrdService'
+import {AllowForward, AllowForwardEntities} from '../model/AllowForwardEntity'
+import {YesOrNo} from '../enums/BaseEnum'
 
 export class TelegramBotClient extends BaseClient {
     get currentOrder(): string | undefined {
@@ -316,9 +319,9 @@ export class TelegramBotClient extends BaseClient {
             {command: 'gs', description: this.t('command.description.gs')},
             {command: 'source', description: this.t('command.description.source')},
             // todo 暂未实现
-            // {command: 'aad', description: this.t('command.description.aad')},
-            // {command: 'als', description: this.t('command.description.als')},
-            // {command: 'arm', description: this.t('command.description.arm')},
+            {command: 'aad', description: this.t('command.description.aad')},
+            {command: 'als', description: this.t('command.description.als')},
+            {command: 'arm', description: this.t('command.description.arm')},
             {command: 'reset', description: this.t('command.description.reset')},
             {command: 'rcc', description: this.t('command.description.rcc')},
             {command: 'stop', description: this.t('command.description.stop')},
@@ -688,6 +691,11 @@ export class TelegramBotClient extends BaseClient {
 
         // 只允许 id 和 username
         bot.command('aad', async (ctx) => {
+            // 添加所有的人
+            let addAll = false
+            if (ctx.msg.text === 'all') {
+                addAll = true
+            }
             // 转换为实体
             const allows = await Promise.all(ctx.args.flatMap(async it => {
                 if (parseInt(it)) {
@@ -698,24 +706,64 @@ export class TelegramBotClient extends BaseClient {
                     return en?.id.toString()
                 }
             }))
-            if (allows.length === 0) {
+            if (!addAll && allows.length === 0) {
                 await ctx.reply(this.t('command.aad.noUser'))
                 return
             }
             // 在bot的聊天使用添加到全部的群组
+            const allowForwardService = AllowForwardService.getInstance()
+            // in bot chat
             if (ctx.chat.id === this._chatId) {
-                this.bindItemService.addAllowEntityByChat(-1, allows).then(() => {
-                    ctx.reply(this.t('command.aad.success'))
-                }).catch(() => {
-                    ctx.reply(this.t('command.aad.fail'))
-                })
-            } else {
-                this.bindItemService.addAllowEntityByChat(ctx.chat.id, allows).then(() => {
-                    ctx.reply(this.t('command.aad.success'))
-                }).catch(() => {
-                    ctx.reply(this.t('command.aad.fail'))
-                })
+                // let allowForward: AllowForward [] = []
+                if (addAll) {
+                    // all bind items
+                    this.bindItemService.getAllBindItems().then(items => {
+                        items.map(it => {
+                            return {chat_id: it.chat_id, all_allow: YesOrNo.YES} as AllowForward
+                        }).forEach(al => {
+                            allowForwardService.add(al)
+                        })
+                    })
+                } else {
+                    this.bindItemService.getAllBindItems().then(items => {
+                        items.map(it => {
+                            return {chat_id: it.chat_id, all_allow: YesOrNo.NO} as AllowForward
+                        }).forEach(al => {
+                            allowForwardService.add(al).then(id => {
+                                allowForwardService.addEntitiesList(allows.map(allow => {
+                                    return {
+                                        allow_forward_id: id,
+                                        entity_id: Number.parseInt(allow)
+                                    } as AllowForwardEntities
+                                }))
+                            })
+                        })
+                        ctx.reply(this.t('command.aad.success'))
+                    }).catch(() => {
+                        ctx.reply(this.t('command.aad.fail'))
+                    })
+                }
+
+            } else { // 单个聊天的情况
+                // all bind items
+                if (addAll) {
+                    allowForwardService.add({chat_id: ctx.chat.id, all_allow: YesOrNo.YES})
+                } else {
+                    allowForwardService.add({chat_id: ctx.chat.id, all_allow: YesOrNo.NO}).then(id => {
+                        allowForwardService.addEntitiesList(allows.map(allow => {
+                            return {
+                                allow_forward_id: id,
+                                entity_id: Number.parseInt(allow)
+                            } as AllowForwardEntities
+                        }))
+                        ctx.reply(this.t('command.aad.success'))
+                    }).catch(() => {
+                        ctx.reply(this.t('command.aad.fail'))
+                    })
+                }
             }
+
+            this.tgUserClient.onMessage()
         })
 
         bot.command('login', async ctx => {
@@ -2118,13 +2166,14 @@ export class TelegramBotClient extends BaseClient {
     }
 
     private async botLaunch(bot: Telegraf, retryCount = 5) {
-        bot.launch().then(() => {
-            this.logDebug('Telegram Bot started')
-        }).catch(error => {
-            this.logError('Telegram Bot start failed', error)
-            this.botLaunch(bot, retryCount - 1)
-        })
-
+        if (retryCount >= 0) {
+            bot.launch().then(() => {
+                this.logDebug('Telegram Bot started')
+            }).catch(error => {
+                this.logError('Telegram Bot start failed', error)
+                this.botLaunch(bot, retryCount - 1)
+            })
+        }
         process.once('SIGINT', () => bot.stop('SIGINT'))
         process.once('SIGTERM', () => bot.stop('SIGTERM'))
     }
