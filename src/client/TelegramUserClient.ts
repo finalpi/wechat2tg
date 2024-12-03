@@ -15,6 +15,7 @@ import {MessageService} from '../service/MessageService'
 import {Snowflake} from 'nodejs-snowflake'
 import {SimpleMessageSender} from '../model/Message'
 import AllowForwardService from '../service/AllowForawrdService'
+import {FileBox} from 'file-box'
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -100,7 +101,7 @@ export class TelegramUserClient extends TelegramClient {
                 })
             }, new NewMessage({fromUsers: [me]}))
         })
-        this.onMessage
+        this.onMessage()
     }
 
     public async onMessage() {
@@ -122,6 +123,16 @@ export class TelegramUserClient extends TelegramClient {
                                     msg_id: msg.id,
                                     chat_id: msgChatId,
                                 })
+                                if (msg.media) {
+                                    const fileName = msg.document?.attributes?.find(attr => attr instanceof Api.DocumentAttributeFilename)?.fileName
+                                    msg.downloadMedia().then((buff) => {
+                                        const sendFile = FileBox.fromBuffer(Buffer.from(buff), fileName)
+                                        wechatClient.addMessage(contact, sendFile, {
+                                            msg_id: msg.id,
+                                            chat_id: msgChatId,
+                                        })
+                                    })
+                                }
                             })
                         }
                         if (bindItem.type === 1) {
@@ -130,6 +141,16 @@ export class TelegramUserClient extends TelegramClient {
                                     msg_id: msg.id,
                                     chat_id: msgChatId,
                                 })
+                                if (msg.media) {
+                                    const fileName = msg.document?.attributes?.find(attr => attr instanceof Api.DocumentAttributeFilename)?.fileName
+                                    msg.downloadMedia().then((buff) => {
+                                        const sendFile = FileBox.fromBuffer(Buffer.from(buff),fileName)
+                                        wechatClient.addMessage(room, sendFile, {
+                                            msg_id: msg.id,
+                                            chat_id: msgChatId,
+                                        })
+                                    })
+                                }
                             })
                         }
                     })

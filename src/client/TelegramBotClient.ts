@@ -721,7 +721,7 @@ export class TelegramBotClient extends BaseClient {
                         items.map(it => {
                             return {chat_id: it.chat_id, all_allow: YesOrNo.YES} as AllowForward
                         }).forEach(al => {
-                            allowForwardService.add(al)
+                            allowForwardService.createOrUpdate(al)
                         })
                     })
                 } else {
@@ -729,7 +729,7 @@ export class TelegramBotClient extends BaseClient {
                         items.map(it => {
                             return {chat_id: it.chat_id, all_allow: YesOrNo.NO} as AllowForward
                         }).forEach(al => {
-                            allowForwardService.add(al).then(id => {
+                            allowForwardService.createOrUpdate(al).then(id => {
                                 allowForwardService.addEntitiesList(allows.map(allow => {
                                     return {
                                         allow_forward_id: id,
@@ -747,9 +747,9 @@ export class TelegramBotClient extends BaseClient {
             } else { // 单个聊天的情况
                 // all bind items
                 if (addAll) {
-                    allowForwardService.add({chat_id: ctx.chat.id, all_allow: YesOrNo.YES})
+                    allowForwardService.createOrUpdate({chat_id: ctx.chat.id, all_allow: YesOrNo.YES})
                 } else {
-                    allowForwardService.add({chat_id: ctx.chat.id, all_allow: YesOrNo.NO}).then(id => {
+                    allowForwardService.createOrUpdate({chat_id: ctx.chat.id, all_allow: YesOrNo.NO}).then(id => {
                         allowForwardService.addEntitiesList(allows.map(allow => {
                             return {
                                 allow_forward_id: id,
@@ -763,7 +763,7 @@ export class TelegramBotClient extends BaseClient {
                 }
             }
 
-            this.tgUserClient.onMessage()
+            // this.tgUserClient.onMessage()
         })
 
         bot.command('login', async ctx => {

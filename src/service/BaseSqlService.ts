@@ -172,7 +172,8 @@ abstract class AbstractSqlService {
                     this.db.run('create table main.allow_forward_entities\n' +
                         '(\n' +
                         '    allow_forward_id INTEGER not null,\n' +
-                        '    entity_id INTEGER not null\n' +
+                        '    entity_id INTEGER not null,\n' +
+                        '    UNIQUE(allow_forward_id, entity_id)\n' +
                     ');\n')
                 }
             })
