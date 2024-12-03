@@ -111,10 +111,11 @@ export class TelegramUserClient extends TelegramClient {
         const chatIds = allAllowForward.map(it => it.chat_id)
         const me = await this.client?.getMe()
         const meId = me.id
+        const botId = returnBigInt(TelegramBotClient.getInstance().bot.botInfo.id)
         this.client.addEventHandler(async event => {
             const msg = event.message
             const msgChatId = msg.chatId?.toJSNumber()
-            if (msg.fromId instanceof Api.PeerUser && !msg.fromId.userId.eq(meId) && chatIds.includes(msgChatId)) {
+            if (msg.fromId instanceof Api.PeerUser && !msg.fromId.userId.eq(meId) && !msg.fromId.userId.eq(botId) && chatIds.includes(msgChatId)) {
                 const allowForward = allAllowForward.find(it => it.chat_id == msgChatId)
                 const sendMessage = TelegramBotClient.getInstance().bindItemService.getBindItemByChatId(allowForward.chat_id).then(bindItem => {
                     const wechatClient = this.telegramBotClient.weChatClient
