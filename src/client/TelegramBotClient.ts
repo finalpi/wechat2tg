@@ -141,6 +141,7 @@ export class TelegramBotClient extends BaseClient {
         this._weChatClient = new WeChatClient(this)
         this._bot = new Telegraf(config.BOT_TOKEN)
         this._bindItemService = new BindItemService(this._bot, this._weChatClient.client)
+        AllowForwardService.getInstance()
         this._officialOrderService = new OfficialOrderService(this._bot, this._weChatClient.client)
         this._chatId = 0
         this._ownerId = 0
@@ -693,19 +694,24 @@ export class TelegramBotClient extends BaseClient {
         bot.command('aad', async (ctx) => {
             // 添加所有的人
             let addAll = false
-            if (ctx.msg.text === 'all') {
+            // 正则表达式用来分离命令后面的参数
+            const match = ctx.update.message.text.match(/\/aad\s+([\p{L}\p{N}_]+)/u)
+            let allows = []
+            if (match && match[1] === 'all') {
                 addAll = true
+            } else {
+                // 转换为实体
+                allows = await Promise.all(ctx.args.flatMap(async it => {
+                    if (parseInt(it)) {
+                        return it
+                    } else {
+                        const username = it.trim().replace('@', '')
+                        const en = await this.tgUserClient.client.getEntity(username)
+                        return en?.id.toString()
+                    }
+                }))
             }
-            // 转换为实体
-            const allows = await Promise.all(ctx.args.flatMap(async it => {
-                if (parseInt(it)) {
-                    return it
-                } else {
-                    const username = it.trim().replace('@', '')
-                    const en = await this.tgUserClient.client.getEntity(username)
-                    return en?.id.toString()
-                }
-            }))
+
             if (!addAll && allows.length === 0) {
                 await ctx.reply(this.t('command.aad.noUser'))
                 return
@@ -724,6 +730,7 @@ export class TelegramBotClient extends BaseClient {
                             allowForwardService.createOrUpdate(al)
                         })
                     })
+                    ctx.reply(this.t('command.aad.success'))
                 } else {
                     this.bindItemService.getAllBindItems().then(items => {
                         items.map(it => {
@@ -748,6 +755,7 @@ export class TelegramBotClient extends BaseClient {
                 // all bind items
                 if (addAll) {
                     allowForwardService.createOrUpdate({chat_id: ctx.chat.id, all_allow: YesOrNo.YES})
+                    ctx.reply(this.t('command.aad.success'))
                 } else {
                     allowForwardService.createOrUpdate({chat_id: ctx.chat.id, all_allow: YesOrNo.NO}).then(id => {
                         allowForwardService.addEntitiesList(allows.map(allow => {

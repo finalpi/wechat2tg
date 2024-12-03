@@ -8,8 +8,6 @@ import * as fs from 'fs'
 import {Contact, Room} from 'wechaty'
 import DynamicService from './DynamicService'
 import {CreateGroupInterface} from '../model/CreateGroupInterface'
-import {Api} from 'telegram'
-import Contacts = Api.contacts.Contacts
 
 export class BindItemService extends AbstractSqlService {
     private tgBotClient: Telegraf
