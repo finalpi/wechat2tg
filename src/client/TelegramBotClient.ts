@@ -746,7 +746,8 @@ export class TelegramBotClient extends BaseClient {
                                 allowForwardService.addEntitiesList(allows.map(allow => {
                                     return {
                                         allow_forward_id: id,
-                                        entity_id: Number.parseInt(allow)
+                                        entity_id: Number.parseInt(allow.id),
+                                        username: allow.username
                                     } as AllowForwardEntities
                                 }))
                             })
