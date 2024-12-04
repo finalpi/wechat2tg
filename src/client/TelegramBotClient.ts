@@ -132,6 +132,7 @@ export class TelegramBotClient extends BaseClient {
     private telegramApiSender: MessageSender
     private telegramBotApiSender: MessageSender
     private _sendQueueHelper: SimpleMessageSendQueueHelper
+    private _allowForwardService: AllowForwardService
 
     private _commands = []
 
@@ -141,7 +142,7 @@ export class TelegramBotClient extends BaseClient {
         this._weChatClient = new WeChatClient(this)
         this._bot = new Telegraf(config.BOT_TOKEN)
         this._bindItemService = new BindItemService(this._bot, this._weChatClient.client)
-        AllowForwardService.getInstance()
+        this._allowForwardService = AllowForwardService.getInstance()
         this._officialOrderService = new OfficialOrderService(this._bot, this._weChatClient.client)
         this._chatId = 0
         this._ownerId = 0
@@ -322,7 +323,6 @@ export class TelegramBotClient extends BaseClient {
             // todo 暂未实现
             {command: 'aad', description: this.t('command.description.aad')},
             {command: 'als', description: this.t('command.description.als')},
-            {command: 'arm', description: this.t('command.description.arm')},
             {command: 'reset', description: this.t('command.description.reset')},
             {command: 'rcc', description: this.t('command.description.rcc')},
             {command: 'stop', description: this.t('command.description.stop')},
@@ -772,6 +772,42 @@ export class TelegramBotClient extends BaseClient {
             }
 
             // this.tgUserClient.onMessage()
+        })
+
+        // ‘/als’ 命令
+        bot.command('als', async ctx => {
+            const allowForward = await this._allowForwardService.one(ctx.chat.id)
+            if (!allowForward) {
+                ctx.reply('未设置允许转发的成员')
+                return
+            }
+            if (allowForward.all_allow) {
+                ctx.reply('成员列表(点击移除)',{
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                {text: '所有人', callback_data: 'als-all'}
+                            ]
+                        ]
+                    }
+                })
+                return
+            }
+            // todo 显示username or nickname
+            const list = await this._allowForwardService.listEntities(allowForward.id)
+            ctx.reply('成员列表(点击移除)',{
+                reply_markup: {
+                    inline_keyboard: []
+                }
+            })
+        })
+
+        bot.action('als-all',ctx => {
+            this._allowForwardService.removeAll(ctx.chat.id)
+            ctx.editMessageReplyMarkup({
+                inline_keyboard: []
+            })
+            ctx.answerCbQuery()
         })
 
         bot.command('login', async ctx => {
