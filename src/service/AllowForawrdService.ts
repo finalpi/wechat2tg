@@ -102,10 +102,10 @@ export default class AllowForwardService extends BaseSqlService {
 
     public addEntitiesList(allowForwardEntities: AllowForwardEntities []): Promise<number> {
         return new Promise((resolve, reject) => {
-            const stmt = this.db.prepare('INSERT INTO allow_forward_entities (allow_forward_id, entity_id) VALUES (?, ?)')
+            const stmt = this.db.prepare('INSERT INTO allow_forward_entities (allow_forward_id, entity_id, username) VALUES (?, ? ,?)')
             const promises = allowForwardEntities.map(allowForwardEntity => {
                 return new Promise<void>((res, rej) => {
-                    stmt.run(allowForwardEntity.allow_forward_id, allowForwardEntity.entity_id, (err) => {
+                    stmt.run(allowForwardEntity.allow_forward_id, allowForwardEntity.entity_id, allowForwardEntity.username, (err) => {
                         if (err) {
                             rej(err)
                         } else {

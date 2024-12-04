@@ -173,6 +173,7 @@ abstract class AbstractSqlService {
                         '(\n' +
                         '    allow_forward_id INTEGER not null,\n' +
                         '    entity_id INTEGER not null,\n' +
+                        '    username TEXT not null,\n' +
                         '    UNIQUE(allow_forward_id, entity_id)\n' +
                     ');\n')
                 }

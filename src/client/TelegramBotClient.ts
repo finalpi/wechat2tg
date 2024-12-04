@@ -703,11 +703,17 @@ export class TelegramBotClient extends BaseClient {
                 // 转换为实体
                 allows = await Promise.all(ctx.args.flatMap(async it => {
                     if (parseInt(it)) {
-                        return it
+                        return {
+                            id: it,
+                            username: it.trim().replace('@', '')
+                        }
                     } else {
                         const username = it.trim().replace('@', '')
                         const en = await this.tgUserClient.client.getEntity(username)
-                        return en?.id.toString()
+                        return {
+                            id: en?.id.toString(),
+                            username: username
+                        }
                     }
                 }))
             }
@@ -761,7 +767,8 @@ export class TelegramBotClient extends BaseClient {
                         allowForwardService.addEntitiesList(allows.map(allow => {
                             return {
                                 allow_forward_id: id,
-                                entity_id: Number.parseInt(allow)
+                                entity_id: Number.parseInt(allow.id),
+                                username: allow.username
                             } as AllowForwardEntities
                         }))
                         ctx.reply(this.t('command.aad.success'))
@@ -793,11 +800,15 @@ export class TelegramBotClient extends BaseClient {
                 })
                 return
             }
-            // todo 显示username or nickname
+            // todo 分页
             const list = await this._allowForwardService.listEntities(allowForward.id)
+            const button = []
+            for (const allowForwardEntity of list) {
+                button.push([{text: allowForwardEntity.username, callback_data: `als-${allowForwardEntity.entity_id}`}])
+            }
             ctx.reply('成员列表(点击移除)',{
                 reply_markup: {
-                    inline_keyboard: []
+                    inline_keyboard: button
                 }
             })
         })
