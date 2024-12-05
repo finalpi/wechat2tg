@@ -9,4 +9,5 @@ export interface AllowForward {
 export interface AllowForwardEntities {
     allow_forward_id: number,
     entity_id: number,
+    username: string
 }

@@ -40,6 +40,20 @@ export default class AllowForwardService extends BaseSqlService {
         })
     }
 
+    /**
+     * 移除转发所有人
+     * @param chat_id
+     */
+    public removeAll(chat_id: number) {
+        this.db.exec('DELETE FROM allow_forward_entities ' +
+            'WHERE allow_forward_id IN (' +
+            '    SELECT af.id' +
+            '    FROM allow_forward af' +
+            `    WHERE af.chat_id = ${chat_id}` +
+            ')')
+        this.db.exec(`DELETE FROM allow_forward WHERE chat_id=${chat_id}`)
+    }
+
     public listEntities(allowId: number): Promise<AllowForwardEntities []> {
         return new Promise((resolve, reject) => {
             this.db.all('SELECT * FROM allow_forward_entities WHERE allow_forward_id = ?', [allowId], (err, rows: AllowForwardEntities[]) => {
@@ -88,10 +102,10 @@ export default class AllowForwardService extends BaseSqlService {
 
     public addEntitiesList(allowForwardEntities: AllowForwardEntities []): Promise<number> {
         return new Promise((resolve, reject) => {
-            const stmt = this.db.prepare('INSERT INTO allow_forward_entities (allow_forward_id, entity_id) VALUES (?, ?)')
+            const stmt = this.db.prepare('INSERT INTO allow_forward_entities (allow_forward_id, entity_id, username) VALUES (?, ? ,?)')
             const promises = allowForwardEntities.map(allowForwardEntity => {
                 return new Promise<void>((res, rej) => {
-                    stmt.run(allowForwardEntity.allow_forward_id, allowForwardEntity.entity_id, (err) => {
+                    stmt.run(allowForwardEntity.allow_forward_id, allowForwardEntity.entity_id, allowForwardEntity.username, (err) => {
                         if (err) {
                             rej(err)
                         } else {

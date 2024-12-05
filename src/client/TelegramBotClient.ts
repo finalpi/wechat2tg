@@ -132,6 +132,7 @@ export class TelegramBotClient extends BaseClient {
     private telegramApiSender: MessageSender
     private telegramBotApiSender: MessageSender
     private _sendQueueHelper: SimpleMessageSendQueueHelper
+    private _allowForwardService: AllowForwardService
 
     private _commands = []
 
@@ -141,7 +142,7 @@ export class TelegramBotClient extends BaseClient {
         this._weChatClient = new WeChatClient(this)
         this._bot = new Telegraf(config.BOT_TOKEN)
         this._bindItemService = new BindItemService(this._bot, this._weChatClient.client)
-        AllowForwardService.getInstance()
+        this._allowForwardService = AllowForwardService.getInstance()
         this._officialOrderService = new OfficialOrderService(this._bot, this._weChatClient.client)
         this._chatId = 0
         this._ownerId = 0
@@ -322,7 +323,6 @@ export class TelegramBotClient extends BaseClient {
             // todo 暂未实现
             {command: 'aad', description: this.t('command.description.aad')},
             {command: 'als', description: this.t('command.description.als')},
-            {command: 'arm', description: this.t('command.description.arm')},
             {command: 'reset', description: this.t('command.description.reset')},
             {command: 'rcc', description: this.t('command.description.rcc')},
             {command: 'stop', description: this.t('command.description.stop')},
@@ -703,11 +703,17 @@ export class TelegramBotClient extends BaseClient {
                 // 转换为实体
                 allows = await Promise.all(ctx.args.flatMap(async it => {
                     if (parseInt(it)) {
-                        return it
+                        return {
+                            id: it,
+                            username: it.trim().replace('@', '')
+                        }
                     } else {
                         const username = it.trim().replace('@', '')
                         const en = await this.tgUserClient.client.getEntity(username)
-                        return en?.id.toString()
+                        return {
+                            id: en?.id.toString(),
+                            username: username
+                        }
                     }
                 }))
             }
@@ -746,7 +752,8 @@ export class TelegramBotClient extends BaseClient {
                                 allowForwardService.addEntitiesList(allows.map(allow => {
                                     return {
                                         allow_forward_id: id,
-                                        entity_id: Number.parseInt(allow)
+                                        entity_id: Number.parseInt(allow.id),
+                                        username: allow.username
                                     } as AllowForwardEntities
                                 }))
                             })
@@ -773,7 +780,8 @@ export class TelegramBotClient extends BaseClient {
                         allowForwardService.addEntitiesList(allows.map(allow => {
                             return {
                                 allow_forward_id: id,
-                                entity_id: Number.parseInt(allow)
+                                entity_id: Number.parseInt(allow.id),
+                                username: allow.username
                             } as AllowForwardEntities
                         }))
                         ctx.reply(this.t('command.aad.success'))
@@ -784,27 +792,44 @@ export class TelegramBotClient extends BaseClient {
             // this.tgUserClient.onMessage()
         })
 
-        // TODO 暂未实现
-        bot.command('als', async (ctx) => {
-            // in bot chat
-            if (ctx.chat.id === this._chatId) {
-                const allowForwardService = AllowForwardService.getInstance()
-                allowForwardService.listAllEntities().then(allowForwards => {
-                    // const list = allowForwards.map(it => {
-                    // })
-                    // ctx.reply(this.t('command.als.success', list))
+        // ‘/als’ 命令
+        bot.command('als', async ctx => {
+            const allowForward = await this._allowForwardService.one(ctx.chat.id)
+            if (!allowForward) {
+                ctx.reply('未设置允许转发的成员')
+                return
+            }
+            if (allowForward.all_allow) {
+                ctx.reply('成员列表(点击移除)',{
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                {text: '所有人', callback_data: 'als-all'}
+                            ]
+                        ]
+                    }
                 })
+                return
             }
+            // todo 分页
+            const list = await this._allowForwardService.listEntities(allowForward.id)
+            const button = []
+            for (const allowForwardEntity of list) {
+                button.push([{text: allowForwardEntity.username, callback_data: `als-${allowForwardEntity.entity_id}`}])
+            }
+            ctx.reply('成员列表(点击移除)',{
+                reply_markup: {
+                    inline_keyboard: button
+                }
+            })
         })
-        // TODO 暂未实现
-        bot.command('arm', async (ctx) => {
-            // in bot chat
-            const allowForwardService = AllowForwardService.getInstance()
-            if (ctx.chat.id === this._chatId) {
-                allowForwardService.rmEntities({entityIds: ctx.args.map(it => Number.parseInt(it))})
-            } else {
-                allowForwardService.rmEntities({chatId: ctx.chat.id, entityIds: [ctx.chat.id]})
-            }
+
+        bot.action('als-all',ctx => {
+            this._allowForwardService.removeAll(ctx.chat.id)
+            ctx.editMessageReplyMarkup({
+                inline_keyboard: []
+            })
+            ctx.answerCbQuery()
         })
 
         bot.command('login', async ctx => {
