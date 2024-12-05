@@ -17,6 +17,10 @@ import {SimpleMessageSender} from '../model/Message'
 import AllowForwardService from '../service/AllowForawrdService'
 import {FileBox} from 'file-box'
 import {returnBigInt} from 'telegram/Helpers'
+import {ConverterHelper} from '../util/FfmpegUtils'
+import fs from 'node:fs'
+import crypto from 'crypto'
+import sharp from 'sharp'
 
 
 export class TelegramUserClient extends TelegramClient {
@@ -131,11 +135,68 @@ export class TelegramUserClient extends TelegramClient {
                                 if (msg.media) {
                                     const fileName = TelegramUserClient.getFileName(msg)
                                     msg.downloadMedia().then((buff) => {
-                                        const sendFile = FileBox.fromBuffer(Buffer.from(buff), fileName)
-                                        wechatClient.addMessage(contact, sendFile, {
-                                            msg_id: msg.id,
-                                            chat_id: msgChatId,
-                                        })
+                                        // if (Buffer.byteLength(buff) < 100 * 1024 && (fileName.endsWith('jpg') || fileName.endsWith('jpeg') || fileName.endsWith('png'))) {
+                                        //     // 构造包含无用信息的 EXIF 元数据
+                                        //     const exifData = {
+                                        //         IFD0: {
+                                        //             // 添加一个长字符串作为无用信息
+                                        //             ImageDescription: '0'.repeat(110_000 - Buffer.byteLength(buff))
+                                        //         }
+                                        //     }
+                                        //
+                                        //     // 保存带有新元数据的图片
+                                        //     sharp(buff)
+                                        //         .withExif(exifData)
+                                        //         .toBuffer()
+                                        //         .then(buffer => {
+                                        //             const sendFile = FileBox.fromBuffer(buffer,fileName)
+                                        //             wechatClient.addMessage(contact, sendFile, {
+                                        //                 msg_id: msg.id,
+                                        //                 chat_id: msgChatId,
+                                        //             })
+                                        //         })
+                                        //     return
+                                        // }
+                                        if (fileName.endsWith('.tgs') || fileName.endsWith('.webm') || fileName.endsWith('.webp')) {
+                                            const hash = crypto.createHash('md5')
+                                            hash.update(buff)
+                                            const md5 = hash.digest('hex')
+                                            const saveFile = `save-files/${md5}${fileName.slice(fileName.lastIndexOf('.'))}`
+                                            const gifFile = `save-files/${md5}.gif`
+                                            const lottie_config = {
+                                                width: 128,
+                                                height: 128
+                                            }
+                                            // 微信不能发超过1Mb的gif文件
+                                            if (saveFile.endsWith('.tgs')) {
+                                                lottie_config.width = 512
+                                                lottie_config.height = 512
+                                            }
+                                            fs.writeFile(saveFile, buff, async (err) => {
+                                                if (!err) {
+                                                    if (!fs.existsSync(gifFile)) {
+                                                        if (fileName.endsWith('.tgs')) {
+                                                            await new ConverterHelper().tgsToGif(saveFile, gifFile, lottie_config)
+                                                        } else if (fileName.endsWith('.webm')) {
+                                                            await new ConverterHelper().webmToGif(saveFile, gifFile)
+                                                        } else if (fileName.endsWith('.webp')) {
+                                                            await new ConverterHelper().webpToGif(saveFile, gifFile)
+                                                        }
+                                                    }
+                                                }
+                                                const sendFile = FileBox.fromFile(gifFile)
+                                                wechatClient.addMessage(contact, sendFile, {
+                                                    msg_id: msg.id,
+                                                    chat_id: msgChatId,
+                                                })
+                                            })
+                                        }else {
+                                            const sendFile = FileBox.fromBuffer(Buffer.from(buff), fileName)
+                                            wechatClient.addMessage(contact, sendFile, {
+                                                msg_id: msg.id,
+                                                chat_id: msgChatId,
+                                            })
+                                        }
                                     })
                                 }
                             })
@@ -151,11 +212,68 @@ export class TelegramUserClient extends TelegramClient {
                                 if (msg.media) {
                                     const fileName = TelegramUserClient.getFileName(msg)
                                     msg.downloadMedia().then((buff) => {
-                                        const sendFile = FileBox.fromBuffer(Buffer.from(buff), fileName)
-                                        wechatClient.addMessage(room, sendFile, {
-                                            msg_id: msg.id,
-                                            chat_id: msgChatId,
-                                        })
+                                        // if (buff.length < 100 * 1024 && (fileName.endsWith('jpg') || fileName.endsWith('jpeg') || fileName.endsWith('png'))) {
+                                        //     // 构造包含无用信息的 EXIF 元数据
+                                        //     const exifData = {
+                                        //         IFD0: {
+                                        //             // 添加一个长字符串作为无用信息
+                                        //             ImageDescription: '0'.repeat(110_000 - buff.length)
+                                        //         }
+                                        //     }
+                                        //
+                                        //     // 保存带有新元数据的图片
+                                        //     sharp(buff)
+                                        //         .withMetadata({exif: exifData})
+                                        //         .toBuffer()
+                                        //         .then(buffer => {
+                                        //             const sendFile = FileBox.fromBuffer(buffer)
+                                        //             wechatClient.addMessage(room, sendFile, {
+                                        //                 msg_id: msg.id,
+                                        //                 chat_id: msgChatId,
+                                        //             })
+                                        //         })
+                                        //     return
+                                        // }
+                                        if (fileName.endsWith('.tgs') || fileName.endsWith('.webm') || fileName.endsWith('.webp')) {
+                                            const hash = crypto.createHash('md5')
+                                            hash.update(buff)
+                                            const md5 = hash.digest('hex')
+                                            const saveFile = `save-files/${md5}${fileName.slice(fileName.lastIndexOf('.'))}`
+                                            const gifFile = `save-files/${md5}.gif`
+                                            const lottie_config = {
+                                                width: 128,
+                                                height: 128
+                                            }
+                                            // 微信不能发超过1Mb的gif文件
+                                            if (saveFile.endsWith('.tgs')) {
+                                                lottie_config.width = 512
+                                                lottie_config.height = 512
+                                            }
+                                            fs.writeFile(saveFile, buff, async (err) => {
+                                                if (!err) {
+                                                    if (!fs.existsSync(gifFile)) {
+                                                        if (fileName.endsWith('.tgs')) {
+                                                            await new ConverterHelper().tgsToGif(saveFile, gifFile, lottie_config)
+                                                        } else if (fileName.endsWith('.webm')) {
+                                                            await new ConverterHelper().webmToGif(saveFile, gifFile)
+                                                        } else if (fileName.endsWith('.webp')) {
+                                                            await new ConverterHelper().webpToGif(saveFile, gifFile)
+                                                        }
+                                                    }
+                                                }
+                                                const sendFile = FileBox.fromFile(gifFile)
+                                                wechatClient.addMessage(room, sendFile, {
+                                                    msg_id: msg.id,
+                                                    chat_id: msgChatId,
+                                                })
+                                            })
+                                        }else {
+                                            const sendFile = FileBox.fromBuffer(Buffer.from(buff), fileName)
+                                            wechatClient.addMessage(room, sendFile, {
+                                                msg_id: msg.id,
+                                                chat_id: msgChatId,
+                                            })
+                                        }
                                     })
                                 }
                             })
