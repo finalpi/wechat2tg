@@ -60,12 +60,12 @@ export class TelegramUserClient extends TelegramClient {
 
     public async start(authParams: authMethods.UserAuthParams | authMethods.BotAuthParams) {
         if (!this._client?.connected) {
-            this._client?.start(authParams).then(async () => this.loginSuccessHandle()).catch((e) => {
+            this._client?.start(authParams).then(async () => setTimeout(() => this.loginSuccessHandle(), 1000)).catch((e) => {
                 this.telegramBotClient.tgUserClientLogin = false
                 this.logError('login... user error', e)
             })
         } else {
-            this.loginSuccessHandle()
+            setTimeout(() => this.loginSuccessHandle(), 500)
         }
         return this._client
     }
@@ -88,24 +88,6 @@ export class TelegramUserClient extends TelegramClient {
             })
 
         })
-        this.client?.getMe().then(me => {
-            this.client.addEventHandler(async event => {
-                // 我发送的消息
-                const msg = event.message
-                TelegramBotClient.getInstance().bindItemService.getAllBindItems().then(binds => {
-                    const msgChatId = msg.chatId?.toJSNumber()
-                    if (msgChatId == this.telegramBotClient.chatId || binds.find(it => it.chat_id == msgChatId)) {
-                        MessageService.getInstance().addMessage({
-                            chat_id: msgChatId?.toString(),
-                            msg_text: msg.text,
-                            create_time: Date.now(),
-                            telegram_user_message_id: msg.id,
-                            sender_id: this.telegramBotClient.weChatClient.client.currentUser.id,
-                        })
-                    }
-                })
-            }, new NewMessage({fromUsers: [me]}))
-        })
         this.onMessage()
     }
 
@@ -119,6 +101,23 @@ export class TelegramUserClient extends TelegramClient {
             this.client.addEventHandler(async event => {
                 const msg = event.message
                 const msgChatId = msg.chatId?.toJSNumber()
+                if(msg.fromId instanceof Api.PeerUser && msg.fromId.userId.eq(meId)){
+                    // 我发送的消息
+                    const msg = event.message
+                    TelegramBotClient.getInstance().bindItemService.getAllBindItems().then(binds => {
+                        const msgChatId = msg.chatId?.toJSNumber()
+                        if (msgChatId == this.telegramBotClient.chatId || binds.find(it => it.chat_id == msgChatId)) {
+                            MessageService.getInstance().addMessage({
+                                chat_id: msgChatId?.toString(),
+                                msg_text: msg.text,
+                                create_time: Date.now(),
+                                telegram_user_message_id: msg.id,
+                                sender_id: this.telegramBotClient.weChatClient.client.currentUser.id,
+                            })
+                        }
+                    })
+                    return
+                }
                 if (msg.fromId instanceof Api.PeerUser && !msg.fromId.userId.eq(meId) && !msg.fromId.userId.eq(botId) && chatIds.includes(msgChatId)) {
                     // if (chatIds.includes(msgChatId)) {
                     const allowForward = allAllowForward.find(it => it.chat_id == msgChatId)
@@ -135,28 +134,29 @@ export class TelegramUserClient extends TelegramClient {
                                 if (msg.media) {
                                     const fileName = TelegramUserClient.getFileName(msg)
                                     msg.downloadMedia().then((buff) => {
-                                        // if (Buffer.byteLength(buff) < 100 * 1024 && (fileName.endsWith('jpg') || fileName.endsWith('jpeg') || fileName.endsWith('png'))) {
-                                        //     // 构造包含无用信息的 EXIF 元数据
-                                        //     const exifData = {
-                                        //         IFD0: {
-                                        //             // 添加一个长字符串作为无用信息
-                                        //             ImageDescription: '0'.repeat(110_000 - Buffer.byteLength(buff))
-                                        //         }
-                                        //     }
-                                        //
-                                        //     // 保存带有新元数据的图片
-                                        //     sharp(buff)
-                                        //         .withExif(exifData)
-                                        //         .toBuffer()
-                                        //         .then(buffer => {
-                                        //             const sendFile = FileBox.fromBuffer(buffer,fileName)
-                                        //             wechatClient.addMessage(contact, sendFile, {
-                                        //                 msg_id: msg.id,
-                                        //                 chat_id: msgChatId,
-                                        //             })
-                                        //         })
-                                        //     return
-                                        // }
+                                        if (Buffer.byteLength(buff) < 100 * 1024 && (fileName.endsWith('jpg') || fileName.endsWith('jpeg') || fileName.endsWith('png'))) {
+                                            // 构造包含无用信息的 EXIF 元数据
+                                            const exifData = {
+                                                IFD0: {
+                                                    // 添加一个长字符串作为无用信息
+                                                    ImageDescription: '0'.repeat(110_000 - Buffer.byteLength(buff))
+                                                }
+                                            }
+
+                                            // 保存带有新元数据的图片
+                                            sharp(buff)
+                                                .toFormat('png')
+                                                .withExif(exifData)
+                                                .toBuffer()
+                                                .then(buffer => {
+                                                    const sendFile = FileBox.fromBuffer(buffer, fileName)
+                                                    wechatClient.addMessage(contact, sendFile, {
+                                                        msg_id: msg.id,
+                                                        chat_id: msgChatId,
+                                                    })
+                                                })
+                                            return
+                                        }
                                         if (fileName.endsWith('.tgs') || fileName.endsWith('.webm') || fileName.endsWith('.webp')) {
                                             const hash = crypto.createHash('md5')
                                             hash.update(buff)
@@ -190,7 +190,7 @@ export class TelegramUserClient extends TelegramClient {
                                                     chat_id: msgChatId,
                                                 })
                                             })
-                                        }else {
+                                        } else {
                                             const sendFile = FileBox.fromBuffer(Buffer.from(buff), fileName)
                                             wechatClient.addMessage(contact, sendFile, {
                                                 msg_id: msg.id,
@@ -212,28 +212,29 @@ export class TelegramUserClient extends TelegramClient {
                                 if (msg.media) {
                                     const fileName = TelegramUserClient.getFileName(msg)
                                     msg.downloadMedia().then((buff) => {
-                                        // if (buff.length < 100 * 1024 && (fileName.endsWith('jpg') || fileName.endsWith('jpeg') || fileName.endsWith('png'))) {
-                                        //     // 构造包含无用信息的 EXIF 元数据
-                                        //     const exifData = {
-                                        //         IFD0: {
-                                        //             // 添加一个长字符串作为无用信息
-                                        //             ImageDescription: '0'.repeat(110_000 - buff.length)
-                                        //         }
-                                        //     }
-                                        //
-                                        //     // 保存带有新元数据的图片
-                                        //     sharp(buff)
-                                        //         .withMetadata({exif: exifData})
-                                        //         .toBuffer()
-                                        //         .then(buffer => {
-                                        //             const sendFile = FileBox.fromBuffer(buffer)
-                                        //             wechatClient.addMessage(room, sendFile, {
-                                        //                 msg_id: msg.id,
-                                        //                 chat_id: msgChatId,
-                                        //             })
-                                        //         })
-                                        //     return
-                                        // }
+                                        if (Buffer.byteLength(buff) < 100 * 1024 && (fileName.endsWith('jpg') || fileName.endsWith('jpeg') || fileName.endsWith('png'))) {
+                                            // 构造包含无用信息的 EXIF 元数据
+                                            const exifData = {
+                                                IFD0: {
+                                                    // 添加一个长字符串作为无用信息
+                                                    ImageDescription: '0'.repeat(110_000 - Buffer.byteLength(buff))
+                                                }
+                                            }
+
+                                            // 保存带有新元数据的图片
+                                            sharp(buff)
+                                                .toFormat('png')
+                                                .withExif(exifData)
+                                                .toBuffer()
+                                                .then(buffer => {
+                                                    const sendFile = FileBox.fromBuffer(buffer, fileName)
+                                                    wechatClient.addMessage(room, sendFile, {
+                                                        msg_id: msg.id,
+                                                        chat_id: msgChatId,
+                                                    })
+                                                })
+                                            return
+                                        }
                                         if (fileName.endsWith('.tgs') || fileName.endsWith('.webm') || fileName.endsWith('.webp')) {
                                             const hash = crypto.createHash('md5')
                                             hash.update(buff)
@@ -267,7 +268,7 @@ export class TelegramUserClient extends TelegramClient {
                                                     chat_id: msgChatId,
                                                 })
                                             })
-                                        }else {
+                                        } else {
                                             const sendFile = FileBox.fromBuffer(Buffer.from(buff), fileName)
                                             wechatClient.addMessage(room, sendFile, {
                                                 msg_id: msg.id,
@@ -300,6 +301,8 @@ export class TelegramUserClient extends TelegramClient {
         let fileName = undefined
         switch (msg.media.className) {
             case 'MessageMediaDocument':
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
                 fileName = msg.document?.attributes?.find(attr => attr instanceof Api.DocumentAttributeFilename)?.fileName
                 if (!fileName && msg.document.mimeType) {
                     if (msg.document.mimeType.includes('ogg')) {
