@@ -122,6 +122,12 @@ export class TelegramUserClient extends TelegramClient {
                         const wechatClient = this.telegramBotClient.weChatClient
                         if (bindItem.type === 0) {
                             wechatClient.client.Contact.find({id: bindItem.wechat_id}).then(contact => {
+                                if (msg.message) {
+                                    wechatClient.addMessage(contact, msg.message, {
+                                        msg_id: msg.id,
+                                        chat_id: msgChatId,
+                                    })
+                                }
                                 if (msg.media) {
                                     const fileName = TelegramUserClient.getFileName(msg)
                                     msg.downloadMedia().then((buff) => {
@@ -131,16 +137,17 @@ export class TelegramUserClient extends TelegramClient {
                                             chat_id: msgChatId,
                                         })
                                     })
-                                } else {
-                                    wechatClient.addMessage(contact, msg.message, {
-                                        msg_id: msg.id,
-                                        chat_id: msgChatId,
-                                    })
                                 }
                             })
                         }
                         if (bindItem.type === 1) {
                             wechatClient.client.Room.find({id: bindItem.wechat_id}).then(room => {
+                                if (msg.message) {
+                                    wechatClient.addMessage(room, msg.message, {
+                                        msg_id: msg.id,
+                                        chat_id: msgChatId,
+                                    })
+                                }
                                 if (msg.media) {
                                     const fileName = TelegramUserClient.getFileName(msg)
                                     msg.downloadMedia().then((buff) => {
@@ -149,11 +156,6 @@ export class TelegramUserClient extends TelegramClient {
                                             msg_id: msg.id,
                                             chat_id: msgChatId,
                                         })
-                                    })
-                                } else {
-                                    wechatClient.addMessage(room, msg.message, {
-                                        msg_id: msg.id,
-                                        chat_id: msgChatId,
                                     })
                                 }
                             })
