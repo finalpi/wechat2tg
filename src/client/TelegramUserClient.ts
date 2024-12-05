@@ -118,7 +118,7 @@ export class TelegramUserClient extends TelegramClient {
                 if (msg.fromId instanceof Api.PeerUser && !msg.fromId.userId.eq(meId) && !msg.fromId.userId.eq(botId) && chatIds.includes(msgChatId)) {
                     // if (chatIds.includes(msgChatId)) {
                     const allowForward = allAllowForward.find(it => it.chat_id == msgChatId)
-                    const sendMessage = TelegramBotClient.getInstance().bindItemService.getBindItemByChatId(allowForward.chat_id).then(bindItem => {
+                    const sendMessage = () => TelegramBotClient.getInstance().bindItemService.getBindItemByChatId(allowForward.chat_id).then(bindItem => {
                         const wechatClient = this.telegramBotClient.weChatClient
                         if (bindItem.type === 0) {
                             wechatClient.client.Contact.find({id: bindItem.wechat_id}).then(contact => {
@@ -158,21 +158,12 @@ export class TelegramUserClient extends TelegramClient {
                         }
                     })
                     if (allowForward?.all_allow) {
-                        sendMessage
+                        sendMessage()
                     } else if (allowForward?.id) {
                         allowForwardService.listEntities(allowForward.id).then(entities => {
                             const entityIds = entities.map(en => en.entity_id)
-                            const searchElement = msg.toId
-                            let searchElementId
-                            if (searchElement.className === 'PeerUser') {
-                                searchElementId = searchElement.userId
-                            } else if (searchElement.className === 'PeerChat') {
-                                searchElementId = searchElement.chatId
-                            } else if (searchElement.className === 'PeerChannel') {
-                                searchElementId = searchElement.channelId
-                            }
-                            if (entityIds.includes(searchElementId)) {
-                                sendMessage
+                            if (msg.fromId instanceof Api.PeerUser && entityIds.includes(msg.fromId.userId.toJSNumber())) {
+                                sendMessage()
                             }
                         })
                     }
