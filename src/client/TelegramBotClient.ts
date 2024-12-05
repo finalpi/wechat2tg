@@ -800,7 +800,7 @@ export class TelegramBotClient extends BaseClient {
                 return
             }
             if (allowForward.all_allow) {
-                ctx.reply('成员列表(点击移除)',{
+                ctx.reply('成员列表(点击移除)', {
                     reply_markup: {
                         inline_keyboard: [
                             [
@@ -812,22 +812,36 @@ export class TelegramBotClient extends BaseClient {
                 return
             }
             // todo 分页
-            const list = await this._allowForwardService.listEntities(allowForward.id)
-            const button = []
-            for (const allowForwardEntity of list) {
-                button.push([{text: allowForwardEntity.username, callback_data: `als-${allowForwardEntity.entity_id}`}])
+            const button = await this.getAlsButtons(allowForward)
+            if (button.length === 0) {
+                ctx.reply('未设置允许转发的成员')
+                return
             }
-            ctx.reply('成员列表(点击移除)',{
+            ctx.reply('成员列表(点击移除)', {
                 reply_markup: {
                     inline_keyboard: button
                 }
             })
         })
 
-        bot.action('als-all',ctx => {
+        bot.action('als-all', ctx => {
             this._allowForwardService.removeAll(ctx.chat.id)
             ctx.editMessageReplyMarkup({
                 inline_keyboard: []
+            })
+            ctx.answerCbQuery()
+        })
+
+        bot.action(/als-(.+)/, async ctx => {
+            const entityId = ctx.match[1]
+            await this._allowForwardService.rmEntity({
+                chatId: ctx.chat.id,
+                entityId: parseInt(entityId)
+            })
+            const allowForward = await this._allowForwardService.one(ctx.chat.id)
+            const button = await this.getAlsButtons(allowForward)
+            ctx.editMessageReplyMarkup({
+                inline_keyboard: button
             })
             ctx.answerCbQuery()
         })
@@ -1184,6 +1198,15 @@ export class TelegramBotClient extends BaseClient {
             this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Official) || []].map(item => item.contact), officialPage, currentSearchWord)
             ctx.answerCbQuery()
         })
+    }
+
+    private async getAlsButtons(allowForward: AllowForward) {
+        const list = await this._allowForwardService.listEntities(allowForward.id)
+        const button = []
+        for (const allowForwardEntity of list) {
+            button.push([{text: allowForwardEntity.username, callback_data: `als-${allowForwardEntity.entity_id}`}])
+        }
+        return button
     }
 
     private onBotMessage(bot: Telegraf) {

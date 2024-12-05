@@ -107,13 +107,15 @@ export class TelegramUserClient extends TelegramClient {
 
     public async onMessage() {
         const allowForwardService = AllowForwardService.getInstance()
+        const me = await this.client?.getMe()
+        const meId = me.id
         allowForwardService.all().then(allAllowForward => {
             const chatIds = allAllowForward.map(it => it.chat_id)
             const botId = returnBigInt(TelegramBotClient.getInstance().bot.botInfo.id)
             this.client.addEventHandler(async event => {
                 const msg = event.message
                 const msgChatId = msg.chatId?.toJSNumber()
-                if (msg.fromId instanceof Api.PeerUser && !msg.fromId.userId.eq(botId) && chatIds.includes(msgChatId)) {
+                if (msg.fromId instanceof Api.PeerUser && !msg.fromId.userId.eq(meId) && !msg.fromId.userId.eq(botId) && chatIds.includes(msgChatId)) {
                     // if (chatIds.includes(msgChatId)) {
                     const allowForward = allAllowForward.find(it => it.chat_id == msgChatId)
                     const sendMessage = TelegramBotClient.getInstance().bindItemService.getBindItemByChatId(allowForward.chat_id).then(bindItem => {
@@ -176,7 +178,8 @@ export class TelegramUserClient extends TelegramClient {
                     }
 
                 }
-            }, new NewMessage({chats: chatIds, func: (event) => event.isGroup}))
+            // }, new NewMessage({chats: chatIds, func: (event) => event.isGroup}))
+            }, new NewMessage())
         })
     }
 
