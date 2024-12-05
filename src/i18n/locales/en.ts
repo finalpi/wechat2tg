@@ -4,7 +4,10 @@ const en = {
             success: 'add successfully',
             fail: 'add failed',
             exist: 'exists',
-            noUser: 'there is no user',
+            noUser: 'No members are allowed to forward',
+            userList: 'Member list (click Remove)',
+            all: 'all',
+            help: 'Use the `/aad all` command to add and forward messages that forward all members of the group, or you can use `/aad @xxxUser` to add and forward messages sent by a user individually, use the `/als` command to view and delete the forwarding list'
         },
         description: {
             help: 'Help',

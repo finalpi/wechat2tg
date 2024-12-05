@@ -320,9 +320,6 @@ export class TelegramBotClient extends BaseClient {
             {command: 'cgdata', description: this.t('command.description.cgdata')},
             {command: 'gs', description: this.t('command.description.gs')},
             {command: 'source', description: this.t('command.description.source')},
-            // todo 暂未实现
-            {command: 'aad', description: this.t('command.description.aad')},
-            {command: 'als', description: this.t('command.description.als')},
             {command: 'reset', description: this.t('command.description.reset')},
             {command: 'rcc', description: this.t('command.description.rcc')},
             {command: 'stop', description: this.t('command.description.stop')},
@@ -339,6 +336,8 @@ export class TelegramBotClient extends BaseClient {
             }
             // 设置command
             this._commands.push({command: 'autocg', description: this.t('command.description.autocg')})
+            this._commands.push({command: 'aad', description: this.t('command.description.aad')})
+            this._commands.push({command: 'als', description: this.t('command.description.als')})
         } else {
             this.forwardSetting.setVariable(VariableType.SETTING_AUTO_GROUP, false)
             // 修改后持成文件
@@ -692,6 +691,14 @@ export class TelegramBotClient extends BaseClient {
 
         // 只允许 id 和 username
         bot.command('aad', async (ctx) => {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
+                ctx.reply(this.t('common.plzLoginWeChat'))
+                return
+            }
+            if (ctx.chat && !ctx.chat.type.includes('group')) {
+                ctx.reply(this.t('common.onlyInGroup'))
+                return
+            }
             // 添加所有的人
             let addAll = false
             // 正则表达式用来分离命令后面的参数
@@ -719,7 +726,7 @@ export class TelegramBotClient extends BaseClient {
             }
 
             if (!addAll && allows.length === 0) {
-                await ctx.reply(this.t('command.aad.noUser'))
+                await ctx.reply(this.t('command.aad.help'))
                 return
             }
             // 在bot的聊天使用添加到全部的群组
@@ -794,17 +801,25 @@ export class TelegramBotClient extends BaseClient {
 
         // ‘/als’ 命令
         bot.command('als', async ctx => {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
+                ctx.reply(this.t('common.plzLoginWeChat'))
+                return
+            }
+            if (ctx.chat && !ctx.chat.type.includes('group')) {
+                ctx.reply(this.t('common.onlyInGroup'))
+                return
+            }
             const allowForward = await this._allowForwardService.one(ctx.chat.id)
             if (!allowForward) {
-                ctx.reply('未设置允许转发的成员')
+                ctx.reply(this.t('command.aad.noUser'))
                 return
             }
             if (allowForward.all_allow) {
-                ctx.reply('成员列表(点击移除)', {
+                ctx.reply(this.t('command.aad.userList'), {
                     reply_markup: {
                         inline_keyboard: [
                             [
-                                {text: '所有人', callback_data: 'als-all'}
+                                {text: this.t('command.aad.all'), callback_data: 'als-all'}
                             ]
                         ]
                     }
@@ -814,10 +829,10 @@ export class TelegramBotClient extends BaseClient {
             // todo 分页
             const button = await this.getAlsButtons(allowForward)
             if (button.length === 0) {
-                ctx.reply('未设置允许转发的成员')
+                ctx.reply(this.t('command.aad.noUser'))
                 return
             }
-            ctx.reply('成员列表(点击移除)', {
+            ctx.reply(this.t('command.aad.userList'), {
                 reply_markup: {
                     inline_keyboard: button
                 }

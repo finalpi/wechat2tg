@@ -122,12 +122,8 @@ export class TelegramUserClient extends TelegramClient {
                         const wechatClient = this.telegramBotClient.weChatClient
                         if (bindItem.type === 0) {
                             wechatClient.client.Contact.find({id: bindItem.wechat_id}).then(contact => {
-                                wechatClient.addMessage(contact, msg.message, {
-                                    msg_id: msg.id,
-                                    chat_id: msgChatId,
-                                })
                                 if (msg.media) {
-                                    const fileName = msg.document?.attributes?.find(attr => attr instanceof Api.DocumentAttributeFilename)?.fileName
+                                    const fileName = TelegramUserClient.getFileName(msg)
                                     msg.downloadMedia().then((buff) => {
                                         const sendFile = FileBox.fromBuffer(Buffer.from(buff), fileName)
                                         wechatClient.addMessage(contact, sendFile, {
@@ -135,23 +131,29 @@ export class TelegramUserClient extends TelegramClient {
                                             chat_id: msgChatId,
                                         })
                                     })
+                                } else {
+                                    wechatClient.addMessage(contact, msg.message, {
+                                        msg_id: msg.id,
+                                        chat_id: msgChatId,
+                                    })
                                 }
                             })
                         }
                         if (bindItem.type === 1) {
                             wechatClient.client.Room.find({id: bindItem.wechat_id}).then(room => {
-                                wechatClient.addMessage(room, msg.message, {
-                                    msg_id: msg.id,
-                                    chat_id: msgChatId,
-                                })
                                 if (msg.media) {
-                                    const fileName = msg.document?.attributes?.find(attr => attr instanceof Api.DocumentAttributeFilename)?.fileName
+                                    const fileName = TelegramUserClient.getFileName(msg)
                                     msg.downloadMedia().then((buff) => {
                                         const sendFile = FileBox.fromBuffer(Buffer.from(buff), fileName)
                                         wechatClient.addMessage(room, sendFile, {
                                             msg_id: msg.id,
                                             chat_id: msgChatId,
                                         })
+                                    })
+                                } else {
+                                    wechatClient.addMessage(room, msg.message, {
+                                        msg_id: msg.id,
+                                        chat_id: msgChatId,
                                     })
                                 }
                             })
@@ -169,9 +171,32 @@ export class TelegramUserClient extends TelegramClient {
                     }
 
                 }
-            // }, new NewMessage({chats: chatIds, func: (event) => event.isGroup}))
+                // }, new NewMessage({chats: chatIds, func: (event) => event.isGroup}))
             }, new NewMessage())
         })
+    }
+
+    private static getFileName(msg: Api.Message) {
+        let fileName = undefined
+        switch (msg.media.className) {
+            case 'MessageMediaDocument':
+                fileName = msg.document?.attributes?.find(attr => attr instanceof Api.DocumentAttributeFilename)?.fileName
+                if (!fileName && msg.document.mimeType) {
+                    if (msg.document.mimeType.includes('ogg')) {
+                        const nowShangHaiZh = new Date().toLocaleString('zh', {
+                            timeZone: 'Asia/ShangHai'
+                        }).toString().replaceAll('/', '-')
+                        fileName = `语音-${nowShangHaiZh.toLocaleLowerCase()}.mp3`
+                    } else {
+                        fileName = 'file.' + msg.document.mimeType.split('/')[1]
+                    }
+                }
+                break
+            case 'MessageMediaPhoto':
+                fileName = 'photo.png'
+                break
+        }
+        return fileName
     }
 
     /**
