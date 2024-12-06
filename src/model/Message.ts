@@ -4,6 +4,7 @@ import {config} from '../config'
 import {TelegramBotClient} from '../client/TelegramBotClient'
 import {message} from 'telegraf/filters'
 import * as PUPPET from 'wechaty-puppet'
+import {ExtraReplyMessage} from 'telegraf/src/telegram-types'
 
 export interface SimpleMessage {
     id?: string,
@@ -16,6 +17,7 @@ export interface SimpleMessage {
     message?: MessageInterface,
     replay_msg_id?: number,
     send_id?: string,
+    extraReplyMessage?: ExtraReplyMessage
 }
 
 export interface MessageSender {

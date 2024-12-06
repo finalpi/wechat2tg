@@ -3,6 +3,7 @@ import {config} from '../config'
 import log4js from 'log4js'
 import {LogUtils} from '../util/LogUtils'
 import {OfficialOrderService} from './OfficialOrderService'
+import {AllowForwardEntities} from '../model/AllowForwardEntity'
 
 abstract class AbstractSqlService {
     protected db: Database = new Database(config.DB_SQLITE_PATH)
@@ -150,6 +151,31 @@ abstract class AbstractSqlService {
                         '    tg_chat_id      integer not null\n' +
                         ');\n' +
                         '\n')
+                }
+            })
+        })
+    }
+
+    protected createAllowForwardTable() {
+        this.db.serialize(() => {
+            this.db.get('SELECT name FROM sqlite_master WHERE type=\'table\' AND name in (\'allow_forward\', \'allow_forward_entities\')', (err, row) => {
+                if (!row) {
+                    this.db.run('create table main.allow_forward\n' +
+                        '(\n' +
+                        '    id              integer not null\n' +
+                        '        constraint allow_forward_pk\n' +
+                        '            primary key autoincrement,\n' +
+                        '    chat_id   INTEGER not null unique,\n' +
+                        '    all_allow INTEGER not null\n' +
+                    ');\n')
+
+                    this.db.run('create table main.allow_forward_entities\n' +
+                        '(\n' +
+                        '    allow_forward_id INTEGER not null,\n' +
+                        '    entity_id INTEGER not null,\n' +
+                        '    username TEXT not null,\n' +
+                        '    UNIQUE(allow_forward_id, entity_id)\n' +
+                    ');\n')
                 }
             })
         })

@@ -4,7 +4,10 @@ const zh = {
             success: '添加成功',
             fail: '添加失败',
             exist: '已存在',
-            noUser: '没有用户',
+            noUser: '未设置允许转发的成员',
+            userList: '成员列表(点击移除)',
+            all: '所有人',
+            help: '使用 `/aad all` 命令可以添加转发该群组内所有成员的消息;使用 `/aad @你想转发的用户` 单独添加转发某一成员发送的消息;使用 `/als` 命令可以查看和删除转发列表'
         },
         description: {
             help: '使用说明',

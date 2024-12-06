@@ -10,17 +10,30 @@ import {CreateGroupInterface} from '../model/CreateGroupInterface'
 import {CustomFile} from 'telegram/client/uploads'
 import {SetupServiceImpl} from '../service/impl/SetupServiceImpl'
 import * as os from 'node:os'
-import {NewMessage} from 'telegram/events'
+import {NewMessage, NewMessageEvent} from 'telegram/events'
 import {MessageService} from '../service/MessageService'
 import {Snowflake} from 'nodejs-snowflake'
 import {SimpleMessageSender} from '../model/Message'
+import AllowForwardService from '../service/AllowForawrdService'
+import {FileBox} from 'file-box'
+import {returnBigInt} from 'telegram/Helpers'
+import {ConverterHelper} from '../util/FfmpegUtils'
+import fs from 'node:fs'
+import crypto from 'crypto'
+import sharp from 'sharp'
+import {ContactInterface, MessageInterface, RoomInterface} from 'wechaty/dist/esm/src/mods/impls'
+import {WeChatClient} from './WechatClient'
+import {AllowForward} from '../model/AllowForwardEntity'
 
 
 export class TelegramUserClient extends TelegramClient {
     private static telegramUserInstance: TelegramUserClient
+    private _allowForwardService = AllowForwardService.getInstance()
+    private allAllowForward: AllowForward[] = []
 
     private constructor(telegramBotClient: TelegramBotClient) {
         super(telegramBotClient)
+        this.updateAllAllowForward()
     }
 
     static getInstance(): TelegramUserClient {
@@ -53,12 +66,12 @@ export class TelegramUserClient extends TelegramClient {
 
     public async start(authParams: authMethods.UserAuthParams | authMethods.BotAuthParams) {
         if (!this._client?.connected) {
-            this._client?.start(authParams).then(async () => this.loginSuccessHandle()).catch((e) => {
+            this._client?.start(authParams).then(async () => setTimeout(() => this.loginSuccessHandle(), 1000)).catch((e) => {
                 this.telegramBotClient.tgUserClientLogin = false
                 this.logError('login... user error', e)
             })
         } else {
-            this.loginSuccessHandle()
+            setTimeout(() => this.loginSuccessHandle(), 500)
         }
         return this._client
     }
@@ -81,8 +94,21 @@ export class TelegramUserClient extends TelegramClient {
             })
 
         })
-        this.client?.getMe().then(me => {
-            this.client.addEventHandler(async event => {
+        this.onMessage()
+    }
+
+    public updateAllAllowForward() {
+        this._allowForwardService.all().then(all=>{
+            this.allAllowForward = all
+        })
+    }
+
+    public async onMessage() {
+        const me = await this.client?.getMe()
+        const meId = me.id
+        this.client.addEventHandler(async event => {
+            const msg = event.message
+            if(msg.fromId instanceof Api.PeerUser && msg.fromId.userId.eq(meId)){
                 // 我发送的消息
                 const msg = event.message
                 TelegramBotClient.getInstance().bindItemService.getAllBindItems().then(binds => {
@@ -97,40 +123,140 @@ export class TelegramUserClient extends TelegramClient {
                         })
                     }
                 })
-            }, new NewMessage({fromUsers: [me]}))
-        })
-        this.onMessage()
+                return
+            }
+            const botId = returnBigInt(TelegramBotClient.getInstance().bot.botInfo.id)
+            const chatIds = this.allAllowForward.map(it => it.chat_id)
+            const msgChatId = msg.chatId?.toJSNumber()
+            if (msg.fromId instanceof Api.PeerUser && !msg.fromId.userId.eq(meId) && !msg.fromId.userId.eq(botId) && chatIds.includes(msgChatId)) {
+                // if (chatIds.includes(msgChatId)) {
+                const allowForward = this.allAllowForward.find(it => it.chat_id == msgChatId)
+                const doSend = async (wechatClient: WeChatClient, sayAble: MessageInterface | ContactInterface | RoomInterface) => {
+                    if (msg.message) {
+                        wechatClient.addMessage(sayAble, msg.message, {
+                            msg_id: msg.id,
+                            chat_id: msgChatId,
+                        })
+                    }
+                    if (msg.media) {
+                        const fileName = TelegramUserClient.getFileName(msg)
+                        msg.downloadMedia().then((buff) => {
+                            if (Buffer.byteLength(buff) < 100 * 1024 && (fileName.endsWith('jpg') || fileName.endsWith('jpeg') || fileName.endsWith('png'))) {
+                                // 构造包含无用信息的 EXIF 元数据
+                                const exifData = {
+                                    IFD0: {
+                                        // 添加一个长字符串作为无用信息
+                                        ImageDescription: '0'.repeat(110_000 - Buffer.byteLength(buff))
+                                    }
+                                }
+                                // 保存带有新元数据的图片
+                                sharp(buff)
+                                    .toFormat('png')
+                                    .withExif(exifData)
+                                    .toBuffer()
+                                    .then(buffer => {
+                                        const sendFile = FileBox.fromBuffer(buffer, fileName)
+                                        wechatClient.addMessage(sayAble, sendFile, {
+                                            msg_id: msg.id,
+                                            chat_id: msgChatId,
+                                        })
+                                    })
+                                return
+                            }
+                            if (fileName.endsWith('.tgs') || fileName.endsWith('.webm') || fileName.endsWith('.webp')) {
+                                const hash = crypto.createHash('md5')
+                                hash.update(buff)
+                                const md5 = hash.digest('hex')
+                                const saveFile = `save-files/${md5}${fileName.slice(fileName.lastIndexOf('.'))}`
+                                const gifFile = `save-files/${md5}.gif`
+                                const lottie_config = {
+                                    width: 128,
+                                    height: 128
+                                }
+                                // 微信不能发超过1Mb的gif文件
+                                if (saveFile.endsWith('.tgs')) {
+                                    lottie_config.width = 512
+                                    lottie_config.height = 512
+                                }
+                                fs.writeFile(saveFile, buff, async (err) => {
+                                    if (!err) {
+                                        if (!fs.existsSync(gifFile)) {
+                                            if (fileName.endsWith('.tgs')) {
+                                                await new ConverterHelper().tgsToGif(saveFile, gifFile, lottie_config)
+                                            } else if (fileName.endsWith('.webm')) {
+                                                await new ConverterHelper().webmToGif(saveFile, gifFile)
+                                            } else if (fileName.endsWith('.webp')) {
+                                                await new ConverterHelper().webpToGif(saveFile, gifFile)
+                                            }
+                                        }
+                                    }
+                                    const sendFile = FileBox.fromFile(gifFile)
+                                    wechatClient.addMessage(sayAble, sendFile, {
+                                        msg_id: msg.id,
+                                        chat_id: msgChatId,
+                                    })
+                                })
+                            } else {
+                                const sendFile = FileBox.fromBuffer(Buffer.from(buff), fileName)
+                                wechatClient.addMessage(sayAble, sendFile, {
+                                    msg_id: msg.id,
+                                    chat_id: msgChatId,
+                                })
+                            }
+                        })
+                    }
+                }
+                const sendMessage = () => TelegramBotClient.getInstance().bindItemService.getBindItemByChatId(allowForward.chat_id).then(bindItem => {
+                    const wechatClient = this.telegramBotClient.weChatClient
+                    if (bindItem.type === 0) {
+                        wechatClient.client.Contact.find({id: bindItem.wechat_id}).then(contact => {
+                            doSend(wechatClient, contact)
+                        })
+                    }
+                    if (bindItem.type === 1) {
+                        wechatClient.client.Room.find({id: bindItem.wechat_id}).then(room => {
+                            doSend(wechatClient, room)
+                        })
+                    }
+                })
+                if (allowForward?.all_allow) {
+                    sendMessage()
+                } else if (allowForward?.id) {
+                    this._allowForwardService.listEntities(allowForward.id).then(entities => {
+                        const entityIds = entities.map(en => en.entity_id)
+                        if (msg.fromId instanceof Api.PeerUser && entityIds.includes(msg.fromId.userId.toJSNumber())) {
+                            sendMessage()
+                        }
+                    })
+                }
+
+            }
+        }, new NewMessage())
     }
 
-    private async onMessage() {
-        const binds = await TelegramBotClient.getInstance().bindItemService.getAllBindItems()
-        const allows = binds.flatMap(it => [...JSON.parse(it.allow_entities ?? '[]')])
-        this.client?.addEventHandler(async event => {
-            const msg = event.message
-            const msgChatId = msg.chatId?.toJSNumber()
-            const bindItem = binds.find(it => it.chat_id == msgChatId)
-            if (msgChatId == this.telegramBotClient.chatId || bindItem) {
-                // this.telegramBotClient.weChatClient.addMessage()
-                const wechatClient = this.telegramBotClient.weChatClient
-                if (bindItem.type === 0) {
-                    wechatClient.client.Contact.find({id: bindItem.wechat_id}).then(contact => {
-                        wechatClient.addMessage(contact, msg.message, {
-                            msg_id: msg.id,
-                            chat_id: msgChatId,
-                        })
-                    })
+    private static getFileName(msg: Api.Message) {
+        let fileName = undefined
+        switch (msg.media.className) {
+            case 'MessageMediaDocument':
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                fileName = msg.document?.attributes?.find(attr => attr instanceof Api.DocumentAttributeFilename)?.fileName
+                if (!fileName && msg.document.mimeType) {
+                    if (msg.document.mimeType.includes('ogg')) {
+                        const nowShangHaiZh = new Date().toLocaleString('zh', {
+                            timeZone: 'Asia/ShangHai'
+                        }).toString().replaceAll('/', '-')
+                        fileName = `语音-${nowShangHaiZh.toLocaleLowerCase()}.mp3`
+                    } else {
+                        fileName = 'file.' + msg.document.mimeType.split('/')[1]
+                    }
                 }
-                if (bindItem.type === 1) {
-                    wechatClient.client.Room.find({id: bindItem.wechat_id}).then(room => {
-                        wechatClient.addMessage(room, msg.message, {
-                            msg_id: msg.id,
-                            chat_id: msgChatId,
-                        })
-                    })
-                }
-            }
-
-        }, new NewMessage({fromUsers: [...allows]}))
+                break
+            case 'MessageMediaPhoto':
+                fileName = 'photo.png'
+                break
+        }
+        return fileName
     }
 
     /**
@@ -143,7 +269,7 @@ export class TelegramUserClient extends TelegramClient {
     }
 
     public async createGroup(createGroupInterface: CreateGroupInterface) {
-        // 如果之前存在改实例则重新绑定
+        // 如果之前存在该实例则重新绑定
         const row = await this.telegramBotClient.bindItemService.reBind(createGroupInterface)
         if (row) {
             return row

@@ -38,6 +38,9 @@ import {Snowflake} from 'nodejs-snowflake'
 import {SetupServiceImpl} from '../service/impl/SetupServiceImpl'
 import {Entity} from 'telegram/define'
 import {ImageUtils} from '../util/ImageUtils'
+import AllowForwardService from '../service/AllowForawrdService'
+import {AllowForward, AllowForwardEntities} from '../model/AllowForwardEntity'
+import {YesOrNo} from '../enums/BaseEnum'
 
 export class TelegramBotClient extends BaseClient {
     get currentOrder(): string | undefined {
@@ -129,6 +132,7 @@ export class TelegramBotClient extends BaseClient {
     private telegramApiSender: MessageSender
     private telegramBotApiSender: MessageSender
     private _sendQueueHelper: SimpleMessageSendQueueHelper
+    private _allowForwardService: AllowForwardService
 
     private _commands = []
 
@@ -138,6 +142,7 @@ export class TelegramBotClient extends BaseClient {
         this._weChatClient = new WeChatClient(this)
         this._bot = new Telegraf(config.BOT_TOKEN)
         this._bindItemService = new BindItemService(this._bot, this._weChatClient.client)
+        this._allowForwardService = AllowForwardService.getInstance()
         this._officialOrderService = new OfficialOrderService(this._bot, this._weChatClient.client)
         this._chatId = 0
         this._ownerId = 0
@@ -315,10 +320,6 @@ export class TelegramBotClient extends BaseClient {
             {command: 'cgdata', description: this.t('command.description.cgdata')},
             {command: 'gs', description: this.t('command.description.gs')},
             {command: 'source', description: this.t('command.description.source')},
-            // todo 暂未实现
-            // {command: 'aad', description: this.t('command.description.aad')},
-            // {command: 'als', description: this.t('command.description.als')},
-            // {command: 'arm', description: this.t('command.description.arm')},
             {command: 'reset', description: this.t('command.description.reset')},
             {command: 'rcc', description: this.t('command.description.rcc')},
             {command: 'stop', description: this.t('command.description.stop')},
@@ -334,6 +335,8 @@ export class TelegramBotClient extends BaseClient {
                 this.telegramApiSender = new SenderFactory().createSender(this._tgClient.client)
             }
             // 设置command
+            this._commands.push({command: 'aad', description: this.t('command.description.aad')})
+            this._commands.push({command: 'als', description: this.t('command.description.als')})
             this._commands.push({command: 'autocg', description: this.t('command.description.autocg')})
         } else {
             this.forwardSetting.setVariable(VariableType.SETTING_AUTO_GROUP, false)
@@ -688,34 +691,173 @@ export class TelegramBotClient extends BaseClient {
 
         // 只允许 id 和 username
         bot.command('aad', async (ctx) => {
-            // 转换为实体
-            const allows = await Promise.all(ctx.args.flatMap(async it => {
-                if (parseInt(it)) {
-                    return it
-                } else {
-                    const username = it.trim().replace('@', '')
-                    const en = await this.tgUserClient.client.getEntity(username)
-                    return en?.id.toString()
-                }
-            }))
-            if (allows.length === 0) {
-                await ctx.reply(this.t('command.aad.noUser'))
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
+                ctx.reply(this.t('common.plzLoginWeChat'))
+                return
+            }
+            if (ctx.chat && !ctx.chat.type.includes('group')) {
+                ctx.reply(this.t('common.onlyInGroup'))
+                return
+            }
+            // 添加所有的人
+            let addAll = false
+            // 正则表达式用来分离命令后面的参数
+            const match = ctx.update.message.text.match(/\/aad\s+([\p{L}\p{N}_]+)/u)
+            let allows = []
+            if (match && match[1] === 'all') {
+                addAll = true
+            } else {
+                // 转换为实体
+                allows = await Promise.all(ctx.args.flatMap(async it => {
+                    if (parseInt(it)) {
+                        return {
+                            id: it,
+                            username: it.trim().replace('@', '')
+                        }
+                    } else {
+                        const username = it.trim().replace('@', '')
+                        const en = await this.tgUserClient.client.getEntity(username)
+                        return {
+                            id: en?.id.toString(),
+                            username: username
+                        }
+                    }
+                }))
+            }
+
+            if (!addAll && allows.length === 0) {
+                await ctx.reply(this.t('command.aad.help'))
                 return
             }
             // 在bot的聊天使用添加到全部的群组
+            const allowForwardService = AllowForwardService.getInstance()
+            // in bot chat
             if (ctx.chat.id === this._chatId) {
-                this.bindItemService.addAllowEntityByChat(-1, allows).then(() => {
+                // let allowForward: AllowForward [] = []
+                if (addAll) {
+                    // all bind items
+                    this.bindItemService.getAllBindItems().then(items => {
+                        items.map(it => {
+                            return {chat_id: it.chat_id, all_allow: YesOrNo.YES} as AllowForward
+                        }).forEach(al => {
+                            allowForwardService.createOrUpdate(al)
+                        })
+                    })
                     ctx.reply(this.t('command.aad.success'))
-                }).catch(() => {
-                    ctx.reply(this.t('command.aad.fail'))
-                })
-            } else {
-                this.bindItemService.addAllowEntityByChat(ctx.chat.id, allows).then(() => {
+                } else {
+                    this.bindItemService.getAllBindItems().then(items => {
+                        items.map(it => {
+                            return {chat_id: it.chat_id, all_allow: YesOrNo.NO} as AllowForward
+                        }).forEach(al => {
+                            allowForwardService.one(al.chat_id).then(async exit => {
+                                let id
+                                if (!exit) {
+                                    id = await allowForwardService.add(al)
+                                } else {
+                                    id = exit.id
+                                }
+                                allowForwardService.addEntitiesList(allows.map(allow => {
+                                    return {
+                                        allow_forward_id: id,
+                                        entity_id: Number.parseInt(allow.id),
+                                        username: allow.username
+                                    } as AllowForwardEntities
+                                }))
+                            })
+                        })
+                        ctx.reply(this.t('command.aad.success'))
+                    }).catch(() => {
+                        ctx.reply(this.t('command.aad.fail'))
+                    })
+                }
+
+            } else { // 单个聊天的情况
+                // all bind items
+                if (addAll) {
+                    allowForwardService.createOrUpdate({chat_id: ctx.chat.id, all_allow: YesOrNo.YES})
                     ctx.reply(this.t('command.aad.success'))
-                }).catch(() => {
-                    ctx.reply(this.t('command.aad.fail'))
-                })
+                } else {
+                    allowForwardService.one(ctx.chat.id).then(async exit => {
+                        let id
+                        if (!exit) {
+                            id = await allowForwardService.add({chat_id: ctx.chat.id, all_allow: YesOrNo.NO})
+                        } else {
+                            id = exit.id
+                        }
+                        allowForwardService.addEntitiesList(allows.map(allow => {
+                            return {
+                                allow_forward_id: id,
+                                entity_id: Number.parseInt(allow.id),
+                                username: allow.username
+                            } as AllowForwardEntities
+                        }))
+                        ctx.reply(this.t('command.aad.success'))
+                    })
+                }
             }
+            // this.tgUserClient.onMessage()
+        })
+
+        // ‘/als’ 命令
+        bot.command('als', async ctx => {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
+                ctx.reply(this.t('common.plzLoginWeChat'))
+                return
+            }
+            if (ctx.chat && !ctx.chat.type.includes('group')) {
+                ctx.reply(this.t('common.onlyInGroup'))
+                return
+            }
+            const allowForward = await this._allowForwardService.one(ctx.chat.id)
+            if (!allowForward) {
+                ctx.reply(this.t('command.aad.noUser'))
+                return
+            }
+            if (allowForward.all_allow) {
+                ctx.reply(this.t('command.aad.userList'), {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                {text: this.t('command.aad.all'), callback_data: 'als-all'}
+                            ]
+                        ]
+                    }
+                })
+                return
+            }
+            // todo 分页
+            const button = await this.getAlsButtons(allowForward)
+            if (button.length === 0) {
+                ctx.reply(this.t('command.aad.noUser'))
+                return
+            }
+            ctx.reply(this.t('command.aad.userList'), {
+                reply_markup: {
+                    inline_keyboard: button
+                }
+            })
+        })
+
+        bot.action('als-all', ctx => {
+            this._allowForwardService.removeAll(ctx.chat.id)
+            ctx.editMessageReplyMarkup({
+                inline_keyboard: []
+            })
+            ctx.answerCbQuery()
+        })
+
+        bot.action(/als-(.+)/, async ctx => {
+            const entityId = ctx.match[1]
+            await this._allowForwardService.rmEntity({
+                chatId: ctx.chat.id,
+                entityId: parseInt(entityId)
+            })
+            const allowForward = await this._allowForwardService.one(ctx.chat.id)
+            const button = await this.getAlsButtons(allowForward)
+            ctx.editMessageReplyMarkup({
+                inline_keyboard: button
+            })
+            ctx.answerCbQuery()
         })
 
         bot.command('login', async ctx => {
@@ -1070,6 +1212,15 @@ export class TelegramBotClient extends BaseClient {
             this.pageContacts(ctx, [...this._weChatClient.contactMap?.get(ContactImpl.Type.Official) || []].map(item => item.contact), officialPage, currentSearchWord)
             ctx.answerCbQuery()
         })
+    }
+
+    private async getAlsButtons(allowForward: AllowForward) {
+        const list = await this._allowForwardService.listEntities(allowForward.id)
+        const button = []
+        for (const allowForwardEntity of list) {
+            button.push([{text: allowForwardEntity.username, callback_data: `als-${allowForwardEntity.entity_id}`}])
+        }
+        return button
     }
 
     private onBotMessage(bot: Telegraf) {
@@ -2118,13 +2269,14 @@ export class TelegramBotClient extends BaseClient {
     }
 
     private async botLaunch(bot: Telegraf, retryCount = 5) {
-        bot.launch().then(() => {
-            this.logDebug('Telegram Bot started')
-        }).catch(error => {
-            this.logError('Telegram Bot start failed', error)
-            this.botLaunch(bot, retryCount - 1)
-        })
-
+        if (retryCount >= 0) {
+            bot.launch().then(() => {
+                this.logDebug('Telegram Bot started')
+            }).catch(error => {
+                this.logError('Telegram Bot start failed', error)
+                this.botLaunch(bot, retryCount - 1)
+            })
+        }
         process.once('SIGINT', () => bot.stop('SIGINT'))
         process.once('SIGTERM', () => bot.stop('SIGTERM'))
     }
