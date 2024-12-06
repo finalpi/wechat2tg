@@ -160,6 +160,10 @@ npm start
 
 - `/source`: Retrieve the original file of compressed media by replying with `/source` (media-only).
 
+- `/aad`: Forward messages from other members within the group. Use the `/aad all` command to enable forwarding messages from all members of the group. Alternatively, use `/aad @username` to forward messages from a specific user (only supported in groups and requires the auto-create group mode to be enabled).
+
+- `/als`: View and manage the forwarding list (only supported in groups and requires the auto-create group mode to be enabled).
+
 ### Environment Variables
 | Name | Required | Description | 
 | --- | --- | --- | 
