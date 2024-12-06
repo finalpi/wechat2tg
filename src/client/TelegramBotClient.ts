@@ -335,9 +335,9 @@ export class TelegramBotClient extends BaseClient {
                 this.telegramApiSender = new SenderFactory().createSender(this._tgClient.client)
             }
             // 设置command
-            this._commands.push({command: 'autocg', description: this.t('command.description.autocg')})
             this._commands.push({command: 'aad', description: this.t('command.description.aad')})
             this._commands.push({command: 'als', description: this.t('command.description.als')})
+            this._commands.push({command: 'autocg', description: this.t('command.description.autocg')})
         } else {
             this.forwardSetting.setVariable(VariableType.SETTING_AUTO_GROUP, false)
             // 修改后持成文件
@@ -795,7 +795,8 @@ export class TelegramBotClient extends BaseClient {
                     })
                 }
             }
-
+            // 更新应该监听的 chatIdList
+            this.tgUserClient.updateAllAllowForward()
             // this.tgUserClient.onMessage()
         })
 
@@ -844,6 +845,8 @@ export class TelegramBotClient extends BaseClient {
             ctx.editMessageReplyMarkup({
                 inline_keyboard: []
             })
+            // 更新应该监听的 chatIdList
+            this.tgUserClient.updateAllAllowForward()
             ctx.answerCbQuery()
         })
 
@@ -858,6 +861,8 @@ export class TelegramBotClient extends BaseClient {
             ctx.editMessageReplyMarkup({
                 inline_keyboard: button
             })
+            // 更新应该监听的 chatIdList
+            this.tgUserClient.updateAllAllowForward()
             ctx.answerCbQuery()
         })
 
