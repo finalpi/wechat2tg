@@ -1,5 +1,6 @@
 import BaseSqlService from './BaseSqlService'
 import {AllowForward, AllowForwardEntities} from '../model/AllowForwardEntity'
+import {TelegramUserClient} from '../client/TelegramUserClient'
 
 export default class AllowForwardService extends BaseSqlService {
     private static instance?: AllowForwardService
@@ -44,14 +45,15 @@ export default class AllowForwardService extends BaseSqlService {
      * 移除转发所有人
      * @param chat_id
      */
-    public removeAll(chat_id: number) {
-        this.db.exec('DELETE FROM allow_forward_entities ' +
+    public async removeAll(chat_id: number) {
+        await this.db.exec('DELETE FROM allow_forward_entities ' +
             'WHERE allow_forward_id IN (' +
             '    SELECT af.id' +
             '    FROM allow_forward af' +
             `    WHERE af.chat_id = ${chat_id}` +
             ')')
-        this.db.exec(`DELETE FROM allow_forward WHERE chat_id=${chat_id}`)
+        await this.db.exec(`DELETE FROM allow_forward WHERE chat_id=${chat_id}`)
+        TelegramUserClient.getInstance().updateAllAllowForward()
     }
 
     public listEntities(allowId: number): Promise<AllowForwardEntities []> {
@@ -94,6 +96,7 @@ export default class AllowForwardService extends BaseSqlService {
                 if (err) {
                     reject(err)
                 } else {
+                    TelegramUserClient.getInstance().updateAllAllowForward()
                     resolve(this.lastID)
                 }
             })
@@ -133,6 +136,7 @@ export default class AllowForwardService extends BaseSqlService {
                 if (err) {
                     reject(err)
                 } else {
+                    TelegramUserClient.getInstance().updateAllAllowForward()
                     resolve(this.lastID)
                 }
             })

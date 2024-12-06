@@ -795,8 +795,6 @@ export class TelegramBotClient extends BaseClient {
                     })
                 }
             }
-            // 更新应该监听的 chatIdList
-            this.tgUserClient.updateAllAllowForward()
             // this.tgUserClient.onMessage()
         })
 
@@ -845,8 +843,6 @@ export class TelegramBotClient extends BaseClient {
             ctx.editMessageReplyMarkup({
                 inline_keyboard: []
             })
-            // 更新应该监听的 chatIdList
-            this.tgUserClient.updateAllAllowForward()
             ctx.answerCbQuery()
         })
 
@@ -861,8 +857,6 @@ export class TelegramBotClient extends BaseClient {
             ctx.editMessageReplyMarkup({
                 inline_keyboard: button
             })
-            // 更新应该监听的 chatIdList
-            this.tgUserClient.updateAllAllowForward()
             ctx.answerCbQuery()
         })
 
