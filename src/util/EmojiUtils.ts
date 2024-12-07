@@ -1,3 +1,6 @@
+import {VariableContainer, VariableType} from '../model/Settings'
+import {EmojiSetting} from '../enums/SettingEnums'
+
 export class EmojiConverter {
     public static emojiUrl = 'https://raw.githubusercontent.com/finalpi/wechat-emoji/main/'
     public emojiMapping: Record<string, string> = {
@@ -446,9 +449,21 @@ export class EmojiConverter {
 
     convert(text: string): string {
         let convertedText = text
-        for (const emojiText in this.emojiMapping) {
-            if (Object.prototype.hasOwnProperty.call(this.emojiMapping, emojiText)) {
-                const emojiUnicode = this.emojiMapping[emojiText]
+        let mapping = this.emojiMapping
+        switch (VariableContainer.getInstance().getVariable(VariableType.SETTING_EMOJI_CONVERT)) {
+            case EmojiSetting.EMOJI:
+                mapping = this.weChatToTelegramEmojiMapping
+                break
+            case EmojiSetting.TEXT:
+                mapping = {}
+                break
+            case EmojiSetting.PICTURE:
+                mapping = this.emojiMapping
+                break
+        }
+        for (const emojiText in mapping) {
+            if (Object.prototype.hasOwnProperty.call(mapping, emojiText)) {
+                const emojiUnicode = mapping[emojiText]
                 const emojiRegex = new RegExp(emojiText.replace('[', '\\[').replace(']', '\\]'), 'g')
                 convertedText = convertedText.replace(emojiRegex, emojiUnicode)
             }
