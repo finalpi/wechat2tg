@@ -121,6 +121,10 @@ const zh = {
             whiteMode: '白名单模式',
             whiteGroup: '白名单群组',
             blackGroup: '黑名单群组',
+            emojiConvert: 'Emoji转换模式({0})',
+            emojiConvertText: '转换成文本',
+            emojiConvertEmoji: '转换成Emoji',
+            emojiConvertPicture: '转换成图片',
         },
         recent: {
             noUsers: '最近联系人为空',

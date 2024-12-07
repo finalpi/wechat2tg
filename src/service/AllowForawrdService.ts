@@ -98,7 +98,6 @@ export default class AllowForwardService extends BaseSqlService {
                 if (err) {
                     reject(err)
                 } else {
-                    TelegramUserClient.getInstance().updateAllAllowForward()
                     resolve(this.lastID)
                 }
             })

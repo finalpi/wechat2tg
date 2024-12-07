@@ -21,7 +21,6 @@ import * as PUPPET from 'wechaty-puppet'
 import {TelegramClient} from './TelegramClient'
 import {BindItemService} from '../service/BindItemService'
 import {RoomItem} from '../model/RoomItem'
-import {ContactItem} from '../model/ContactItem'
 import {BindItem} from '../model/BindItem'
 import {UserAuthParams} from 'telegram/client/auth'
 import {EventEmitter} from 'node:events'
@@ -36,11 +35,11 @@ import sharp from 'sharp'
 import {OfficialOrderService} from '../service/OfficialOrderService'
 import {Snowflake} from 'nodejs-snowflake'
 import {SetupServiceImpl} from '../service/impl/SetupServiceImpl'
-import {Entity} from 'telegram/define'
 import {ImageUtils} from '../util/ImageUtils'
 import AllowForwardService from '../service/AllowForawrdService'
 import {AllowForward, AllowForwardEntities} from '../model/AllowForwardEntity'
 import {YesOrNo} from '../enums/BaseEnum'
+import {EmojiSetting} from '../enums/SettingEnums'
 
 export class TelegramBotClient extends BaseClient {
     get currentOrder(): string | undefined {
@@ -116,7 +115,7 @@ export class TelegramBotClient extends BaseClient {
     private orderName = ''
     private order = ''
 
-    private forwardSetting: VariableContainer = new VariableContainer()
+    private forwardSetting: VariableContainer = VariableContainer.getInstance()
 
     private eventEmitter: EventEmitter
 
@@ -796,6 +795,7 @@ export class TelegramBotClient extends BaseClient {
                 }
             }
             // this.tgUserClient.onMessage()
+            TelegramUserClient.getInstance().updateAllAllowForward()
         })
 
         // ‘/als’ 命令
@@ -1582,6 +1582,37 @@ export class TelegramBotClient extends BaseClient {
             const b = !this.forwardSetting.getVariable(VariableType.SETTING_BLOCK_EMOTICON)
             const answerText = b ? this.t('common.open') : this.t('common.close')
             this.forwardSetting.setVariable(VariableType.SETTING_BLOCK_EMOTICON, b)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
+            // 点击后修改上面按钮
+            ctx.editMessageReplyMarkup(this.getSettingButton())
+            return ctx.answerCbQuery(answerText)
+        })
+
+        // Emoji转换
+        bot.action(VariableType.SETTING_EMOJI_CONVERT, ctx => {
+            let emojiType = this.forwardSetting.getVariable(VariableType.SETTING_EMOJI_CONVERT)
+            emojiType = (emojiType + 1) % 3
+
+            const getEmojiStr = (emojiEnum: number) => {
+                let emojiSetting = ''
+                switch (emojiEnum) {
+                    case EmojiSetting.EMOJI:
+                        emojiSetting = this.t('command.setting.emojiConvertEmoji')
+                        break
+                    case EmojiSetting.PICTURE:
+                        emojiSetting = this.t('command.setting.emojiConvertPicture')
+                        break
+                    case EmojiSetting.TEXT:
+                        emojiSetting = this.t('command.setting.emojiConvertText')
+                        break
+                    default:
+                        return
+                }
+                return emojiSetting
+            }
+            const answerText = getEmojiStr(emojiType)
+            this.forwardSetting.setVariable(VariableType.SETTING_EMOJI_CONVERT, emojiType)
             // 修改后持成文件
             this.forwardSetting.writeToFile()
             // 点击后修改上面按钮
@@ -2581,7 +2612,7 @@ export class TelegramBotClient extends BaseClient {
             if (!fs.existsSync(StorageSettings.STORAGE_FOLDER)) {
                 fs.mkdirSync(StorageSettings.STORAGE_FOLDER)
             }
-            const variableContainer = new VariableContainer()
+            const variableContainer = VariableContainer.getInstance()
             variableContainer.parseFromFile()
             this.forwardSetting = variableContainer
         } catch (error) {
@@ -2757,6 +2788,23 @@ export class TelegramBotClient extends BaseClient {
     }
 
     private getSettingButton() {
+        const getEmojiStr = (emojiEnum: number) => {
+            let emojiSetting = this.t('command.setting.emojiConvert')
+            switch (emojiEnum) {
+                case EmojiSetting.EMOJI:
+                    emojiSetting = this.t('command.setting.emojiConvertEmoji')
+                    break
+                case EmojiSetting.PICTURE:
+                    emojiSetting = this.t('command.setting.emojiConvertPicture')
+                    break
+                case EmojiSetting.TEXT:
+                    emojiSetting = this.t('command.setting.emojiConvertText')
+                    break
+                default:
+                    return
+            }
+            return emojiSetting
+        }
         return {
             inline_keyboard: [
                 [Markup.button.callback(this.t('command.setting.messageMode', this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.BLACK ? this.t('command.setting.blackMode') : this.t('command.setting.whiteMode')), VariableType.SETTING_NOTION_MODE),],
@@ -2769,7 +2817,10 @@ export class TelegramBotClient extends BaseClient {
                 [Markup.button.callback(this.t('command.setting.autoTranscript', this.forwardSetting.getVariable(VariableType.SETTING_AUTO_TRANSCRIPT) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_AUTO_TRANSCRIPT),],
                 [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE ?
                     Markup.button.callback(this.t('command.setting.whiteGroup'), VariableType.SETTING_WHITE_LIST) :
-                    Markup.button.callback(this.t('command.setting.blackGroup'), VariableType.SETTING_BLACK_LIST)]
+                    Markup.button.callback(this.t('command.setting.blackGroup'), VariableType.SETTING_BLACK_LIST)],
+                [Markup.button.callback(this.t('command.setting.emojiConvert',
+                        getEmojiStr(this.forwardSetting.getVariable(VariableType.SETTING_EMOJI_CONVERT))),
+                    VariableType.SETTING_EMOJI_CONVERT),],
             ],
         }
     }

@@ -118,6 +118,10 @@ const en = {
             whiteMode: 'Whitelist mode',
             whiteGroup: 'Whitelist Groups',
             blackGroup: 'Blacklist Groups',
+            emojiConvert: 'Emoji conversion model({0})',
+            emojiConvertText: 'Emoji conversion to text',
+            emojiConvertEmoji: 'Emoji conversion to Emoji',
+            emojiConvertPicture: 'Emoji conversion to picture',
         },
         recent: {
             noUsers: 'No recent contacts',

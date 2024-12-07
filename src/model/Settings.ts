@@ -1,7 +1,20 @@
 import * as fs from 'node:fs'
 import {LogUtils} from '../util/LogUtils'
+import {EmojiSetting} from '../enums/SettingEnums'
 
 export class VariableContainer {
+    public static instance: VariableContainer
+
+    public static getInstance(): VariableContainer {
+        if (!VariableContainer.instance) {
+            VariableContainer.instance = new VariableContainer()
+            VariableContainer.instance.parseFromFile()
+        }
+        return VariableContainer.instance
+    }
+
+    private constructor() {
+    }
 
     private variables: {
         [VariableType.SETTING_NOTION_MODE]: NotionMode,
@@ -17,6 +30,7 @@ export class VariableContainer {
         [VariableType.SETTING_AUTO_GROUP]: boolean,
         [VariableType.SETTING_AUTO_TRANSCRIPT]: boolean,
         [VariableType.SETTING_LANGUAGE]: string,
+        [VariableType.SETTING_EMOJI_CONVERT]: number,
     } = {
         [VariableType.SETTING_NOTION_MODE]: NotionMode.BLACK,
         [VariableType.SETTING_WHITE_LIST]: [],
@@ -31,6 +45,7 @@ export class VariableContainer {
         [VariableType.SETTING_AUTO_GROUP]: false,
         [VariableType.SETTING_AUTO_TRANSCRIPT]: false,
         [VariableType.SETTING_LANGUAGE]: 'zh',
+        [VariableType.SETTING_EMOJI_CONVERT]: EmojiSetting.EMOJI,
     }
 
     setVariable<T extends VariableType>(key: T, value: VariableMap[T]) {
@@ -104,6 +119,8 @@ export enum VariableType {
     SETTING_AUTO_GROUP = 'Setting_Auto_Group',
     // 语言设置
     SETTING_LANGUAGE = 'Setting_Language',
+    // 表情转换方法
+    SETTING_EMOJI_CONVERT = 'SETTING_EMOJI_CONVERT',
 }
 
 export enum NotionMode {
@@ -126,6 +143,7 @@ type VariableMap = {
     [VariableType.SETTING_AUTO_GROUP]: boolean,
     [VariableType.SETTING_AUTO_TRANSCRIPT]: boolean,
     [VariableType.SETTING_LANGUAGE]: string,
+    [VariableType.SETTING_EMOJI_CONVERT]: number,
 };
 
 export enum StorageSettings {
