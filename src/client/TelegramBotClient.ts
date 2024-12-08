@@ -749,19 +749,27 @@ export class TelegramBotClient extends BaseClient {
                             return {chat_id: it.chat_id, all_allow: YesOrNo.NO} as AllowForward
                         }).forEach(al => {
                             allowForwardService.one(al.chat_id).then(async exit => {
-                                let id
                                 if (!exit) {
-                                    id = await allowForwardService.add(al)
+                                    allowForwardService.add(al)
+                                        .then((id) => {
+                                            TelegramUserClient.getInstance().updateAllAllowForward()
+                                            allowForwardService.addEntitiesList(allows.map(allow => {
+                                                return {
+                                                    allow_forward_id: id,
+                                                    entity_id: Number.parseInt(allow.id),
+                                                    username: allow.username
+                                                } as AllowForwardEntities
+                                            }))
+                                        })
                                 } else {
-                                    id = exit.id
+                                    await allowForwardService.addEntitiesList(allows.map(allow => {
+                                        return {
+                                            allow_forward_id: exit.id,
+                                            entity_id: Number.parseInt(allow.id),
+                                            username: allow.username
+                                        } as AllowForwardEntities
+                                    }))
                                 }
-                                allowForwardService.addEntitiesList(allows.map(allow => {
-                                    return {
-                                        allow_forward_id: id,
-                                        entity_id: Number.parseInt(allow.id),
-                                        username: allow.username
-                                    } as AllowForwardEntities
-                                }))
                             })
                         })
                         ctx.reply(this.t('command.aad.success'))
@@ -773,29 +781,37 @@ export class TelegramBotClient extends BaseClient {
             } else { // 单个聊天的情况
                 // all bind items
                 if (addAll) {
-                    allowForwardService.createOrUpdate({chat_id: ctx.chat.id, all_allow: YesOrNo.YES})
+                    await allowForwardService.createOrUpdate({chat_id: ctx.chat.id, all_allow: YesOrNo.YES})
                     ctx.reply(this.t('command.aad.success'))
                 } else {
                     allowForwardService.one(ctx.chat.id).then(async exit => {
-                        let id
                         if (!exit) {
-                            id = await allowForwardService.add({chat_id: ctx.chat.id, all_allow: YesOrNo.NO})
+                            allowForwardService.add({chat_id: ctx.chat.id, all_allow: YesOrNo.NO})
+                                .then((id) => {
+                                    allowForwardService.addEntitiesList(allows.map(allow => {
+                                        return {
+                                            allow_forward_id: id,
+                                            entity_id: Number.parseInt(allow.id),
+                                            username: allow.username
+                                        } as AllowForwardEntities
+                                    }))
+                                    TelegramUserClient.getInstance().updateAllAllowForward()
+                                }).catch(() => {
+                                ctx.reply(this.t('command.aad.fail'))
+                            })
                         } else {
-                            id = exit.id
+                           await allowForwardService.addEntitiesList(allows.map(allow => {
+                                return {
+                                    allow_forward_id: exit.id,
+                                    entity_id: Number.parseInt(allow.id),
+                                    username: allow.username
+                                } as AllowForwardEntities
+                            }))
                         }
-                        allowForwardService.addEntitiesList(allows.map(allow => {
-                            return {
-                                allow_forward_id: id,
-                                entity_id: Number.parseInt(allow.id),
-                                username: allow.username
-                            } as AllowForwardEntities
-                        }))
                         ctx.reply(this.t('command.aad.success'))
                     })
                 }
             }
-            // this.tgUserClient.onMessage()
-            TelegramUserClient.getInstance().updateAllAllowForward()
         })
 
         // ‘/als’ 命令
