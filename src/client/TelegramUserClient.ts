@@ -141,7 +141,7 @@ export class TelegramUserClient extends TelegramClient {
                     if (msg.media) {
                         const fileName = TelegramUserClient.getFileName(msg)
                         msg.downloadMedia().then((buff) => {
-                            if (Buffer.byteLength(buff) < 100 * 1024 && (fileName.endsWith('jpg') || fileName.endsWith('jpeg') || fileName.endsWith('png'))) {
+                            if (Buffer.byteLength(buff) < 100 * 1024 && (fileName?.endsWith('jpg') || fileName?.endsWith('jpeg') || fileName?.endsWith('png'))) {
                                 // 构造包含无用信息的 EXIF 元数据
                                 const exifData = {
                                     IFD0: {
