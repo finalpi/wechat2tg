@@ -205,15 +205,22 @@ export class TelegramUserClient extends TelegramClient {
                             }
                         })
                     }
+                    MessageService.getInstance().addMessage({
+                        chat_id: msgChatId?.toString(),
+                        msg_text: msg.text,
+                        create_time: Date.now(),
+                        telegram_user_message_id: msg.id,
+                        sender_id: this.telegramBotClient.weChatClient.client.currentUser.id,
+                    })
                 }
                 const sendMessage = () => TelegramBotClient.getInstance().bindItemService.getBindItemByChatId(allowForward.chat_id).then(bindItem => {
                     const wechatClient = this.telegramBotClient.weChatClient
-                    if (bindItem.type === 0) {
+                    if (bindItem.type === 0 && bindItem.forward === 1) {
                         wechatClient.client.Contact.find({id: bindItem.wechat_id}).then(contact => {
                             doSend(wechatClient, contact)
                         })
                     }
-                    if (bindItem.type === 1) {
+                    if (bindItem.type === 1  && bindItem.forward === 1) {
                         wechatClient.client.Room.find({id: bindItem.wechat_id}).then(room => {
                             doSend(wechatClient, room)
                         })
