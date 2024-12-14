@@ -61,6 +61,7 @@ export class SimpleMessageSendQueueHelper {
                 this.sendFunction(...sendMessage.message).then(() => {
                     sendMessage.success = true
                     sendMessage.sending = false
+                    sendMessage.message = []
                 }).catch(async e => {
                     console.error(e)
                     sendMessage.success = false

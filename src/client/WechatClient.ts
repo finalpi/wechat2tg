@@ -161,7 +161,8 @@ export class WeChatClient extends BaseClient {
 
     public addMessage(sayable: MessageInterface | ContactInterface | RoomInterface, msg: string | FileBox, extra: {
         msg_id: number,
-        chat_id: number
+        chat_id: number,
+        afterSend?: () => Promise<void>
     }): void {
         this.sendQueueHelper.addMessageWithMsgId(extra.msg_id, sayable, msg, extra)
     }
@@ -180,6 +181,7 @@ export class WeChatClient extends BaseClient {
                     MessageService.getInstance().updateMessageByChatMsg({
                         chat_id: extra.chat_id.toString(),
                         msg_text: msgText,
+                        tg_msg_id: extra.msg_id ? extra.msg_id : undefined,
                     }, {
                         telegram_message_id: extra.msg_id,
                         type: msg instanceof FileBox ? 0 : 7,

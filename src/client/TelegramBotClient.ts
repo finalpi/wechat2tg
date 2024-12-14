@@ -700,10 +700,8 @@ export class TelegramBotClient extends BaseClient {
             }
             // 添加所有的人
             let addAll = false
-            // 正则表达式用来分离命令后面的参数
-            const match = ctx.update.message.text.match(/\/aad\s+([\p{L}\p{N}_]+)/u)
             let allows = []
-            if (match && match[1] === 'all') {
+            if (ctx.args?.includes('all')) {
                 addAll = true
             } else {
                 // 转换为实体

@@ -42,7 +42,8 @@ const en = {
 5\\. The currently replied user or group will be pinned
 6\\. Replying to a forwarded message can directly forward it to the corresponding person or group \\(temporarily does not support replying to replies, and does not change the currently replied user\\)
 7\\. Because the WeChat protocol used is a web protocol, there may be a **ban** **please think twice before using it** \\(I haven't encountered this yet\\)
-8\\. For more features, please check the GitHub repository README`,
+8\\. For more features, please check the GitHub repository README
+9\\. You can use the /lang command to switch languages`,
         startText: 'Please enter /login to log in, or enter /help to view help\nPlease note that after executing /login, you will be the owner of this bot',
         settingsText: 'Program settings:',
         langText: 'Language settings:',
