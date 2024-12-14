@@ -33,7 +33,11 @@ export class MessageService extends AbstractSqlService {
         })
     }
 
-    public updateMessageByChatMsg(query: { chat_id: string, msg_text: string }, update: MessageItemUpdate) {
+    public updateMessageByChatMsg(query: { chat_id: string, msg_text: string, tg_msg_id?: number } = {
+        tg_msg_id: -1,
+        chat_id: '',
+        msg_text: ''
+    }, update: MessageItemUpdate) {
         const logger = this._log
         this.db.serialize(() => {
             // 构建 SET 子句
@@ -52,15 +56,16 @@ export class MessageService extends AbstractSqlService {
             }
 
             const sql = `UPDATE tb_message
-                     SET ${setClauses.join(', ')}
-                     WHERE chat_id = ? AND msg_text = ? AND telegram_user_message_id = (
-                         SELECT MAX(telegram_user_message_id)
-                         FROM tb_message
-                         WHERE chat_id = ? AND msg_text = ?
-                     )`
+                         SET ${setClauses.join(', ')}
+                         WHERE chat_id = ?
+                           AND (msg_text = ? OR telegram_message_id = ? OR telegram_user_message_id = ?)
+                           AND telegram_user_message_id = (SELECT MAX(telegram_user_message_id)
+                                                           FROM tb_message
+                                                           WHERE chat_id = ?
+                                                             AND (msg_text = ? OR telegram_message_id = ? OR telegram_user_message_id = ?))`
 
             // 添加 WHERE 子句的参数
-            params.push(query.chat_id, query.msg_text, query.chat_id, query.msg_text)
+            params.push(query.chat_id, query.msg_text, query.tg_msg_id, query.tg_msg_id,  query.chat_id, query.msg_text, query.tg_msg_id, query.tg_msg_id)
 
             this.db.run(sql, params, function (err) {
                 if (err) {
