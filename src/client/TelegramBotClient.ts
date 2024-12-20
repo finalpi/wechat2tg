@@ -42,6 +42,9 @@ import {YesOrNo} from '../enums/BaseEnum'
 import {EmojiSetting} from '../enums/SettingEnums'
 
 export class TelegramBotClient extends BaseClient {
+    get botId(): number {
+        return this._botId
+    }
     get currentOrder(): string | undefined {
         return this._currentOrder
     }
@@ -92,6 +95,7 @@ export class TelegramBotClient extends BaseClient {
     private _tgUserClient: TelegramUserClient | undefined
     private _tgUserClientLogin = false
     private readonly _bot: Telegraf
+    private _botId: number
     private _chatId: number | string
     private _ownerId: number
     private loginCommandExecuted = false
@@ -330,7 +334,7 @@ export class TelegramBotClient extends BaseClient {
                 this._tgClient = TelegramClient.getInstance()
                 this._tgUserClient = TelegramUserClient.getInstance()
                 // 意外情况没创建文件夹
-                new SetupServiceImpl().createFolder()
+                // new SetupServiceImpl().createFolder()
                 this.telegramApiSender = new SenderFactory().createSender(this._tgClient.client)
             }
             // 设置command
@@ -622,8 +626,7 @@ export class TelegramBotClient extends BaseClient {
                 const administrators = await ctx.telegram.getChatAdministrators(ctx.chat.id)
 
                 // 检查机器人是否在管理员列表中
-                const botId = ctx.botInfo.id
-                const isAdmin = administrators.some(admin => admin.user.id === botId)
+                const isAdmin = administrators.some(admin => admin.user.id === this.botId)
 
                 if (!isAdmin) {
                     return ctx.reply(this.t('command.cgdata.notAdmin'))
@@ -1246,14 +1249,14 @@ export class TelegramBotClient extends BaseClient {
         })
 
         bot.on(message('left_chat_member'), ctx => {
-            if (ctx.message.left_chat_member.id === ctx.botInfo.id) {
+            if (ctx.message.left_chat_member.id === this.botId) {
                 this.bindItemService.removeBindItemByChatId(ctx.message.chat.id)
             }
         })
 
         bot.on(message('new_chat_members'), ctx => {
             for (const newChatMember of ctx.message.new_chat_members) {
-                if (newChatMember.id === ctx.botInfo.id) {
+                if (newChatMember.id === this.botId) {
                     ctx.reply(this.t('common.plzLoginWeChat'))
                 }
             }
@@ -2317,6 +2320,7 @@ export class TelegramBotClient extends BaseClient {
         if (retryCount >= 0) {
             bot.launch().then(() => {
                 this.logDebug('Telegram Bot started')
+                this._botId = bot.botInfo.id
             }).catch(error => {
                 this.logError('Telegram Bot start failed', error)
                 this.botLaunch(bot, retryCount - 1)

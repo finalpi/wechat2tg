@@ -155,7 +155,7 @@ export class TelegramUserClient extends TelegramClient {
                             })
                             return
                         }
-                        const botId = returnBigInt(TelegramBotClient.getInstance().bot.botInfo.id)
+                        const botId = returnBigInt(TelegramBotClient.getInstance().botId)
                         const chatIds = this.allAllowForward.map(it => it.chat_id)
                         const msgChatId = msg.chatId?.toJSNumber()
                         if (msg.fromId instanceof Api.PeerUser && !msg.fromId.userId.eq(mineId)
@@ -324,7 +324,7 @@ export class TelegramUserClient extends TelegramClient {
             return row
         }
         let bindItem
-        if (this.telegramBotClient.bot.botInfo?.id) {
+        if (this.telegramBotClient.botId) {
             let name
             let avatar
             if (createGroupInterface.type === 0) {
@@ -341,14 +341,14 @@ export class TelegramUserClient extends TelegramClient {
             if (!name) {
                 name = '微信-未命名群'
             }
-            this.logDebug('createGroup id  ', this.telegramBotClient.chatId, this.telegramBotClient.bot.botInfo?.id)
+            this.logDebug('createGroup id  ', this.telegramBotClient.chatId, this.telegramBotClient.botId)
             if (!this._client?.connected) {
                 await this._client?.connect()
                 return undefined
             }
             const result = await this.client?.invoke(
                 new Api.messages.CreateChat({
-                    users: [this.telegramBotClient.chatId, this.telegramBotClient.bot.botInfo?.id],
+                    users: [this.telegramBotClient.chatId, this.telegramBotClient.botId],
                     title: name,
                     ttlPeriod: 0
                 })
@@ -427,11 +427,11 @@ export class TelegramUserClient extends TelegramClient {
 
     public setAdmin(chatId: BigInteger) {
         // 设置管理员
-        if (this.telegramBotClient.bot.botInfo?.id) {
+        if (this.telegramBotClient.botId) {
             this.client?.invoke(
                 new Api.messages.EditChatAdmin({
                     chatId: chatId,
-                    userId: this.telegramBotClient.bot.botInfo?.id,
+                    userId: this.telegramBotClient.botId,
                     isAdmin: true
                 })
             )
