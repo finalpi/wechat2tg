@@ -2318,9 +2318,10 @@ export class TelegramBotClient extends BaseClient {
 
     private async botLaunch(bot: Telegraf, retryCount = 5) {
         if (retryCount >= 0) {
-            bot.launch().then(() => {
-                this.logDebug('Telegram Bot started')
+            bot.launch(()=>{
                 this._botId = bot.botInfo.id
+            }).then(() => {
+                this.logDebug('Telegram Bot started')
             }).catch(error => {
                 this.logError('Telegram Bot start failed', error)
                 this.botLaunch(bot, retryCount - 1)
