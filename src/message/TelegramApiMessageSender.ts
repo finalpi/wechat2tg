@@ -48,7 +48,11 @@ export class TelegramApiMessageSender extends MessageSender {
             if (sendParam.message) {
                 this.sender.editMessage(inputPeerChannelFromMessage, sendParam).then(res => {
                     if (tempFilePath) {
-                        fs.rmSync('save-files/temp_file')
+                        fs.rm(tempFilePath,err=>{
+                            if (err){
+                                console.log(`rm ${tempFilePath} error`)
+                            }
+                        })
                     }
                     resolve({
                         message_id: res.id
