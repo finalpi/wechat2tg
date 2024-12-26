@@ -745,7 +745,9 @@ export class WeChatClient extends BaseClient {
         switch (messageType) {
             case PUPPET.types.Message.Unknown:
                 // console.log(talker.name(), ': 发送了unknown message...')
-
+                if (message.text() !== '') {
+                    this.logDebug('unknown message:', message.text())
+                }
                 if (message.text() === `${this.t('wechat.get')}${this.t('wechat.messageType.redPacket')}, ${this.t('wechat.plzViewOnPhone')}`) {
                     sendMessageBody.body = `${this.t('wechat.get')}${this.t('wechat.messageType.redPacket')}, ${this.t('wechat.plzViewOnPhone')}`
                     this.tgClient.sendQueueHelper.addMessageWithMsgId(uniqueId, sendMessageBody)

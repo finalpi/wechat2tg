@@ -3,6 +3,7 @@ import {TelegramClient as GramClient} from 'telegram/client/TelegramClient'
 import * as messageMethods from 'telegram/client/messages'
 import * as uploadMethods from 'telegram/client/uploads'
 import {CustomFile} from 'telegram/client/uploads'
+import fs from 'node:fs'
 
 export class TelegramApiMessageSender extends MessageSender {
     private sender: GramClient
@@ -35,14 +36,24 @@ export class TelegramApiMessageSender extends MessageSender {
                 // @ts-ignore
                 sendParam.forceDocument = true
             }
+            let tempFilePath = undefined
             if (file.buff) {
-                sendParam.file = new CustomFile(file.filename, file.buff.length, '', file.buff)
+                tempFilePath = `save-files/${file.filename}`
+                fs.writeFileSync(tempFilePath,file.buff)
+                sendParam.file = new CustomFile(file.filename, file.buff.length, tempFilePath)
             }
             if (file.caption) {
                 sendParam.text = file.caption
             }
             if (sendParam.message) {
                 this.sender.editMessage(inputPeerChannelFromMessage, sendParam).then(res => {
+                    if (tempFilePath) {
+                        fs.rm(tempFilePath,err=>{
+                            if (err){
+                                console.log(`rm ${tempFilePath} error`)
+                            }
+                        })
+                    }
                     resolve({
                         message_id: res.id
                     })
