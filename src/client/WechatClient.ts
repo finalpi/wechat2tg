@@ -258,7 +258,10 @@ export class WeChatClient extends BaseClient {
         }
         // if(this._client.ready().then())
         if (!this._started) {
-            await this._client.start().then(() => {
+            // if (this.client.ready().then(() => {
+            //     console.log('fuck lao wang +++ ',this.client.currentUser.wechaty.state)
+            // }))
+            this._client.start().then(() => {
                 this._started = true
                 this.logInfo('Wechat client start!')
 
@@ -273,11 +276,11 @@ export class WeChatClient extends BaseClient {
 
     private init() {
         if (this._client === null) return
-        this._client.on('login', this.login)
-            .on('scan', this.scan)
+        this._client.once('login', this.login)
+            .once('scan', this.scan)
             .on('message', this.message)
             .on('logout', this.logout)
-            .on('stop', this.onStop)
+            .once('stop', this.onStop)
             .on('post', () => this.logInfo('on post...'))
             .on('room-join', this.roomJoin)
             .on('room-topic', this.roomTopic)
@@ -413,10 +416,12 @@ export class WeChatClient extends BaseClient {
     }
 
     public async stop() {
+        this.client.currentUser.wechaty.stop()
         this._started = false
-        await this._client.stop().then(() => this._started = false)
-        await this.clearCache()
-        this.logInfo('stop ... ')
+        // await this._client.stop().then(() => this._started = false)
+        this.clearCache().then(() => {
+            this.logInfo('stop do clearCache ... ')
+        })
     }
 
     public restart() {
