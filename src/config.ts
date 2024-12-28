@@ -28,6 +28,7 @@ export const config = {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY?.toString() || '',
     OPENAI_HOST: process.env.OPENAI_HOST?.toString() || 'https://api.openai.com',
     OPENAI_MODEL: process.env.OPENAI_MODEL?.toString() || 'gpt-3.5-turbo',
+    OPENAI_SYSTEM_PROMPT: process.env.OPENAI_SYSTEM_PROMPT?.toString() || '',
 }
 
 export const useProxy = config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== ''
