@@ -46,14 +46,6 @@ export class WeChatClient extends BaseClient {
             name: './storage/wechat_bot',
             puppet: 'wechaty-puppet-wechat4u',
         })
-        this._tgClient = tgClient
-        this._contactMap = new Map<number, Set<ContactItem>>([
-            [0, new Set<ContactItem>()],
-            [1, new Set<ContactItem>()],
-            [2, new Set<ContactItem>()],
-            [3, new Set<ContactItem>()]
-        ])
-
         this.scan = this.scan.bind(this)
         this.message = this.message.bind(this)
         this.start = this.start.bind(this)
@@ -68,6 +60,14 @@ export class WeChatClient extends BaseClient {
         this.roomLeave = this.roomLeave.bind(this)
         this.roomInvite = this.roomInvite.bind(this)
         this.error = this.error.bind(this)
+        this.init()
+        this._tgClient = tgClient
+        this._contactMap = new Map<number, Set<ContactItem>>([
+            [0, new Set<ContactItem>()],
+            [1, new Set<ContactItem>()],
+            [2, new Set<ContactItem>()],
+            [3, new Set<ContactItem>()]
+        ])
     }
 
     private readonly _client: WechatyInterface
@@ -252,7 +252,6 @@ export class WeChatClient extends BaseClient {
     }
 
     public async start() {
-        this.init()
         if (this._client === null) {
             return
         }
@@ -276,11 +275,11 @@ export class WeChatClient extends BaseClient {
 
     private init() {
         if (this._client === null) return
-        this._client.once('login', this.login)
-            .once('scan', this.scan)
+        this._client.on('login', this.login)
+            .on('scan', this.scan)
             .on('message', this.message)
             .on('logout', this.logout)
-            .once('stop', this.onStop)
+            .on('stop', this.onStop)
             .on('post', () => this.logInfo('on post...'))
             .on('room-join', this.roomJoin)
             .on('room-topic', this.roomTopic)
@@ -419,9 +418,6 @@ export class WeChatClient extends BaseClient {
         this.client.currentUser.wechaty.stop()
         this._started = false
         // await this._client.stop().then(() => this._started = false)
-        this.clearCache().then(() => {
-            this.logInfo('stop do clearCache ... ')
-        })
     }
 
     public restart() {
@@ -441,10 +437,14 @@ export class WeChatClient extends BaseClient {
 
     public async logout() {
         // this._client.logout()
-        this.logInfo('logout ....')
+        this.logInfo('on logout ....')
+        this.clearCache().then(() => {
+            this.logInfo('logout do clearCache ... ')
+        })
         // this._client.reset().then()
         if (this._started) {
-            // 被挤下线,需要重新登录
+            this._started = false
+            // 被挤下线,需要重新登录，需要重启 wechaty，不然不会清空缓存
             this.resetValue()
         }
     }
@@ -1049,11 +1049,7 @@ export class WeChatClient extends BaseClient {
     private clearCache() {
         return new Promise(resolve => {
             const filePath = 'storage/wechat_bot.memory-card.json'
-            fs.access(filePath, fs.constants.F_OK, async (err) => {
-                if (!err) {
-                    // 文件存在，删除文件
-                    await fs.promises.unlink(filePath)
-                }
+            fs.rm(filePath,err => {
                 this.contactMap?.get(ContactImpl.Type.Individual)?.clear()
                 this.contactMap?.get(ContactImpl.Type.Official)?.clear()
                 this.cacheMemberDone = false

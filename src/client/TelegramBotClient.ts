@@ -417,6 +417,10 @@ export class TelegramBotClient extends BaseClient {
         })
 
         bot.command('reset', (ctx) => {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
+                ctx.reply(this.t('common.plzLoginWeChat'))
+                return
+            }
             this._weChatClient.resetValue()
             ctx.reply(this.t('command.resetText'))
         })
@@ -2719,7 +2723,6 @@ export class TelegramBotClient extends BaseClient {
 
 
     public onWeChatLogout(ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
-
         this._weChatClient.logout().then(() => {
             ctx.reply(this.t('wechat.logoutSuccess')).then(() => this.loginCommandExecuted = false)
         }).catch(() => ctx.reply(this.t('wechat.logoutFail')))
@@ -2849,8 +2852,6 @@ export class TelegramBotClient extends BaseClient {
 
     public reset() {
         this._weChatClient.stop().then(() => {
-
-            // setTimeout(() => {
             this.wechatStartFlag = false
             const filePath = 'storage/wechat_bot.memory-card.json'
             fs.access(filePath, fs.constants.F_OK, async (err) => {
@@ -2862,12 +2863,15 @@ export class TelegramBotClient extends BaseClient {
                 }
                 // this._weChatClient = new WeChatClient(this)
             })
-                // this._weChatClient.start().then(() => {
-                //     // 标记为已执行
-                //     this.wechatStartFlag = true
-                //     this.loginCommandExecuted = true
-                // })
-            // }, 2000)
+            // 两秒后自动启动
+            setTimeout(() => {
+                this.logInfo('start wechaty bot')
+                this._weChatClient.start().then(() => {
+                    // 标记为已执行
+                    this.wechatStartFlag = true
+                    this.loginCommandExecuted = true
+                })
+            }, 2000)
         })
         // this._weChatClient = new WeChatClient(this)
     }
