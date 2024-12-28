@@ -2818,7 +2818,7 @@ export class TelegramBotClient extends BaseClient {
             }
             if (!find) {
                 blackList.push({id: id + '', name: text})
-                this.bot.telegram.sendMessage(this.chatId, this.t('common.addSuccess'))
+                this.bot.telegram.sendMessage(this.chatId, this.t('wechat.addSuccess'))
             }
         } else {
             const whiteList = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST)
@@ -2830,7 +2830,7 @@ export class TelegramBotClient extends BaseClient {
             }
             if (!find) {
                 whiteList.push({id: id + '', name: text})
-                this.bot.telegram.sendMessage(this.chatId, this.t('common.addSuccess'))
+                this.bot.telegram.sendMessage(this.chatId, this.t('wechat.addSuccess'))
             }
         }
         this.forwardSetting.writeToFile()
