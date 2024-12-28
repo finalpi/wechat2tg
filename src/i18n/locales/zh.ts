@@ -118,6 +118,8 @@ const zh = {
             autoTranscript: '自动语音转文字({0})',
             forwardSelf: '转发自己在微信发送的消息({0})',
             mediaQualityCompression: '媒体质量压缩({0})',
+            openAIByContact: '联系人AI自动回复({0})',
+            openAIByRoom: '群组AI自动回复({0})',
             blackMode: '黑名单模式',
             whiteMode: '白名单模式',
             whiteGroup: '白名单群组',

@@ -115,6 +115,8 @@ const en = {
             autoTranscript: 'Auto speech-to-text({0})',
             forwardSelf: 'Forward a message you sent on WeChat({0})',
             mediaQualityCompression: 'Media Quality Compression({0})',
+            openAIByContact: 'Contact AI auto-reply({0})',
+            openAIByRoom: 'Room AI auto-reply({0})',
             blackMode: 'Blacklist Mode',
             whiteMode: 'Whitelist mode',
             whiteGroup: 'Whitelist Groups',

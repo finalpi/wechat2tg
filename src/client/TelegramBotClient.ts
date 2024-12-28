@@ -1684,6 +1684,30 @@ export class TelegramBotClient extends BaseClient {
             return ctx.answerCbQuery(answerText)
         })
 
+        // 自动回复群组
+        bot.action(VariableType.SETTING_FORWARD_OPENAI_ROOM, ctx => {
+            const b = !this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_OPENAI_ROOM)
+            const answerText = b ? this.t('common.open') : this.t('common.close')
+            this.forwardSetting.setVariable(VariableType.SETTING_FORWARD_OPENAI_ROOM, b)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
+            // 点击后修改上面按钮
+            ctx.editMessageReplyMarkup(this.getSettingButton())
+            return ctx.answerCbQuery(answerText)
+        })
+
+        // 自动回复联系人
+        bot.action(VariableType.SETTING_FORWARD_OPENAI_CONTACT, ctx => {
+            const b = !this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_OPENAI_CONTACT)
+            const answerText = b ? this.t('common.open') : this.t('common.close')
+            this.forwardSetting.setVariable(VariableType.SETTING_FORWARD_OPENAI_CONTACT, b)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
+            // 点击后修改上面按钮
+            ctx.editMessageReplyMarkup(this.getSettingButton())
+            return ctx.answerCbQuery(answerText)
+        })
+
         // 白名单设置
         bot.action(VariableType.SETTING_WHITE_LIST, ctx => {
             // 当前白名单
@@ -2839,6 +2863,8 @@ export class TelegramBotClient extends BaseClient {
                 [Markup.button.callback(this.t('command.setting.blockEmoticon', this.forwardSetting.getVariable(VariableType.SETTING_BLOCK_EMOTICON) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_BLOCK_EMOTICON),],
                 [Markup.button.callback(this.t('command.setting.forwardSelf', this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_FORWARD_SELF),],
                 [Markup.button.callback(this.t('command.setting.mediaQualityCompression', this.forwardSetting.getVariable(VariableType.SETTING_COMPRESSION) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_COMPRESSION),],
+                config.OPENAI_API_KEY ? [Markup.button.callback(this.t('command.setting.openAIByRoom', this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_OPENAI_ROOM) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_FORWARD_OPENAI_ROOM)] : [],
+                config.OPENAI_API_KEY ? [Markup.button.callback(this.t('command.setting.openAIByContact', this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_OPENAI_CONTACT) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_FORWARD_OPENAI_CONTACT)] : [],
                 [Markup.button.callback(this.t('command.setting.autoTranscript', this.forwardSetting.getVariable(VariableType.SETTING_AUTO_TRANSCRIPT) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_AUTO_TRANSCRIPT),],
                 [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE ?
                     Markup.button.callback(this.t('command.setting.whiteGroup'), VariableType.SETTING_WHITE_LIST) :

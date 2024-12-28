@@ -31,6 +31,8 @@ export class VariableContainer {
         [VariableType.SETTING_AUTO_TRANSCRIPT]: boolean,
         [VariableType.SETTING_LANGUAGE]: string,
         [VariableType.SETTING_EMOJI_CONVERT]: number,
+        [VariableType.SETTING_FORWARD_OPENAI_ROOM]: boolean,
+        [VariableType.SETTING_FORWARD_OPENAI_CONTACT]: boolean,
     } = {
         [VariableType.SETTING_NOTION_MODE]: NotionMode.BLACK,
         [VariableType.SETTING_WHITE_LIST]: [],
@@ -46,6 +48,8 @@ export class VariableContainer {
         [VariableType.SETTING_AUTO_TRANSCRIPT]: false,
         [VariableType.SETTING_LANGUAGE]: 'zh',
         [VariableType.SETTING_EMOJI_CONVERT]: EmojiSetting.EMOJI,
+        [VariableType.SETTING_FORWARD_OPENAI_ROOM]: false,
+        [VariableType.SETTING_FORWARD_OPENAI_CONTACT]: false,
     }
 
     setVariable<T extends VariableType>(key: T, value: VariableMap[T]) {
@@ -121,6 +125,10 @@ export enum VariableType {
     SETTING_LANGUAGE = 'Setting_Language',
     // 表情转换方法
     SETTING_EMOJI_CONVERT = 'SETTING_EMOJI_CONVERT',
+    // OPENAI 群组回复开关
+    SETTING_FORWARD_OPENAI_ROOM = 'SETTING_FORWARD_OPENAI_ROOM',
+    // OPENAI 联系人回复开关
+    SETTING_FORWARD_OPENAI_CONTACT = 'SETTING_FORWARD_OPENAI_CONTACT'
 }
 
 export enum NotionMode {
@@ -144,6 +152,8 @@ type VariableMap = {
     [VariableType.SETTING_AUTO_TRANSCRIPT]: boolean,
     [VariableType.SETTING_LANGUAGE]: string,
     [VariableType.SETTING_EMOJI_CONVERT]: number,
+    [VariableType.SETTING_FORWARD_OPENAI_ROOM]: boolean,
+    [VariableType.SETTING_FORWARD_OPENAI_CONTACT]: boolean,
 };
 
 export enum StorageSettings {
