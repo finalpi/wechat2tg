@@ -1130,7 +1130,7 @@ export class WeChatClient extends BaseClient {
             }
             if (message.message.room() && this.tgClient.setting.getVariable(VariableType.SETTING_FORWARD_OPENAI_ROOM)) {
                 requestOpenAI()
-            } else if (message.message.talker().type() === 1 && this.tgClient.setting.getVariable(VariableType.SETTING_FORWARD_OPENAI_CONTACT)) {
+            } else if (!message.message.room() && message.message.talker().type() === 1 && this.tgClient.setting.getVariable(VariableType.SETTING_FORWARD_OPENAI_CONTACT)) {
                 requestOpenAI()
             }
         }

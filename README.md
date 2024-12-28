@@ -144,7 +144,7 @@ npm start
 
 - `/recent`: List recent users or groups with messages for quick replies.
 
-- `/setting`: Access settings.
+- `/settings`: Access settings.
 
 - `/bind`: Check group bindings for WeChat users or groups (group-only command).
 
@@ -187,7 +187,7 @@ npm start
 | TENCENT_SECRET_ID | No | Tencent voice-to-text API Secret ID | 
 | TENCENT_SECRET_KEY | No | Tencent voice-to-text API Secret Key | 
 
-### `/setting` Command Description
+### `/settings` Command Description
 
 1. **Switch Between Blacklist or Whitelist Mode**
    - **Whitelist Mode** : Only accepts messages from WeChat groups listed in the whitelist.
@@ -287,8 +287,12 @@ Commands:
 1. Configure `TENCENT_SECRET_ID` and `TENCENT_SECRET_KEY` (obtainable from Tencent's [Speech Recognition Console](https://console.cloud.tencent.com/asr) ).
    Free usage quota is available.
 
-2. Enable auto voice-to-text conversion in `/setting`.
+2. Enable auto voice-to-text conversion in `/settings`.
 
+### USE OPENAI TO AUTOMATICALLY REPLY TO USER MESSAGES
+
+1. Configure 'OPENAI_API_KEY'
+2. Turn on 'Group AI Auto Reply' or 'Contact AI Auto Reply' in '/settings'
 
 
 ### Custom Message Templates

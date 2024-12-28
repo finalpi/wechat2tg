@@ -43,4 +43,13 @@ services:
       # 腾讯语音识别控制台申请的API_KEY(可选)
       TENCENT_SECRET_ID: ''
       TENCENT_SECRET_KEY: ''
+      # OPENAI
+      ## APIKEY
+      OPENAI_API_KEY: ''
+      ## OPENAI 接口地址
+      OPENAI_HOST: 'https://api.openai.com'
+      ## 模型
+      OPENAI_MODEL: 'gpt-3.5-turbo'
+      ## 系统提示词，可以让 GPT 扮演各种角色
+      OPENAI_SYSTEM_PROMPT: ''
     restart: unless-stopped
