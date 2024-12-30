@@ -36,9 +36,21 @@ import {Api} from 'telegram'
 import messages = Api.messages
 import {ImageUtils} from '../util/ImageUtils'
 import {SpeechService} from '../service/SpeechService'
+import {OpenAIService} from '../service/OpenAIService'
+import {config} from '../config'
 
 export class WeChatClient extends BaseClient {
 
+
+    private readonly _client: WechatyInterface
+    private readonly _tgClient: TelegramBotClient
+    private scanMsgId: number | undefined
+    private _started = false
+    private loadMsg: number | undefined
+    private readyCount = 0
+    private snowflakeUtil = new Snowflake()
+    private _openAIService?: OpenAIService
+    private sendQueueHelper: SimpleMessageSendQueueHelper
 
     constructor(private readonly tgClient: TelegramBotClient) {
         super()
@@ -46,14 +58,6 @@ export class WeChatClient extends BaseClient {
             name: './storage/wechat_bot',
             puppet: 'wechaty-puppet-wechat4u',
         })
-        this._tgClient = tgClient
-        this._contactMap = new Map<number, Set<ContactItem>>([
-            [0, new Set<ContactItem>()],
-            [1, new Set<ContactItem>()],
-            [2, new Set<ContactItem>()],
-            [3, new Set<ContactItem>()]
-        ])
-
         this.scan = this.scan.bind(this)
         this.message = this.message.bind(this)
         this.start = this.start.bind(this)
@@ -68,28 +72,20 @@ export class WeChatClient extends BaseClient {
         this.roomLeave = this.roomLeave.bind(this)
         this.roomInvite = this.roomInvite.bind(this)
         this.error = this.error.bind(this)
+        this.init()
+        this._tgClient = tgClient
+        this._contactMap = new Map<number, Set<ContactItem>>([
+            [0, new Set<ContactItem>()],
+            [1, new Set<ContactItem>()],
+            [2, new Set<ContactItem>()],
+            [3, new Set<ContactItem>()]
+        ])
+        if (config.OPENAI_API_KEY) {
+            this._openAIService = new OpenAIService(config.OPENAI_API_KEY, config.OPENAI_HOST, config.OPENAI_MODEL)
+        }
     }
 
-    private readonly _client: WechatyInterface
-    private readonly _tgClient: TelegramBotClient
-
     private _contactMap: Map<number, Set<ContactItem>> | undefined
-    private _roomList: RoomItem[] = []
-
-    private _selectedContact: ContactInterface [] = []
-    private _selectedRoom: RoomInterface [] = []
-    private _memberCache: MemberCacheType[] = []
-    private scanMsgId: number | undefined
-
-    private _started = false
-    private _cacheMemberDone = false
-    private _cacheMemberSendMessage = false
-    private _friendShipList: FriendshipItem[] = []
-    private loadMsg: number | undefined
-    private readyCount = 0
-    private snowflakeUtil = new Snowflake()
-
-    private sendQueueHelper: SimpleMessageSendQueueHelper
 
     public get contactMap(): Map<number, Set<ContactItem>> | undefined {
         return this._contactMap
@@ -99,37 +95,7 @@ export class WeChatClient extends BaseClient {
         this._contactMap = contactMap
     }
 
-    get friendShipList(): FriendshipItem[] {
-        return this._friendShipList
-    }
-
-    set friendShipList(value: FriendshipItem[]) {
-        this._friendShipList = value
-    }
-
-    get cacheMemberSendMessage(): boolean {
-        return this._cacheMemberSendMessage
-    }
-
-    set cacheMemberSendMessage(value: boolean) {
-        this._cacheMemberSendMessage = value
-    }
-
-    get cacheMemberDone(): boolean {
-        return this._cacheMemberDone
-    }
-
-    set cacheMemberDone(value: boolean) {
-        this._cacheMemberDone = value
-    }
-
-    get memberCache(): MemberCacheType[] {
-        return this._memberCache
-    }
-
-    set memberCache(value: MemberCacheType[]) {
-        this._memberCache = value
-    }
+    private _roomList: RoomItem[] = []
 
     get roomList(): RoomItem[] {
         return this._roomList
@@ -139,6 +105,18 @@ export class WeChatClient extends BaseClient {
         this._roomList = value
     }
 
+    private _selectedContact: ContactInterface [] = []
+
+    get selectedContact(): ContactInterface[] {
+        return this._selectedContact
+    }
+
+    set selectedContact(value: ContactInterface[]) {
+        this._selectedContact = value
+    }
+
+    private _selectedRoom: RoomInterface [] = []
+
     get selectedRoom(): RoomInterface[] {
         return this._selectedRoom
     }
@@ -147,12 +125,44 @@ export class WeChatClient extends BaseClient {
         this._selectedRoom = value
     }
 
-    get selectedContact(): ContactInterface[] {
-        return this._selectedContact
+    private _memberCache: MemberCacheType[] = []
+
+    get memberCache(): MemberCacheType[] {
+        return this._memberCache
     }
 
-    set selectedContact(value: ContactInterface[]) {
-        this._selectedContact = value
+    set memberCache(value: MemberCacheType[]) {
+        this._memberCache = value
+    }
+
+    private _cacheMemberDone = false
+
+    get cacheMemberDone(): boolean {
+        return this._cacheMemberDone
+    }
+
+    set cacheMemberDone(value: boolean) {
+        this._cacheMemberDone = value
+    }
+
+    private _cacheMemberSendMessage = false
+
+    get cacheMemberSendMessage(): boolean {
+        return this._cacheMemberSendMessage
+    }
+
+    set cacheMemberSendMessage(value: boolean) {
+        this._cacheMemberSendMessage = value
+    }
+
+    private _friendShipList: FriendshipItem[] = []
+
+    get friendShipList(): FriendshipItem[] {
+        return this._friendShipList
+    }
+
+    set friendShipList(value: FriendshipItem[]) {
+        this._friendShipList = value
     }
 
     public get client() {
@@ -252,13 +262,15 @@ export class WeChatClient extends BaseClient {
     }
 
     public async start() {
-        this.init()
         if (this._client === null) {
             return
         }
         // if(this._client.ready().then())
         if (!this._started) {
-            await this._client.start().then(() => {
+            // if (this.client.ready().then(() => {
+            //     console.log('fuck lao wang +++ ',this.client.currentUser.wechaty.state)
+            // }))
+            this._client.start().then(() => {
                 this._started = true
                 this.logInfo('Wechat client start!')
 
@@ -268,6 +280,81 @@ export class WeChatClient extends BaseClient {
         } else {
             this.logInfo('Wechat client already started!')
             return new Error('Wechat client already started!')
+        }
+    }
+
+    public async stop() {
+        this.client.currentUser.wechaty.stop()
+        this._started = false
+        // await this._client.stop().then(() => this._started = false)
+    }
+
+    public restart() {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        this._client.restart().then(() => {
+            this.logDebug('restart ... ')
+        })
+    }
+
+    public reset() {
+        // this._client.reset().then(() => {
+        this.logInfo('reset ... ')
+        // })
+        this._client.logout()
+    }
+
+    public async logout() {
+        // this._client.logout()
+        this.logInfo('on logout ....')
+        this.clearCache().then(() => {
+            this.logInfo('logout do clearCache ... ')
+        })
+        // this._client.reset().then()
+        if (this._started) {
+            this._started = false
+            // 被挤下线,需要重新登录，需要重启 wechaty，不然不会清空缓存
+            this.resetValue()
+        }
+    }
+
+    public resetValue() {
+        this.readyCount = 0
+        this.tgClient.reset()
+    }
+
+    public async reloadContactCache() {
+        this._contactMap = new Map<number, Set<ContactItem>>([
+            [0, new Set<ContactItem>()],
+            [1, new Set<ContactItem>()],
+            [2, new Set<ContactItem>()],
+            [3, new Set<ContactItem>()]
+        ])
+        return this.cacheMember()
+    }
+
+    public editSendFailButton(chatId: number, tg_msg_id: number, caption: string) {
+        this.tgClient.bot.telegram.editMessageCaption(chatId, tg_msg_id, undefined, caption, {
+            reply_markup: {
+                inline_keyboard: [[Markup.button.callback(this.t('common.reReceive'), 'resendFile')]]
+            }
+        })
+    }
+
+    public getSendTgFileMethodString(messageType: number): 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice' {
+        switch (messageType) {
+            case PUPPET.types.Message.Image:
+                return 'photo'
+            case PUPPET.types.Message.Emoticon:
+                return 'photo'
+            case PUPPET.types.Message.Audio:
+                return 'audio'
+            case 34:
+                return 'voice'
+            case PUPPET.types.Message.Video:
+                return 'video'
+            default:
+                return 'document'
         }
     }
 
@@ -410,38 +497,6 @@ export class WeChatClient extends BaseClient {
             }
             this.logDebug('cache member done!')
         })
-    }
-
-    public async stop() {
-        this._started = false
-        await this._client.stop().then(() => this._started = false)
-        await this.clearCache()
-        this.logInfo('stop ... ')
-    }
-
-    public restart() {
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        this._client.restart().then(() => {
-            this.logDebug('restart ... ')
-        })
-    }
-
-    public reset() {
-        // this._client.reset().then(() => {
-        this.logInfo('reset ... ')
-        // })
-        this._client.logout()
-    }
-
-    public async logout() {
-        // this._client.logout()
-        this.logInfo('logout ....')
-        // this._client.reset().then()
-        if (this._started) {
-            // 被挤下线,需要重新登录
-            this.resetValue()
-        }
     }
 
     private login() {
@@ -1026,29 +1081,10 @@ export class WeChatClient extends BaseClient {
         this.tgClient.bindItemService.updateItem(this.roomList, this.contactMap)
     }
 
-    public resetValue() {
-        this.readyCount = 0
-        this.tgClient.reset()
-    }
-
-    public async reloadContactCache() {
-        this._contactMap = new Map<number, Set<ContactItem>>([
-            [0, new Set<ContactItem>()],
-            [1, new Set<ContactItem>()],
-            [2, new Set<ContactItem>()],
-            [3, new Set<ContactItem>()]
-        ])
-        return this.cacheMember()
-    }
-
     private clearCache() {
         return new Promise(resolve => {
             const filePath = 'storage/wechat_bot.memory-card.json'
-            fs.access(filePath, fs.constants.F_OK, async (err) => {
-                if (!err) {
-                    // 文件存在，删除文件
-                    await fs.promises.unlink(filePath)
-                }
+            fs.rm(filePath, err => {
                 this.contactMap?.get(ContactImpl.Type.Individual)?.clear()
                 this.contactMap?.get(ContactImpl.Type.Official)?.clear()
                 this.cacheMemberDone = false
@@ -1083,6 +1119,21 @@ export class WeChatClient extends BaseClient {
     }
 
     private async sendTextToTg(message: SimpleMessage) {
+        // AI 自动回复
+        if (config.OPENAI_API_KEY && !message.message.self() && message.message.type() === PUPPET.types.Message.Text) {
+            const requestOpenAI = () => {
+                this._openAIService.callOpenAI(message.body + '').then(res => {
+                    if (res) {
+                        message.message.say(res)
+                    }
+                })
+            }
+            if (message.message.room() && this.tgClient.setting.getVariable(VariableType.SETTING_FORWARD_OPENAI_ROOM)) {
+                requestOpenAI()
+            } else if (!message.message.room() && message.message.talker().type() === 1 && this.tgClient.setting.getVariable(VariableType.SETTING_FORWARD_OPENAI_CONTACT)) {
+                requestOpenAI()
+            }
+        }
         const html = SimpleMessageSender.send(message) + ''
         const maxLength = 9000
 
@@ -1374,31 +1425,6 @@ export class WeChatClient extends BaseClient {
                     body: `[${this.getMessageName(messageType)}]${this.t('wechat.forwardFail')}, ${this.t('wechat.plzViewOnPhone')}`
                 })
             })
-        }
-    }
-
-    public editSendFailButton(chatId: number, tg_msg_id: number, caption: string) {
-        this.tgClient.bot.telegram.editMessageCaption(chatId, tg_msg_id, undefined, caption, {
-            reply_markup: {
-                inline_keyboard: [[Markup.button.callback(this.t('common.reReceive'), 'resendFile')]]
-            }
-        })
-    }
-
-    public getSendTgFileMethodString(messageType: number): 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice' {
-        switch (messageType) {
-            case PUPPET.types.Message.Image:
-                return 'photo'
-            case PUPPET.types.Message.Emoticon:
-                return 'photo'
-            case PUPPET.types.Message.Audio:
-                return 'audio'
-            case 34:
-                return 'voice'
-            case PUPPET.types.Message.Video:
-                return 'video'
-            default:
-                return 'document'
         }
     }
 

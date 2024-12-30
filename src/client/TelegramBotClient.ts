@@ -292,8 +292,8 @@ export class TelegramBotClient extends BaseClient {
 
 
                     this.logDebug('自动启动微信bot')
-                }).catch(() => {
-                    this.logError('自动启动失败')
+                }).catch((reason) => {
+                    this.logError('自动启动失败', reason)
                 })
             }
         }
@@ -417,6 +417,10 @@ export class TelegramBotClient extends BaseClient {
         })
 
         bot.command('reset', (ctx) => {
+            if (!this.wechatStartFlag || !this._weChatClient.client.isLoggedIn) {
+                ctx.reply(this.t('common.plzLoginWeChat'))
+                return
+            }
             this._weChatClient.resetValue()
             ctx.reply(this.t('command.resetText'))
         })
@@ -893,6 +897,9 @@ export class TelegramBotClient extends BaseClient {
                 }).catch(() => {
                     ctx.reply(this.t('command.login.fail'))
                 })
+            } else {
+                // TODO i18n
+                ctx.reply('你已经登陆或者请扫描二维码登录')
             }
         })
 
@@ -1670,6 +1677,30 @@ export class TelegramBotClient extends BaseClient {
             const b = !this.forwardSetting.getVariable(VariableType.SETTING_COMPRESSION)
             const answerText = b ? this.t('common.open') : this.t('common.close')
             this.forwardSetting.setVariable(VariableType.SETTING_COMPRESSION, b)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
+            // 点击后修改上面按钮
+            ctx.editMessageReplyMarkup(this.getSettingButton())
+            return ctx.answerCbQuery(answerText)
+        })
+
+        // 自动回复群组
+        bot.action(VariableType.SETTING_FORWARD_OPENAI_ROOM, ctx => {
+            const b = !this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_OPENAI_ROOM)
+            const answerText = b ? this.t('common.open') : this.t('common.close')
+            this.forwardSetting.setVariable(VariableType.SETTING_FORWARD_OPENAI_ROOM, b)
+            // 修改后持成文件
+            this.forwardSetting.writeToFile()
+            // 点击后修改上面按钮
+            ctx.editMessageReplyMarkup(this.getSettingButton())
+            return ctx.answerCbQuery(answerText)
+        })
+
+        // 自动回复联系人
+        bot.action(VariableType.SETTING_FORWARD_OPENAI_CONTACT, ctx => {
+            const b = !this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_OPENAI_CONTACT)
+            const answerText = b ? this.t('common.open') : this.t('common.close')
+            this.forwardSetting.setVariable(VariableType.SETTING_FORWARD_OPENAI_CONTACT, b)
             // 修改后持成文件
             this.forwardSetting.writeToFile()
             // 点击后修改上面按钮
@@ -2716,7 +2747,6 @@ export class TelegramBotClient extends BaseClient {
 
 
     public onWeChatLogout(ctx: NarrowedContext<Context<tg.Update>, tg.Update>) {
-
         this._weChatClient.logout().then(() => {
             ctx.reply(this.t('wechat.logoutSuccess')).then(() => this.loginCommandExecuted = false)
         }).catch(() => ctx.reply(this.t('wechat.logoutFail')))
@@ -2726,14 +2756,14 @@ export class TelegramBotClient extends BaseClient {
         this.wechatStartFlag = false
         this._weChatClient.stop().then(() => {
             ctx.reply(this.t('command.stop.success')).then(() => this.loginCommandExecuted = false)
-            const filePath = 'storage/wechat_bot.memory-card.json'
-            fs.access(filePath, fs.constants.F_OK, async (err) => {
-                if (!err) {
-                    // 文件存在，删除文件
-                    await fs.promises.unlink(filePath)
-                }
-                this._weChatClient = new WeChatClient(this)
-            })
+            // const filePath = 'storage/wechat_bot.memory-card.json'
+            // fs.access(filePath, fs.constants.F_OK, async (err) => {
+            //     if (!err) {
+            //         // 文件存在，删除文件
+            //         await fs.promises.unlink(filePath)
+            //     }
+            //     // this._weChatClient = new WeChatClient(this)
+            // })
         }).catch(() => ctx.reply(this.t('command.stop.fail')))
     }
 
@@ -2788,7 +2818,7 @@ export class TelegramBotClient extends BaseClient {
             }
             if (!find) {
                 blackList.push({id: id + '', name: text})
-                this.bot.telegram.sendMessage(this.chatId, this.t('common.addSuccess'))
+                this.bot.telegram.sendMessage(this.chatId, this.t('wechat.addSuccess'))
             }
         } else {
             const whiteList = this.forwardSetting.getVariable(VariableType.SETTING_WHITE_LIST)
@@ -2800,7 +2830,7 @@ export class TelegramBotClient extends BaseClient {
             }
             if (!find) {
                 whiteList.push({id: id + '', name: text})
-                this.bot.telegram.sendMessage(this.chatId, this.t('common.addSuccess'))
+                this.bot.telegram.sendMessage(this.chatId, this.t('wechat.addSuccess'))
             }
         }
         this.forwardSetting.writeToFile()
@@ -2833,6 +2863,8 @@ export class TelegramBotClient extends BaseClient {
                 [Markup.button.callback(this.t('command.setting.blockEmoticon', this.forwardSetting.getVariable(VariableType.SETTING_BLOCK_EMOTICON) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_BLOCK_EMOTICON),],
                 [Markup.button.callback(this.t('command.setting.forwardSelf', this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_SELF) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_FORWARD_SELF),],
                 [Markup.button.callback(this.t('command.setting.mediaQualityCompression', this.forwardSetting.getVariable(VariableType.SETTING_COMPRESSION) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_COMPRESSION),],
+                config.OPENAI_API_KEY ? [Markup.button.callback(this.t('command.setting.openAIByRoom', this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_OPENAI_ROOM) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_FORWARD_OPENAI_ROOM)] : [],
+                config.OPENAI_API_KEY ? [Markup.button.callback(this.t('command.setting.openAIByContact', this.forwardSetting.getVariable(VariableType.SETTING_FORWARD_OPENAI_CONTACT) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_FORWARD_OPENAI_CONTACT)] : [],
                 [Markup.button.callback(this.t('command.setting.autoTranscript', this.forwardSetting.getVariable(VariableType.SETTING_AUTO_TRANSCRIPT) ? this.t('common.open') : this.t('common.close')), VariableType.SETTING_AUTO_TRANSCRIPT),],
                 [this.forwardSetting.getVariable(VariableType.SETTING_NOTION_MODE) === NotionMode.WHITE ?
                     Markup.button.callback(this.t('command.setting.whiteGroup'), VariableType.SETTING_WHITE_LIST) :
@@ -2844,21 +2876,35 @@ export class TelegramBotClient extends BaseClient {
         }
     }
 
-    public async reset() {
-        await this._weChatClient.stop()
-        this._weChatClient = new WeChatClient(this)
-        setTimeout(() => {
-            this.wechatStartFlag = true
-            this._weChatClient.start().then(() => {
-                // 标记为已执行
-                this.loginCommandExecuted = true
+    public reset() {
+        this._weChatClient.stop().then(() => {
+            this.wechatStartFlag = false
+            const filePath = 'storage/wechat_bot.memory-card.json'
+            fs.access(filePath, fs.constants.F_OK, async (err) => {
+                if (!err) {
+                    // 文件存在，删除文件
+                    fs.promises.unlink(filePath).then(() => {
+                        this.logDebug('delete wechat memory card success')
+                    })
+                }
+                // this._weChatClient = new WeChatClient(this)
             })
-        }, 2000)
+            // 两秒后自动启动
+            setTimeout(() => {
+                this.logInfo('start wechaty bot')
+                this._weChatClient.start().then(() => {
+                    // 标记为已执行
+                    this.wechatStartFlag = true
+                    this.loginCommandExecuted = true
+                })
+            }, 2000)
+        })
+        // this._weChatClient = new WeChatClient(this)
     }
 
-    public async stop() {
-        await this._weChatClient.stop()
-        this._weChatClient = new WeChatClient(this)
+    public stop() {
+        this._weChatClient.stop()
+        // this._weChatClient = new WeChatClient(this)
     }
 
     private async handleFileMessage(ctx: any, fileType: string | 'audio' | 'video' | 'document' | 'photo' | 'voice') {
