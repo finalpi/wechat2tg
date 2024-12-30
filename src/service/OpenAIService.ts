@@ -6,12 +6,16 @@ export class OpenAIService {
     private readonly _host: string
     private readonly _model: string
     private readonly _systemPrompt: string
+    private readonly _maxTokens: number
+    private readonly _temperature: number
 
     constructor(_apiKey: string,_host: string,_model: string) {
         this._apiKey = _apiKey
         this._host = _host
         this._model = _model
         this._systemPrompt = config.OPENAI_SYSTEM_PROMPT
+        this._maxTokens = config.OPENAI_MAX_TOKENS
+        this._temperature = config.OPENAI_TEMPERATURE
     }
 
     public async callOpenAI(prompt: string) {
@@ -29,8 +33,8 @@ export class OpenAIService {
         const body = {
             model: this._model,
             messages: messages,
-            temperature: 0.7,
-            max_tokens: 150,
+            temperature: this._temperature,
+            max_tokens: this._maxTokens,
         }
 
         try {

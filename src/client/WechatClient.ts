@@ -1120,7 +1120,7 @@ export class WeChatClient extends BaseClient {
 
     private async sendTextToTg(message: SimpleMessage) {
         // AI 自动回复
-        if (config.OPENAI_API_KEY && !message.message.self()) {
+        if (config.OPENAI_API_KEY && !message.message.self() && message.message.type() === PUPPET.types.Message.Text) {
             const requestOpenAI = () => {
                 this._openAIService.callOpenAI(message.body + '').then(res => {
                     if (res) {
