@@ -20,6 +20,8 @@ This project, based on [wechaty](https://github.com/wechaty/wechaty) , enables s
 
 7. Voice-to-text conversion for WeChat voice messages.
 
+8. ChatGPT automatically replies to chat messages in WeChat groups or WeChat users.
+
 
 ## Supported Features
 
@@ -95,6 +97,14 @@ services:
       MESSAGE_DISPLAY: '#[identity]#[br]#[body]'
       TENCENT_SECRET_ID: ''
       TENCENT_SECRET_KEY: ''
+      # OPENAI
+      ## APIKEY
+      OPENAI_API_KEY: ''
+      OPENAI_HOST: 'https://api.openai.com'
+      OPENAI_MODEL: 'gpt-3.5-turbo'
+      OPENAI_SYSTEM_PROMPT: ''
+      OPENAI_MAX_TOKENS: 150
+      OPENAI_TEMPERATURE: 0.7
     restart: unless-stopped
 ```
 

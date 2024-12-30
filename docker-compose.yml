@@ -52,4 +52,8 @@ services:
       OPENAI_MODEL: 'gpt-3.5-turbo'
       ## 系统提示词，可以让 GPT 扮演各种角色
       OPENAI_SYSTEM_PROMPT: ''
+      ## 指定单句 token 上限
+      OPENAI_MAX_TOKENS: 150
+      ## 指定随机性
+      OPENAI_TEMPERATURE: 0.7
     restart: unless-stopped
