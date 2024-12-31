@@ -1,5 +1,7 @@
 import axios from 'axios'
 import {config} from '../config'
+import {SocksProxyAgent} from 'socks-proxy-agent'
+import {HttpsProxyAgent} from 'https-proxy-agent'
 
 export class OpenAIService {
     private readonly _apiKey: string
@@ -36,9 +38,26 @@ export class OpenAIService {
             temperature: this._temperature,
             max_tokens: this._maxTokens,
         }
+        const axiosConfig: axios.AxiosRequestConfig = { headers }
+        // 使用代理
+        if (config.PROTOCOL === 'socks5' && config.HOST !== '' && config.PORT !== '') {
+            const info = {
+                hostname: config.HOST,
+                port: config.PORT,
+                username: config.USERNAME,
+                password: config.PASSWORD
+            }
+            const socksAgent = new SocksProxyAgent(info)
+            axiosConfig.httpsAgent = socksAgent
+            axiosConfig.httpAgent = socksAgent
+        } else if ((config.PROTOCOL === 'http' || config.PROTOCOL === 'https') && config.HOST !== '' && config.PORT !== '') {
+            const httpAgent = new HttpsProxyAgent(`${config.PROTOCOL}://${config.USERNAME}:${config.PASSWORD}@${config.HOST}:${config.PORT}`)
+            axiosConfig.httpsAgent = httpAgent
+            axiosConfig.httpAgent = httpAgent
+        }
 
         try {
-            const response = await axios.post(url, body, { headers })
+            const response = await axios.post(url, body, axiosConfig)
             return response.data.choices[0].message.content
         } catch (error) {
             console.error('Error calling OpenAI API:', error)
