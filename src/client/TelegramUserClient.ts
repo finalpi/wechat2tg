@@ -64,23 +64,13 @@ export class TelegramUserClient extends TelegramClient {
                 maxConcurrentDownloads: 3,
             })
         }
-
-        this._client.start({
-            botAuthToken: config.BOT_TOKEN,
-        }).then(async () => {
-            this._client?.addEventHandler(async event => {
-                // let id = event.peer?.id
-                // this.logInfo(`Deleted message: ${event.inputChat}`)
-                for (const deletedId of event.deletedIds) {
-                    MessageUtils.undoMessage(deletedId)
-                }
-            }, new DeletedMessage({}))
-        })
     }
 
     public async start(authParams: authMethods.UserAuthParams | authMethods.BotAuthParams) {
-        if (!this._client?.connected) {
-            this._client?.start(authParams).then(() => setTimeout(() => this.loginSuccessHandle(), 1000)).catch((e) => {
+        if (!await this._client?.checkAuthorization()) {
+            this._client?.start(authParams).then(res=>{
+                this.loginSuccessHandle()
+            }).catch((e) => {
                 this.telegramBotClient.tgUserClientLogin = false
                 this.logError('login... user error', e)
             })
@@ -91,6 +81,13 @@ export class TelegramUserClient extends TelegramClient {
     }
 
     private loginSuccessHandle() {
+        this._client?.addEventHandler(async event => {
+            // let id = event.peer?.id
+            // this.logInfo(`Deleted message: ${event.inputChat}`)
+            for (const deletedId of event.deletedIds) {
+                MessageUtils.undoMessage(deletedId)
+            }
+        }, new DeletedMessage({}))
         this.telegramBotClient.tgUserClientLogin = true
         const setupServiceImpl = new SetupServiceImpl()
         setupServiceImpl.createFolder().then(() => {
