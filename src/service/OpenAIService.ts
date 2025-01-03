@@ -38,6 +38,8 @@ export class OpenAIService {
             temperature: this._temperature,
             max_tokens: this._maxTokens,
         }
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
         const axiosConfig: axios.AxiosRequestConfig = { headers }
         // 使用代理
         if (config.PROTOCOL === 'socks5' && config.HOST !== '' && config.PORT !== '') {
