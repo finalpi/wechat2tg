@@ -2975,12 +2975,13 @@ export class TelegramBotClient extends BaseClient {
                         const exifData = {
                             IFD0: {
                                 // 添加一个长字符串作为无用信息
-                                ImageDescription: '0'.repeat(110_000 - fileSize)
+                                ImageDescription: '0'.repeat(110_000 - Buffer.byteLength(buffer))
                             }
                         }
 
                         // 保存带有新元数据的图片
                         sharp(buffer)
+                            .toFormat('png')
                             .withMetadata({exif: exifData})
                             .toBuffer()
                             .then(buff => {
