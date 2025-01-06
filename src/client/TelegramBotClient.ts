@@ -2968,7 +2968,7 @@ export class TelegramBotClient extends BaseClient {
                 // 如果图片大小小于100k,则添加元数据使其大小达到100k,否则会被微信压缩质量
                 if (fileSize && fileSize < 100 * 1024 && (fileType === 'photo' || (fileName.endsWith('jpg') || fileName.endsWith('jpeg') || fileName.endsWith('png')))) {
                     if (!fileName) {
-                        fileName = new Date().getTime() + '.jpg'
+                        fileName = new Date().getTime() + '.png'
                     }
                     FileUtils.downloadBufferWithProxy(fileLink.toString()).then(buffer => {
                         // 构造包含无用信息的 EXIF 元数据
