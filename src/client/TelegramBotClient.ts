@@ -2968,19 +2968,20 @@ export class TelegramBotClient extends BaseClient {
                 // 如果图片大小小于100k,则添加元数据使其大小达到100k,否则会被微信压缩质量
                 if (fileSize && fileSize < 100 * 1024 && (fileType === 'photo' || (fileName.endsWith('jpg') || fileName.endsWith('jpeg') || fileName.endsWith('png')))) {
                     if (!fileName) {
-                        fileName = new Date().getTime() + '.jpg'
+                        fileName = new Date().getTime() + '.png'
                     }
                     FileUtils.downloadBufferWithProxy(fileLink.toString()).then(buffer => {
                         // 构造包含无用信息的 EXIF 元数据
                         const exifData = {
                             IFD0: {
                                 // 添加一个长字符串作为无用信息
-                                ImageDescription: '0'.repeat(110_000 - fileSize)
+                                ImageDescription: '0'.repeat(110_000 - Buffer.byteLength(buffer))
                             }
                         }
 
                         // 保存带有新元数据的图片
                         sharp(buffer)
+                            .toFormat('png')
                             .withMetadata({exif: exifData})
                             .toBuffer()
                             .then(buff => {
