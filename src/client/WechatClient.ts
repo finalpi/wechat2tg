@@ -1,16 +1,4 @@
 import * as QRCode from 'qrcode'
-import {ScanStatus, WechatyBuilder} from 'wechaty'
-import * as PUPPET from 'wechaty-puppet'
-import {
-    ContactImpl,
-    ContactInterface,
-    FriendshipImpl,
-    FriendshipInterface,
-    MessageInterface,
-    RoomInterface,
-    RoomInvitationInterface,
-    WechatyInterface
-} from 'wechaty/impls'
 import {TelegramBotClient} from './TelegramBotClient'
 import {EmojiConverter} from '../util/EmojiUtils'
 import {MemberCacheType} from '../model/TgCache'
@@ -20,7 +8,6 @@ import {UniqueIdGenerator} from '../util/IdUtils'
 import {NotionMode, VariableType} from '../model/Settings'
 import {FriendshipItem} from '../model/FriendshipItem'
 import {MessageUtils} from '../util/MessageUtils'
-import {FileBox, type FileBoxInterface} from 'file-box'
 import * as fs from 'fs'
 import {RoomItem} from '../model/RoomItem'
 import {ContactItem} from '../model/ContactItem'
@@ -38,11 +25,12 @@ import {ImageUtils} from '../util/ImageUtils'
 import {SpeechService} from '../service/SpeechService'
 import {OpenAIService} from '../service/OpenAIService'
 import {config} from '../config'
+import {GeweBot, Filebox, UrlLink, WeVideo, Voice, MiniApp, AppMsg, Contact, Room, Message, MessageType} from 'gewechaty'
 
 export class WeChatClient extends BaseClient {
 
 
-    private readonly _client: WechatyInterface
+    private readonly _client: GeweBot
     private readonly _tgClient: TelegramBotClient
     private scanMsgId: number | undefined
     private _started = false
@@ -54,9 +42,10 @@ export class WeChatClient extends BaseClient {
 
     constructor(private readonly tgClient: TelegramBotClient) {
         super()
-        this._client = WechatyBuilder.build({
-            name: './storage/wechat_bot',
-            puppet: 'wechaty-puppet-wechat4u',
+        this._client = new GeweBot({
+            debug: true, // 是否开启调试模式 默认false
+            base_api: 'http://192.168.1.245:2531/v2/api',
+            file_api: 'http://192.168.1.245:2532/download',
         })
         this.scan = this.scan.bind(this)
         this.message = this.message.bind(this)
@@ -105,23 +94,23 @@ export class WeChatClient extends BaseClient {
         this._roomList = value
     }
 
-    private _selectedContact: ContactInterface [] = []
+    private _selectedContact: Contact [] = []
 
-    get selectedContact(): ContactInterface[] {
+    get selectedContact(): Contact[] {
         return this._selectedContact
     }
 
-    set selectedContact(value: ContactInterface[]) {
+    set selectedContact(value: Contact[]) {
         this._selectedContact = value
     }
 
-    private _selectedRoom: RoomInterface [] = []
+    private _selectedRoom: Room [] = []
 
-    get selectedRoom(): RoomInterface[] {
+    get selectedRoom(): Room[] {
         return this._selectedRoom
     }
 
-    set selectedRoom(value: RoomInterface[]) {
+    set selectedRoom(value: Room[]) {
         this._selectedRoom = value
     }
 
@@ -169,7 +158,7 @@ export class WeChatClient extends BaseClient {
         return this._client
     }
 
-    public addMessage(sayable: MessageInterface | ContactInterface | RoomInterface, msg: string | FileBox, extra: {
+    public addMessage(sayable: Message | Contact | Room, msg: string | Filebox, extra: {
         msg_id: number,
         chat_id: number,
         afterSend?: () => Promise<void>
@@ -178,11 +167,11 @@ export class WeChatClient extends BaseClient {
     }
 
     // TODO: 请在接口中定义方法
-    public sendMessage(sayable: MessageInterface | ContactInterface | RoomInterface, msg: string | FileBox, extra: {
+    public sendMessage(sayable: Message | Contact | Room, msg: string | Filebox, extra: {
         msg_id: number,
         chat_id: number
-    }): Promise<void | MessageInterface> {
-        const msgText = msg instanceof FileBox ? msg.name : msg.toString()
+    }): Promise<void | Message> {
+        const msgText = msg instanceof Filebox ? msg.name : msg.toString()
         return new Promise((resolve, reject) => {
             sayable.say(msg).then(msg => {
                 // 保存到undo消息缓存
@@ -194,7 +183,7 @@ export class WeChatClient extends BaseClient {
                         tg_msg_id: extra.msg_id ? extra.msg_id : undefined,
                     }, {
                         telegram_message_id: extra.msg_id,
-                        type: msg instanceof FileBox ? 0 : 7,
+                        type: msg instanceof Filebox ? 0 : 7,
                         sender_id: sayable.id,
                         wechat_message_id: msg.id,
                         send_by: msg.talker().name()
@@ -283,11 +272,11 @@ export class WeChatClient extends BaseClient {
         }
     }
 
-    public async stop() {
-        this.client.currentUser.wechaty.stop()
-        this._started = false
-        // await this._client.stop().then(() => this._started = false)
-    }
+    // public async stop() {
+    //     this.client.currentUser.wechaty.stop()
+    //     this._started = false
+    //     // await this._client.stop().then(() => this._started = false)
+    // }
 
     public restart() {
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -343,7 +332,7 @@ export class WeChatClient extends BaseClient {
 
     public getSendTgFileMethodString(messageType: number): 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice' {
         switch (messageType) {
-            case PUPPET.types.Message.Image:
+            case MessageType.Image:
                 return 'photo'
             case PUPPET.types.Message.Emoticon:
                 return 'photo'
@@ -428,7 +417,7 @@ export class WeChatClient extends BaseClient {
         }
     }
 
-    private roomJoin(room: RoomInterface, inviteeList: ContactInterface[], inviter: ContactInterface) {
+    private roomJoin(room: Room, inviteeList: Contact[], inviter: Contact) {
         inviteeList.forEach(item => {
             if (item.self()) {
                 const item = this._roomList.find(it => it.id === room.id)
@@ -440,7 +429,7 @@ export class WeChatClient extends BaseClient {
         })
     }
 
-    private roomLeave(room: RoomInterface, leaverList: ContactInterface[]) {
+    private roomLeave(room: Room, leaverList: Contact[]) {
         leaverList.forEach(leaver => {
             if (leaver.self()) {
                 this._roomList = this._roomList.filter(it => it.id != room.id)
@@ -448,7 +437,7 @@ export class WeChatClient extends BaseClient {
         })
     }
 
-    private async roomTopic(room: RoomInterface, topic: string, oldTopic: string, changer: ContactInterface) {
+    private async roomTopic(room: Room, topic: string, oldTopic: string, changer: Contact) {
         const item = this._roomList.find(it => it.room.id === room.id)
         if (item) {
             if (item.room.payload?.topic !== topic) {
@@ -555,7 +544,7 @@ export class WeChatClient extends BaseClient {
         }
     }
 
-    private async message(message: MessageInterface) {
+    private async message(message: Message) {
         const talker = message.talker()
         const [roomEntity] = await Promise.all([message.room()])
         const messageType = message.type()
@@ -874,7 +863,7 @@ export class WeChatClient extends BaseClient {
                 MessageUtils.messageTextToContact(message.text()).then(res => {
                     const shareContactCaption = `${this.t('wechat.getOne')} 👤${res.nickname} 的名片消息, ${this.t('wechat.plzViewOnPhone')}\n${identityStr}`
                     if (res.bigheadimgurl) {
-                        FileBox.fromUrl(res.bigheadimgurl).toBuffer().then(avatarBuff => {
+                        Filebox.fromUrl(res.bigheadimgurl).toBuffer().then(avatarBuff => {
                             this._tgClient.bot.telegram.sendPhoto(
                                 bindItem ? bindItem.chat_id : this.tgClient.chatId, {source: avatarBuff}, {caption: shareContactCaption}).then(msg => {
                                 MessageService.getInstance().addMessage({
@@ -1101,16 +1090,16 @@ export class WeChatClient extends BaseClient {
         })
     }
 
-    private sentMessageWhenFileToLage(fileBox: FileBoxInterface, message: SimpleMessage): boolean {
+    private sentMessageWhenFileToLage(Filebox: FileboxInterface, message: SimpleMessage): boolean {
         // 配置了tg api可以往下走发送
-        if (!this.tgClient.tgClient && fileBox.size > 1024 * 1024 * 50) {
+        if (!this.tgClient.tgClient && Filebox.size > 1024 * 1024 * 50) {
             this.sendMessageToTg(message)
             return true
         }
         return false
     }
 
-    private async sendMessageToTg(tgMessage: SimpleMessage, message?: MessageInterface, identityStr?: string) {
+    private async sendMessageToTg(tgMessage: SimpleMessage, message?: Message, identityStr?: string) {
         if (message) {
             this.sendFileToTg(message, identityStr, tgMessage)
         } else {
@@ -1273,7 +1262,7 @@ export class WeChatClient extends BaseClient {
         }
     }
 
-    private async sendFileToTg(message: MessageInterface, identityStr: string, tgMessage: SimpleMessage) {
+    private async sendFileToTg(message: Message, identityStr: string, tgMessage: SimpleMessage) {
         // 先发送一个临时文件
         let sender = new SenderFactory().createSender(this._tgClient.bot)
         let messageType: PUPPET.types.Message | number = message.type()
@@ -1281,7 +1270,7 @@ export class WeChatClient extends BaseClient {
         if (messageType === PUPPET.types.Message.Audio) {
             if (tgMessage.message && tgMessage.id) {
                 // 语音文件特殊处理
-                message.toFileBox().then(fBox => {
+                message.toFilebox().then(fBox => {
                     let fileName = fBox.name
                     // 如果是语音文件 替换后缀方便直接播放
                     if (fileName.endsWith('.sil')) {
@@ -1349,7 +1338,7 @@ export class WeChatClient extends BaseClient {
                         send_by: tgMessage.sender ? tgMessage.sender : '',
                         create_time: new Date().getTime(),
                     })
-                    message.toFileBox().then(fBox => {
+                    message.toFilebox().then(fBox => {
                         const fileName = fBox.name
                         // 配置了tg api尝试发送大文件
                         if (this.sentMessageWhenFileToLage(fBox, {
@@ -1430,7 +1419,7 @@ export class WeChatClient extends BaseClient {
 
     private getMessageName(messageType: number): string {
         switch (messageType) {
-            case PUPPET.types.Message.Unknown:
+            case MessageType.Unknown:
                 return this.t('wechat.messageType.unknown')
             case PUPPET.types.Message.Text:
                 return this.t('wechat.messageType.text')
