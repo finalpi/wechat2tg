@@ -20,7 +20,7 @@ export class WeChatClient implements ClientInterface{
             debug: true, // 是否开启调试模式 默认false
             base_api: config.BASE_API,
             file_api: config.FILE_API,
-            proxy: 'todo',
+            proxy: config.CALLBACK_API,
         })
         this.init()
     }

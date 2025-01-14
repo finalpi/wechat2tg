@@ -25,6 +25,7 @@ export const config = {
     MESSAGE_DISPLAY: process.env.MESSAGE_DISPLAY?.toString() || '#[identity]#[br]#[body]',
     BASE_API: process.env.BASE_API?.toString(),
     FILE_API: process.env.FILE_API?.toString(),
+    CALLBACK_API: process.env.CALLBACK_API?.toString(),
 }
 
 export const useProxy = config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== ''

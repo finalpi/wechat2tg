@@ -12,17 +12,7 @@ export class ConfigurationService {
         return ConfigurationService.instance
     }
     constructor() {
-        this.configurationRepository.getOne().then(data => {
-            if (!data) {
-                this.init()
-            }
-        })
-    }
-    init() {
-        // 初始化配置
-        const configuration = new Configuration()
-        configuration.id = 1
-        AppDataSource.manager.save(configuration)
+        //
     }
     async getConfig():Promise<Configuration>{
         return await this.configurationRepository.getOne()
