@@ -20,6 +20,7 @@ export class WeChatClient implements ClientInterface{
             debug: true, // 是否开启调试模式 默认false
             base_api: config.BASE_API,
             file_api: config.FILE_API,
+            proxy: 'todo',
         })
         this.init()
     }
@@ -40,6 +41,15 @@ export class WeChatClient implements ClientInterface{
                 })
             })
         })
+
+        this._client.on('all', msg => { // 如需额外的处理逻辑可以监听 all 事件 该事件将返回回调地址接收到的所有原始数据
+        })
+
+        this._client.on('message', (msg) => {
+            // 此处放回的msg为Message类型 可以使用Message类的方法
+            console.log(msg)
+            msg.say('Hello, World!')
+        })
     }
 
     hasLogin(): boolean {
@@ -48,6 +58,8 @@ export class WeChatClient implements ClientInterface{
     start(): void {
         this._client.start().then(async ({app, router}) => {
             //
+            app.use(router.routes()).use(router.allowedMethods())
+            console.log('登录后操作')
         })
     }
 }
