@@ -23,6 +23,8 @@ export const config = {
     CREATE_ROOM_NAME: process.env.CREATE_ROOM_NAME?.toString() || '#[topic]',
     CREATE_CONTACT_NAME: process.env.CREATE_CONTACT_NAME?.toString() || '#[alias]#[[name]]',
     MESSAGE_DISPLAY: process.env.MESSAGE_DISPLAY?.toString() || '#[identity]#[br]#[body]',
+    BASE_API: process.env.BASE_API?.toString(),
+    FILE_API: process.env.FILE_API?.toString(),
 }
 
 export const useProxy = config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== ''

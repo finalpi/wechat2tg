@@ -9,5 +9,7 @@
     "rootDir": "src",
     "skipLibCheck": true,
     "noImplicitAny": false,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true
   }
 }
