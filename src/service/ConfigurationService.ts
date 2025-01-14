@@ -24,8 +24,8 @@ export class ConfigurationService {
         configuration.id = 1
         AppDataSource.manager.save(configuration)
     }
-    async getConfig(){
-        return this.configurationRepository.getOne()
+    async getConfig():Promise<Configuration>{
+        return await this.configurationRepository.getOne()
     }
 
     async saveConfig(config: Configuration){
