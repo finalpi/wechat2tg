@@ -21,4 +21,8 @@ export class BindGroupService {
     async createOrUpdate(bindGroup: BindGroup) {
         return await this.bindGroupRepository.createOrUpdate(bindGroup)
     }
+
+    async getByWxId(wxId: string) {
+        return await this.bindGroupRepository.getByWxId(wxId)
+    }
 }

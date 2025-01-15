@@ -11,7 +11,7 @@ export class BindGroup {
     @Column()
     name: string
 
-    @Column()
+    @Column({nullable: true})
     alias: string
 
     @Column()
@@ -19,4 +19,8 @@ export class BindGroup {
 
     @Column()
     avatarLink: string
+
+    // 类型：0-contact，1-room
+    @Column()
+    type: number
 }

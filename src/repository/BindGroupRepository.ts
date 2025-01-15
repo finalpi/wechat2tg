@@ -25,4 +25,10 @@ export class BindGroupRepository {
     async createOrUpdate(bindGroup: BindGroup) {
         return await this.bindGroupRepository.save(bindGroup)
     }
+
+    async getByWxId(wxId: string) {
+        return await this.bindGroupRepository.findOneBy({
+            wxId: wxId
+        })
+    }
 }

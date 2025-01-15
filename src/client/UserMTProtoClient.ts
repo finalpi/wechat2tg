@@ -8,6 +8,9 @@ import {config} from '../config'
 export class UserMTProtoClient implements ClientInterface {
     private static instance = undefined
     private _client: GramClient
+    get client() {
+        return this._client
+    }
     static getInstance(): UserMTProtoClient {
         if (!UserMTProtoClient.instance) {
             UserMTProtoClient.instance = new UserMTProtoClient()
