@@ -244,6 +244,13 @@ export class TelegramBotClient implements ClientInterface {
         if (retryCount >= 0) {
             bot.launch(()=>{
                 // 保存 botID
+                this.configurationService.getConfig().then(config=> {
+                    if (!config.botId || config.botId == 0) {
+                        const botId = this.bot.botInfo.id
+                        config.botId = botId
+                        this.configurationService.saveConfig(config)
+                    }
+                })
             }).then(() => {
                 // 启动后做的事情
             }).catch(error => {

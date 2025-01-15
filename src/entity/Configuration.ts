@@ -9,4 +9,9 @@ export class Configuration {
         default: 0
     })
     chatId: number
+
+    @Column({
+        default: 0
+    })
+    botId: number
 }
