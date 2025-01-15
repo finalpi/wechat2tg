@@ -9,11 +9,13 @@ import {WeChatClient} from './WechatClient'
 import {UserAuthParams} from 'telegram/client/auth'
 import {UserMTProtoClient} from './UserMTProtoClient'
 import {message} from 'telegraf/filters'
+import {BindGroupService} from '../service/BindGroupService'
 
 export class TelegramBotClient implements ClientInterface {
     private readonly _bot: Telegraf
     private static instance = undefined
     private configurationService = ConfigurationService.getInstance()
+    private bindGroupService:BindGroupService
     private wechatClient: WeChatClient
     private chatId: number
     // UserClient 成员变量
@@ -65,6 +67,7 @@ export class TelegramBotClient implements ClientInterface {
         this.configurationService.getConfig().then(config => {
             this.chatId = config.chatId
         })
+        this.bindGroupService = BindGroupService.getInstance()
     }
     hasLogin(): boolean {
         throw new Error('Method not implemented.')
@@ -212,6 +215,16 @@ export class TelegramBotClient implements ClientInterface {
             // 处理等待用户输入的指令
             if (await this.dealWithCommand(ctx, text)) {
                 return
+            }
+            const bindGroup = await this.bindGroupService.getByChatId(0 - ctx.chat.id)
+            if (bindGroup) {
+                if (bindGroup.type === 0) {
+                    const contact = await this.wechatClient.client.Contact.find({id: bindGroup.wxId})
+                    contact.say(text)
+                }else {
+                    const room = await this.wechatClient.client.Room.find({id: bindGroup.wxId})
+                    room.say(text)
+                }
             }
         })
     }

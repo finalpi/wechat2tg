@@ -7,6 +7,8 @@ import {CustomFile} from 'telegram/client/uploads'
 import axios from 'axios'
 import {returnBigInt} from 'telegram/Helpers'
 import sharp from 'sharp'
+import {FormatUtils} from '../util/FormatUtils'
+import {config} from '../config'
 
 export class TelegramGroupOperateService {
     private bindGroupService: BindGroupService
@@ -40,6 +42,18 @@ export class TelegramGroupOperateService {
             ))
         })
         // 更新群组名
+        let name
+        if (contactOrRoom.type === 0) {
+            name = FormatUtils.transformTitleStr(config.CREATE_CONTACT_NAME, contactOrRoom.alias, contactOrRoom.name, '')
+        } else {
+            name = FormatUtils.transformTitleStr(config.CREATE_ROOM_NAME, '', '', contactOrRoom.name)
+        }
+        this.client?.invoke(
+            new Api.messages.EditChatTitle({
+                chatId: returnBigInt(contactOrRoom.chatId),
+                title: name,
+            })
+        )
     }
 
     // 创建并绑定群组

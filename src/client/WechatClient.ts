@@ -13,6 +13,9 @@ import {BindGroup} from '../entity/BindGroup'
 
 export class WeChatClient implements ClientInterface{
     private readonly _client: GeweBot
+    get client() {
+        return this._client
+    }
     private telegramBotClient: TelegramBotClient
     private botMessageSender: MessageSender
     private configurationService = ConfigurationService.getInstance()
@@ -71,6 +74,7 @@ export class WeChatClient implements ClientInterface{
             wxId = contact._wxid
         }
         let bindGroup = await this.bindGroupService.getByWxId(wxId)
+        // 如果找不到就创建一个新的群组
         if (!bindGroup) {
             bindGroup = new BindGroup()
             bindGroup.wxId = wxId
@@ -89,6 +93,11 @@ export class WeChatClient implements ClientInterface{
                 bindGroup.avatarLink = await contact.avatar()
             }
             bindGroup = await this.groupOperate.createGroup(bindGroup)
+        }
+        switch (msg.type()){
+            case this._client.Message.Type.Text:
+                this.botMessageSender.sendText(0 - bindGroup.chatId,msg.text())
+                break
         }
     }
 

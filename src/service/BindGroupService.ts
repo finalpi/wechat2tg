@@ -25,4 +25,8 @@ export class BindGroupService {
     async getByWxId(wxId: string) {
         return await this.bindGroupRepository.getByWxId(wxId)
     }
+
+    async getByChatId(chatId: number) {
+        return await this.bindGroupRepository.getByChatId(chatId)
+    }
 }

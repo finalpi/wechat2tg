@@ -31,4 +31,10 @@ export class BindGroupRepository {
             wxId: wxId
         })
     }
+
+    async getByChatId(chatId: number) {
+        return await this.bindGroupRepository.findOneBy({
+            chatId: chatId
+        })
+    }
 }
