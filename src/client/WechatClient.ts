@@ -10,6 +10,7 @@ import {TelegramGroupOperateService} from '../service/TelegramGroupOperateServic
 import {BindGroupService} from '../service/BindGroupService'
 import {UserMTProtoClient} from './UserMTProtoClient'
 import {BindGroup} from '../entity/BindGroup'
+import {FormatUtils} from '../util/FormatUtils'
 
 export class WeChatClient implements ClientInterface{
     private readonly _client: GeweBot
@@ -36,7 +37,7 @@ export class WeChatClient implements ClientInterface{
         this.init()
     }
 
-    init() {
+    private init() {
         this._client.on('scan', qr => { // 需要用户扫码时返回对象qrcode.content为二维码内容 qrcode.url为转化好的图片地址
             this.configurationService.getConfig().then(config => {
                 QRCode.toBuffer(qr.content,{
@@ -62,14 +63,17 @@ export class WeChatClient implements ClientInterface{
         })
     }
 
-    async onMessage(msg) {
+    private async onMessage(msg) {
         // 查找 group
         let wxId
         const room = await msg.room()
         const contact = await msg.from()
+        const alias = await contact.alias()
+        let topic
         if (room) {
             //
             wxId = room.chatroomId
+            topic = room.name
         } else {
             wxId = contact._wxid
         }
@@ -86,7 +90,6 @@ export class WeChatClient implements ClientInterface{
             }else {
                 bindGroup.type = 0
                 bindGroup.name = contact.name()
-                const alias = await contact.alias()
                 if (alias !== bindGroup.name){
                     bindGroup.alias = await contact.alias()
                 }
@@ -94,9 +97,15 @@ export class WeChatClient implements ClientInterface{
             }
             bindGroup = await this.groupOperate.createGroup(bindGroup)
         }
+        // 身份
+        const identity = FormatUtils.transformTitleStr(bindGroup.type === 0 ? config.CONTACT_MESSAGE_GROUP : config.ROOM_MESSAGE_GROUP, alias, contact.name(), topic)
+        const message = `${identity}\n${msg.text()}`
         switch (msg.type()){
             case this._client.Message.Type.Text:
-                this.botMessageSender.sendText(0 - bindGroup.chatId,msg.text())
+                this.botMessageSender.sendText(0 - bindGroup.chatId, message, {parse_mode: 'HTML'})
+                break
+            case this._client.Message.Type.Quote:
+                this.botMessageSender.sendText(0 - bindGroup.chatId, message, {parse_mode: 'HTML'})
                 break
         }
     }
