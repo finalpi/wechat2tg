@@ -6,10 +6,10 @@ import {TelegramBotClient} from './TelegramBotClient'
 import {ConfigurationService} from '../service/ConfigurationService'
 import QRCode from 'qrcode'
 import {config} from '../config'
-import {TelegramGroupOperateService} from "../service/TelegramGroupOperateService";
-import {BindGroupService} from "../service/BindGroupService";
-import {UserMTProtoClient} from "./UserMTProtoClient";
-import {BindGroup} from "../entity/BindGroup";
+import {TelegramGroupOperateService} from '../service/TelegramGroupOperateService'
+import {BindGroupService} from '../service/BindGroupService'
+import {UserMTProtoClient} from './UserMTProtoClient'
+import {BindGroup} from '../entity/BindGroup'
 
 export class WeChatClient implements ClientInterface{
     private readonly _client: GeweBot
@@ -90,7 +90,6 @@ export class WeChatClient implements ClientInterface{
             }
             bindGroup = await this.groupOperate.createGroup(bindGroup)
         }
-        msg.say('Hello, World!')
     }
 
     hasLogin(): boolean {
