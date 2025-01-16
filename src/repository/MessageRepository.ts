@@ -19,7 +19,7 @@ export class MessageRepository {
         return await this.repository.save(message)
     }
 
-    async getByWxMsgId(wxMsgId: number) {
+    async getByWxMsgId(wxMsgId: string) {
         return await this.repository.findOneBy({
             wxMsgId: wxMsgId
         })

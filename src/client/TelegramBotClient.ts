@@ -46,11 +46,13 @@ export class TelegramBotClient extends AbstractClient {
         messageEntity.chatId = message.chatId
         messageEntity.wxMsgId = message.id
         messageEntity.type = message.type
+        messageEntity.wxSenderId = message.senderId
+        messageEntity.content = message.content
         await this.messageService.createOrUpdate(messageEntity)
         // 文本消息放进队列发送
         if (message.type === 0) {
             // 文本消息走队列
-            this.sendQueueHelper.addMessageWithMsgId(message.id, message)
+            this.sendQueueHelper.addMessageWithMsgId(parseInt(message.id), message)
         }
         return true
     }
@@ -119,12 +121,12 @@ export class TelegramBotClient extends AbstractClient {
         }
         this.sendQueueHelper = new SimpleMessageSendQueueHelper(async (message: BaseMessage)=> {
             // 发送文本消息的方法
-            const bindGroup = await this.bindGroupService.getByWxId(message.senderId)
+            const bindGroup = await this.bindGroupService.getByWxId(message.wxId)
             const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content)
             const option: Option = {
                 parse_mode: 'HTML'
             }
-            if (message.param.reply_id) {
+            if (message.param?.reply_id) {
                 option.reply_id = message.param.reply_id
             }
             const newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
@@ -188,19 +190,27 @@ export class TelegramBotClient extends AbstractClient {
             const text = ctx.message.text
             const messageId = ctx.message.message_id
             const chatId = ctx.chat.id
+            const replyMessageId = ctx.update.message['reply_to_message']?.message_id
             // 处理等待用户输入的指令
             if (await this.dealWithCommand(ctx, text)) {
                 return
             }
-            // 发送消息到微信
-            TelegramBotClient.getSpyClient('wxClient').sendMessage({
-                id: messageId,
-                senderId: chatId + '',
+            const message: BaseMessage = {
+                id: messageId + '',
+                senderId: '',
+                wxId: '',
                 sender: '{me}',
                 chatId: chatId,
                 content: text,
                 type: 0
-            })
+            }
+            if (replyMessageId) {
+                message.param = {
+                    replyMessageId: replyMessageId
+                }
+            }
+            // 发送消息到微信
+            TelegramBotClient.getSpyClient('wxClient').sendMessage(message)
         })
     }
 

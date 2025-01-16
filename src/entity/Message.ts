@@ -13,7 +13,19 @@ export class Message {
     @Column({
         default: 0
     })
-    wxMsgId: number
+    wxMsgId: string
+
+    // 回复消息需要用到发送者 Id
+    @Column({
+        default: ''
+    })
+    wxSenderId: string
+
+    // 回复消息需要用到发送者 Id
+    @Column({
+        default: ''
+    })
+    content: string
 
     @Column({
         default: 0

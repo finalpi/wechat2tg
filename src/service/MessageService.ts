@@ -20,7 +20,7 @@ export class MessageService {
         return await this.repository.createOrUpdate(message)
     }
 
-    async getByWxMsgId(wxMsgId: number) {
+    async getByWxMsgId(wxMsgId: string) {
         return await this.repository.getByWxMsgId(wxMsgId)
     }
 
