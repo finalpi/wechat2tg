@@ -12,6 +12,8 @@ import BaseMessage from '../base/BaseMessage'
 import {ClientFactory} from './factory/ClientFactory'
 import {SimpleMessageSendQueueHelper} from '../util/SimpleMessageSendQueueHelper'
 import {Telegraf} from 'telegraf'
+import {MessageService} from '../service/MessageService'
+import {Message} from '../entity/Message'
 
 export class WeChatClient extends AbstractClient {
     private configurationService = ConfigurationService.getInstance()
@@ -19,6 +21,7 @@ export class WeChatClient extends AbstractClient {
     private bindGroupService: BindGroupService
     private sendQueueHelper: SimpleMessageSendQueueHelper
     private scanMsgId: number = undefined
+    private messageService: MessageService
 
     private static instance = undefined
 
@@ -33,6 +36,7 @@ export class WeChatClient extends AbstractClient {
         super()
         this.groupOperate = new TelegramGroupOperateService(BindGroupService.getInstance(), UserMTProtoClient.getInstance().client)
         this.bindGroupService = BindGroupService.getInstance()
+        this.messageService = MessageService.getInstance()
         this.client = new GeweBot({
             debug: true, // 是否开启调试模式 默认false
             base_api: config.BASE_API,
@@ -40,7 +44,7 @@ export class WeChatClient extends AbstractClient {
             proxy: config.CALLBACK_API,
         })
         this.init()
-        this.sendQueueHelper = new SimpleMessageSendQueueHelper(async (message: BaseMessage)=> {
+        this.sendQueueHelper = new SimpleMessageSendQueueHelper(async (message: BaseMessage) => {
             // 发送文本消息的方法
             const bindGroup = await this.bindGroupService.getByChatId(parseInt(message.senderId))
             if (bindGroup) {
@@ -52,9 +56,14 @@ export class WeChatClient extends AbstractClient {
                     const room = await this.client.Room.find({id: bindGroup.wxId})
                     msgResult = await room.say(message.content)
                 }
-                // todo 将 msgId 更新到数据库
+                // 将 msgId 更新到数据库
+                const messageEntity = await this.messageService.getByBotMsgId(bindGroup.chatId, message.id)
+                if (msgResult && messageEntity) {
+                    messageEntity.wxMsgId = msgResult.newMsgId
+                    this.messageService.createOrUpdate(messageEntity)
+                }
             }
-        },617)
+        }, 617)
     }
 
     async login(): Promise<boolean> {
@@ -78,9 +87,16 @@ export class WeChatClient extends AbstractClient {
     }
 
     async sendMessage(message: BaseMessage): Promise<boolean> {
+        const messageEntity = new Message()
+        messageEntity.chatId = message.chatId
+        messageEntity.tgBotMsgId = message.id
+        messageEntity.type = message.type
+        await this.messageService.createOrUpdate(messageEntity)
         if (message.type === 0) {
             // 文本消息走队列
             this.sendQueueHelper.addMessageWithMsgId(message.id, message)
+        } else {
+            // 文件消息
         }
         return true
     }
@@ -161,14 +177,24 @@ export class WeChatClient extends AbstractClient {
             id: msg._newMsgId,
             senderId: wxId,
             sender: identity,
+            chatId: bindGroup.chatId,
             type: 0,
             content: msg.text()
         }
-        switch (msg.type()){
+        let referMsg
+        switch (msg.type()) {
             case this.client.Message.Type.Text:
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case this.client.Message.Type.Quote:
+                messageParam.content = msg.trueText
+                referMsg = await this.messageService.getByWxMsgId(msg.refer.svrid)
+                if (referMsg) {
+                    messageParam.param = {
+                        reply_id: referMsg.tgBotMsgId
+                    }
+                }
+                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
         }
     }

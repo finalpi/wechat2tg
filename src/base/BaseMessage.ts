@@ -1,5 +1,6 @@
 export default interface BaseMessage {
     id: number,
+    chatId: number,
     content: string,
     // 发送者身份id，可能是 chatId 也可能是 wxId
     senderId: string,

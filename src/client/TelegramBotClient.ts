@@ -13,9 +13,11 @@ import BaseMessage from '../base/BaseMessage'
 import {ClientFactory} from './factory/ClientFactory'
 import {Configuration} from '../entity/Configuration'
 import {SimpleMessageSendQueueHelper} from '../util/SimpleMessageSendQueueHelper'
-import {MessageSender} from '../message/MessageSender'
+import {MessageSender, Option} from '../message/MessageSender'
 import {SenderFactory} from '../message/SenderFactory'
 import {FormatUtils} from '../util/FormatUtils'
+import {Message} from '../entity/Message'
+import {MessageService} from '../service/MessageService'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -40,6 +42,11 @@ export class TelegramBotClient extends AbstractClient {
     }
 
     async sendMessage(message: BaseMessage): Promise<boolean> {
+        const messageEntity = new Message()
+        messageEntity.chatId = message.chatId
+        messageEntity.wxMsgId = message.id
+        messageEntity.type = message.type
+        await this.messageService.createOrUpdate(messageEntity)
         // 文本消息放进队列发送
         if (message.type === 0) {
             // 文本消息走队列
@@ -56,6 +63,7 @@ export class TelegramBotClient extends AbstractClient {
     private sendQueueHelper: SimpleMessageSendQueueHelper
     private configurationService = ConfigurationService.getInstance()
     private bindGroupService: BindGroupService
+    private messageService: MessageService
     private chatId: number
     // 等待命令输入
     private waitInputCommand: string | undefined = undefined
@@ -104,6 +112,7 @@ export class TelegramBotClient extends AbstractClient {
             this.config = config
         })
         this.bindGroupService = BindGroupService.getInstance()
+        this.messageService = MessageService.getInstance()
         // 判断文件夹是否存在
         if (!fs.existsSync('save-files')) {
             fs.mkdirSync('save-files')
@@ -112,8 +121,19 @@ export class TelegramBotClient extends AbstractClient {
             // 发送文本消息的方法
             const bindGroup = await this.bindGroupService.getByWxId(message.senderId)
             const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content)
-            const newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, {parse_mode: 'HTML'})
-            // todo 更新chatId
+            const option: Option = {
+                parse_mode: 'HTML'
+            }
+            if (message.param.reply_id) {
+                option.reply_id = message.param.reply_id
+            }
+            const newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
+            // 更新chatId
+            const messageEntity = await this.messageService.getByWxMsgId(message.id)
+            if (newMsg && messageEntity) {
+                messageEntity.tgBotMsgId = parseInt(newMsg.message_id + '')
+                this.messageService.createOrUpdate(messageEntity)
+            }
             return
         },617)
         this.messageSender = SenderFactory.createSender(this.client)
@@ -177,6 +197,7 @@ export class TelegramBotClient extends AbstractClient {
                 id: messageId,
                 senderId: chatId + '',
                 sender: '{me}',
+                chatId: chatId,
                 content: text,
                 type: 0
             })
