@@ -10,39 +10,15 @@ import {FormatUtils} from '../util/FormatUtils'
 import {AbstractClient} from '../base/BaseClient'
 import BaseMessage from '../base/BaseMessage'
 import {ClientFactory} from './factory/ClientFactory'
+import {SimpleMessageSendQueueHelper} from '../util/SimpleMessageSendQueueHelper'
+import {Telegraf} from 'telegraf'
 
 export class WeChatClient extends AbstractClient {
-    async login(): Promise<boolean> {
-        if (!WeChatClient.getSpyClient('wxClient')) {
-            const clientFactory = new ClientFactory()
-            WeChatClient.addSpyClient({
-                interfaceId: 'wxClient',
-                client: clientFactory.create('wxClient')
-            })
-        }
-        this.client.start().then(async ({app, router}) => {
-            //
-            app.use(router.routes()).use(router.allowedMethods())
-            console.log('登录后操作')
-        })
-        return true
-    }
-
-    logout(): Promise<boolean> {
-        throw new Error('Method not implemented.')
-    }
-
-    sendMessage(message: BaseMessage): Promise<boolean> {
-        throw new Error('Method not implemented.')
-    }
-
-    handlerMessage(event: Event, message: BaseMessage): Promise<unknown> {
-        throw new Error('Method not implemented.')
-    }
-
     private configurationService = ConfigurationService.getInstance()
     private groupOperate: TelegramGroupOperateService
     private bindGroupService: BindGroupService
+    private sendQueueHelper: SimpleMessageSendQueueHelper
+    private scanMsgId: number = undefined
 
     private static instance = undefined
 
@@ -64,6 +40,53 @@ export class WeChatClient extends AbstractClient {
             proxy: config.CALLBACK_API,
         })
         this.init()
+        this.sendQueueHelper = new SimpleMessageSendQueueHelper(async (message: BaseMessage)=> {
+            // 发送文本消息的方法
+            const bindGroup = await this.bindGroupService.getByChatId(parseInt(message.senderId))
+            if (bindGroup) {
+                let msgResult
+                if (bindGroup.type === 0) {
+                    const contact = await this.client.Contact.find({id: bindGroup.wxId})
+                    msgResult = await contact.say(message.content)
+                } else {
+                    const room = await this.client.Room.find({id: bindGroup.wxId})
+                    msgResult = await room.say(message.content)
+                }
+                // todo 将 msgId 更新到数据库
+            }
+        },617)
+    }
+
+    async login(): Promise<boolean> {
+        if (!WeChatClient.getSpyClient('wxClient')) {
+            const clientFactory = new ClientFactory()
+            WeChatClient.addSpyClient({
+                interfaceId: 'wxClient',
+                client: clientFactory.create('wxClient')
+            })
+        }
+        this.client.start().then(async ({app, router}) => {
+            //
+            app.use(router.routes()).use(router.allowedMethods())
+            console.log('登录后操作')
+        })
+        return true
+    }
+
+    logout(): Promise<boolean> {
+        throw new Error('Method not implemented.')
+    }
+
+    async sendMessage(message: BaseMessage): Promise<boolean> {
+        if (message.type === 0) {
+            // 文本消息走队列
+            this.sendQueueHelper.addMessageWithMsgId(message.id, message)
+        }
+        return true
+    }
+
+    handlerMessage(event: Event, message: BaseMessage): Promise<unknown> {
+        throw new Error('Method not implemented.')
     }
 
     private init() {
@@ -73,11 +96,17 @@ export class WeChatClient extends AbstractClient {
                     width: 300
                 }, (error, buffer) => {
                     if (!error) {
-                        // this.botMessageSender.sendFile(config.chatId,{
-                        //     buff: buffer,
-                        //     filename: 'qr.png',
-                        //     fileType: 'photo'
-                        // })
+                        const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
+                        if (this.scanMsgId) {
+                            tgBotClient.telegram.editMessageMedia(config.chatId, this.scanMsgId, undefined, {
+                                type: 'photo',
+                                media: {source: buffer}, caption: '请扫描二维码登录'
+                            })
+                        } else {
+                            tgBotClient.telegram.sendPhoto(config.chatId, {source: buffer}, {caption: '请扫描二维码登录'}).then(msg => {
+                                this.scanMsgId = msg.message_id
+                            })
+                        }
                     }
                 })
             })
@@ -128,15 +157,20 @@ export class WeChatClient extends AbstractClient {
         }
         // 身份
         const identity = FormatUtils.transformTitleStr(bindGroup.type === 0 ? config.CONTACT_MESSAGE_GROUP : config.ROOM_MESSAGE_GROUP, alias, contact.name(), topic)
-        const message = `${identity}\n${msg.text()}`
-        // switch (msg.type()){
-        //     case this._client.Message.Type.Text:
-        //         this.botMessageSender.sendText(0 - bindGroup.chatId, message, {parse_mode: 'HTML'})
-        //         break
-        //     case this._client.Message.Type.Quote:
-        //         this.botMessageSender.sendText(0 - bindGroup.chatId, message, {parse_mode: 'HTML'})
-        //         break
-        // }
+        const messageParam: BaseMessage = {
+            id: msg._newMsgId,
+            senderId: wxId,
+            sender: identity,
+            type: 0,
+            content: msg.text()
+        }
+        switch (msg.type()){
+            case this.client.Message.Type.Text:
+                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                break
+            case this.client.Message.Type.Quote:
+                break
+        }
     }
 
     hasLogin(): boolean {

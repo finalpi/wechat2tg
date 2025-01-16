@@ -32,7 +32,7 @@ export class TelegramGroupOperateService {
             })
             this.client?.invoke(new Api.messages.EditChatPhoto(
                 {
-                    chatId: returnBigInt(contactOrRoom.chatId),
+                    chatId: returnBigInt(0 - contactOrRoom.chatId),
                     photo: new Api.InputChatUploadedPhoto(
                         {
                             file: file,
@@ -50,7 +50,7 @@ export class TelegramGroupOperateService {
         }
         this.client?.invoke(
             new Api.messages.EditChatTitle({
-                chatId: returnBigInt(contactOrRoom.chatId),
+                chatId: returnBigInt(0 - contactOrRoom.chatId),
                 title: name,
             })
         )
@@ -72,7 +72,7 @@ export class TelegramGroupOperateService {
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         const id = result?.updates.chats[0].id
-        contactOrRoom.chatId = id.valueOf()
+        contactOrRoom.chatId = 0 - id.valueOf()
         // 设置管理员
         this.client?.invoke(
             new Api.messages.EditChatAdmin({

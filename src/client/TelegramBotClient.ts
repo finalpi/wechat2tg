@@ -11,6 +11,11 @@ import {BindGroupService} from '../service/BindGroupService'
 import {AbstractClient} from '../base/BaseClient'
 import BaseMessage from '../base/BaseMessage'
 import {ClientFactory} from './factory/ClientFactory'
+import {Configuration} from '../entity/Configuration'
+import {SimpleMessageSendQueueHelper} from '../util/SimpleMessageSendQueueHelper'
+import {MessageSender} from '../message/MessageSender'
+import {SenderFactory} from '../message/SenderFactory'
+import {FormatUtils} from '../util/FormatUtils'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -34,8 +39,13 @@ export class TelegramBotClient extends AbstractClient {
         throw new Error('Method not implemented.')
     }
 
-    sendMessage(message: BaseMessage): Promise<boolean> {
-        throw new Error('Method not implemented.')
+    async sendMessage(message: BaseMessage): Promise<boolean> {
+        // 文本消息放进队列发送
+        if (message.type === 0) {
+            // 文本消息走队列
+            this.sendQueueHelper.addMessageWithMsgId(message.id, message)
+        }
+        return true
     }
 
     handlerMessage(event: Event, message: BaseMessage): Promise<unknown> {
@@ -43,6 +53,7 @@ export class TelegramBotClient extends AbstractClient {
     }
 
     private static instance = undefined
+    private sendQueueHelper: SimpleMessageSendQueueHelper
     private configurationService = ConfigurationService.getInstance()
     private bindGroupService: BindGroupService
     private chatId: number
@@ -51,6 +62,8 @@ export class TelegramBotClient extends AbstractClient {
     private phoneNumber: string | undefined = undefined
     private password: string | undefined = undefined
     private phoneCode = ''
+    private messageSender: MessageSender
+    config: Configuration | undefined
 
     static getInstance(): TelegramBotClient {
         if (!TelegramBotClient.instance) {
@@ -88,12 +101,22 @@ export class TelegramBotClient extends AbstractClient {
         // 加载配置
         this.configurationService.getConfig().then(config => {
             this.chatId = config.chatId
+            this.config = config
         })
         this.bindGroupService = BindGroupService.getInstance()
         // 判断文件夹是否存在
         if (!fs.existsSync('save-files')) {
             fs.mkdirSync('save-files')
         }
+        this.sendQueueHelper = new SimpleMessageSendQueueHelper(async (message: BaseMessage)=> {
+            // 发送文本消息的方法
+            const bindGroup = await this.bindGroupService.getByWxId(message.senderId)
+            const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content)
+            const newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, {parse_mode: 'HTML'})
+            // todo 更新chatId
+            return
+        },617)
+        this.messageSender = SenderFactory.createSender(this.client)
     }
 
     private onBotAction(bot: Telegraf) {
@@ -143,20 +166,20 @@ export class TelegramBotClient extends AbstractClient {
     onMessage(bot: Telegraf) {
         bot.on(message('text'), async ctx => {
             const text = ctx.message.text
+            const messageId = ctx.message.message_id
+            const chatId = ctx.chat.id
             // 处理等待用户输入的指令
             if (await this.dealWithCommand(ctx, text)) {
                 return
             }
-            const bindGroup = await this.bindGroupService.getByChatId(0 - ctx.chat.id)
-            if (bindGroup) {
-                if (bindGroup.type === 0) {
-                    const contact = await TelegramBotClient.getSpyClient('wxClient').client.Contact.find({id: bindGroup.wxId})
-                    contact.say(text)
-                } else {
-                    const room = await TelegramBotClient.getSpyClient('wxClient').client.Room.find({id: bindGroup.wxId})
-                    room.say(text)
-                }
-            }
+            // 发送消息到微信
+            TelegramBotClient.getSpyClient('wxClient').sendMessage({
+                id: messageId,
+                senderId: chatId + '',
+                sender: '{me}',
+                content: text,
+                type: 0
+            })
         })
     }
 

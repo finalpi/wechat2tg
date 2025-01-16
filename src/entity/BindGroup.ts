@@ -5,7 +5,7 @@ export class BindGroup {
     @PrimaryGeneratedColumn()
     id: number
 
-    // MTProto 协议的 chatId，bot 协议需要取相反数
+    // bot 协议的 chatId，MTProto 协议需要取相反数
     @Column()
     chatId: number
 
