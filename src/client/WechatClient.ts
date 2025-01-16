@@ -1,8 +1,4 @@
 import {GeweBot} from 'gewechaty'
-import {ClientInterface} from './base/ClientInterface'
-import {MessageSender} from '../message/MessageSender'
-import {SenderFactory} from '../message/SenderFactory'
-import {TelegramBotClient} from './TelegramBotClient'
 import {ConfigurationService} from '../service/ConfigurationService'
 import QRCode from 'qrcode'
 import {config} from '../config'
@@ -11,24 +7,57 @@ import {BindGroupService} from '../service/BindGroupService'
 import {UserMTProtoClient} from './UserMTProtoClient'
 import {BindGroup} from '../entity/BindGroup'
 import {FormatUtils} from '../util/FormatUtils'
+import {AbstractClient} from '../base/BaseClient'
+import BaseMessage from '../base/BaseMessage'
+import {ClientFactory} from './factory/ClientFactory'
 
-export class WeChatClient implements ClientInterface{
-    private readonly _client: GeweBot
-    get client() {
-        return this._client
+export class WeChatClient extends AbstractClient {
+    async login(): Promise<boolean> {
+        if (!WeChatClient.getSpyClient('wxClient')) {
+            const clientFactory = new ClientFactory()
+            WeChatClient.addSpyClient({
+                interfaceId: 'wxClient',
+                client: clientFactory.create('wxClient')
+            })
+        }
+        this.client.start().then(async ({app, router}) => {
+            //
+            app.use(router.routes()).use(router.allowedMethods())
+            console.log('登录后操作')
+        })
+        return true
     }
-    private telegramBotClient: TelegramBotClient
-    private botMessageSender: MessageSender
+
+    logout(): Promise<boolean> {
+        throw new Error('Method not implemented.')
+    }
+
+    sendMessage(message: BaseMessage): Promise<boolean> {
+        throw new Error('Method not implemented.')
+    }
+
+    handlerMessage(event: Event, message: BaseMessage): Promise<unknown> {
+        throw new Error('Method not implemented.')
+    }
+
     private configurationService = ConfigurationService.getInstance()
     private groupOperate: TelegramGroupOperateService
     private bindGroupService: BindGroupService
 
-    constructor(private readonly tgClient: TelegramBotClient) {
-        this.telegramBotClient = tgClient
-        this.groupOperate = new TelegramGroupOperateService(BindGroupService.getInstance(),UserMTProtoClient.getInstance().client)
+    private static instance = undefined
+
+    static getInstance(): WeChatClient {
+        if (!WeChatClient.instance) {
+            WeChatClient.instance = new WeChatClient()
+        }
+        return WeChatClient.instance
+    }
+
+    private constructor() {
+        super()
+        this.groupOperate = new TelegramGroupOperateService(BindGroupService.getInstance(), UserMTProtoClient.getInstance().client)
         this.bindGroupService = BindGroupService.getInstance()
-        this.botMessageSender = SenderFactory.createSender(tgClient.bot)
-        this._client = new GeweBot({
+        this.client = new GeweBot({
             debug: true, // 是否开启调试模式 默认false
             base_api: config.BASE_API,
             file_api: config.FILE_API,
@@ -38,32 +67,32 @@ export class WeChatClient implements ClientInterface{
     }
 
     private init() {
-        this._client.on('scan', qr => { // 需要用户扫码时返回对象qrcode.content为二维码内容 qrcode.url为转化好的图片地址
+        this.client.on('scan', qr => { // 需要用户扫码时返回对象qrcode.content为二维码内容 qrcode.url为转化好的图片地址
             this.configurationService.getConfig().then(config => {
-                QRCode.toBuffer(qr.content,{
+                QRCode.toBuffer(qr.content, {
                     width: 300
-                },(error, buffer) => {
+                }, (error, buffer) => {
                     if (!error) {
-                        this.botMessageSender.sendFile(config.chatId,{
-                            buff: buffer,
-                            filename: 'qr.png',
-                            fileType: 'photo'
-                        })
+                        // this.botMessageSender.sendFile(config.chatId,{
+                        //     buff: buffer,
+                        //     filename: 'qr.png',
+                        //     fileType: 'photo'
+                        // })
                     }
                 })
             })
         })
 
-        this._client.on('all', msg => { // 如需额外的处理逻辑可以监听 all 事件 该事件将返回回调地址接收到的所有原始数据
+        this.client.on('all', msg => { // 如需额外的处理逻辑可以监听 all 事件 该事件将返回回调地址接收到的所有原始数据
         })
 
-        this._client.on('message', (msg) => {
+        this.client.on('message', (msg) => {
             // 此处放回的msg为Message类型 可以使用Message类的方法
             this.onMessage(msg)
         })
     }
 
-    private async onMessage(msg) {
+    async onMessage(msg) {
         // 查找 group
         let wxId
         const room = await msg.room()
@@ -87,10 +116,10 @@ export class WeChatClient implements ClientInterface{
                 bindGroup.name = room.name
                 const avatar = await room.avatar()
                 bindGroup.avatarLink = avatar.url
-            }else {
+            } else {
                 bindGroup.type = 0
                 bindGroup.name = contact.name()
-                if (alias !== bindGroup.name){
+                if (alias !== bindGroup.name) {
                     bindGroup.alias = await contact.alias()
                 }
                 bindGroup.avatarLink = await contact.avatar()
@@ -100,24 +129,17 @@ export class WeChatClient implements ClientInterface{
         // 身份
         const identity = FormatUtils.transformTitleStr(bindGroup.type === 0 ? config.CONTACT_MESSAGE_GROUP : config.ROOM_MESSAGE_GROUP, alias, contact.name(), topic)
         const message = `${identity}\n${msg.text()}`
-        switch (msg.type()){
-            case this._client.Message.Type.Text:
-                this.botMessageSender.sendText(0 - bindGroup.chatId, message, {parse_mode: 'HTML'})
-                break
-            case this._client.Message.Type.Quote:
-                this.botMessageSender.sendText(0 - bindGroup.chatId, message, {parse_mode: 'HTML'})
-                break
-        }
+        // switch (msg.type()){
+        //     case this._client.Message.Type.Text:
+        //         this.botMessageSender.sendText(0 - bindGroup.chatId, message, {parse_mode: 'HTML'})
+        //         break
+        //     case this._client.Message.Type.Quote:
+        //         this.botMessageSender.sendText(0 - bindGroup.chatId, message, {parse_mode: 'HTML'})
+        //         break
+        // }
     }
 
     hasLogin(): boolean {
         throw new Error('Method not implemented.')
-    }
-    start(): void {
-        this._client.start().then(async ({app, router}) => {
-            //
-            app.use(router.routes()).use(router.allowedMethods())
-            console.log('登录后操作')
-        })
     }
 }

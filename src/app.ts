@@ -1,10 +1,9 @@
 import 'reflect-metadata'
 import {AppDataSource} from './data-sourse'
-import {Configuration} from './entity/Configuration'
-import {TelegramBotClient} from './client/TelegramBotClient'
+import {ClientFactory} from './client/factory/ClientFactory'
 
 AppDataSource.initialize()
     .then(async () => {
-        TelegramBotClient.getInstance().start()
+        new ClientFactory().create('botClient').login()
     })
     .catch((error) => console.log(error))

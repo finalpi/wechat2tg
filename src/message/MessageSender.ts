@@ -23,7 +23,7 @@ export abstract class MessageSender {
     abstract deleteMessage(chatId: undefined | number, msgId: number)
 
     sendAction(chatId: number, action: ChatAction) {
-        TelegramBotClient.getInstance().bot.telegram.sendChatAction(chatId, action)
+        TelegramBotClient.getSpyClient('botClient').client.telegram.sendChatAction(chatId, action)
     }
 }
 

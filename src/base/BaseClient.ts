@@ -1,36 +1,45 @@
 import BaseMessage from './BaseMessage'
 import {Logger} from 'log4js'
+import {LogUtils} from '../util/LogUtil'
+import {GeweBot} from 'gewechaty'
+import {Telegraf} from 'telegraf'
+import {TelegramClient as GramClient} from 'telegram/client/TelegramClient'
+import {botType} from './BaseFactory'
+
 
 export abstract class AbstractClient implements IClient {
-    protected spyClientMap: Map<string, IClient> = new Map<string, IClient>()
+    protected static spyClientMap: Map<string, IClient> = new Map<string, IClient>()
+    client: Client
     logger: Logger
-    protected constructor(logger: Logger) {
-        this.logger = logger
+
+    protected constructor() {
+        const env = process.env.NODE_ENV || 'default'
+        const category = env === 'production' ? 'production' : env === 'development' ? 'development' : 'default'
+        this.logger = LogUtils.config().getLogger(category)
     }
 
-    abstract login(): Promise<boolean>;
+    abstract login(param?: any): Promise<boolean>;
+
     abstract logout(): Promise<boolean>;
-    abstract onMessage(): Promise<BaseMessage>;
+
+    abstract onMessage(msg: any): void;
+
     abstract sendMessage(message: BaseMessage): Promise<boolean>;
+
     abstract handlerMessage(event: Event, message: BaseMessage): Promise<unknown>;
 
-    addSpyClient(client: SpyClient): void {
-        this.spyClientMap.set(client.interfaceId, client.client)
+    static addSpyClient(client: SpyClient): void {
+        AbstractClient.spyClientMap.set(client.interfaceId, client.client)
     }
 
-    popSpyClient(id: string): IClient {
-        const iClient = this.spyClientMap.get(id)
-        this.spyClientMap.delete(id)
+    static popSpyClient(id: botType): IClient {
+        const iClient = AbstractClient.spyClientMap.get(id)
+        AbstractClient.spyClientMap.delete(id)
         return iClient
     }
-    spyClients(): SpyClient[] {
-        return Array.from(this.spyClientMap).map(([interfaceId, client]) => {
-            return {interfaceId, client}
-        })
-    }
 
-    getSpyClient(id: string): IClient {
-        return this.spyClientMap.get(id)
+    static getSpyClient(id: botType): IClient {
+        return AbstractClient.spyClientMap.get(id)
     }
 
     logInfo(message: string): void {
@@ -45,20 +54,25 @@ export abstract class AbstractClient implements IClient {
         this.logger.debug(message)
     }
 }
+
 export interface IClient {
-    login(): Promise<boolean>
+    login(param?: any): Promise<boolean>
+
     logout(): Promise<boolean>
-    onMessage(): Promise<BaseMessage>
+
+    onMessage(msg: any): void;
+
     sendMessage(message: BaseMessage): Promise<boolean>
+
     handlerMessage(event: Event, message: BaseMessage): Promise<unknown>
-    getSpyClient(id: string): IClient
-    addSpyClient(client: SpyClient): void
-    popSpyClient(id: string): IClient
-    spyClients(): SpyClient[]
+
     logger: Logger
+    client: Client
 }
 
+export type Client = GeweBot | Telegraf | GramClient
+
 export type SpyClient = {
-    interfaceId: string
+    interfaceId: botType
     client: IClient
 }

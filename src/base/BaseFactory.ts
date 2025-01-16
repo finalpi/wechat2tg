@@ -3,6 +3,7 @@
 import {IClient} from './BaseClient'
 
 export interface BaseFactory {
-    create(type: 'singleton' | 'multiple'): IClient;
-    destroy(): Promise<boolean>;
+    create(type: botType): IClient;
 }
+
+export type botType = 'botClient' | 'userMTPClient' | 'wxClient'

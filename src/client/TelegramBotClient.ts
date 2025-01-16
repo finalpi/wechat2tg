@@ -1,33 +1,56 @@
-import {ClientInterface} from './base/ClientInterface'
 import {Context, session, Telegraf} from 'telegraf'
 import {config} from '../config'
 import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from 'https-proxy-agent'
 import * as fs from 'node:fs'
 import {ConfigurationService} from '../service/ConfigurationService'
-import {WeChatClient} from './WechatClient'
 import {UserAuthParams} from 'telegram/client/auth'
 import {UserMTProtoClient} from './UserMTProtoClient'
 import {message} from 'telegraf/filters'
 import {BindGroupService} from '../service/BindGroupService'
+import {AbstractClient} from '../base/BaseClient'
+import BaseMessage from '../base/BaseMessage'
+import {ClientFactory} from './factory/ClientFactory'
 
-export class TelegramBotClient implements ClientInterface {
-    private readonly _bot: Telegraf
+export class TelegramBotClient extends AbstractClient {
+    async login(): Promise<boolean> {
+        if (!TelegramBotClient.getSpyClient('botClient')) {
+            const clientFactory = new ClientFactory()
+            TelegramBotClient.addSpyClient({
+                interfaceId: 'botClient',
+                client: clientFactory.create('botClient')
+            })
+        }
+        const bot = this.client
+        bot.use(session())
+        this.onBotCommand(bot)
+        this.onMessage(bot)
+        this.onBotAction(bot)
+        await this.botLaunch(bot)
+        return true
+    }
+
+    logout(): Promise<boolean> {
+        throw new Error('Method not implemented.')
+    }
+
+    sendMessage(message: BaseMessage): Promise<boolean> {
+        throw new Error('Method not implemented.')
+    }
+
+    handlerMessage(event: Event, message: BaseMessage): Promise<unknown> {
+        throw new Error('Method not implemented.')
+    }
+
     private static instance = undefined
     private configurationService = ConfigurationService.getInstance()
-    private bindGroupService:BindGroupService
-    private wechatClient: WeChatClient
+    private bindGroupService: BindGroupService
     private chatId: number
-    // UserClient 成员变量
-    private _userMTProtoClient: UserMTProtoClient | undefined
     // 等待命令输入
     private waitInputCommand: string | undefined = undefined
     private phoneNumber: string | undefined = undefined
     private password: string | undefined = undefined
     private phoneCode = ''
-    get bot(): Telegraf{
-        return this._bot
-    }
 
     static getInstance(): TelegramBotClient {
         if (!TelegramBotClient.instance) {
@@ -37,6 +60,7 @@ export class TelegramBotClient implements ClientInterface {
     }
 
     private constructor() {
+        super()
         if (config.PROTOCOL === 'socks5' && config.HOST !== '' && config.PORT !== '') {
             const info = {
                 hostname: config.HOST,
@@ -46,46 +70,30 @@ export class TelegramBotClient implements ClientInterface {
             }
 
             const socksAgent = new SocksProxyAgent(info)
-            this._bot = new Telegraf(config.BOT_TOKEN, {
+            this.client = new Telegraf(config.BOT_TOKEN, {
                 telegram: {
                     agent: socksAgent
                 }
             })
         } else if ((config.PROTOCOL === 'http' || config.PROTOCOL === 'https') && config.HOST !== '' && config.PORT !== '') {
             const httpAgent = new HttpsProxyAgent(`${config.PROTOCOL}://${config.USERNAME}:${config.PASSWORD}@${config.HOST}:${config.PORT}`)
-            this._bot = new Telegraf(config.BOT_TOKEN, {
+            this.client = new Telegraf(config.BOT_TOKEN, {
                 telegram: {
                     agent: httpAgent
                 }
             })
         } else {
-            this._bot = new Telegraf(config.BOT_TOKEN)
+            this.client = new Telegraf(config.BOT_TOKEN)
         }
-        // 初始化微信客户端实例
-        this.wechatClient = new WeChatClient(this)
         // 加载配置
         this.configurationService.getConfig().then(config => {
             this.chatId = config.chatId
         })
         this.bindGroupService = BindGroupService.getInstance()
-    }
-    hasLogin(): boolean {
-        throw new Error('Method not implemented.')
-    }
-    start(): void {
         // 判断文件夹是否存在
         if (!fs.existsSync('save-files')) {
             fs.mkdirSync('save-files')
         }
-
-        const bot = this._bot
-
-        bot.use(session())
-        this._userMTProtoClient = UserMTProtoClient.getInstance()
-        this.onBotCommand(bot)
-        this.onMessage(bot)
-        this.onBotAction(bot)
-        this.botLaunch(bot)
     }
 
     private onBotAction(bot: Telegraf) {
@@ -132,21 +140,83 @@ export class TelegramBotClient implements ClientInterface {
         })
     }
 
+    onMessage(bot: Telegraf) {
+        bot.on(message('text'), async ctx => {
+            const text = ctx.message.text
+            // 处理等待用户输入的指令
+            if (await this.dealWithCommand(ctx, text)) {
+                return
+            }
+            const bindGroup = await this.bindGroupService.getByChatId(0 - ctx.chat.id)
+            if (bindGroup) {
+                if (bindGroup.type === 0) {
+                    const contact = await TelegramBotClient.getSpyClient('wxClient').client.Contact.find({id: bindGroup.wxId})
+                    contact.say(text)
+                } else {
+                    const room = await TelegramBotClient.getSpyClient('wxClient').client.Room.find({id: bindGroup.wxId})
+                    room.say(text)
+                }
+            }
+        })
+    }
+
+    private onBotCommand(bot: Telegraf) {
+        const commands = [
+            {command: 'help', description: '帮助'},
+            {command: 'start', description: '开始'},
+            {command: 'login', description: '登录'},
+        ]
+
+        bot.telegram.setMyCommands(commands)
+
+        bot.command('login', async ctx => {
+            // 首次登录设置主人 chatId
+            const config = await this.configurationService.getConfig()
+            if (!config.chatId || config.chatId === 0) {
+                config.chatId = ctx.chat.id
+                this.chatId = ctx.chat.id
+                await this.configurationService.saveConfig(config)
+            }
+            // todo 先判断是否登录 TG user client
+            this.loginUserClient()
+            // 登录微信客户端
+            this.loginWechatClient()
+        })
+    }
+
+    private loginWechatClient() {
+        if (!TelegramBotClient.getSpyClient('wxClient')) {
+            const clientFactory = new ClientFactory()
+            TelegramBotClient.addSpyClient({
+                interfaceId: 'wxClient',
+                client: clientFactory.create('wxClient')
+            })
+        }
+        TelegramBotClient.getSpyClient('wxClient').login()
+    }
+
     public async loginUserClient() {
+        if (!TelegramBotClient.getSpyClient('userMTPClient')) {
+            const clientFactory = new ClientFactory()
+            TelegramBotClient.addSpyClient({
+                interfaceId: 'userMTPClient',
+                client: clientFactory.create('userMTPClient')
+            })
+        }
         const authParams: UserAuthParams = {
             onError(err: Error): Promise<boolean> | void {
                 console.error(err)
             },
             phoneNumber: async () =>
                 new Promise((resolve) => {
-                    this.bot.telegram.sendMessage(this.chatId, '请输入你的手机号码（需要带国家区号，例如：+8613355558888）').then(res => {
+                    this.client.telegram.sendMessage(this.chatId, '请输入你的手机号码（需要带国家区号，例如：+8613355558888）').then(res => {
                         this.waitInputCommand = 'phoneNumber'
                         const intervalId = setInterval(() => {
                             if (this.phoneNumber) {
                                 const phoneNumber = this.phoneNumber
                                 this.phoneNumber = undefined
                                 clearInterval(intervalId)
-                                this._bot.telegram.deleteMessage(this.chatId, res.message_id)
+                                this.client.telegram.deleteMessage(this.chatId, res.message_id)
                                 resolve(phoneNumber)
                             }
                         }, 1000)
@@ -154,14 +224,14 @@ export class TelegramBotClient implements ClientInterface {
                 }),
             password: async (hint?: string) =>
                 new Promise((resolve) => {
-                    this.bot.telegram.sendMessage(this.chatId, '请输入你的二步验证密码:').then(res => {
+                    this.client.telegram.sendMessage(this.chatId, '请输入你的二步验证密码:').then(res => {
                         this.waitInputCommand = 'password'
                         const intervalId = setInterval(() => {
                             if (this.password) {
                                 const password = this.password
                                 this.password = undefined
                                 clearInterval(intervalId)
-                                this._bot.telegram.deleteMessage(this.chatId, res.message_id)
+                                this.client.telegram.deleteMessage(this.chatId, res.message_id)
                                 resolve(password)
                             }
                         }, 1000)
@@ -169,7 +239,7 @@ export class TelegramBotClient implements ClientInterface {
                 }),
             phoneCode: async (isCodeViaApp?) =>
                 new Promise((resolve) => {
-                    this.bot.telegram.sendMessage(this.chatId, '请输入你收到的验证码:_ _ _ _ _\n', {
+                    this.client.telegram.sendMessage(this.chatId, '请输入你收到的验证码:_ _ _ _ _\n', {
                         reply_markup: {
                             inline_keyboard: [
                                 [
@@ -199,67 +269,24 @@ export class TelegramBotClient implements ClientInterface {
                                 const phoneCode = this.phoneCode
                                 this.phoneCode = ''
                                 clearInterval(intervalId)
-                                this._bot.telegram.deleteMessage(this.chatId, res.message_id)
+                                this.client.telegram.deleteMessage(this.chatId, res.message_id)
                                 resolve(phoneCode)
                             }
                         }, 1000)
                     })
                 }),
         }
-        this._userMTProtoClient?.start(authParams)
-    }
-
-    private onMessage(bot: Telegraf) {
-        bot.on(message('text'),async ctx=> {
-            const text = ctx.message.text
-            // 处理等待用户输入的指令
-            if (await this.dealWithCommand(ctx, text)) {
-                return
-            }
-            const bindGroup = await this.bindGroupService.getByChatId(0 - ctx.chat.id)
-            if (bindGroup) {
-                if (bindGroup.type === 0) {
-                    const contact = await this.wechatClient.client.Contact.find({id: bindGroup.wxId})
-                    contact.say(text)
-                }else {
-                    const room = await this.wechatClient.client.Room.find({id: bindGroup.wxId})
-                    room.say(text)
-                }
-            }
-        })
-    }
-    private onBotCommand(bot: Telegraf) {
-        const commands = [
-            {command: 'help', description: '帮助'},
-            {command: 'start', description: '开始'},
-            {command: 'login', description: '登录'},
-        ]
-
-        bot.telegram.setMyCommands(commands)
-
-        bot.command('login', async ctx => {
-            // 首次登录设置主人 chatId
-            const config = await this.configurationService.getConfig()
-            if (!config.chatId || config.chatId === 0) {
-                config.chatId = ctx.chat.id
-                this.chatId = ctx.chat.id
-                await this.configurationService.saveConfig(config)
-            }
-            // todo 先判断是否登录 TG user client
-            this.loginUserClient()
-            // 启动微信客户端
-            this.wechatClient.start()
-        })
+        TelegramBotClient.getSpyClient('userMTPClient').login(authParams)
     }
 
 
     private async botLaunch(bot: Telegraf, retryCount = 5) {
         if (retryCount >= 0) {
-            bot.launch(()=>{
+            bot.launch(() => {
                 // 保存 botID
-                this.configurationService.getConfig().then(config=> {
+                this.configurationService.getConfig().then(config => {
                     if (!config.botId || config.botId == 0) {
-                        const botId = this.bot.botInfo.id
+                        const botId = this.client.botInfo.id
                         config.botId = botId
                         this.configurationService.saveConfig(config)
                     }
