@@ -18,7 +18,7 @@
     "dotenv": "^16.0.3",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.2",
-    "gewechaty": "file://../gewechaty/dist",
+    "gewechaty": "https://github.com/finalpi/gewechaty/releases/download/v0.0.23/gewechaty-0.0.23.tgz",
     "https-proxy-agent": "^7.0.4",
     "jsdom": "^24.1.0",
     "log4js": "^6.9.1",

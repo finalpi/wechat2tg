@@ -1,9 +1,6 @@
 import BaseMessage from './BaseMessage'
 import {Logger} from 'log4js'
 import {LogUtils} from '../util/LogUtil'
-import {GeweBot} from 'gewechaty'
-import {Telegraf} from 'telegraf'
-import {TelegramClient as GramClient} from 'telegram/client/TelegramClient'
 import {botType} from './BaseFactory'
 
 
@@ -70,7 +67,7 @@ export interface IClient {
     client: Client
 }
 
-export type Client = GeweBot | Telegraf | GramClient
+export type Client = any
 
 export type SpyClient = {
     interfaceId: botType

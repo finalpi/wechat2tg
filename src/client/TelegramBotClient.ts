@@ -28,7 +28,7 @@ export class TelegramBotClient extends AbstractClient {
                 client: clientFactory.create('botClient')
             })
         }
-        const bot = this.client
+        const bot: Telegraf = this.client
         bot.use(session())
         this.onBotCommand(bot)
         this.onMessage(bot)
