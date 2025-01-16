@@ -21,26 +21,34 @@ export class TelegramGroupOperateService {
 
     // 更新群组信息
     public async updateGroup(contactOrRoom: BindGroup) {
+        const oldBindGroup = await this.bindGroupService.getByChatId(contactOrRoom.chatId)
+        if (!oldBindGroup) {
+            return
+        }
+        oldBindGroup.alias = contactOrRoom.alias
         // 更新头像
-        const response = await axios.get(contactOrRoom.avatarLink, { responseType: 'arraybuffer' })
-        const buff = Buffer.from(response.data)
-        sharp(buff).toFormat('png').resize(200).toBuffer(async (err,buff)=>{
-            const toUpload = new CustomFile('avatar.png', buff.length, '', buff)
-            const file = await this.client?.uploadFile({
-                file: toUpload,
-                workers: 3,
+        if (contactOrRoom.avatarLink !== oldBindGroup.avatarLink) {
+            oldBindGroup.avatarLink = contactOrRoom.avatarLink
+            const response = await axios.get(contactOrRoom.avatarLink, { responseType: 'arraybuffer' })
+            const buff = Buffer.from(response.data)
+            sharp(buff).toFormat('png').resize(200).toBuffer(async (err,buff)=>{
+                const toUpload = new CustomFile('avatar.png', buff.length, '', buff)
+                const file = await this.client?.uploadFile({
+                    file: toUpload,
+                    workers: 3,
+                })
+                this.client?.invoke(new Api.messages.EditChatPhoto(
+                    {
+                        chatId: returnBigInt(0 - contactOrRoom.chatId),
+                        photo: new Api.InputChatUploadedPhoto(
+                            {
+                                file: file,
+                            }
+                        )
+                    }
+                ))
             })
-            this.client?.invoke(new Api.messages.EditChatPhoto(
-                {
-                    chatId: returnBigInt(0 - contactOrRoom.chatId),
-                    photo: new Api.InputChatUploadedPhoto(
-                        {
-                            file: file,
-                        }
-                    )
-                }
-            ))
-        })
+        }
         // 更新群组名
         let name
         if (contactOrRoom.type === 0) {
@@ -48,18 +56,28 @@ export class TelegramGroupOperateService {
         } else {
             name = FormatUtils.transformTitleStr(config.CREATE_ROOM_NAME, '', '', contactOrRoom.name)
         }
-        this.client?.invoke(
-            new Api.messages.EditChatTitle({
-                chatId: returnBigInt(0 - contactOrRoom.chatId),
-                title: name,
-            })
-        )
+        if (name !== oldBindGroup.name) {
+            oldBindGroup.name = name
+            this.client?.invoke(
+                new Api.messages.EditChatTitle({
+                    chatId: returnBigInt(0 - contactOrRoom.chatId),
+                    title: name,
+                })
+            )
+        }
+        this.bindGroupService.createOrUpdate(oldBindGroup)
     }
 
     // 创建并绑定群组
     public async createGroup(contactOrRoom: BindGroup): Promise<BindGroup> {
         // 删除之前绑定过的群组
         await this.bindGroupService.removeByChatIdOrWxId(contactOrRoom.chatId,contactOrRoom.wxId)
+        const oldGourp = await this.bindGroupService.getByWxId(contactOrRoom.wxId)
+        if (oldGourp) {
+            contactOrRoom.chatId = oldGourp.chatId
+            this.updateGroup(contactOrRoom)
+            return oldGourp
+        }
         // 创建群组
         const config = await this.configService.getConfig()
         const result = await this.client?.invoke(
@@ -81,10 +99,17 @@ export class TelegramGroupOperateService {
                 isAdmin: true
             })
         )
+        let bindGroup = new BindGroup()
+        bindGroup.chatId = contactOrRoom.chatId
+        bindGroup.name = contactOrRoom.name
+        bindGroup.type = contactOrRoom.type
+        bindGroup.alias = contactOrRoom.alias
+        bindGroup.wxId = contactOrRoom.wxId
+        bindGroup = await this.bindGroupService.createOrUpdate(contactOrRoom)
+
         // 更新信息
         this.updateGroup(contactOrRoom)
         // 添加绑定
-        const bindGroup = await this.bindGroupService.createOrUpdate(contactOrRoom)
         return bindGroup
     }
 }
