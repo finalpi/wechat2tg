@@ -9,6 +9,7 @@ import {returnBigInt} from 'telegram/Helpers'
 import sharp from 'sharp'
 import {FormatUtils} from '../util/FormatUtils'
 import {config} from '../config'
+import {FileUtils} from '../util/FileUtils'
 
 export class TelegramGroupOperateService {
     private bindGroupService: BindGroupService
@@ -29,8 +30,7 @@ export class TelegramGroupOperateService {
         // 更新头像
         if (contactOrRoom.avatarLink !== oldBindGroup.avatarLink) {
             oldBindGroup.avatarLink = contactOrRoom.avatarLink
-            const response = await axios.get(contactOrRoom.avatarLink, { responseType: 'arraybuffer' })
-            const buff = Buffer.from(response.data)
+            const buff = await FileUtils.getInstance().downloadUrl2Buffer(contactOrRoom.avatarLink)
             sharp(buff).toFormat('png').resize(200).toBuffer(async (err,buff)=>{
                 const toUpload = new CustomFile('avatar.png', buff.length, '', buff)
                 const file = await this.client?.uploadFile({

@@ -8,6 +8,8 @@ export abstract class AbstractClient implements IClient {
     protected static spyClientMap: Map<string, IClient> = new Map<string, IClient>()
     client: Client
     logger: Logger
+    hasReady = false
+    hasLogin = false
 
     protected constructor() {
         const env = process.env.NODE_ENV || 'default'
@@ -63,6 +65,8 @@ export interface IClient {
 
     handlerMessage(event: Event, message: BaseMessage): Promise<unknown>
 
+    hasReady: boolean
+    hasLogin: boolean
     logger: Logger
     client: Client
 }

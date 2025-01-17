@@ -14,6 +14,7 @@ import {SimpleMessageSendQueueHelper} from '../util/SimpleMessageSendQueueHelper
 import {Telegraf} from 'telegraf'
 import {MessageService} from '../service/MessageService'
 import {Message} from '../entity/Message'
+import {FileUtils} from '../util/FileUtils'
 
 export class WeChatClient extends AbstractClient {
     private configurationService = ConfigurationService.getInstance()
@@ -44,39 +45,42 @@ export class WeChatClient extends AbstractClient {
             file_api: config.FILE_API,
             proxy: config.CALLBACK_API,
         })
+        this.hasReady = true
         this.init()
-        this.sendQueueHelper = new SimpleMessageSendQueueHelper(async (message: BaseMessage) => {
-            // 发送文本消息的方法
-            const bindGroup = await this.bindGroupService.getByChatId(message.chatId)
-            if (bindGroup) {
-                let msgResult
-                let quoteMsg: Message
-                if (message.param?.replyMessageId) {
-                    quoteMsg = await this.messageService.getByBotMsgId(bindGroup.chatId, message.param?.replyMessageId)
+        this.sendQueueHelper = new SimpleMessageSendQueueHelper(this.sendTextMsg.bind(this), 617)
+    }
+
+    private async sendTextMsg(message: BaseMessage) {
+        // 发送文本消息的方法
+        const bindGroup = await this.bindGroupService.getByChatId(message.chatId)
+        if (bindGroup) {
+            let msgResult
+            let quoteMsg: Message
+            if (message.param?.replyMessageId) {
+                quoteMsg = await this.messageService.getByBotMsgId(bindGroup.chatId, message.param?.replyMessageId)
+            }
+            if (bindGroup.type === 0) {
+                const contact = await this.client.Contact.find({id: bindGroup.wxId})
+                if (quoteMsg) {
+                    msgResult = await contact.quoteSay(message.content, quoteMsg.wxMsgId, quoteMsg.wxSenderId, quoteMsg.content)
+                }else {
+                    msgResult = await contact.say(message.content)
                 }
-                if (bindGroup.type === 0) {
-                    const contact = await this.client.Contact.find({id: bindGroup.wxId})
-                    if (quoteMsg) {
-                        msgResult = await contact.quoteSay(message.content, quoteMsg.wxMsgId, quoteMsg.wxSenderId, quoteMsg.content)
-                    }else {
-                        msgResult = await contact.say(message.content)
-                    }
-                } else {
-                    const room = await this.client.Room.find({id: bindGroup.wxId})
-                    if (quoteMsg) {
-                        msgResult = await room.quoteSay(message.content, quoteMsg.wxMsgId, quoteMsg.wxSenderId, quoteMsg.content)
-                    }else {
-                        msgResult = await room.say(message.content)
-                    }
-                }
-                // 将 msgId 更新到数据库
-                const messageEntity = await this.messageService.getByBotMsgId(bindGroup.chatId, parseInt(message.id))
-                if (msgResult && messageEntity) {
-                    messageEntity.wxMsgId = msgResult.newMsgId
-                    this.messageService.createOrUpdate(messageEntity)
+            } else {
+                const room = await this.client.Room.find({id: bindGroup.wxId})
+                if (quoteMsg) {
+                    msgResult = await room.quoteSay(message.content, quoteMsg.wxMsgId, quoteMsg.wxSenderId, quoteMsg.content)
+                }else {
+                    msgResult = await room.say(message.content)
                 }
             }
-        }, 617)
+            // 将 msgId 更新到数据库
+            const messageEntity = await this.messageService.getByBotMsgId(bindGroup.chatId, parseInt(message.id))
+            if (msgResult && messageEntity) {
+                messageEntity.wxMsgId = msgResult.newMsgId
+                this.messageService.createOrUpdate(messageEntity)
+            }
+        }
     }
 
     async login(): Promise<boolean> {
@@ -91,6 +95,13 @@ export class WeChatClient extends AbstractClient {
             //
             app.use(router.routes()).use(router.allowedMethods())
             this.wxInfo = await this.client.info()
+            this.hasLogin = true
+            const config = await this.configurationService.getConfig()
+            const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
+            tgBotClient.telegram.sendMessage(config.chatId, '微信登录成功')
+            if (this.scanMsgId) {
+                tgBotClient.telegram.deleteMessage(config.chatId, this.scanMsgId)
+            }
         })
         return true
     }
@@ -100,6 +111,9 @@ export class WeChatClient extends AbstractClient {
     }
 
     async sendMessage(message: BaseMessage): Promise<boolean> {
+        if (!this.hasReady || !this.hasLogin) {
+            return
+        }
         const messageEntity = new Message()
         messageEntity.chatId = message.chatId
         messageEntity.tgBotMsgId = parseInt(message.id)
@@ -198,6 +212,8 @@ export class WeChatClient extends AbstractClient {
             content: msg.text()
         }
         let referMsg
+        let filebox
+        let fileBuff: Buffer
         switch (msg.type()) {
             case this.client.Message.Type.Text:
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
@@ -211,10 +227,48 @@ export class WeChatClient extends AbstractClient {
                 }
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
+            case this.client.Message.Type.Voice:
+            case this.client.Message.Type.Image:
+            case this.client.Message.Type.Emoji:
+                if (this.client.Message.Type.Image === msg.type()) {
+                    filebox = await msg.toFileBox(1)
+                }else if (this.client.Message.Type.Emoji === msg.type()) {
+                    filebox = {
+                        name: 'emoji.gif',
+                        url: msg.emoji.cdnurl,
+                    }
+                } else {
+                    filebox = await msg.toFileBox()
+                }
+                fileBuff = await FileUtils.getInstance().downloadUrl2Buffer(filebox.url)
+                messageParam.type = 1
+                messageParam.file = {
+                    fileName: filebox.name,
+                    file: fileBuff,
+                    sendType: this.wxFileType2TgFileType(msg.type())
+                }
+                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                break
+            default:
+                console.log('unknow',msg)
+                break
         }
     }
 
-    hasLogin(): boolean {
-        throw new Error('Method not implemented.')
+
+    // 微信文件类型转为tg类型
+    wxFileType2TgFileType(messageType: string): 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'  {
+        switch (messageType) {
+            case this.client.Message.Type.Emoji:
+                return 'animation'
+            case this.client.Message.Type.Image:
+                return 'photo'
+            case this.client.Message.Type.Voice:
+                return 'voice'
+            case this.client.Message.Type.Video:
+                return 'video'
+            default:
+                return 'document'
+        }
     }
 }

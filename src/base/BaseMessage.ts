@@ -11,7 +11,9 @@ export default interface BaseMessage {
     type: 0 | 1,
     file?: {
         fileName: string,
-        file: Buffer
+        file: Buffer,
+        // 发送的类型
+        sendType?: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
     }
     param?: any
 }

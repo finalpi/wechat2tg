@@ -14,4 +14,10 @@ export class Configuration {
         default: 0
     })
     botId: number
+
+    // 媒体是否压缩
+    @Column({
+        default: true
+    })
+    compression: boolean
 }

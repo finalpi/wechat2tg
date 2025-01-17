@@ -19,6 +19,7 @@ export class UserMTProtoClient extends AbstractClient {
         if (!await this.client?.checkAuthorization()) {
             this.client?.start(authParams).then(res => {
                 // 登录成功逻辑
+                this.hasLogin = true
             }).catch((e) => {
                 //
             })
@@ -68,5 +69,6 @@ export class UserMTProtoClient extends AbstractClient {
             autoReconnect: true,
             maxConcurrentDownloads: 3,
         })
+        this.hasReady = true
     }
 }

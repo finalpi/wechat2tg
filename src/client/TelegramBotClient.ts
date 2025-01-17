@@ -53,6 +53,16 @@ export class TelegramBotClient extends AbstractClient {
         if (message.type === 0) {
             // 文本消息走队列
             this.sendQueueHelper.addMessageWithMsgId(parseInt(message.id), message)
+        }else {
+            // 文件消息逻辑
+            this.messageSender.sendFile(message.chatId,{
+                buff: message.file.file,
+                filename: message.file.fileName,
+                fileType: message.file.sendType,
+                caption: message.sender
+            }, {
+                parse_mode: 'HTML'
+            })
         }
         return true
     }
@@ -108,6 +118,7 @@ export class TelegramBotClient extends AbstractClient {
         } else {
             this.client = new Telegraf(config.BOT_TOKEN)
         }
+        this.hasReady = true
         // 加载配置
         this.configurationService.getConfig().then(config => {
             this.chatId = config.chatId
@@ -119,26 +130,28 @@ export class TelegramBotClient extends AbstractClient {
         if (!fs.existsSync('save-files')) {
             fs.mkdirSync('save-files')
         }
-        this.sendQueueHelper = new SimpleMessageSendQueueHelper(async (message: BaseMessage)=> {
-            // 发送文本消息的方法
-            const bindGroup = await this.bindGroupService.getByWxId(message.wxId)
-            const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content)
-            const option: Option = {
-                parse_mode: 'HTML'
-            }
-            if (message.param?.reply_id) {
-                option.reply_id = message.param.reply_id
-            }
-            const newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
-            // 更新chatId
-            const messageEntity = await this.messageService.getByWxMsgId(message.id)
-            if (newMsg && messageEntity) {
-                messageEntity.tgBotMsgId = parseInt(newMsg.message_id + '')
-                this.messageService.createOrUpdate(messageEntity)
-            }
-            return
-        },617)
+        this.sendQueueHelper = new SimpleMessageSendQueueHelper(this.sendTextMsg.bind(this),617)
         this.messageSender = SenderFactory.createSender(this.client)
+    }
+
+    private async sendTextMsg(message: BaseMessage) {
+        // 发送文本消息的方法
+        const bindGroup = await this.bindGroupService.getByWxId(message.wxId)
+        const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content)
+        const option: Option = {
+            parse_mode: 'HTML'
+        }
+        if (message.param?.reply_id) {
+            option.reply_id = message.param.reply_id
+        }
+        const newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
+        // 更新chatId
+        const messageEntity = await this.messageService.getByWxMsgId(message.id)
+        if (newMsg && messageEntity) {
+            messageEntity.tgBotMsgId = parseInt(newMsg.message_id + '')
+            this.messageService.createOrUpdate(messageEntity)
+        }
+        return
     }
 
     private onBotAction(bot: Telegraf) {
@@ -343,6 +356,12 @@ export class TelegramBotClient extends AbstractClient {
                         const botId = this.client.botInfo.id
                         config.botId = botId
                         this.configurationService.saveConfig(config)
+                    }
+                    this.hasLogin = true
+                    if (config.chatId > 0) {
+                        this.loginUserClient()
+                        // 登录微信客户端
+                        this.loginWechatClient()
                     }
                 })
             }).then(() => {
