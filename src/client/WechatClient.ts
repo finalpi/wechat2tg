@@ -1,4 +1,4 @@
-import {GeweBot} from 'gewechaty'
+import {GeweBot,Filebox} from 'gewechaty'
 import {ConfigurationService} from '../service/ConfigurationService'
 import QRCode from 'qrcode'
 import {config} from '../config'
@@ -44,6 +44,7 @@ export class WeChatClient extends AbstractClient {
             base_api: config.BASE_API,
             file_api: config.FILE_API,
             proxy: config.CALLBACK_API,
+            static: 'save-files'
         })
         this.hasReady = true
         this.init()
@@ -126,6 +127,23 @@ export class WeChatClient extends AbstractClient {
             this.sendQueueHelper.addMessageWithMsgId(parseInt(message.id), message)
         } else {
             // 文件消息
+            const bindGroup = await this.bindGroupService.getByChatId(message.chatId)
+            if (bindGroup) {
+                let msgResult
+                if (bindGroup.type === 0) {
+                    const contact = await this.client.Contact.find({id: bindGroup.wxId})
+                    msgResult = await contact.say(Filebox.fromBuff(message.file.file,message.file.fileName))
+                } else {
+                    const room = await this.client.Room.find({id: bindGroup.wxId})
+                    msgResult = await room.say(Filebox.fromBuff(message.file.file,message.file.fileName))
+                }
+                // 将 msgId 更新到数据库
+                const messageEntity = await this.messageService.getByBotMsgId(bindGroup.chatId, parseInt(message.id))
+                if (msgResult && messageEntity) {
+                    messageEntity.wxMsgId = msgResult.newMsgId
+                    this.messageService.createOrUpdate(messageEntity)
+                }
+            }
         }
         return true
     }
@@ -251,6 +269,8 @@ export class WeChatClient extends AbstractClient {
                 break
             default:
                 console.log('unknow',msg)
+                messageParam.content = `收到一条${msg.type()}消息，请在手机上查看`
+                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
         }
     }

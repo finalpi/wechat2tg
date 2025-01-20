@@ -1,11 +1,10 @@
 import {Context, session, Telegraf} from 'telegraf'
-import {config} from '../config'
+import {config, useProxy} from '../config'
 import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from 'https-proxy-agent'
 import * as fs from 'node:fs'
 import {ConfigurationService} from '../service/ConfigurationService'
 import {UserAuthParams} from 'telegram/client/auth'
-import {UserMTProtoClient} from './UserMTProtoClient'
 import {message} from 'telegraf/filters'
 import {BindGroupService} from '../service/BindGroupService'
 import {AbstractClient} from '../base/BaseClient'
@@ -18,6 +17,10 @@ import {SenderFactory} from '../message/SenderFactory'
 import {FormatUtils} from '../util/FormatUtils'
 import {Message} from '../entity/Message'
 import {MessageService} from '../service/MessageService'
+import {FileUtils} from '../util/FileUtils'
+import sharp from 'sharp'
+import {ConverterHelper} from '../util/FfmpegUtils'
+import * as path from 'node:path'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -28,8 +31,44 @@ export class TelegramBotClient extends AbstractClient {
                 client: clientFactory.create('botClient')
             })
         }
+        this.startTime = new Date()
+        const config = await this.configurationService.getConfig()
         const bot: Telegraf = this.client
         bot.use(session())
+        // 此方法需要放在所有监听方法之前,先拦截命令做处理鉴权
+        bot.use(async (ctx, next) => {
+            const chatId = config.chatId
+            if (ctx.message) {
+                const messageDate = new Date(ctx.message?.date * 1000)
+                if (messageDate.getTime() < this.startTime.getTime()) {
+                    return
+                }
+            }
+            if (!chatId) {
+                return next()
+            }
+
+            if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === chatId) {
+                return next()
+            }
+
+            if (ctx.chat && ctx.chat.type.includes('group') && ctx.callbackQuery && ctx.callbackQuery.from.id === chatId) {
+                return next()
+            }
+
+            if (ctx.chat && ctx.chat.type.includes('group') && !ctx.callbackQuery && !ctx.message) {
+                return
+            }
+
+            // const bind = await this.bindItemService.getBindItemByChatId(ctx.chat.id)
+            if (ctx.chat && (chatId === ctx.chat.id)) {
+                return next() // 如果用户授权，则继续处理下一个中间件或命令
+            }
+
+            if (!ctx.chat?.type.includes('group') && ctx.message && !ctx.message.from.is_bot) {
+                return ctx.reply('Sorry, you are not authorized to interact with this bot.') // 如果用户未授权，发送提示消息
+            }
+        })
         this.onBotCommand(bot)
         this.onMessage(bot)
         this.onBotAction(bot)
@@ -83,6 +122,8 @@ export class TelegramBotClient extends AbstractClient {
     private password: string | undefined = undefined
     private phoneCode = ''
     private messageSender: MessageSender
+    // bot 启动时间
+    private startTime: Date
     config: Configuration | undefined
 
     static getInstance(): TelegramBotClient {
@@ -225,6 +266,226 @@ export class TelegramBotClient extends AbstractClient {
             // 发送消息到微信
             TelegramBotClient.getSpyClient('wxClient').sendMessage(message)
         })
+        bot.on(message('voice'), ctx =>
+            this.handleFileMessage.call(this, ctx, 'voice'))
+
+        bot.on(message('audio'), ctx =>
+            this.handleFileMessage.call(this, ctx, 'audio'))
+
+        bot.on(message('video'), ctx =>
+            this.handleFileMessage.call(this, ctx, 'video'))
+
+        bot.on(message('document'), ctx =>
+            this.handleFileMessage.call(this, ctx, 'document'))
+
+        bot.on(message('photo'), ctx =>
+            this.handleFileMessage.call(this, ctx, 'photo'))
+
+        bot.on(message('sticker'), ctx => {
+            if (!TelegramBotClient.getSpyClient('wxClient').hasReady || !TelegramBotClient.getSpyClient('wxClient').hasLogin) {
+                ctx.reply('请先登录微信')
+                return
+            }
+            const fileId = ctx.message.sticker.file_id
+            ctx.telegram.getFileLink(fileId).then(async fileLink => {
+                const uniqueId = ctx.message.sticker.file_unique_id
+                const href = fileLink.href
+                const fileName = `${uniqueId}-${href.substring(href.lastIndexOf('/') + 1, href.length)}`
+                const saveFile = `save-files/${fileName}`
+                const gifFile = `save-files/${fileName.slice(0, fileName.lastIndexOf('.'))}.gif`
+
+                const lottie_config = {
+                    width: 128,
+                    height: 128
+                }
+                // 微信不能发超过1Mb的gif文件
+                if (saveFile.endsWith('.tgs')) {
+                    lottie_config.width = 512
+                    lottie_config.height = 512
+                }
+
+                // gif 文件存在
+                if (fs.existsSync(gifFile)) {
+                    this.sendGif(saveFile, gifFile, ctx, lottie_config)
+                } else if (!fs.existsSync(saveFile)) {
+                    FileUtils.downloadWithProxy(fileLink.toString(), saveFile).then(() => {
+                        this.sendGif(saveFile, gifFile, ctx, lottie_config)
+                    }).catch(() => ctx.reply('发送失败'))
+                } else {
+                    this.sendGif(saveFile, gifFile, ctx, lottie_config)
+                }
+            }).catch(e => {
+                ctx.reply('发送失败', {
+                    reply_parameters: {
+                        message_id: ctx.message.message_id
+                    }
+                })
+            })
+        })
+
+    }
+
+    private async sendGif(saveFile: string, gifFile: string, ctx: any,
+                          lottie_config?: {
+                              width: number,
+                              height: number
+                          }) {
+        try {
+            if (!fs.existsSync(gifFile)) {
+                if (saveFile.endsWith('.tgs')) {
+                    await new ConverterHelper().tgsToGif(saveFile, gifFile, lottie_config)
+                } else if (saveFile.endsWith('.webm')) {
+                    await new ConverterHelper().webmToGif(saveFile, gifFile)
+                } else if (saveFile.endsWith('.webp')) {
+                    await new ConverterHelper().webpToGif(saveFile, gifFile)
+                }
+            }
+            if (!fs.existsSync(gifFile)) {
+                await ctx.reply('表情转换失败', {
+                    reply_parameters: {
+                        message_id: ctx.message.message_id
+                    }
+                })
+                return
+            }
+            const messageId = ctx.message.message_id
+            const chatId = ctx.chat.id
+            const baseMessage: BaseMessage = {
+                id: messageId + '',
+                senderId: '',
+                wxId: '',
+                sender: '{me}',
+                chatId: chatId,
+                content: '',
+                type: 1
+            }
+            const buffer = fs.readFileSync(gifFile)
+
+            // 提取文件名
+            const fileName = path.basename(gifFile)
+            baseMessage.content = fileName
+            baseMessage.file = {
+                fileName: fileName,
+                file: Buffer.from(buffer),
+            }
+            TelegramBotClient.getSpyClient('wxClient').sendMessage(baseMessage)
+        } catch (e) {
+            this.logError('发送失败')
+            await ctx.reply('发送失败', {
+                reply_parameters: {
+                    message_id: ctx.message.message_id
+                }
+            })
+        }
+
+    }
+
+    private async handleFileMessage(ctx: any, fileType: string | 'audio' | 'video' | 'document' | 'photo' | 'voice') {
+        if (!TelegramBotClient.getSpyClient('wxClient').hasReady || !TelegramBotClient.getSpyClient('wxClient').hasLogin) {
+            ctx.reply('请先登录微信')
+            return
+        }
+        const messageId = ctx.message.message_id
+        const chatId = ctx.chat.id
+        const baseMessage: BaseMessage = {
+            id: messageId + '',
+            senderId: '',
+            wxId: '',
+            sender: '{me}',
+            chatId: chatId,
+            content: '',
+            type: 1
+        }
+        if (ctx.message[fileType]) {
+            let fileId = ctx.message[fileType].file_id
+            let fileSize = ctx.message[fileType].file_size
+            let fileName = ctx.message[fileType].file_name || ''
+            if (!fileId) {
+                fileId = ctx.message[fileType][ctx.message[fileType].length - 1].file_id
+                fileSize = ctx.message[fileType][ctx.message[fileType].length - 1].file_size
+            }
+            if (fileSize && fileSize > 20971520) {
+                // 配置了大文件发送则发送大文件
+                FileUtils.getInstance().downloadLargeFile(ctx.message.message_id, ctx.chat.id).then(buff => {
+                    if (buff) {
+                        baseMessage.content = fileName
+                        baseMessage.file = {
+                            fileName: fileName,
+                            file: Buffer.from(buff),
+                        }
+                        TelegramBotClient.getSpyClient('wxClient').sendMessage(baseMessage)
+                    } else {
+                        ctx.reply('发送失败', {
+                            reply_parameters: {
+                                message_id: ctx.message.message_id
+                            }
+                        })
+                    }
+                }).catch(err => {
+                    this.logError('use telegram api download file error: ' + err)
+                    ctx.reply('发送失败', {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    })
+                })
+                return
+            }
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            ctx.telegram.getFileLink(fileId).then(async fileLink => {
+                FileUtils.downloadBufferWithProxy(fileLink.toString()).then(buffer => {
+                    // 如果图片大小小于100k,则添加元数据使其大小达到100k,否则会被微信压缩质量
+                    if (fileSize && fileSize < 100 * 1024 && (fileType === 'photo' || (fileName.endsWith('jpg') || fileName.endsWith('jpeg') || fileName.endsWith('png')))) {
+                        if (!fileName) {
+                            fileName = new Date().getTime() + '.png'
+                        }
+                        baseMessage.content = fileName
+                            // 构造包含无用信息的 EXIF 元数据
+                            const exifData = {
+                                IFD0: {
+                                    // 添加一个长字符串作为无用信息
+                                    ImageDescription: '0'.repeat(110_000 - Buffer.byteLength(buffer))
+                                }
+                            }
+
+                            // 保存带有新元数据的图片
+                            sharp(buffer)
+                                .toFormat('png')
+                                .withMetadata({exif: exifData})
+                                .toBuffer()
+                                .then(buff => {
+                                    baseMessage.file = {
+                                        fileName: fileName,
+                                        file: buff,
+                                    }
+                                    TelegramBotClient.getSpyClient('wxClient').sendMessage(baseMessage)
+                                }).catch((err) => {
+                                ctx.reply('发送失败')
+                            })
+                        return
+                    }
+                    if (fileType === 'voice') {
+                        const nowShangHaiZh = new Date().toLocaleString('zh', {
+                            timeZone: 'Asia/ShangHai'
+                        }).toString().replaceAll('/', '-')
+                        fileName = `语音-${nowShangHaiZh.toLocaleLowerCase()}.mp3`
+                    }
+                    baseMessage.content = fileName
+                    baseMessage.file = {
+                        fileName: fileName,
+                        file: buffer,
+                    }
+                    TelegramBotClient.getSpyClient('wxClient').sendMessage(baseMessage)
+                }).catch(() => ctx.reply('发送失败'))
+            }).catch(reason => {
+                ctx.reply('发送失败', {
+                    reply_parameters: {
+                        message_id: ctx.message.message_id
+                    }
+                })
+            })
+        }
     }
 
     private onBotCommand(bot: Telegraf) {
@@ -260,6 +521,17 @@ export class TelegramBotClient extends AbstractClient {
             })
         }
         TelegramBotClient.getSpyClient('wxClient').login()
+    }
+
+    private loginMTPClient() {
+        if (!TelegramBotClient.getSpyClient('botMTPClient')) {
+            const clientFactory = new ClientFactory()
+            TelegramBotClient.addSpyClient({
+                interfaceId: 'botMTPClient',
+                client: clientFactory.create('botMTPClient')
+            })
+        }
+        TelegramBotClient.getSpyClient('botMTPClient').login()
     }
 
     public async loginUserClient() {
@@ -362,6 +634,8 @@ export class TelegramBotClient extends AbstractClient {
                         this.loginUserClient()
                         // 登录微信客户端
                         this.loginWechatClient()
+                        // 登录 botMTP 客户端
+                        this.loginMTPClient()
                     }
                 })
             }).then(() => {
