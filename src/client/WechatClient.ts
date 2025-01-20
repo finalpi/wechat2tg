@@ -44,7 +44,8 @@ export class WeChatClient extends AbstractClient {
             base_api: config.BASE_API,
             file_api: config.FILE_API,
             proxy: config.CALLBACK_API,
-            static: 'save-files'
+            static: 'save-files',
+            ds_path: 'storage/ds.json'
         })
         this.hasReady = true
         this.init()
