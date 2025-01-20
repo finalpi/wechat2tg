@@ -15,6 +15,9 @@ export class TelegramGroupOperateService {
     private bindGroupService: BindGroupService
     private client: GramClient
     private configService: ConfigurationService = ConfigurationService.getInstance()
+    private readonly folderName = 'WeChat'
+    // 创建群组队列，保证不重复
+    private createGroupQueue: BindGroup[] = []
     constructor(bindGroupService: BindGroupService,client: GramClient) {
         this.bindGroupService = bindGroupService
         this.client = client
@@ -70,6 +73,11 @@ export class TelegramGroupOperateService {
 
     // 创建并绑定群组
     public async createGroup(contactOrRoom: BindGroup): Promise<BindGroup> {
+        const item = this.createGroupQueue.find(value => contactOrRoom.chatId === value.chatId)
+        if (item) {
+            return item
+        }
+        this.createGroupQueue.push(contactOrRoom)
         // 删除之前绑定过的群组
         await this.bindGroupService.removeByChatIdOrWxId(contactOrRoom.chatId,contactOrRoom.wxId)
         const oldGourp = await this.bindGroupService.getByWxId(contactOrRoom.wxId)
@@ -105,11 +113,42 @@ export class TelegramGroupOperateService {
         bindGroup.type = contactOrRoom.type
         bindGroup.alias = contactOrRoom.alias
         bindGroup.wxId = contactOrRoom.wxId
-        bindGroup = await this.bindGroupService.createOrUpdate(contactOrRoom)
+        bindGroup = await this.bindGroupService.createOrUpdate(bindGroup)
 
         // 更新信息
-        this.updateGroup(contactOrRoom)
+        await this.updateGroup(contactOrRoom)
+        // 添加到文件夹
+        this.addToFolder(bindGroup.chatId)
+        this.createGroupQueue = this.createGroupQueue.filter(i=> i.chatId !== contactOrRoom.chatId)
         // 添加绑定
         return bindGroup
+    }
+
+    async addToFolder(chatId: number): Promise<void> {
+        const result = await this.client?.invoke(new Api.messages.GetDialogFilters())
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        const dialogFilter: Api.TypeDialogFilter = result?.filters.find(it => it.title === this.folderName)
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        // TODO: #42 Cannot read properties of undefined (reading 'id')
+        const id = dialogFilter?.id
+        const entity = await this.client?.getInputEntity(chatId)
+        if (entity && dialogFilter) {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            const exist = dialogFilter.includePeers.find(it => it.chatId === entity.chatId)
+            if (!exist) {
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                dialogFilter.includePeers.push(entity)
+                await this.client?.invoke(new Api.messages.UpdateDialogFilter({
+                    id: id,
+                    filter: dialogFilter,
+                })).catch(e => {
+                    // this.tgBotClient.bot.telegram.sendMessage(this.tgBotClient.chatId, this.i18n.t('common.addGroupToFolderFail'))
+                })
+            }
+        }
     }
 }

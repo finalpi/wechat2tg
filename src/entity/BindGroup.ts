@@ -18,7 +18,7 @@ export class BindGroup {
     @Column()
     wxId: string
 
-    @Column()
+    @Column({nullable: true})
     avatarLink: string
 
     // 类型：0-contact，1-room

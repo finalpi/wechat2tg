@@ -164,10 +164,10 @@ export class WeChatClient extends AbstractClient {
                         if (this.scanMsgId) {
                             tgBotClient.telegram.editMessageMedia(config.chatId, this.scanMsgId, undefined, {
                                 type: 'photo',
-                                media: {source: buffer}, caption: '请扫描二维码登录'
+                                media: {source: buffer}, caption: '请扫描二维码登录,第一次登录加载时间较长，请耐心等待'
                             })
                         } else {
-                            tgBotClient.telegram.sendPhoto(config.chatId, {source: buffer}, {caption: '请扫描二维码登录'}).then(msg => {
+                            tgBotClient.telegram.sendPhoto(config.chatId, {source: buffer}, {caption: '请扫描二维码登录,第一次登录加载时间较长，请耐心等待'}).then(msg => {
                                 this.scanMsgId = msg.message_id
                             })
                         }
@@ -189,7 +189,11 @@ export class WeChatClient extends AbstractClient {
         // 查找 group
         let wxId
         const room = await msg.room()
-        const contact = await msg.from()
+        const fromContact = await msg.from()
+        let contact = await msg.from()
+        if (msg.self()) {
+            contact = await msg.to()
+        }
         const alias = await contact.alias()
         let topic
         if (room) {
@@ -201,7 +205,7 @@ export class WeChatClient extends AbstractClient {
         }
         let bindGroup = await this.bindGroupService.getByWxId(wxId)
         // 如果找不到就创建一个新的群组
-        if (!bindGroup) {
+        if (!bindGroup && wxId !== this.wxInfo.wxid) {
             bindGroup = new BindGroup()
             bindGroup.wxId = wxId
             if (room) {
@@ -219,8 +223,11 @@ export class WeChatClient extends AbstractClient {
             }
             bindGroup = await this.groupOperate.createGroup(bindGroup)
         }
+        if (!bindGroup) {
+            return
+        }
         // 身份
-        const identity = FormatUtils.transformTitleStr(bindGroup.type === 0 ? config.CONTACT_MESSAGE_GROUP : config.ROOM_MESSAGE_GROUP, alias, contact.name(), topic)
+        const identity = FormatUtils.transformTitleStr(bindGroup.type === 0 ? config.CONTACT_MESSAGE_GROUP : config.ROOM_MESSAGE_GROUP, await fromContact.alias(), fromContact.name(), topic)
         const messageParam: BaseMessage = {
             id: msg._newMsgId,
             senderId: contact._wxid,
@@ -269,9 +276,11 @@ export class WeChatClient extends AbstractClient {
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             default:
-                console.log('unknow',msg)
-                messageParam.content = `收到一条${msg.type()}消息，请在手机上查看`
-                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                if (msg.type()) {
+                    console.log('unknow',msg)
+                    messageParam.content = `收到一条${msg.type()}消息，请在手机上查看`
+                    WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                }
                 break
         }
     }
