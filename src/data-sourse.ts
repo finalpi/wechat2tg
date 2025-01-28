@@ -2,6 +2,8 @@ import {DataSource} from 'typeorm'
 import {Configuration} from './entity/Configuration'
 import {BindGroup} from './entity/BindGroup'
 import {Message} from './entity/Message'
+import fs from 'node:fs'
+import {WxContact} from './entity/WxContact'
 
 export const AppDataSource = new DataSource({
     type: 'sqlite',
@@ -9,3 +11,38 @@ export const AppDataSource = new DataSource({
     entities: [Configuration, BindGroup, Message],
     synchronize: true,
 })
+
+AppDataSource.initialize().then(() => {
+    console.log('AppDataSource initialized')
+}).catch((e) => {
+    console.error('AppDataSource initialize failed', e)
+})
+
+export const GeWeChatDataSource = new DataSource({
+    type: 'sqlite',
+    database: getGeWeChatDataSource() + '.db',
+    // database: 'wx_J2acELrtPBGJqoEffcNWL.db',
+    entities: [WxContact],
+    logger: 'debug',
+    logging: 'all',
+    synchronize: true,
+})
+
+
+GeWeChatDataSource.initialize().then(() => {
+    console.log('GeWeChatDataSource initialized')
+}).catch((e) => {
+    console.error('GeWeChatDataSource initialize failed', e)
+})
+
+
+function getGeWeChatDataSource(): string {
+    // 读取 ds.json 文件，获取数据库文件路径
+    try {
+        const dsJson = fs.readFileSync('ds.json', 'utf-8')
+        const ds = JSON.parse(dsJson)
+        return ds.appid
+    } catch (e) {
+        console.error('读取 ds.json 文件失败')
+    }
+}

@@ -21,6 +21,7 @@ import {FileUtils} from '../util/FileUtils'
 import sharp from 'sharp'
 import {ConverterHelper} from '../util/FfmpegUtils'
 import * as path from 'node:path'
+import TgCommandHelper from '../service/TelegramCommandHelper'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -489,13 +490,9 @@ export class TelegramBotClient extends AbstractClient {
     }
 
     private onBotCommand(bot: Telegraf) {
-        const commands = [
-            {command: 'help', description: '帮助'},
-            {command: 'start', description: '开始'},
-            {command: 'login', description: '登录'},
-        ]
+        TgCommandHelper.setCommand(bot)
+        TgCommandHelper.setSimpleCommandHandler(bot)
 
-        bot.telegram.setMyCommands(commands)
 
         bot.command('login', async ctx => {
             // 首次登录设置主人 chatId

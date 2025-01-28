@@ -1,0 +1,12 @@
+version: '3.9'
+
+services:
+  gewe:
+    image: registry.cn-chengdu.aliyuncs.com/tu1h/wechotd:alpine # 拉取镜像
+    container_name: gewe 
+    ports:
+      - "192.168.1.12:2531:2531"
+      - "192.168.1.12:2532:2532"
+    volumes:
+      - ./temp:/root/temp
+    restart: always
