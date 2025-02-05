@@ -102,6 +102,12 @@ export class TelegramBotClient extends AbstractClient {
                 caption: message.sender
             }, {
                 parse_mode: 'HTML'
+            }).catch(e => {
+                if (e.response.error_code === 403) {
+                    this.bindGroupService.removeByChatIdOrWxId(message.chatId,message.senderId)
+                    message.chatId = this.config.botId
+                    this.sendMessage(message)
+                }
             })
         }
         return true
@@ -186,7 +192,13 @@ export class TelegramBotClient extends AbstractClient {
         if (message.param?.reply_id) {
             option.reply_id = message.param.reply_id
         }
-        const newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
+        const newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option).catch(e => {
+            if (e.response.error_code === 403) {
+                this.bindGroupService.removeByChatIdOrWxId(message.chatId,message.senderId)
+                message.chatId = this.config.botId
+                this.sendTextMsg(message)
+            }
+        })
         // 更新chatId
         const messageEntity = await this.messageService.getByWxMsgId(message.id)
         if (newMsg && messageEntity) {

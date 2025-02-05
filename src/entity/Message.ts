@@ -17,24 +17,28 @@ export class Message {
 
     // 回复消息需要用到发送者 Id
     @Column({
-        default: ''
+        default: '',
+        nullable: true
     })
     wxSenderId: string
 
     // 回复消息需要用到发送者 Id
     @Column({
-        default: ''
+        default: '',
+        nullable: true
     })
     content: string
 
     @Column({
-        default: 0
+        default: 0,
+        nullable: true
     })
     tgBotMsgId: number
 
     // 消息类型 0:文本消息，1:文件消息
     @Column({
-        default: 0
+        default: 0,
+        nullable: true
     })
     type: number
 }

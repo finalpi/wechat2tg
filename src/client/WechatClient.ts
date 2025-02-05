@@ -106,6 +106,7 @@ export class WeChatClient extends AbstractClient {
             tgBotClient.telegram.sendMessage(config.chatId, '微信登录成功')
             if (this.scanMsgId) {
                 tgBotClient.telegram.deleteMessage(config.chatId, this.scanMsgId)
+                this.scanMsgId = undefined
             }
         })
         return true
@@ -268,6 +269,12 @@ export class WeChatClient extends AbstractClient {
             case this.client.Message.Type.Emoji:
                 if (this.client.Message.Type.Image === msg.type()) {
                     filebox = await msg.toFileBox(1)
+                    if (filebox.url === config.FILE_API) {
+                        filebox = await msg.toFileBox(2)
+                    }
+                    if (filebox.url === config.FILE_API) {
+                        filebox = await msg.toFileBox(3)
+                    }
                 } else if (this.client.Message.Type.Emoji === msg.type()) {
                     filebox = {
                         name: 'emoji.gif',
@@ -278,6 +285,9 @@ export class WeChatClient extends AbstractClient {
                     }
                 } else {
                     filebox = await msg.toFileBox()
+                }
+                if (!filebox || filebox.url === config.FILE_API) {
+                    return
                 }
                 fileBuff = await FileUtils.getInstance().downloadUrl2Buffer(filebox.url)
                 messageParam.type = 1

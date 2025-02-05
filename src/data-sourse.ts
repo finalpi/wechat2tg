@@ -12,12 +12,6 @@ export const AppDataSource = new DataSource({
     synchronize: true,
 })
 
-AppDataSource.initialize().then(() => {
-    console.log('AppDataSource initialized')
-}).catch((e) => {
-    console.error('AppDataSource initialize failed', e)
-})
-
 export const GeWeChatDataSource = new DataSource({
     type: 'sqlite',
     database: getGeWeChatDataSource() + '.db',
