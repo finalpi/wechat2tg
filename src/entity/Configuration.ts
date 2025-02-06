@@ -20,4 +20,10 @@ export class Configuration {
         default: true
     })
     compression: boolean
+
+    // 是否使用文件传输助手接收文件
+    @Column({
+        default: true
+    })
+    useFileHelper: boolean
 }
