@@ -27,4 +27,8 @@ export class MessageService {
     async getByBotMsgId(chatId: number, tgBotMsgId: number) {
         return await this.repository.getByBotMsgId(chatId, tgBotMsgId)
     }
+
+    async getByFhMsgId(fhMsgId: string) {
+        return await this.repository.getByFhMsgId(fhMsgId)
+    }
 }

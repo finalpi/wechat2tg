@@ -6,4 +6,4 @@ export interface BaseFactory {
     create(type: botType): IClient;
 }
 
-export type botType = 'botClient' | 'userMTPClient' | 'wxClient' | 'botMTPClient'
+export type botType = 'botClient' | 'userMTPClient' | 'wxClient' | 'botMTPClient' | 'fhClient'

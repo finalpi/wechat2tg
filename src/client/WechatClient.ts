@@ -207,6 +207,10 @@ export class WeChatClient extends AbstractClient {
         } else {
             wxId = contact._wxid
         }
+        const fh = await this.client.Contact.find({id: 'filehelper'})
+        if (wxId === 'filehelper') {
+            return
+        }
         let bindGroup = await this.bindGroupService.getByWxId(wxId)
         // 如果找不到就创建一个新的群组
         if (!bindGroup && wxId !== this.wxInfo.wxid) {
@@ -298,7 +302,28 @@ export class WeChatClient extends AbstractClient {
                 }
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
+            case this.client.Message.Type.Video:
+            case this.client.Message.Type.File:
+                // 转发文件和视频消息到文件传输助手
+                messageParam.type = 2
+                if (WeChatClient.getSpyClient('fhClient').hasLogin) {
+                    const result = await msg.forward(fh)
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-ignore
+                    messageParam.fhMsgId = result.newMsgId.c.join('')
+                    messageParam.content = identity
+                    WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                    break
+                }else {
+                    // 未登录
+                    messageParam.content = `收到一条${msg.type()}消息，请在手机上查看`
+                    WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                    break
+                }
             default:
+                if (msg.type() === this.client.Message.Type.FileStart) {
+                    break
+                }
                 if (msg.type()) {
                     console.log('unknow', msg)
                     messageParam.content = `收到一条${msg.type()}消息，请在手机上查看`

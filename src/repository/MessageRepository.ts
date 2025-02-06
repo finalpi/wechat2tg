@@ -31,4 +31,10 @@ export class MessageRepository {
             tgBotMsgId: tgBotMsgId
         })
     }
+
+    async getByFhMsgId(getByFhMsgId: string) {
+        return await this.repository.findOneBy({
+            fhMsgId: getByFhMsgId
+        })
+    }
 }

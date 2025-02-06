@@ -10,6 +10,7 @@ export default class TgCommandHelper {
             {command: 'help', description: '帮助'},
             {command: 'start', description: '开始'},
             {command: 'login', description: '登录'},
+            {command: 'flogin', description: '登录文件传输助手接收文件消息'},
             {command: 'user', description: '查看联系人'},
             {command: 'room', description: '查看群组'},
         ]

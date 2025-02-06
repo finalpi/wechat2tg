@@ -41,4 +41,11 @@ export class Message {
         nullable: true
     })
     type: number
+
+    // 文件传输助手的msgId
+    @Column({
+        default: '',
+        nullable: true
+    })
+    fhMsgId: string
 }

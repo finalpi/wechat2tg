@@ -88,13 +88,14 @@ export class TelegramBotClient extends AbstractClient {
         messageEntity.type = message.type
         messageEntity.wxSenderId = message.senderId
         messageEntity.content = message.content
+        messageEntity.fhMsgId = message.fhMsgId
         await this.messageService.createOrUpdate(messageEntity)
         // 文本消息放进队列发送
         if (message.type === 0) {
             // 文本消息走队列
             this.sendQueueHelper.addMessageWithMsgId(parseInt(message.id), message)
-        }else {
-            // 文件消息逻辑
+        }else if (message.type === 1) {
+            // 图片消息逻辑
             this.messageSender.sendFile(message.chatId,{
                 buff: message.file.file,
                 filename: message.file.fileName,
@@ -102,12 +103,25 @@ export class TelegramBotClient extends AbstractClient {
                 caption: message.sender
             }, {
                 parse_mode: 'HTML'
+            }).then(msgRes=>{
+                messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
+                this.messageService.createOrUpdate(messageEntity)
             }).catch(e => {
                 if (e.response.error_code === 403) {
                     this.bindGroupService.removeByChatIdOrWxId(message.chatId,message.senderId)
                     message.chatId = this.config.botId
                     this.sendMessage(message)
                 }
+            })
+        }else {
+            this.messageSender.sendFile(message.chatId, {
+                buff: Buffer.from('0'),
+                filename: 'temp_file',
+                caption: '文件接收中',
+                fileType: 'document'
+            }).then(async msgRes=>{
+                messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
+                this.messageService.createOrUpdate(messageEntity)
             })
         }
         return true
@@ -519,6 +533,18 @@ export class TelegramBotClient extends AbstractClient {
             // 登录微信客户端
             this.loginWechatClient()
         })
+
+        bot.command('flogin', async ctx => {
+            // 首次登录设置主人 chatId
+            const config = await this.configurationService.getConfig()
+            if (!config.chatId || config.chatId === 0) {
+                config.chatId = ctx.chat.id
+                this.chatId = ctx.chat.id
+                await this.configurationService.saveConfig(config)
+            }
+            // 登录文件传输助手客户端
+            this.loginFileHelperClient()
+        })
     }
 
     private loginWechatClient() {
@@ -530,6 +556,17 @@ export class TelegramBotClient extends AbstractClient {
             })
         }
         TelegramBotClient.getSpyClient('wxClient').login()
+    }
+
+    private loginFileHelperClient() {
+        if (!TelegramBotClient.getSpyClient('fhClient')) {
+            const clientFactory = new ClientFactory()
+            TelegramBotClient.addSpyClient({
+                interfaceId: 'fhClient',
+                client: clientFactory.create('fhClient')
+            })
+        }
+        TelegramBotClient.getSpyClient('fhClient').login()
     }
 
     private loginMTPClient() {
