@@ -15,6 +15,7 @@ import {Telegraf} from 'telegraf'
 import {MessageService} from '../service/MessageService'
 import {Message} from '../entity/Message'
 import {FileUtils} from '../util/FileUtils'
+import {GeWeChatDataSource} from '../data-sourse'
 
 export class WeChatClient extends AbstractClient {
     private configurationService = ConfigurationService.getInstance()
@@ -108,6 +109,18 @@ export class WeChatClient extends AbstractClient {
                 tgBotClient.telegram.deleteMessage(config.chatId, this.scanMsgId)
                 this.scanMsgId = undefined
             }
+            GeWeChatDataSource.initialize().then(() => {
+                console.log('GeWeChatDataSource initialized')
+            }).catch((e) => {
+                console.error('GeWeChatDataSource initialize failed', e)
+            })
+            // 登录后更新群组绑定信息
+            setTimeout(async ()=>{
+                const allBind = await this.bindGroupService.getAll()
+                for (const bindGroup of allBind) {
+                    this.updateGroupByChatId(bindGroup.chatId)
+                }
+            },3000)
         })
         return true
     }
@@ -195,6 +208,7 @@ export class WeChatClient extends AbstractClient {
         const room = await msg.room()
         const fromContact = await msg.from()
         let contact = await msg.from()
+        const configuration = await this.configurationService.getConfig()
         if (msg.self()) {
             contact = await msg.to()
         }
@@ -209,6 +223,9 @@ export class WeChatClient extends AbstractClient {
         }
         const fh = await this.client.Contact.find({id: 'filehelper'})
         if (wxId === 'filehelper') {
+            return
+        }
+        if (wxId.startsWith('gh_') && !configuration.receivePublicAccount) {
             return
         }
         let bindGroup = await this.bindGroupService.getByWxId(wxId)
@@ -306,7 +323,7 @@ export class WeChatClient extends AbstractClient {
             case this.client.Message.Type.File:
                 // 转发文件和视频消息到文件传输助手
                 messageParam.type = 2
-                if (WeChatClient.getSpyClient('fhClient').hasLogin) {
+                if (configuration.useFileHelper && WeChatClient.getSpyClient('fhClient').hasLogin) {
                     const result = await msg.forward(fh)
                     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                     // @ts-ignore
@@ -333,6 +350,34 @@ export class WeChatClient extends AbstractClient {
         }
     }
 
+    private async updateGroupByChatId(chatId: number) {
+        const bindItem = await this.bindGroupService.getByChatId(chatId)
+        if (bindItem) {
+            const telegramGroupOperateService = new TelegramGroupOperateService(this.bindGroupService, WeChatClient.getSpyClient('userMTPClient').client)
+            if (bindItem.type === 0) {
+                const wxContact = await WeChatClient.getSpyClient('wxClient').client.Contact.find({id: bindItem.wxId})
+                if (wxContact) {
+                    await wxContact.sync()
+                    bindItem.name = wxContact.name()
+                    bindItem.avatarLink = await wxContact.avatar()
+                    const alias = await wxContact.alias()
+                    if (alias !== bindItem.name) {
+                        bindItem.alias = alias
+                    }
+                    telegramGroupOperateService.updateGroup(bindItem)
+                }
+            } else {
+                const wxRoom = await WeChatClient.getSpyClient('wxClient').client.Room.find({id: bindItem.wxId})
+                if (wxRoom) {
+                    await wxRoom.sync()
+                    bindItem.name = wxRoom.name
+                    const avatar = await wxRoom.avatar()
+                    bindItem.avatarLink = avatar.url
+                    telegramGroupOperateService.updateGroup(bindItem)
+                }
+            }
+        }
+    }
 
     // 微信文件类型转为tg类型
     wxFileType2TgFileType(messageType: string): 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice' {

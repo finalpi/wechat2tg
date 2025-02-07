@@ -25,50 +25,54 @@ export class TelegramGroupOperateService {
 
     // 更新群组信息
     public async updateGroup(contactOrRoom: BindGroup) {
-        const oldBindGroup = await this.bindGroupService.getByChatId(contactOrRoom.chatId)
-        if (!oldBindGroup) {
-            return
-        }
-        oldBindGroup.alias = contactOrRoom.alias
-        // 更新头像
-        if (contactOrRoom.avatarLink !== oldBindGroup.avatarLink) {
-            oldBindGroup.avatarLink = contactOrRoom.avatarLink
-            const buff = await FileUtils.getInstance().downloadUrl2Buffer(contactOrRoom.avatarLink)
-            sharp(buff).toFormat('png').resize(200).toBuffer(async (err,buff)=>{
-                const toUpload = new CustomFile('avatar.png', buff.length, '', buff)
-                const file = await this.client?.uploadFile({
-                    file: toUpload,
-                    workers: 3,
+        try {
+            const oldBindGroup = await this.bindGroupService.getByChatId(contactOrRoom.chatId)
+            if (!oldBindGroup) {
+                return
+            }
+            oldBindGroup.alias = contactOrRoom.alias
+            // 更新头像
+            if (contactOrRoom.avatarLink !== oldBindGroup.avatarLink) {
+                oldBindGroup.avatarLink = contactOrRoom.avatarLink
+                const buff = await FileUtils.getInstance().downloadUrl2Buffer(contactOrRoom.avatarLink)
+                sharp(buff).toFormat('png').resize(200).toBuffer(async (err,buff)=>{
+                    const toUpload = new CustomFile('avatar.png', buff.length, '', buff)
+                    const file = await this.client?.uploadFile({
+                        file: toUpload,
+                        workers: 3,
+                    })
+                    await this.client?.invoke(new Api.messages.EditChatPhoto(
+                        {
+                            chatId: returnBigInt(0 - contactOrRoom.chatId),
+                            photo: new Api.InputChatUploadedPhoto(
+                                {
+                                    file: file,
+                                }
+                            )
+                        }
+                    ))
                 })
-                this.client?.invoke(new Api.messages.EditChatPhoto(
-                    {
+            }
+            // 更新群组名
+            let name
+            if (contactOrRoom.type === 0) {
+                name = FormatUtils.transformTitleStr(config.CREATE_CONTACT_NAME, contactOrRoom.alias, contactOrRoom.name, '')
+            } else {
+                name = FormatUtils.transformTitleStr(config.CREATE_ROOM_NAME, '', '', contactOrRoom.name)
+            }
+            if (name !== oldBindGroup.name) {
+                oldBindGroup.name = name
+                await this.client?.invoke(
+                    new Api.messages.EditChatTitle({
                         chatId: returnBigInt(0 - contactOrRoom.chatId),
-                        photo: new Api.InputChatUploadedPhoto(
-                            {
-                                file: file,
-                            }
-                        )
-                    }
-                ))
-            })
+                        title: name,
+                    })
+                )
+            }
+            this.bindGroupService.createOrUpdate(oldBindGroup)
+        }catch (e) {
+            console.log(e)
         }
-        // 更新群组名
-        let name
-        if (contactOrRoom.type === 0) {
-            name = FormatUtils.transformTitleStr(config.CREATE_CONTACT_NAME, contactOrRoom.alias, contactOrRoom.name, '')
-        } else {
-            name = FormatUtils.transformTitleStr(config.CREATE_ROOM_NAME, '', '', contactOrRoom.name)
-        }
-        if (name !== oldBindGroup.name) {
-            oldBindGroup.name = name
-            this.client?.invoke(
-                new Api.messages.EditChatTitle({
-                    chatId: returnBigInt(0 - contactOrRoom.chatId),
-                    title: name,
-                })
-            )
-        }
-        this.bindGroupService.createOrUpdate(oldBindGroup)
     }
 
     // 创建并绑定群组

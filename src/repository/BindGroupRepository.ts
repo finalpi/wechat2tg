@@ -32,6 +32,10 @@ export class BindGroupRepository {
         })
     }
 
+    async getAll() {
+        return await this.bindGroupRepository.find()
+    }
+
     async getByChatId(chatId: number) {
         return await this.bindGroupRepository.findOneBy({
             chatId: chatId

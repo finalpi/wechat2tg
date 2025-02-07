@@ -23,17 +23,10 @@ export const GeWeChatDataSource = new DataSource({
 })
 
 
-GeWeChatDataSource.initialize().then(() => {
-    console.log('GeWeChatDataSource initialized')
-}).catch((e) => {
-    console.error('GeWeChatDataSource initialize failed', e)
-})
-
-
 function getGeWeChatDataSource(): string {
     // 读取 ds.json 文件，获取数据库文件路径
     try {
-        const dsJson = fs.readFileSync('ds.json', 'utf-8')
+        const dsJson = fs.readFileSync('storage/ds.json', 'utf-8')
         const ds = JSON.parse(dsJson)
         return ds.appid
     } catch (e) {

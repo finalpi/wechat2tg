@@ -1,4 +1,4 @@
-import {Context, session, Telegraf} from 'telegraf'
+import {Context, Markup, session, Telegraf} from 'telegraf'
 import {config, useProxy} from '../config'
 import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from 'https-proxy-agent'
@@ -22,6 +22,7 @@ import sharp from 'sharp'
 import {ConverterHelper} from '../util/FfmpegUtils'
 import * as path from 'node:path'
 import TgCommandHelper from '../service/TelegramCommandHelper'
+import {TelegramGroupOperateService} from '../service/TelegramGroupOperateService'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -262,6 +263,15 @@ export class TelegramBotClient extends AbstractClient {
                     ]
                 }
             })
+            ctx.answerCbQuery()
+        })
+
+        bot.action(/^st:/, async ctx => {
+            const booleanKey = ctx.match.input.split(':')[1]
+            const config = await this.configurationService.getConfig()
+            config[booleanKey] = !config[booleanKey]
+            await this.configurationService.saveConfig(config)
+            ctx.editMessageReplyMarkup(await this.getSettingButton())
             ctx.answerCbQuery()
         })
     }
@@ -545,6 +555,61 @@ export class TelegramBotClient extends AbstractClient {
             // 登录文件传输助手客户端
             this.loginFileHelperClient()
         })
+
+        bot.command('settings', async ctx => {
+            ctx.sendMessage('程序设置:', {
+                reply_markup: await this.getSettingButton()
+            })
+        })
+
+        bot.command('update', async (ctx) => {
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                await this.updateGroupByChatId(ctx.chat.id)
+            } else {
+                return ctx.reply('仅支持群组中使用')
+            }
+        })
+    }
+
+    private async updateGroupByChatId(chatId: number) {
+        const bindItem = await this.bindGroupService.getByChatId(chatId)
+        if (bindItem) {
+            const telegramGroupOperateService = new TelegramGroupOperateService(this.bindGroupService, TelegramBotClient.getSpyClient('userMTPClient').client)
+            if (bindItem.type === 0) {
+                const wxContact = await TelegramBotClient.getSpyClient('wxClient').client.Contact.find({id: bindItem.wxId})
+                if (wxContact) {
+                    await wxContact.sync()
+                    bindItem.name = wxContact.name()
+                    bindItem.avatarLink = await wxContact.avatar()
+                    const alias = await wxContact.alias()
+                    if (alias !== bindItem.name) {
+                        bindItem.alias = alias
+                    }
+                    telegramGroupOperateService.updateGroup(bindItem)
+                }
+            } else {
+                const wxRoom = await TelegramBotClient.getSpyClient('wxClient').client.Room.find({id: bindItem.wxId})
+                if (wxRoom) {
+                    await wxRoom.sync()
+                    bindItem.name = wxRoom.name
+                    const avatar = await wxRoom.avatar()
+                    bindItem.avatarLink = avatar.url
+                    telegramGroupOperateService.updateGroup(bindItem)
+                }
+            }
+        }
+    }
+
+    private async getSettingButton() {
+        const settings = await this.configurationService.getSetting()
+        const inline_keyboard = []
+        const keys = settings.keys()
+        for (const key of keys) {
+            inline_keyboard.push([Markup.button.callback(`${settings.get(key).description}(${settings.get(key).options.get(settings.get(key).value)})`, `st:${key}`)])
+        }
+        return {
+            inline_keyboard: inline_keyboard,
+        }
     }
 
     private loginWechatClient() {
@@ -682,6 +747,9 @@ export class TelegramBotClient extends AbstractClient {
                         this.loginWechatClient()
                         // 登录 botMTP 客户端
                         this.loginMTPClient()
+                        if (config.useFileHelper) {
+                            this.loginFileHelperClient()
+                        }
                     }
                 })
             }).then(() => {

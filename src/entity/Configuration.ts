@@ -26,4 +26,10 @@ export class Configuration {
         default: true
     })
     useFileHelper: boolean
+
+    // 是否接收公众号消息
+    @Column({
+        default: true
+    })
+    receivePublicAccount: boolean
 }
