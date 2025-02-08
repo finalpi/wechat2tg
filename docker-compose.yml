@@ -2,8 +2,10 @@ version: '3'
 
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:latest
+    image: finalpi/wechat2tg-pad:latest
     container_name: wx2tg
+    ports:
+      - "3000:3000"
     volumes:
       - ./config:/app/storage
       - ./save-files:/app/save-files # 保存文件夹挂载后表情不需要重新转换
