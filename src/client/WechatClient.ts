@@ -11,7 +11,7 @@ import {AbstractClient} from '../base/BaseClient'
 import BaseMessage from '../base/BaseMessage'
 import {ClientFactory} from './factory/ClientFactory'
 import {SimpleMessageSendQueueHelper} from '../util/SimpleMessageSendQueueHelper'
-import {Telegraf} from 'telegraf'
+import {Markup, Telegraf} from 'telegraf'
 import {MessageService} from '../service/MessageService'
 import {Message} from '../entity/Message'
 import {FileUtils} from '../util/FileUtils'
@@ -24,6 +24,7 @@ export class WeChatClient extends AbstractClient {
     private sendQueueHelper: SimpleMessageSendQueueHelper
     private scanMsgId: number = undefined
     private messageService: MessageService
+    private friendshipList = []
     private wxInfo
     // 登陆时间
     private startTime
@@ -53,6 +54,10 @@ export class WeChatClient extends AbstractClient {
         this.hasReady = true
         this.init()
         this.sendQueueHelper = new SimpleMessageSendQueueHelper(this.sendTextMsg.bind(this), 617)
+    }
+
+    getFriendShipByWxId(wxId: string) {
+        return this.friendshipList.find(item=>item.formId === wxId)
     }
 
     private async sendTextMsg(message: BaseMessage) {
@@ -197,6 +202,19 @@ export class WeChatClient extends AbstractClient {
         })
 
         this.client.on('all', msg => { // 如需额外的处理逻辑可以监听 all 事件 该事件将返回回调地址接收到的所有原始数据
+        })
+
+        this.client.on('friendship', (friendship) => {
+            this.friendshipList.push(friendship)
+            const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
+            this.configurationService.getConfig().then(config=>{
+                tgBotClient.telegram.sendMessage(config.chatId,`<b>${friendship.fromName}</b> 请求添加您为好友:\n  ${friendship.hello()}`,{
+                    parse_mode: 'HTML',
+                    reply_markup: {
+                        inline_keyboard: [[Markup.button.callback('接受',`fr:${friendship.formId}`)]]
+                    }
+                })
+            })
         })
 
         this.client.on('message', (msg) => {

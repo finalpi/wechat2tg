@@ -27,6 +27,7 @@ import {WxContactRepository} from '../repository/WxContactRepository'
 import {KeyboardPageUtils} from '../util/KeyboardPageUtils'
 import {BindGroup} from '../entity/BindGroup'
 import {WxRoomRepository} from '../repository/WxRoomRepository'
+import {WeChatClient} from './WechatClient'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -391,6 +392,20 @@ export class TelegramBotClient extends AbstractClient {
                     }
                 }
             }
+            ctx.answerCbQuery()
+        })
+
+        bot.action(/^fr:/, async ctx => {
+            const wxId = ctx.match.input.split(':')[1]
+            const wxClient = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
+            const friend = wxClient.getFriendShipByWxId(wxId)
+            if (friend) {
+                friend.accept()
+                ctx.reply('添加成功')
+            } else {
+                ctx.reply('好友请求已过期')
+            }
+            ctx.deleteMessage()
             ctx.answerCbQuery()
         })
     }
