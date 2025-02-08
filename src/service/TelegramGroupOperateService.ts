@@ -82,13 +82,14 @@ export class TelegramGroupOperateService {
             return item
         }
         this.createGroupQueue.push(contactOrRoom)
-        // 删除之前绑定过的群组
-        await this.bindGroupService.removeByChatIdOrWxId(contactOrRoom.chatId,contactOrRoom.wxId)
         const oldGourp = await this.bindGroupService.getByWxId(contactOrRoom.wxId)
         if (oldGourp) {
             contactOrRoom.chatId = oldGourp.chatId
             this.updateGroup(contactOrRoom)
             return oldGourp
+        }else {
+            // 删除之前绑定过的群组
+            await this.bindGroupService.removeByChatIdOrWxId(contactOrRoom.chatId,contactOrRoom.wxId)
         }
         // 创建群组
         const config = await this.configService.getConfig()

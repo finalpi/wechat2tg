@@ -1,4 +1,4 @@
-import {GeweBot, Filebox, Message as WeChatMessage } from 'gewechaty'
+import {GeweBot, Filebox, Message as WeChatMessage} from 'gewechaty'
 import {ConfigurationService} from '../service/ConfigurationService'
 import QRCode from 'qrcode'
 import {config} from '../config'
@@ -43,7 +43,7 @@ export class WeChatClient extends AbstractClient {
         this.bindGroupService = BindGroupService.getInstance()
         this.messageService = MessageService.getInstance()
         this.client = new GeweBot({
-            debug: true, // 是否开启调试模式 默认false
+            debug: false, // 是否开启调试模式 默认false
             base_api: config.BASE_API,
             file_api: config.FILE_API,
             proxy: config.CALLBACK_API,
@@ -115,12 +115,15 @@ export class WeChatClient extends AbstractClient {
                 console.error('GeWeChatDataSource initialize failed', e)
             })
             // 登录后更新群组绑定信息
-            setTimeout(async ()=>{
+            setTimeout(async () => {
                 const allBind = await this.bindGroupService.getAll()
                 for (const bindGroup of allBind) {
-                    this.updateGroupByChatId(bindGroup.chatId)
+                    // 添加延迟防止接口调用过快
+                    setTimeout(() => {
+                        this.updateGroupByChatId(bindGroup.chatId)
+                    }, 500)
                 }
-            },3000)
+            }, 10000)
         })
         return true
     }
@@ -203,6 +206,15 @@ export class WeChatClient extends AbstractClient {
     }
 
     async onMessage(msg: WeChatMessage) {
+        // TODO: 只处理新消息，丢弃历史消息（未来可以增加选项更好的保存聊天记录）
+        if (msg._createTime < this.startTime) {
+            return
+        }
+        // 过滤重复消息
+        const oldMsg = await this.messageService.getByWxMsgId(msg._newMsgId)
+        if (oldMsg) {
+            return
+        }
         // 查找 group
         let wxId
         const room = await msg.room()
@@ -265,10 +277,6 @@ export class WeChatClient extends AbstractClient {
         let referMsg
         let filebox
         let fileBuff: Buffer
-        // TODO: 只处理新消息，丢弃历史消息（未来可以增加选项更好的保存聊天记录）
-        if (msg._createTime < this.startTime) {
-            return
-        }
         switch (msg.type()) {
             case this.client.Message.Type.Text:
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
@@ -331,7 +339,7 @@ export class WeChatClient extends AbstractClient {
                     messageParam.content = identity
                     WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                     break
-                }else {
+                } else {
                     // 未登录
                     messageParam.content = `收到一条${msg.type()}消息，请在手机上查看`
                     WeChatClient.getSpyClient('botClient').sendMessage(messageParam)

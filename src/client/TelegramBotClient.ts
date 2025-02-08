@@ -23,6 +23,10 @@ import {ConverterHelper} from '../util/FfmpegUtils'
 import * as path from 'node:path'
 import TgCommandHelper from '../service/TelegramCommandHelper'
 import {TelegramGroupOperateService} from '../service/TelegramGroupOperateService'
+import {WxContactRepository} from '../repository/WxContactRepository'
+import {KeyboardPageUtils} from '../util/KeyboardPageUtils'
+import {BindGroup} from '../entity/BindGroup'
+import {WxRoomRepository} from '../repository/WxRoomRepository'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -137,6 +141,8 @@ export class TelegramBotClient extends AbstractClient {
     private configurationService = ConfigurationService.getInstance()
     private bindGroupService: BindGroupService
     private messageService: MessageService
+    private wxContactRepository: WxContactRepository
+    private wxRoomRepository: WxRoomRepository
     private chatId: number
     // 等待命令输入
     private waitInputCommand: string | undefined = undefined
@@ -189,6 +195,8 @@ export class TelegramBotClient extends AbstractClient {
         })
         this.bindGroupService = BindGroupService.getInstance()
         this.messageService = MessageService.getInstance()
+        this.wxContactRepository = WxContactRepository.getInstance()
+        this.wxRoomRepository = WxRoomRepository.getInstance()
         // 判断文件夹是否存在
         if (!fs.existsSync('save-files')) {
             fs.mkdirSync('save-files')
@@ -272,6 +280,117 @@ export class TelegramBotClient extends AbstractClient {
             config[booleanKey] = !config[booleanKey]
             await this.configurationService.saveConfig(config)
             ctx.editMessageReplyMarkup(await this.getSettingButton())
+            ctx.answerCbQuery()
+        })
+
+        bot.action(/^us:page-/, async ctx => {
+            const pageNum = ctx.match.input.split('-')[1]
+            const data = TelegramBotClient.getSpyClient('wxClient').client.db.findAllContacts()
+            const dataMap = data.map(item => {
+                return {
+                    remark: item.remark ? item.remark : item.nickName,
+                    action: item.userName
+                }
+            })
+            const page = new KeyboardPageUtils(dataMap,parseInt(pageNum),'us')
+            ctx.editMessageReplyMarkup(page.getMarkup())
+            ctx.answerCbQuery()
+        })
+
+        bot.action(/^us:/, async ctx => {
+            const wxId = ctx.match.input.split(':')[1]
+            const contact = await TelegramBotClient.getSpyClient('wxClient').client.Contact.find({id: wxId})
+            if (contact) {
+                if (ctx.chat && ctx.chat.type.includes('group')) {
+                    await this.bindGroupService.removeByChatIdOrWxId(ctx.chat.id,wxId)
+                    // 群组中使用，重新绑定
+                    const group = new BindGroup()
+                    group.chatId = ctx.chat.id
+                    group.wxId = wxId
+                    group.type = 0
+                    group.name = contact.name()
+                    await this.bindGroupService.createOrUpdate(group)
+                    this.updateGroupByChatId(group.chatId)
+                    ctx.reply('绑定成功')
+                }else {
+                    // bot中使用，创建新的群组
+                    const telegramGroupOperateService = new TelegramGroupOperateService(this.bindGroupService, TelegramBotClient.getSpyClient('userMTPClient').client)
+                    let bindGroup = new BindGroup()
+                    bindGroup.wxId = wxId
+                    bindGroup.name = contact.name()
+                    bindGroup.avatarLink = await contact.avatar()
+                    bindGroup.type = 0
+                    const alias = await contact.alias()
+                    if (alias !== bindGroup.name) {
+                        bindGroup.alias = alias
+                    }
+                    bindGroup = await telegramGroupOperateService.createGroup(bindGroup)
+                    const inviteLink = await ctx.telegram.exportChatInviteLink(bindGroup.chatId)
+                    if (inviteLink) {
+                        ctx.reply('创建群组成功', {
+                            reply_markup: {
+                                inline_keyboard: [
+                                    [{ text: '打开群组 🚀', url: inviteLink }]
+                                ]
+                            }
+                        })
+                    }
+                }
+            }
+            ctx.answerCbQuery()
+        })
+
+        bot.action(/^ro:page-/, async ctx => {
+            const pageNum = ctx.match.input.split('-')[1]
+            const data = TelegramBotClient.getSpyClient('wxClient').client.db.findAllRooms()
+            const dataMap = data.map(item => {
+                return {
+                    remark: item.remark ? item.remark : item.nickName,
+                    action: item.chatroomId
+                }
+            })
+            const page = new KeyboardPageUtils(dataMap,parseInt(pageNum),'ro')
+            ctx.editMessageReplyMarkup(page.getMarkup())
+            ctx.answerCbQuery()
+        })
+
+        bot.action(/^ro:/, async ctx => {
+            const wxId = ctx.match.input.split(':')[1]
+            const room = await TelegramBotClient.getSpyClient('wxClient').client.Room.find({id: wxId})
+            if (room) {
+                if (ctx.chat && ctx.chat.type.includes('group')) {
+                    await this.bindGroupService.removeByChatIdOrWxId(ctx.chat.id,wxId)
+                    // 群组中使用，重新绑定
+                    const group = new BindGroup()
+                    group.chatId = ctx.chat.id
+                    group.wxId = wxId
+                    group.type = 1
+                    group.name = room.name
+                    await this.bindGroupService.createOrUpdate(group)
+                    this.updateGroupByChatId(group.chatId)
+                    ctx.reply('绑定成功')
+                }else {
+                    // bot中使用，创建新的群组
+                    const telegramGroupOperateService = new TelegramGroupOperateService(this.bindGroupService, TelegramBotClient.getSpyClient('userMTPClient').client)
+                    let bindGroup = new BindGroup()
+                    bindGroup.wxId = wxId
+                    bindGroup.name = room.name
+                    const avatar = await room.avatar()
+                    bindGroup.avatarLink = avatar.url
+                    bindGroup.type = 1
+                    bindGroup = await telegramGroupOperateService.createGroup(bindGroup)
+                    const inviteLink = await ctx.telegram.exportChatInviteLink(bindGroup.chatId)
+                    if (inviteLink) {
+                        ctx.reply('创建群组成功', {
+                            reply_markup: {
+                                inline_keyboard: [
+                                    [{ text: '打开群组 🚀', url: inviteLink }]
+                                ]
+                            }
+                        })
+                    }
+                }
+            }
             ctx.answerCbQuery()
         })
     }
@@ -568,6 +687,97 @@ export class TelegramBotClient extends AbstractClient {
             } else {
                 return ctx.reply('仅支持群组中使用')
             }
+        })
+
+        bot.command('unbind', async (ctx) => {
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                await this.bindGroupService.removeByChatIdOrWxId(ctx.chat.id,undefined)
+                ctx.reply('解绑成功')
+            } else {
+                return ctx.reply('仅支持群组中使用')
+            }
+        })
+
+        bot.command('user', async ctx => {
+            if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
+                return
+            }
+            // 获取消息文本
+            const messageText = ctx.update.message.text
+
+            // 正则表达式用来分离命令后面的参数
+            const match = messageText.match(/\/user\s+([\p{L}\p{N}_]+)/u)
+            let data
+            if (match) {
+                const userName = match[1]
+                data = await this.wxContactRepository.getByNickNameOrRemark(userName)
+            }else {
+                data = TelegramBotClient.getSpyClient('wxClient').client.db.findAllContacts()
+            }
+            if (!data || data.length === 0) {
+                ctx.reply('未查找到联系人')
+                return
+            }
+            const dataMap = data.map(item => {
+                return {
+                    remark: item.remark ? item.remark : item.nickName,
+                    action: item.userName
+                }
+            })
+            const page = new KeyboardPageUtils(dataMap,1,'us')
+            if (match) {
+                page.pageSize = 999
+            }
+            let text
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                text = '绑定联系人'
+            } else {
+                text = '创建联系人群组'
+            }
+            ctx.reply(text, {
+                reply_markup: page.getMarkup()
+            })
+        })
+
+        bot.command('room', async ctx => {
+            if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
+                return
+            }
+            // 获取消息文本
+            const messageText = ctx.update.message.text
+
+            // 正则表达式用来分离命令后面的参数
+            const match = messageText.match(/\/user\s+([\p{L}\p{N}_]+)/u)
+            let data
+            if (match) {
+                const userName = match[1]
+                data = await this.wxRoomRepository.getByNickNameOrRemark(userName)
+            }else {
+                data = TelegramBotClient.getSpyClient('wxClient').client.db.findAllRooms()
+            }
+            if (!data || data.length === 0) {
+                ctx.reply('未查找到群组')
+                return
+            }
+            const dataMap = data.map(item => {
+                return {
+                    remark: item.remark ? item.remark : item.nickName,
+                    action: item.chatroomId
+                }
+            })
+            const page = new KeyboardPageUtils(dataMap,1,'ro')
+            if (match) {
+                page.pageSize = 999
+            }
+            let text
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                text = '绑定微信群'
+            } else {
+                text = '创建微信群群组'
+            }
+            ctx.reply(text, {
+                reply_markup: page.getMarkup()
+            })
         })
     }
 

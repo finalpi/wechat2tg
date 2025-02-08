@@ -1,5 +1,5 @@
 import { GeWeChatDataSource } from '../data-sourse'
-import { Repository } from 'typeorm'
+import {Like, Repository, SelectQueryBuilder} from 'typeorm'
 import { WxContact } from '../entity/WxContact'
 import {Page} from '../entity/Page'
 
@@ -26,6 +26,15 @@ export class WxContactRepository {
 
     async getByUserName(userName: string): Promise<WxContact | null> {
         return this.WxContactRepository.findOneBy({ userName })
+    }
+
+    async getByNickNameOrRemark(query: string) {
+        return this.WxContactRepository.find({
+            where: [
+                { nickName: Like(`%${query}%`) },
+                { remark: Like(`%${query}%`) }
+            ]
+        })
     }
 
     async getAll(): Promise<WxContact[]> {

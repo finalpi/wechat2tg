@@ -14,7 +14,8 @@ export default class TgCommandHelper {
             {command: 'update', description: '更新群组头像和名称'},
             {command: 'settings', description: '程序设置'},
             {command: 'user', description: '查看联系人'},
-            {command: 'room', description: '查看群组'},
+            {command: 'room', description: '查看微信群'},
+            {command: 'unbind', description: '解绑群组'},
         ]
 
         bot.telegram.setMyCommands(commands).then(r => {
@@ -34,7 +35,7 @@ export default class TgCommandHelper {
     public static setSimpleCommandHandler(bot: Telegraf) {
         // this.user(bot)
         // FIXME: JUST TEST
-        setupUserCommand(bot)
+        // setupUserCommand(bot)
         initBot(bot)
     }
 

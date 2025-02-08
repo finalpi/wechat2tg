@@ -4,6 +4,7 @@ import {BindGroup} from './entity/BindGroup'
 import {Message} from './entity/Message'
 import fs from 'node:fs'
 import {WxContact} from './entity/WxContact'
+import {WxRoom} from "./entity/WxRoom";
 
 export const AppDataSource = new DataSource({
     type: 'sqlite',
@@ -16,7 +17,7 @@ export const GeWeChatDataSource = new DataSource({
     type: 'sqlite',
     database: getGeWeChatDataSource() + '.db',
     // database: 'wx_J2acELrtPBGJqoEffcNWL.db',
-    entities: [WxContact],
+    entities: [WxContact,WxRoom],
     logger: 'debug',
     logging: 'all',
     synchronize: true,
