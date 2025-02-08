@@ -6,7 +6,7 @@ export class WxRoom {
     @PrimaryColumn('text')
     chatroomId: string
 
-    @Column('text')
+    @Column('text', {nullable: true})
     nickName: string
 
     @Column('text', {nullable: true})
