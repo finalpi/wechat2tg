@@ -30,6 +30,10 @@ export class TelegramGroupOperateService {
             if (!oldBindGroup) {
                 return
             }
+            const entity = await this.client.getEntity(returnBigInt(0 - contactOrRoom.chatId))
+            if (!entity) {
+                return
+            }
             oldBindGroup.alias = contactOrRoom.alias
             // 更新头像
             if (contactOrRoom.avatarLink !== oldBindGroup.avatarLink) {
@@ -41,16 +45,31 @@ export class TelegramGroupOperateService {
                         file: toUpload,
                         workers: 3,
                     })
-                    await this.client?.invoke(new Api.messages.EditChatPhoto(
-                        {
-                            chatId: returnBigInt(0 - contactOrRoom.chatId),
-                            photo: new Api.InputChatUploadedPhoto(
-                                {
-                                    file: file,
-                                }
-                            )
-                        }
-                    ))
+                    // 超级群
+                    if (entity.className === 'Channel' && entity.megagroup) {
+                        await this.client?.invoke(new Api.channels.EditPhoto(
+                            {
+                                channel: entity,
+                                photo: new Api.InputChatUploadedPhoto(
+                                    {
+                                        file: file,
+                                    }
+                                )
+                            }
+                        ))
+                    }else {
+                        // 普通群
+                        await this.client?.invoke(new Api.messages.EditChatPhoto(
+                            {
+                                chatId: returnBigInt(0 - contactOrRoom.chatId),
+                                photo: new Api.InputChatUploadedPhoto(
+                                    {
+                                        file: file,
+                                    }
+                                )
+                            }
+                        ))
+                    }
                 })
             }
             // 更新群组名
@@ -62,12 +81,22 @@ export class TelegramGroupOperateService {
             }
             if (name !== oldBindGroup.name) {
                 oldBindGroup.name = name
-                await this.client?.invoke(
-                    new Api.messages.EditChatTitle({
-                        chatId: returnBigInt(0 - contactOrRoom.chatId),
-                        title: name,
-                    })
-                )
+                // 超级群
+                if (entity.className === 'Channel' && entity.megagroup) {
+                    await this.client?.invoke(
+                        new Api.channels.EditTitle({
+                            channel: entity,
+                            title: name,
+                        })
+                    )
+                } else {
+                    await this.client?.invoke(
+                        new Api.messages.EditChatTitle({
+                            chatId: returnBigInt(0 - contactOrRoom.chatId),
+                            title: name,
+                        })
+                    )
+                }
             }
             this.bindGroupService.createOrUpdate(oldBindGroup)
         }catch (e) {

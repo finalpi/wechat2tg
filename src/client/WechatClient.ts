@@ -49,7 +49,8 @@ export class WeChatClient extends AbstractClient {
             file_api: config.FILE_API,
             proxy: config.CALLBACK_API,
             static: 'save-files',
-            ds_path: 'storage/ds.json'
+            ds_path: 'storage/ds.json',
+            db_path: 'storage/db/'
         })
         this.hasReady = true
         this.init()
@@ -255,7 +256,7 @@ export class WeChatClient extends AbstractClient {
         if (wxId === 'filehelper') {
             return
         }
-        if (wxId.startsWith('gh_') && !configuration.receivePublicAccount) {
+        if (wxId && wxId.startsWith('gh_') && !configuration.receivePublicAccount) {
             return
         }
         let bindGroup = await this.bindGroupService.getByWxId(wxId)
@@ -290,7 +291,9 @@ export class WeChatClient extends AbstractClient {
             sender: identity,
             chatId: bindGroup.chatId,
             type: 0,
-            content: msg.text()
+            content: msg.text(),
+            source_type: msg.type(),
+            source_text: msg.text()
         }
         let referMsg
         let filebox
@@ -359,6 +362,7 @@ export class WeChatClient extends AbstractClient {
                     break
                 } else {
                     // 未登录
+                    messageParam.type = 3
                     messageParam.content = `收到一条${msg.type()}消息，请在手机上查看`
                     WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                     break

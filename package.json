@@ -18,7 +18,7 @@
     "dotenv": "^16.0.3",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.2",
-    "gewechaty": "https://github.com/finalpi/gewechaty/releases/download/v0.0.25/gewechaty-0.0.25.tgz",
+    "gewechaty": "https://github.com/finalpi/gewechaty/releases/download/v0.0.27/gewechaty-0.0.27.tgz",
     "https-proxy-agent": "^7.0.4",
     "jsdom": "^24.1.0",
     "log4js": "^6.9.1",
@@ -36,7 +36,7 @@
     "ts-node": "^10.9.1",
     "typeorm": "^0.3.20",
     "wechaty": "^1.20.2",
-    "wechaty-puppet-wechat4u": "https://github.com/finalpi/puppet-wechat4file/releases/download/1.14.27/wechaty-puppet-wechat4u-1.14.27.tgz",
+    "wechaty-puppet-wechat4u": "https://github.com/finalpi/puppet-wechat4file/releases/download/1.14.28/wechaty-puppet-wechat4u-1.14.28.tgz",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
