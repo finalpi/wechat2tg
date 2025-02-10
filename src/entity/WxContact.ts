@@ -6,7 +6,7 @@ export class WxContact {
     @PrimaryColumn('text')
     userName: string
 
-    @Column('text')
+    @Column('text',{nullable: true})
     nickName: string
 
     @Column('text', {nullable: true})
