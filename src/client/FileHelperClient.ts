@@ -142,7 +142,7 @@ export class FileHelperClient extends AbstractClient {
             buff: buffer,
             filename: fileName,
             fileType: 'document',
-            caption: msg.content
+            caption: msg.sender
         },{parse_mode: 'HTML'})
     }
 

@@ -291,7 +291,9 @@ export class WeChatClient extends AbstractClient {
             sender: identity,
             chatId: bindGroup.chatId,
             type: 0,
-            content: msg.text()
+            content: msg.text(),
+            source_type: msg.type(),
+            source_text: msg.text()
         }
         let referMsg
         let filebox
@@ -360,6 +362,7 @@ export class WeChatClient extends AbstractClient {
                     break
                 } else {
                     // 未登录
+                    messageParam.type = 3
                     messageParam.content = `收到一条${msg.type()}消息，请在手机上查看`
                     WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                     break

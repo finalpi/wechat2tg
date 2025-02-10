@@ -48,4 +48,24 @@ export class Message {
         nullable: true
     })
     fhMsgId: string
+
+    // 原始的 text
+    @Column({
+        default: '',
+        nullable: true
+    })
+    source_text: string
+
+    // 原始的消息类型
+    @Column({
+        nullable: true
+    })
+    source_type: number
+
+    // 发送者
+    @Column({
+        default: '',
+        nullable: true
+    })
+    sender: string
 }
