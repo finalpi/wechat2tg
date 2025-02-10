@@ -256,7 +256,7 @@ export class WeChatClient extends AbstractClient {
         if (wxId === 'filehelper') {
             return
         }
-        if (wxId.startsWith('gh_') && !configuration.receivePublicAccount) {
+        if (wxId && wxId.startsWith('gh_') && !configuration.receivePublicAccount) {
             return
         }
         let bindGroup = await this.bindGroupService.getByWxId(wxId)
