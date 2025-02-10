@@ -13,7 +13,7 @@
 ## 注意事项
 
 1. 本项目仅用于技术研究和学习，不得用于非法用途
-2. 无论遇到什么问题都欢迎提交 issue,
+2. 无论遇到什么问题都欢迎提交 issue
 
 ## 部署安装
 
@@ -49,11 +49,16 @@ services:
      restart: always
 ```
 
-运行
+#### 运行
 
 ```shell
 docker-compose up -d
 ```
+
+#### 关闭 bot 隐私模式
+
+关闭掉机器人的隐私模式，打开 BotFather，输入 `/mybots`，选择你的bot。点击 `Bot Settings` - `Group Privacy` - `Turn off`
+，出现 `Privacy mode is disabled for xxx` 就说明关闭成功了
 
 ## 使用说明
 
