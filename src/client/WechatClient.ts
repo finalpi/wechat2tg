@@ -259,6 +259,10 @@ export class WeChatClient extends AbstractClient {
         if (wxId && wxId.startsWith('gh_') && !configuration.receivePublicAccount) {
             return
         }
+        // 企业微信无 wxId 过滤掉
+        if (!wxId) {
+            return
+        }
         let bindGroup = await this.bindGroupService.getByWxId(wxId)
         // 如果找不到就创建一个新的群组
         if (!bindGroup && wxId !== this.wxInfo.wxid) {
