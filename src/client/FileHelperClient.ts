@@ -10,18 +10,47 @@ import {MessageService} from '../service/MessageService'
 import {MessageSender} from '../message/MessageSender'
 import {SenderFactory} from '../message/SenderFactory'
 import fs from 'node:fs'
+import {Message} from '../entity/Message'
 
 export class FileHelperClient extends AbstractClient {
     private static instance = undefined
     private configurationService = ConfigurationService.getInstance()
     private scanMsgId = undefined
     private messageMTBotSender: MessageSender
+    private pendingMessage: any[] = []
 
     static getInstance(): FileHelperClient {
         if (!FileHelperClient.instance) {
             FileHelperClient.instance = new FileHelperClient()
         }
         return FileHelperClient.instance
+    }
+
+    // 定时任务消费集合
+    private runTask = async () => {
+        if (this.pendingMessage.length === 0) {
+            setTimeout(this.runTask, 1000)
+            return
+        }
+        for (const msg of this.pendingMessage) {
+            const messageService = MessageService.getInstance()
+            const messageEntity = await messageService.getByFhMsgId(msg.id)
+            if (messageEntity && messageEntity.tgBotMsgId > 0) {
+                this.pendingMessage = this.pendingMessage.filter(item=> item !== msg)
+                msg.toFileBox().then(fBox => {
+                    const fileName = fBox.name
+                    fBox.toBuffer().then(buffer => {
+                        if (buffer.length > 0) {
+                            this.receiveFile(messageEntity, fileName, buffer)
+                        }
+                    })
+                })
+            } else {
+                setTimeout(this.runTask, 1000)
+                return
+            }
+        }
+        setTimeout(this.runTask, 1000)
     }
 
     constructor() {
@@ -32,6 +61,7 @@ export class FileHelperClient extends AbstractClient {
             name: './storage/fileHelper',
             puppet: 'wechaty-puppet-wechat4u',
         })
+        this.runTask()
         this.messageMTBotSender = SenderFactory.createSender(FileHelperClient.getSpyClient('botMTPClient').client)
         this.client.on('scan',async (qrcode: string, status: ScanStatus) => {
             this.logDebug('---------on scan---------')
@@ -120,30 +150,20 @@ export class FileHelperClient extends AbstractClient {
         switch (messageType) {
             case PUPPET.types.Message.Video:
             case PUPPET.types.Message.Attachment:
-                msg.toFileBox().then(fBox => {
-                    const fileName = fBox.name
-                    fBox.toBuffer().then(buffer => {
-                        setTimeout(()=>{
-                            if (buffer.length > 0) {
-                                this.receiveFile(msg.id, fileName, buffer)
-                            }
-                        },1000)
-                    })
-                })
+                this.pendingMessage.push(msg)
                 break
         }
-        console.log(msg)
     }
 
-    async receiveFile(msgId: string, fileName: string, buffer: Buffer) {
-        const messageService = MessageService.getInstance()
-        const msg = await messageService.getByFhMsgId(msgId)
-        this.messageMTBotSender.editFile(msg.chatId + '',msg.tgBotMsgId,{
-            buff: buffer,
-            filename: fileName,
-            fileType: 'document',
-            caption: msg.sender
-        },{parse_mode: 'HTML'})
+    async receiveFile(msg: Message, fileName: string, buffer: Buffer) {
+        if (msg) {
+            await this.messageMTBotSender.editFile(msg.chatId + '',msg.tgBotMsgId,{
+                buff: buffer,
+                filename: fileName,
+                fileType: 'document',
+                caption: msg.sender
+            },{parse_mode: 'HTML'})
+        }
     }
 
     sendMessage(message: BaseMessage): Promise<boolean> {
