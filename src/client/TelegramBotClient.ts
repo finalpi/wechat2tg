@@ -870,6 +870,8 @@ export class TelegramBotClient extends AbstractClient {
                     telegramGroupOperateService.updateGroup(bindItem)
                 }
             }
+        } else {
+            this.messageSender.sendText(chatId, '当前未绑定联系人或微信群')
         }
     }
 
