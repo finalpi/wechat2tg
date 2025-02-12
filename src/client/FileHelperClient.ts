@@ -67,6 +67,7 @@ export class FileHelperClient extends AbstractClient {
             this.logDebug('---------on scan---------')
             if (status === ScanStatus.Waiting || status === ScanStatus.Timeout) {
                 const config = await this.configurationService.getConfig()
+                this.hasLogin = false
                 const tgBotClient: Telegraf = FileHelperClient.getSpyClient('botClient').client
                 QRCode.toBuffer(qrcode).then(buff => {
                     if (this.scanMsgId) {

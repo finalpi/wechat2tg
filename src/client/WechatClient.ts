@@ -1,4 +1,4 @@
-import {GeweBot, Filebox, Message as WeChatMessage} from 'gewechaty'
+import {GeweBot, Filebox, Message as WeChatMessage, WeVideo, Voice} from 'gewechaty'
 import {ConfigurationService} from '../service/ConfigurationService'
 import QRCode from 'qrcode'
 import {config} from '../config'
@@ -16,6 +16,7 @@ import {MessageService} from '../service/MessageService'
 import {Message} from '../entity/Message'
 import {FileUtils} from '../util/FileUtils'
 import {GeWeChatDataSource} from '../data-sourse'
+import {ConverterHelper} from '../util/FfmpegUtils'
 
 export class WeChatClient extends AbstractClient {
     private configurationService = ConfigurationService.getInstance()
@@ -58,7 +59,7 @@ export class WeChatClient extends AbstractClient {
     }
 
     getFriendShipByWxId(wxId: string) {
-        return this.friendshipList.find(item=>item.formId === wxId)
+        return this.friendshipList.find(item => item.formId === wxId)
     }
 
     private async sendTextMsg(message: BaseMessage) {
@@ -157,12 +158,27 @@ export class WeChatClient extends AbstractClient {
             const bindGroup = await this.bindGroupService.getByChatId(message.chatId)
             if (bindGroup) {
                 let msgResult
+                let file
+                if (message.file.fileName.endsWith('.mp4')) {
+                    const url = FileUtils.saveFile(message.file.file, message.file.fileName)
+                    // 提取视频封面
+                    const ffmpegUtil = await new ConverterHelper()
+                    const videoPath = `save-files/_gewetemp/${message.file.fileName}`
+                    await ffmpegUtil.extractThumbnail(videoPath, `save-files/_gewetemp/${message.file.fileName}.jpg`)
+                    file = new WeVideo({
+                        thumbUrl: `${config.CALLBACK_API}/_gewetemp/${message.file.fileName}.jpg`, // 视频封面
+                        videoUrl: url, // 视频文件url
+                        videoDuration: 9, // 视频时长单位秒 似乎随便传个值就行
+                    })
+                } else {
+                    file = Filebox.fromBuff(message.file.file, message.file.fileName)
+                }
                 if (bindGroup.type === 0) {
                     const contact = await this.client.Contact.find({id: bindGroup.wxId})
-                    msgResult = await contact.say(Filebox.fromBuff(message.file.file, message.file.fileName))
+                    msgResult = await contact.say(file)
                 } else {
                     const room = await this.client.Room.find({id: bindGroup.wxId})
-                    msgResult = await room.say(Filebox.fromBuff(message.file.file, message.file.fileName))
+                    msgResult = await room.say(file)
                 }
                 // 将 msgId 更新到数据库
                 const messageEntity = await this.messageService.getByBotMsgId(bindGroup.chatId, parseInt(message.id))
@@ -208,11 +224,11 @@ export class WeChatClient extends AbstractClient {
         this.client.on('friendship', (friendship) => {
             this.friendshipList.push(friendship)
             const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
-            this.configurationService.getConfig().then(config=>{
-                tgBotClient.telegram.sendMessage(config.chatId,`<b>${friendship.fromName}</b> 请求添加您为好友:\n  ${friendship.hello()}`,{
+            this.configurationService.getConfig().then(config => {
+                tgBotClient.telegram.sendMessage(config.chatId, `<b>${friendship.fromName}</b> 请求添加您为好友:\n  ${friendship.hello()}`, {
                     parse_mode: 'HTML',
                     reply_markup: {
-                        inline_keyboard: [[Markup.button.callback('接受',`fr:${friendship.formId}`)]]
+                        inline_keyboard: [[Markup.button.callback('接受', `fr:${friendship.formId}`)]]
                     }
                 })
             })
