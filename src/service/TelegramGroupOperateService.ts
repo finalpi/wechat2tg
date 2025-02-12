@@ -30,7 +30,7 @@ export class TelegramGroupOperateService {
             if (!oldBindGroup) {
                 return
             }
-            const entity = await this.client.getEntity(returnBigInt(0 - contactOrRoom.chatId))
+            const entity = await this.client.getEntity(returnBigInt(contactOrRoom.chatId))
             if (!entity) {
                 return
             }
@@ -61,7 +61,7 @@ export class TelegramGroupOperateService {
                         // 普通群
                         await this.client?.invoke(new Api.messages.EditChatPhoto(
                             {
-                                chatId: returnBigInt(0 - contactOrRoom.chatId),
+                                chatId: entity.id,
                                 photo: new Api.InputChatUploadedPhoto(
                                     {
                                         file: file,
@@ -83,19 +83,23 @@ export class TelegramGroupOperateService {
                 oldBindGroup.name = name
                 // 超级群
                 if (entity.className === 'Channel' && entity.megagroup) {
-                    await this.client?.invoke(
-                        new Api.channels.EditTitle({
-                            channel: entity,
-                            title: name,
-                        })
-                    )
-                } else {
-                    await this.client?.invoke(
-                        new Api.messages.EditChatTitle({
-                            chatId: returnBigInt(0 - contactOrRoom.chatId),
-                            title: name,
-                        })
-                    )
+                    if (entity.title !== name) {
+                        await this.client?.invoke(
+                            new Api.channels.EditTitle({
+                                channel: entity,
+                                title: name,
+                            })
+                        )
+                    }
+                } else if (entity.className === 'Chat' ){
+                    if (entity.title !== name) {
+                        await this.client?.invoke(
+                            new Api.messages.EditChatTitle({
+                                chatId: entity.id,
+                                title: name,
+                            })
+                        )
+                    }
                 }
             }
             this.bindGroupService.createOrUpdate(oldBindGroup)
