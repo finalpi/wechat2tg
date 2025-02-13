@@ -15,7 +15,7 @@ import {Markup, Telegraf} from 'telegraf'
 import {MessageService} from '../service/MessageService'
 import {Message} from '../entity/Message'
 import {FileUtils} from '../util/FileUtils'
-import {GeWeChatDataSource} from '../data-sourse'
+import {getGeWeChatDataSource} from '../data-sourse'
 import {ConverterHelper} from '../util/FfmpegUtils'
 
 export class WeChatClient extends AbstractClient {
@@ -116,7 +116,7 @@ export class WeChatClient extends AbstractClient {
                 tgBotClient.telegram.deleteMessage(config.chatId, this.scanMsgId)
                 this.scanMsgId = undefined
             }
-            GeWeChatDataSource.initialize().then(() => {
+            getGeWeChatDataSource().initialize().then(() => {
                 console.log('GeWeChatDataSource initialized')
             }).catch((e) => {
                 console.error('GeWeChatDataSource initialize failed', e)

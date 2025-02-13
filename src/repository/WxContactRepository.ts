@@ -1,4 +1,4 @@
-import { GeWeChatDataSource } from '../data-sourse'
+import {getGeWeChatDataSource} from '../data-sourse'
 import {Like, Repository, SelectQueryBuilder} from 'typeorm'
 import { WxContact } from '../entity/WxContact'
 import {Page} from '../entity/Page'
@@ -9,7 +9,7 @@ export class WxContactRepository {
 
     private constructor() {
         // GeWeChatDataSource.initialize().then(() => {
-            this.WxContactRepository = GeWeChatDataSource.getRepository(WxContact)
+            this.WxContactRepository = getGeWeChatDataSource().getRepository(WxContact)
         // })
     }
 

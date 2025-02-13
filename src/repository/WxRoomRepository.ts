@@ -1,4 +1,4 @@
-import { GeWeChatDataSource } from '../data-sourse'
+import {getGeWeChatDataSource} from '../data-sourse'
 import {Like, Repository, SelectQueryBuilder} from 'typeorm'
 import { WxRoom } from '../entity/WxRoom'
 import {Page} from '../entity/Page'
@@ -9,7 +9,7 @@ export class WxRoomRepository {
 
     private constructor() {
         // GeWeChatDataSource.initialize().then(() => {
-            this.WxRoomRepository = GeWeChatDataSource.getRepository(WxRoom)
+            this.WxRoomRepository = getGeWeChatDataSource().getRepository(WxRoom)
         // })
     }
 
