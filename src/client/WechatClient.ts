@@ -334,7 +334,6 @@ export class WeChatClient extends AbstractClient {
                 }
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
-            case this.client.Message.Type.Voice:
             case this.client.Message.Type.Image:
             case this.client.Message.Type.Emoji:
                 if (this.client.Message.Type.Image === msg.type()) {
