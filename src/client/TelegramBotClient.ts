@@ -156,8 +156,6 @@ export class TelegramBotClient extends AbstractClient {
     private configurationService = ConfigurationService.getInstance()
     private bindGroupService: BindGroupService
     private messageService: MessageService
-    private wxContactRepository: WxContactRepository
-    private wxRoomRepository: WxRoomRepository
     private chatId: number
     // 等待命令输入
     private waitInputCommand: string | undefined = undefined
@@ -210,8 +208,6 @@ export class TelegramBotClient extends AbstractClient {
         })
         this.bindGroupService = BindGroupService.getInstance()
         this.messageService = MessageService.getInstance()
-        this.wxContactRepository = WxContactRepository.getInstance()
-        this.wxRoomRepository = WxRoomRepository.getInstance()
         // 判断文件夹是否存在
         if (!fs.existsSync('save-files')) {
             fs.mkdirSync('save-files')
@@ -230,10 +226,11 @@ export class TelegramBotClient extends AbstractClient {
         if (message.param?.reply_id) {
             option.reply_id = message.param.reply_id
         }
-        const newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option).catch(e => {
+        const newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option).catch(async e => {
             if (e.response.error_code === 403) {
                 this.bindGroupService.removeByChatIdOrWxId(message.chatId, message.senderId)
-                message.chatId = this.config.botId
+                const config = await this.configurationService.getConfig()
+                message.chatId = config.botId
                 this.sendTextMsg(message)
             }
         })
@@ -618,6 +615,12 @@ export class TelegramBotClient extends AbstractClient {
             let fileId = ctx.message[fileType].file_id
             let fileSize = ctx.message[fileType].file_size
             let fileName = ctx.message[fileType].file_name || ''
+            if (!fileName && fileType === 'photo') {
+                fileName = new Date().getTime() + '.png'
+            }
+            if (!fileName && fileType === 'video') {
+                fileName = new Date().getTime() + '.mp4'
+            }
             if (!fileId) {
                 fileId = ctx.message[fileType][ctx.message[fileType].length - 1].file_id
                 fileSize = ctx.message[fileType][ctx.message[fileType].length - 1].file_size
@@ -655,9 +658,6 @@ export class TelegramBotClient extends AbstractClient {
                 FileUtils.downloadBufferWithProxy(fileLink.toString()).then(buffer => {
                     // 如果图片大小小于100k,则添加元数据使其大小达到100k,否则会被微信压缩质量
                     if (fileSize && fileSize < 100 * 1024 && (fileType === 'photo' || (fileName.endsWith('jpg') || fileName.endsWith('jpeg') || fileName.endsWith('png')))) {
-                        if (!fileName) {
-                            fileName = new Date().getTime() + '.png'
-                        }
                         baseMessage.content = fileName
                         // 构造包含无用信息的 EXIF 元数据
                         const exifData = {
@@ -684,10 +684,7 @@ export class TelegramBotClient extends AbstractClient {
                         return
                     }
                     if (fileType === 'voice') {
-                        const nowShangHaiZh = new Date().toLocaleString('zh', {
-                            timeZone: 'Asia/ShangHai'
-                        }).toString().replaceAll('/', '-')
-                        fileName = `语音-${nowShangHaiZh.toLocaleLowerCase()}.mp3`
+                        fileName = `语音-${new Date().getTime()}.mp3`
                     }
                     baseMessage.content = fileName
                     baseMessage.file = {
@@ -762,6 +759,7 @@ export class TelegramBotClient extends AbstractClient {
 
         bot.command('user', async ctx => {
             if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
+                ctx.reply('请先登录微信')
                 return
             }
             // 获取消息文本
@@ -772,7 +770,7 @@ export class TelegramBotClient extends AbstractClient {
             let data
             if (match) {
                 const userName = match[1]
-                data = await this.wxContactRepository.getByNickNameOrRemark(userName)
+                data = await WxContactRepository.getInstance().getByNickNameOrRemark(userName)
             } else {
                 data = TelegramBotClient.getSpyClient('wxClient').client.db.findAllContacts()
             }
@@ -803,6 +801,7 @@ export class TelegramBotClient extends AbstractClient {
 
         bot.command('room', async ctx => {
             if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
+                ctx.reply('请先登录微信')
                 return
             }
             // 获取消息文本
@@ -813,7 +812,7 @@ export class TelegramBotClient extends AbstractClient {
             let data
             if (match) {
                 const userName = match[1]
-                data = await this.wxRoomRepository.getByNickNameOrRemark(userName)
+                data = await WxRoomRepository.getInstance().getByNickNameOrRemark(userName)
             } else {
                 data = TelegramBotClient.getSpyClient('wxClient').client.db.findAllRooms()
             }
@@ -869,6 +868,8 @@ export class TelegramBotClient extends AbstractClient {
                     telegramGroupOperateService.updateGroup(bindItem)
                 }
             }
+        } else {
+            this.messageSender.sendText(chatId, '当前未绑定联系人或微信群')
         }
     }
 

@@ -85,4 +85,31 @@ export class ConverterHelper {
         }
         throw new Error('Input file must be a string')
     }
+
+    extractThumbnail(videoPath, outputImage, time = '00:00:01') {
+        return new Promise((resolve, reject) => {
+            ffmpeg(videoPath)
+                .screenshots({
+                    timestamps: [time], // 指定时间点（默认1秒处）
+                    filename: outputImage,
+                    folder: './',
+                    size: '320x?' // 限制宽度，高度自适应
+                })
+                .on('end', () => resolve(outputImage))
+                .on('error', (err) => reject(err))
+        })
+    }
+
+    getVideoDuration(videoPath): Promise<number> {
+        return new Promise((resolve, reject) => {
+            ffmpeg(videoPath).
+            ffmpeg.ffprobe(videoPath, (err, metadata) => {
+                if (err) {
+                    reject(err)
+                } else {
+                    resolve(Math.floor(metadata.format.duration)) // 获取时长（单位：秒）
+                }
+            })
+        })
+    }
 }

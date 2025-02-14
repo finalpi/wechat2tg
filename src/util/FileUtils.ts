@@ -4,6 +4,7 @@ import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from 'https-proxy-agent'
 import {BotMTProtoClient} from '../client/BotMTProtoClient'
 import fs from 'node:fs'
+import {join} from 'path'
 
 export class FileUtils {
     private constructor() { //
@@ -108,5 +109,40 @@ export class FileUtils {
             console.error('下载文件失败:', error)
             throw error
         }
+    }
+
+    static joinURL = (...parts) => {
+        // 过滤掉空值（null、undefined 或空字符串），并且去除每个部分的开头和结尾的斜杠
+        const validParts = parts.filter(part => part).map(part => part.replace(/^\/+|\/+$/g, ''))
+        // 使用 '/' 拼接所有有效部分
+        return validParts.join('/')
+    }
+
+    static saveFile(buff: Buffer,fileName: string) {
+        const staticUrl = 'save-files'
+        const tempname = '_gewetemp'
+        const proxyUrl = config.CALLBACK_API
+        const tempDir = join(staticUrl, tempname)
+        // 检查 temp 目录是否存在，如果不存在则创建
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir)
+        }
+        // 构建目标文件的路径
+        const destPath = join(tempDir, fileName)
+        // 复制文件到 temp 目录
+        fs.writeFileSync(destPath, buff)
+        const url = FileUtils.joinURL(proxyUrl, tempname, fileName)
+        const t = setTimeout(() => {
+            // 删除文件
+            fs.unlink(destPath, (err) => {
+                if (err) {
+                    console.error('删除文件时出错:', err)
+                } else {
+                    console.log(`文件 ${destPath} 已删除`)
+                }
+            })
+            clearTimeout(t)
+        }, 1000 * 60 * 5)
+        return url
     }
 }
