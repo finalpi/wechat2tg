@@ -285,6 +285,7 @@ export class WeChatClient extends AbstractClient {
         if (!bindGroup && wxId !== this.wxInfo.wxid) {
             bindGroup = new BindGroup()
             bindGroup.wxId = wxId
+            bindGroup.isReceive = true
             if (room) {
                 bindGroup.type = 1
                 bindGroup.name = room.name
@@ -301,6 +302,10 @@ export class WeChatClient extends AbstractClient {
             bindGroup = await this.groupOperate.createGroup(bindGroup)
         }
         if (!bindGroup) {
+            return
+        }
+        // 屏蔽消息
+        if (!bindGroup.isReceive) {
             return
         }
         // 身份

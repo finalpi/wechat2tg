@@ -12,6 +12,7 @@ export default class TgCommandHelper {
             {command: 'login', description: '登录'},
             {command: 'flogin', description: '登录文件传输助手接收文件消息'},
             {command: 'update', description: '更新群组头像和名称'},
+            {command: 'message', description: '是否接收该群组消息'},
             {command: 'settings', description: '程序设置'},
             {command: 'user', description: '查看联系人'},
             {command: 'room', description: '查看微信群'},

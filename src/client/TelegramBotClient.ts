@@ -302,6 +302,16 @@ export class TelegramBotClient extends AbstractClient {
             ctx.answerCbQuery()
         })
 
+        bot.action(/^message/, async ctx => {
+            const bindGroup = await this.bindGroupService.getByChatId(ctx.chat.id)
+            if (bindGroup) {
+                bindGroup.isReceive = !bindGroup.isReceive
+                await this.bindGroupService.createOrUpdate(bindGroup)
+                ctx.editMessageReplyMarkup({inline_keyboard: [[{text: `状态：${bindGroup.isReceive ? '接收消息' : '屏蔽消息'}`, callback_data: 'message'}]]})
+            }
+            ctx.answerCbQuery()
+        })
+
         bot.action(/^st:/, async ctx => {
             const booleanKey = ctx.match.input.split(':')[1]
             const config = await this.configurationService.getConfig()
@@ -752,6 +762,25 @@ export class TelegramBotClient extends AbstractClient {
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 await this.bindGroupService.removeByChatIdOrWxId(ctx.chat.id, undefined)
                 ctx.reply('解绑成功')
+            } else {
+                return ctx.reply('仅支持群组中使用')
+            }
+        })
+
+        bot.command('message', async (ctx) => {
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                const bindGroup = await this.bindGroupService.getByChatId(ctx.chat.id)
+                if (!bindGroup) {
+                    ctx.reply('该群组暂未绑定')
+                    return
+                }
+                ctx.reply('是否接收该群组消息', {
+                    reply_markup: {
+                        inline_keyboard: [[
+                            {text: `当前状态：${bindGroup.isReceive ? '接收消息' : '屏蔽消息'}`, callback_data: 'message'}
+                        ]]
+                    }
+                })
             } else {
                 return ctx.reply('仅支持群组中使用')
             }

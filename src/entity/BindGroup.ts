@@ -24,4 +24,10 @@ export class BindGroup {
     // 类型：0-contact，1-room
     @Column()
     type: number
+
+    // 是否接收消息
+    @Column({
+        default: true
+    })
+    isReceive: boolean
 }
