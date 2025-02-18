@@ -17,6 +17,7 @@ import {Message} from '../entity/Message'
 import {FileUtils} from '../util/FileUtils'
 import {getGeWeChatDataSource} from '../data-sourse'
 import {ConverterHelper} from '../util/FfmpegUtils'
+import {MessageTypeUtils} from "../util/MessageTypeUtils";
 
 export class WeChatClient extends AbstractClient {
     private configurationService = ConfigurationService.getInstance()
@@ -303,7 +304,17 @@ export class WeChatClient extends AbstractClient {
             return
         }
         // 身份
-        const identity = FormatUtils.transformTitleStr(bindGroup.type === 0 ? config.CONTACT_MESSAGE_GROUP : config.ROOM_MESSAGE_GROUP, fromContact._alias, fromContact.name(), topic)
+        let identityType
+        if (bindGroup.type === 0) {
+            if (wxId && wxId.startsWith('gh_')) {
+                identityType = config.OFFICIAL_MESSAGE_GROUP
+            } else {
+                identityType = config.CONTACT_MESSAGE_GROUP
+            }
+        } else {
+            identityType = config.ROOM_MESSAGE_GROUP
+        }
+        const identity = FormatUtils.transformTitleStr(identityType, fromContact._alias, fromContact.name(), topic)
         const messageParam: BaseMessage = {
             id: msg._newMsgId,
             senderId: contact._wxid,
@@ -318,8 +329,37 @@ export class WeChatClient extends AbstractClient {
         let referMsg
         let filebox
         let fileBuff: Buffer
+        let msgJson
+        let appLinkList
         switch (msg.type()) {
             case this.client.Message.Type.Text:
+                // 因为是html模式 原始的文本中的<>需要转义
+                messageParam.content = messageParam.content.replaceAll(/</g, '&lt;')
+                    .replaceAll(/>/g, '&gt;')
+                if (await msg.mentionSelf()) {
+                    // 如果自己被 @ 了
+                    const tgId = configuration.chatId
+                    if (this.wxInfo) {
+                        messageParam.content = messageParam.content.replaceAll(`@${this.wxInfo.nickName}`,
+                            `<a href="tg://user?id=${tgId}">@${this.wxInfo.nickName}</a>`)
+                        messageParam.content = messageParam.content.replaceAll('@所有人',
+                            `<a href="tg://user?id=${tgId}">@所有人</a>`)
+                    }
+                }
+                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                break
+            case this.client.Message.Type.Link:
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                msgJson = this.client.Message.getXmlToJson(msg._xml)
+                appLinkList = msgJson.msg.appmsg.mmreader.category.item
+                if (appLinkList && appLinkList.length > 1) {
+                    messageParam.content = appLinkList.map((it, index) => {
+                        return `<a href="${it.url}">${it.title}</a>\n`
+                    }).join('\n')
+                } else {
+                    messageParam.content = `<a href="${msgJson.msg.appmsg.url}">${msgJson.msg.appmsg.title}</a>`
+                }
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case this.client.Message.Type.Quote:
@@ -387,12 +427,12 @@ export class WeChatClient extends AbstractClient {
                     break
                 }
             default:
-                if (msg.type() === this.client.Message.Type.FileStart) {
+                if (MessageTypeUtils.SKIP_TYPE_LIST.includes(msg.type() + '')) {
                     break
                 }
                 if (msg.type()) {
                     console.log('unknow', msg)
-                    messageParam.content = `收到一条${msg.type()}消息，请在手机上查看`
+                    messageParam.content = `收到一条${MessageTypeUtils.getTypeName(msg.type() + '')}消息，请在手机上查看`
                     WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 }
                 break

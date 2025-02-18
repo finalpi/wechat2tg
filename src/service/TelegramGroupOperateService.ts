@@ -38,7 +38,17 @@ export class TelegramGroupOperateService {
             // 更新头像
             if (contactOrRoom.avatarLink !== oldBindGroup.avatarLink) {
                 oldBindGroup.avatarLink = contactOrRoom.avatarLink
-                const buff = await FileUtils.getInstance().downloadUrl2Buffer(contactOrRoom.avatarLink)
+                let buff
+                try {
+                    if (contactOrRoom.avatarLink) {
+                        buff = await FileUtils.getInstance().downloadUrl2Buffer(contactOrRoom.avatarLink)
+                    }
+                }catch (e) {
+                    console.error(e)
+                }
+                if (!buff) {
+                    return
+                }
                 sharp(buff).toFormat('png').resize(200).toBuffer(async (err,buff)=>{
                     const toUpload = new CustomFile('avatar.png', buff.length, '', buff)
                     const file = await this.client?.uploadFile({
@@ -75,6 +85,10 @@ export class TelegramGroupOperateService {
             // 更新群组名
             let name
             if (contactOrRoom.type === 0) {
+                if (contactOrRoom.alias === contactOrRoom.name) {
+                    oldBindGroup.alias = ''
+                    contactOrRoom.alias = ''
+                }
                 name = FormatUtils.transformTitleStr(config.CREATE_CONTACT_NAME, contactOrRoom.alias, contactOrRoom.name, '')
             } else {
                 name = FormatUtils.transformTitleStr(config.CREATE_ROOM_NAME, '', '', contactOrRoom.name)

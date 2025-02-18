@@ -808,7 +808,7 @@ export class TelegramBotClient extends AbstractClient {
             const messageText = ctx.update.message.text
 
             // 正则表达式用来分离命令后面的参数
-            const match = messageText.match(/\/user\s+([\p{L}\p{N}_]+)/u)
+            const match = messageText.match(/\/room\s+([\p{L}\p{N}_]+)/u)
             let data
             if (match) {
                 const userName = match[1]
