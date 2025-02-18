@@ -17,7 +17,8 @@ import {Message} from '../entity/Message'
 import {FileUtils} from '../util/FileUtils'
 import {getGeWeChatDataSource} from '../data-sourse'
 import {ConverterHelper} from '../util/FfmpegUtils'
-import {MessageTypeUtils} from "../util/MessageTypeUtils";
+import {MessageTypeUtils} from '../util/MessageTypeUtils'
+import {EmojiConverter} from '../util/EmojiUtils'
 
 export class WeChatClient extends AbstractClient {
     private configurationService = ConfigurationService.getInstance()
@@ -336,11 +337,14 @@ export class WeChatClient extends AbstractClient {
         let fileBuff: Buffer
         let msgJson
         let appLinkList
+        const emojiConverter = new EmojiConverter()
         switch (msg.type()) {
             case this.client.Message.Type.Text:
                 // 因为是html模式 原始的文本中的<>需要转义
                 messageParam.content = messageParam.content.replaceAll(/</g, '&lt;')
                     .replaceAll(/>/g, '&gt;')
+                // emoji 转换
+                messageParam.content = emojiConverter.convert(messageParam.content,configuration)
                 if (await msg.mentionSelf()) {
                     // 如果自己被 @ 了
                     const tgId = configuration.chatId
@@ -375,6 +379,8 @@ export class WeChatClient extends AbstractClient {
                 // 因为是html模式 原始的文本中的<>需要转义
                 messageParam.content = messageParam.content.replaceAll(/</g, '&lt;')
                     .replaceAll(/>/g, '&gt;')
+                // emoji 转换
+                messageParam.content = emojiConverter.convert(messageParam.content,configuration)
                 if (referMsg) {
                     messageParam.param = {
                         reply_id: referMsg.tgBotMsgId

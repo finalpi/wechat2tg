@@ -31,6 +31,9 @@ export class ConfigurationService {
         // 公众号消息
         this.setBooleanOptions(settingMap,'receivePublicAccount',config.receivePublicAccount, '接收公众号消息')
 
+        // 原始 emoji 是否以图片链接方式显示
+        this.setBooleanOptions(settingMap,'emojiPicture',config.emojiPicture, '微信emoji是否以图片链接显示')
+
         return settingMap
     }
 
