@@ -314,7 +314,7 @@ export class WeChatClient extends AbstractClient {
         } else {
             identityType = config.ROOM_MESSAGE_GROUP
         }
-        const identity = FormatUtils.transformTitleStr(identityType, fromContact._alias, fromContact.name(), topic)
+        const identity = FormatUtils.transformTitleStr(identityType, fromContact._alias !== fromContact.name() ? fromContact._alias : '', fromContact.name(), topic)
         const messageParam: BaseMessage = {
             id: msg._newMsgId,
             senderId: contact._wxid,
