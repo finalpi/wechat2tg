@@ -367,9 +367,20 @@ export class WeChatClient extends AbstractClient {
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
                 referMsg = await this.messageService.getByWxMsgId(msg.refer.svrid)
+                // 因为是html模式 原始的文本中的<>需要转义
+                messageParam.content = messageParam.content.replaceAll(/</g, '&lt;')
+                    .replaceAll(/>/g, '&gt;')
                 if (referMsg) {
                     messageParam.param = {
                         reply_id: referMsg.tgBotMsgId
+                    }
+                }else {
+                    // 找不到上下文
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-ignore
+                    msgJson = this.client.Message.getXmlToJson(msg._xml)
+                    if (msgJson.msg.appmsg.refermsg.content) {
+                        messageParam.content = `<blockquote>${msgJson.msg.appmsg.refermsg.content}</blockquote>${messageParam.content}`
                     }
                 }
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
