@@ -143,6 +143,21 @@ export class TelegramBotClient extends AbstractClient {
             }).catch(e => {
                 this.dealException(e, message)
             })
+        } else if (message.type === 4) {
+            const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
+            // 名片消息
+            client.telegram.sendPhoto(message.chatId, {source: message.file.file, filename: message.file.fileName},{
+                caption: message.content,
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [[Markup.button.callback('添加为好友', `af:${message.businessCardId}`)]]
+                },
+            }).then(async msgRes => {
+                messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
+                this.messageService.createOrUpdate(messageEntity)
+            }).catch(e => {
+                this.dealException(e, message)
+            })
         }
         return true
     }
@@ -372,6 +387,21 @@ export class TelegramBotClient extends AbstractClient {
                 this.downloadFileByFileHelper(msg)
             }
 
+            ctx.answerCbQuery()
+        })
+
+        bot.action(/^af:/, async ctx => {
+            const wxId = ctx.match.input.split(':')[1]
+            const wxClient = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
+            const friend = wxClient.getCardByWxId(wxId)
+            if (friend) {
+                friend.v3 = friend.username
+                TelegramBotClient.getSpyClient('wxClient').client.Friendship.add(friend, '你好')
+                ctx.reply('好友请求已发送')
+            } else {
+                ctx.reply('名片已过期')
+            }
+            ctx.deleteMessage()
             ctx.answerCbQuery()
         })
 
@@ -864,6 +894,28 @@ export class TelegramBotClient extends AbstractClient {
                 })
             } else {
                 return ctx.reply('仅支持群组中使用')
+            }
+        })
+
+        bot.command('add', async ctx => {
+            if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
+                ctx.reply('请先登录微信')
+                return
+            }
+            // 获取消息文本
+            const messageText = ctx.update.message.text
+
+            // 正则表达式用来分离命令后面的参数
+            const match = messageText.match(/\/add\s+([\p{L}\p{N}_]+)/u)
+            if (match && match.length > 1) {
+                const contact = await TelegramBotClient.getSpyClient('wxClient').client.Friendship.search(match[1])
+                if (!contact.v3){
+                    return ctx.reply('没有搜索到该用户')
+                }
+                TelegramBotClient.getSpyClient('wxClient').client.Friendship.add(contact, '你好')
+                ctx.reply('好友请求已发送')
+            } else {
+                ctx.reply('请在 /add 命令后面加上你要添加的联系人的手机号，例如：/add 18888888888')
             }
         })
 

@@ -64,6 +64,10 @@ export class WeChatClient extends AbstractClient {
         return this.friendshipList.find(item => item.formId === wxId)
     }
 
+    getCardByWxId(wxId: string) {
+        return this.friendshipList.find(item => item.username === wxId)
+    }
+
     private async sendTextMsg(message: BaseMessage) {
         // 发送文本消息的方法
         const bindGroup = await this.bindGroupService.getByChatId(message.chatId)
@@ -394,6 +398,27 @@ export class WeChatClient extends AbstractClient {
                         messageParam.content = `<blockquote>${msgJson.msg.appmsg.refermsg.content}</blockquote>${messageParam.content}`
                     }
                 }
+                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                break
+            case this.client.Message.Type.Contact:
+                // 名片消息处理
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                msgJson = this.client.Message.getXmlToJson(msg._xml)
+                this.friendshipList.push(msgJson.msg)
+                messageParam.type = 4
+                if (msgJson.msg.bigheadimgurl) {
+                    fileBuff = await FileUtils.getInstance().downloadUrl2Buffer(msgJson.msg.bigheadimgurl)
+                }else {
+                    fileBuff = await FileUtils.getInstance().downloadUrl2Buffer(msgJson.msg.smallheadimgurl)
+                }
+                messageParam.file = {
+                    fileName: 'head.png',
+                    file: fileBuff,
+                    sendType: 'photo'
+                }
+                messageParam.content = `${identity} \n推荐给你一位联系人 <b>${msgJson.msg.nickname}</b>`
+                messageParam.businessCardId = msgJson.msg.username
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case this.client.Message.Type.Image:
