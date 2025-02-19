@@ -109,6 +109,17 @@ export class WeChatClient extends AbstractClient {
                 client: clientFactory.create('wxClient')
             })
         }
+        if (this.scanMsgId) {
+            const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
+            this.configurationService.getConfig().then(config => {
+                tgBotClient.telegram.sendMessage(config.chatId, '请扫描二维码登录,第一次登录加载时间较长，请耐心等待', {
+                    reply_parameters: {
+                        message_id: this.scanMsgId
+                    }
+                })
+            })
+            return
+        }
         this.client.start().then(async ({app, router}) => {
             //
             app.use(router.routes()).use(router.allowedMethods())
@@ -357,7 +368,7 @@ export class WeChatClient extends AbstractClient {
                 messageParam.content = messageParam.content.replaceAll(/</g, '&lt;')
                     .replaceAll(/>/g, '&gt;')
                 // emoji 转换
-                messageParam.content = emojiConverter.convert(messageParam.content,configuration)
+                messageParam.content = emojiConverter.convert(messageParam.content, configuration)
                 if (await msg.mentionSelf()) {
                     // 如果自己被 @ 了
                     const tgId = configuration.chatId
@@ -393,12 +404,12 @@ export class WeChatClient extends AbstractClient {
                 messageParam.content = messageParam.content.replaceAll(/</g, '&lt;')
                     .replaceAll(/>/g, '&gt;')
                 // emoji 转换
-                messageParam.content = emojiConverter.convert(messageParam.content,configuration)
+                messageParam.content = emojiConverter.convert(messageParam.content, configuration)
                 if (referMsg) {
                     messageParam.param = {
                         reply_id: referMsg.tgBotMsgId
                     }
-                }else {
+                } else {
                     // 找不到上下文
                     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                     // @ts-ignore
@@ -418,7 +429,7 @@ export class WeChatClient extends AbstractClient {
                 messageParam.type = 4
                 if (msgJson.msg.bigheadimgurl) {
                     fileBuff = await FileUtils.getInstance().downloadUrl2Buffer(msgJson.msg.bigheadimgurl)
-                }else {
+                } else {
                     fileBuff = await FileUtils.getInstance().downloadUrl2Buffer(msgJson.msg.smallheadimgurl)
                 }
                 messageParam.file = {
