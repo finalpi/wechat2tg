@@ -34,6 +34,9 @@ export class ConfigurationService {
         // 原始 emoji 是否以图片链接方式显示
         this.setBooleanOptions(settingMap,'emojiPicture',config.emojiPicture, '微信emoji是否以图片链接显示')
 
+        // 转发自己发送的消息
+        this.setBooleanOptions(settingMap,'selfMessage',config.selfMessage, '转发自己在微信发送的消息')
+
         return settingMap
     }
 

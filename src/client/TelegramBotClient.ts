@@ -827,6 +827,13 @@ export class TelegramBotClient extends AbstractClient {
 
 
         bot.command('login', async ctx => {
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                return ctx.reply('该命令无法在群组中使用')
+            }
+            const wxClient = TelegramBotClient.getSpyClient('wxClient')
+            if (wxClient && wxClient.hasLogin) {
+                return ctx.reply('已登录，请勿重复登录')
+            }
             // 首次登录设置主人 chatId
             const config = await this.configurationService.getConfig()
             if (!config.chatId || config.chatId === 0) {
@@ -841,6 +848,13 @@ export class TelegramBotClient extends AbstractClient {
         })
 
         bot.command('flogin', async ctx => {
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                return ctx.reply('该命令无法在群组中使用')
+            }
+            const fhClient = TelegramBotClient.getSpyClient('fhClient')
+            if (fhClient && fhClient.hasLogin) {
+                return ctx.reply('已登录，请勿重复登录')
+            }
             // 首次登录设置主人 chatId
             const config = await this.configurationService.getConfig()
             if (!config.chatId || config.chatId === 0) {

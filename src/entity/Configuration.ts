@@ -38,4 +38,10 @@ export class Configuration {
         default: false
     })
     emojiPicture: boolean
+
+    // 转发自己发送的消息
+    @Column({
+        default: true
+    })
+    selfMessage: boolean
 }

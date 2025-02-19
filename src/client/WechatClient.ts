@@ -283,6 +283,10 @@ export class WeChatClient extends AbstractClient {
         let contact = await msg.from()
         const configuration = await this.configurationService.getConfig()
         if (msg.self()) {
+            // 过滤自己发送的消息
+            if (!configuration.selfMessage) {
+                return
+            }
             contact = await msg.to()
         }
         const alias = await contact.alias()
@@ -385,7 +389,7 @@ export class WeChatClient extends AbstractClient {
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
                 msgJson = this.client.Message.getXmlToJson(msg._xml)
-                appLinkList = msgJson.msg.appmsg.mmreader.category.item
+                appLinkList = msgJson.msg.appmsg.mmreader?.category?.item
                 if (appLinkList && appLinkList.length > 1) {
                     messageParam.content = appLinkList.map((it, index) => {
                         return `<a href="${it.url}">${it.title}</a>\n`
