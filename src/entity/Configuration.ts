@@ -32,4 +32,16 @@ export class Configuration {
         default: true
     })
     receivePublicAccount: boolean
+
+    // 原始 emoji 是否以图片链接方式显示
+    @Column({
+        default: false
+    })
+    emojiPicture: boolean
+
+    // 转发自己发送的消息
+    @Column({
+        default: true
+    })
+    selfMessage: boolean
 }

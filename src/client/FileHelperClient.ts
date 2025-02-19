@@ -140,6 +140,17 @@ export class FileHelperClient extends AbstractClient {
                 client: clientFactory.create('fhClient')
             })
         }
+        if (this.scanMsgId) {
+            const tgBotClient: Telegraf = FileHelperClient.getSpyClient('botClient').client
+            this.configurationService.getConfig().then(config => {
+                tgBotClient.telegram.sendMessage(config.chatId, '扫描二维码登录文件传输助手', {
+                    reply_parameters: {
+                        message_id: this.scanMsgId
+                    }
+                })
+            })
+            return
+        }
         this.client.start()
         return true
     }

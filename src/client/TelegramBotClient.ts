@@ -116,11 +116,7 @@ export class TelegramBotClient extends AbstractClient {
                 messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
                 this.messageService.createOrUpdate(messageEntity)
             }).catch(e => {
-                if (e.response.error_code === 403) {
-                    this.bindGroupService.removeByChatIdOrWxId(message.chatId, message.senderId)
-                    message.chatId = this.config.botId
-                    this.sendMessage(message)
-                }
+                this.dealException(e, message)
             })
         } else if (message.type === 2) {
             this.messageSender.sendFile(message.chatId, {
@@ -131,6 +127,8 @@ export class TelegramBotClient extends AbstractClient {
             }).then(async msgRes => {
                 messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
                 this.messageService.createOrUpdate(messageEntity)
+            }).catch(e => {
+                this.dealException(e, message)
             })
         } else if (message.type === 3) {
             const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
@@ -142,6 +140,23 @@ export class TelegramBotClient extends AbstractClient {
             }).then(async msgRes => {
                 messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
                 this.messageService.createOrUpdate(messageEntity)
+            }).catch(e => {
+                this.dealException(e, message)
+            })
+        } else if (message.type === 4) {
+            const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
+            // 名片消息
+            client.telegram.sendPhoto(message.chatId, {source: message.file.file, filename: message.file.fileName},{
+                caption: message.content,
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [[Markup.button.callback('添加为好友', `af:${message.businessCardId}`)]]
+                },
+            }).then(async msgRes => {
+                messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
+                this.messageService.createOrUpdate(messageEntity)
+            }).catch(e => {
+                this.dealException(e, message)
             })
         }
         return true
@@ -226,14 +241,65 @@ export class TelegramBotClient extends AbstractClient {
         if (message.param?.reply_id) {
             option.reply_id = message.param.reply_id
         }
-        const newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option).catch(async e => {
-            if (e.response.error_code === 403) {
-                this.bindGroupService.removeByChatIdOrWxId(message.chatId, message.senderId)
-                const config = await this.configurationService.getConfig()
-                message.chatId = config.botId
-                this.sendTextMsg(message)
+        let newMsg
+        // 长文本分片发送
+        const html = message.content
+        const maxLength = 9000
+        if (html.length > maxLength) {
+            // 分割长文本,分多次发送
+            const result = []
+            let currentLength = 0
+            let currentChunk = ''
+
+            // 使用正则表达式匹配HTML标签
+            const regex = /(<[^>]+>|[^<]+)/g
+            let match
+
+            while ((match = regex.exec(html)) !== null) {
+                const chunk = match[0] // 获取当前匹配的片段
+                const chunkLength = chunk.length
+
+                // 检查当前片段加上当前块的长度是否超过最大长度
+                if (currentLength + chunkLength > maxLength) {
+                    // 如果超过最大长度，先将当前块存入结果
+                    result.push(currentChunk)
+                    // 重置当前块和当前长度
+                    currentChunk = ''
+                    currentLength = 0
+                }
+
+                // 将当前片段添加到当前块
+                currentChunk += chunk
+                currentLength += chunkLength
             }
-        })
+
+            // 添加最后一块（如果有）
+            if (currentChunk) {
+                result.push(currentChunk)
+            }
+
+            for (let i = 0; i < result.length; i++) {
+                let sendMsg = result[i]
+                if (result.length > 1) {
+                    sendMsg = `<b>part${i + 1}:</b>` + sendMsg
+                }
+                const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, sendMsg)
+                if (i == 0) {
+                    newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option).catch(async e => {
+                        await this.dealException(e, message)
+                    })
+                } else {
+                    await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option).catch(async e => {
+                        await this.dealException(e, message)
+                    })
+                }
+            }
+        } else {
+            newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option).catch(async e => {
+                await this.dealException(e, message)
+            })
+        }
+
         // 更新chatId
         const messageEntity = await this.messageService.getByWxMsgId(message.id)
         if (newMsg && messageEntity) {
@@ -241,6 +307,28 @@ export class TelegramBotClient extends AbstractClient {
             this.messageService.createOrUpdate(messageEntity)
         }
         return
+    }
+
+    private async dealException(e, message: BaseMessage) {
+        if (e.response.error_code === 403) {
+            this.bindGroupService.removeByChatIdOrWxId(message.chatId, message.senderId)
+            const config = await this.configurationService.getConfig()
+            message.chatId = config.botId
+            this.sendTextMsg(message)
+        }
+        // Telegram Too Many Requests
+        else if (e.response.error_code === 429) {
+            setTimeout(() => {
+                // this._tgClient.bot.telegram.sendMessage(message.chatId,
+                //     SimpleMessageSender.send(
+                //         {
+                //             body: this.t('common.tooManyRequests', e.response.parameters.retry_after),
+                //             chatId: message.chatId,
+                //         }))
+                this.logError(e.response.parameters.retry_after)
+                this.sendMessage(message)
+            }, e.response.parameters.retry_after * 1000 || 20000)
+        }
     }
 
     private onBotAction(bot: Telegraf) {
@@ -287,7 +375,7 @@ export class TelegramBotClient extends AbstractClient {
         })
 
         bot.action(/^fl:/, async ctx => {
-            if(!TelegramBotClient.getSpyClient('fhClient').hasLogin) {
+            if (!TelegramBotClient.getSpyClient('fhClient').hasLogin) {
                 ctx.sendMessage('请先在 bot 中使用 /flogin 指令登录文件传输助手')
                 ctx.answerCbQuery()
                 return
@@ -299,6 +387,36 @@ export class TelegramBotClient extends AbstractClient {
                 this.downloadFileByFileHelper(msg)
             }
 
+            ctx.answerCbQuery()
+        })
+
+        bot.action(/^af:/, async ctx => {
+            const wxId = ctx.match.input.split(':')[1]
+            const wxClient = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
+            const friend = wxClient.getCardByWxId(wxId)
+            if (friend) {
+                friend.v3 = friend.username
+                TelegramBotClient.getSpyClient('wxClient').client.Friendship.add(friend, '你好')
+                ctx.reply('好友请求已发送')
+            } else {
+                ctx.reply('名片已过期')
+            }
+            ctx.deleteMessage()
+            ctx.answerCbQuery()
+        })
+
+        bot.action(/^message/, async ctx => {
+            const bindGroup = await this.bindGroupService.getByChatId(ctx.chat.id)
+            if (bindGroup) {
+                bindGroup.isReceive = !bindGroup.isReceive
+                await this.bindGroupService.createOrUpdate(bindGroup)
+                ctx.editMessageReplyMarkup({
+                    inline_keyboard: [[{
+                        text: `状态：${bindGroup.isReceive ? '接收消息' : '屏蔽消息'}`,
+                        callback_data: 'message'
+                    }]]
+                })
+            }
             ctx.answerCbQuery()
         })
 
@@ -709,6 +827,13 @@ export class TelegramBotClient extends AbstractClient {
 
 
         bot.command('login', async ctx => {
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                return ctx.reply('该命令无法在群组中使用')
+            }
+            const wxClient = TelegramBotClient.getSpyClient('wxClient')
+            if (wxClient && wxClient.hasLogin) {
+                return ctx.reply('已登录，请勿重复登录')
+            }
             // 首次登录设置主人 chatId
             const config = await this.configurationService.getConfig()
             if (!config.chatId || config.chatId === 0) {
@@ -723,6 +848,13 @@ export class TelegramBotClient extends AbstractClient {
         })
 
         bot.command('flogin', async ctx => {
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                return ctx.reply('该命令无法在群组中使用')
+            }
+            const fhClient = TelegramBotClient.getSpyClient('fhClient')
+            if (fhClient && fhClient.hasLogin) {
+                return ctx.reply('已登录，请勿重复登录')
+            }
             // 首次登录设置主人 chatId
             const config = await this.configurationService.getConfig()
             if (!config.chatId || config.chatId === 0) {
@@ -754,6 +886,50 @@ export class TelegramBotClient extends AbstractClient {
                 ctx.reply('解绑成功')
             } else {
                 return ctx.reply('仅支持群组中使用')
+            }
+        })
+
+        bot.command('message', async (ctx) => {
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                const bindGroup = await this.bindGroupService.getByChatId(ctx.chat.id)
+                if (!bindGroup) {
+                    ctx.reply('该群组暂未绑定')
+                    return
+                }
+                ctx.reply('是否接收该群组消息', {
+                    reply_markup: {
+                        inline_keyboard: [[
+                            {
+                                text: `当前状态：${bindGroup.isReceive ? '接收消息' : '屏蔽消息'}`,
+                                callback_data: 'message'
+                            }
+                        ]]
+                    }
+                })
+            } else {
+                return ctx.reply('仅支持群组中使用')
+            }
+        })
+
+        bot.command('add', async ctx => {
+            if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
+                ctx.reply('请先登录微信')
+                return
+            }
+            // 获取消息文本
+            const messageText = ctx.update.message.text
+
+            // 正则表达式用来分离命令后面的参数
+            const match = messageText.match(/\/add\s+([\p{L}\p{N}_]+)/u)
+            if (match && match.length > 1) {
+                const contact = await TelegramBotClient.getSpyClient('wxClient').client.Friendship.search(match[1])
+                if (!contact.v3){
+                    return ctx.reply('没有搜索到该用户')
+                }
+                TelegramBotClient.getSpyClient('wxClient').client.Friendship.add(contact, '你好')
+                ctx.reply('好友请求已发送')
+            } else {
+                ctx.reply('请在 /add 命令后面加上你要添加的联系人的手机号，例如：/add 18888888888')
             }
         })
 
@@ -808,7 +984,7 @@ export class TelegramBotClient extends AbstractClient {
             const messageText = ctx.update.message.text
 
             // 正则表达式用来分离命令后面的参数
-            const match = messageText.match(/\/user\s+([\p{L}\p{N}_]+)/u)
+            const match = messageText.match(/\/room\s+([\p{L}\p{N}_]+)/u)
             let data
             if (match) {
                 const userName = match[1]
