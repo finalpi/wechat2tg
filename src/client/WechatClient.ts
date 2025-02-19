@@ -112,33 +112,38 @@ export class WeChatClient extends AbstractClient {
         this.client.start().then(async ({app, router}) => {
             //
             app.use(router.routes()).use(router.allowedMethods())
-            this.wxInfo = await this.client.info()
-            this.hasLogin = true
-            this.startTime = new Date().getTime() / 1000
-            const config = await this.configurationService.getConfig()
-            const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
-            tgBotClient.telegram.sendMessage(config.chatId, '微信登录成功')
-            if (this.scanMsgId) {
-                tgBotClient.telegram.deleteMessage(config.chatId, this.scanMsgId)
-                this.scanMsgId = undefined
-            }
             getGeWeChatDataSource().initialize().then(() => {
                 console.log('GeWeChatDataSource initialized')
             }).catch((e) => {
                 console.error('GeWeChatDataSource initialize failed', e)
             })
-            // 登录后更新群组绑定信息
-            setTimeout(async () => {
-                const allBind = await this.bindGroupService.getAll()
-                for (const bindGroup of allBind) {
-                    // 添加延迟防止接口调用过快
-                    setTimeout(() => {
-                        this.updateGroupByChatId(bindGroup.chatId)
-                    }, 500)
-                }
-            }, 10000)
+            this.startTime = new Date().getTime() / 1000
+            this.loginSuccess()
         })
         return true
+    }
+
+    private async loginSuccess() {
+        this.wxInfo = await this.client.info()
+        this.hasLogin = true
+        const config = await this.configurationService.getConfig()
+        const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
+        tgBotClient.telegram.sendMessage(config.chatId, '微信登录成功')
+        if (this.scanMsgId) {
+            tgBotClient.telegram.deleteMessage(config.chatId, this.scanMsgId)
+            this.scanMsgId = undefined
+        }
+
+        // 登录后更新群组绑定信息
+        setTimeout(async () => {
+            const allBind = await this.bindGroupService.getAll()
+            for (const bindGroup of allBind) {
+                // 添加延迟防止接口调用过快
+                setTimeout(() => {
+                    this.updateGroupByChatId(bindGroup.chatId)
+                }, 500)
+            }
+        }, 10000)
     }
 
     logout(): Promise<boolean> {
@@ -243,6 +248,10 @@ export class WeChatClient extends AbstractClient {
         this.client.on('message', (msg) => {
             // 此处放回的msg为Message类型 可以使用Message类的方法
             this.onMessage(msg)
+        })
+
+        this.client.on('login', (msg) => {
+            this.loginSuccess()
         })
     }
 
