@@ -15,7 +15,10 @@
 1. 本项目仅用于技术研究和学习，不得用于非法用途
 2. 无论遇到什么问题都欢迎提交 issue
 
-### gewechat 容器的注意事项(原项目 readme 已删除)
+### [gewechat](https://github.com/Devo919/Gewechat) 容器的注意事项(原项目 readme 已删除)
+
+> [!WARNING]
+> gewechat 容器并非开源，使用风险自行判断，以下是原项目的注意事项，建议参考原项目使用说明
 
 #### 注意事项：
 - 1、系统环境推荐：Centos7或Ubantu2204
