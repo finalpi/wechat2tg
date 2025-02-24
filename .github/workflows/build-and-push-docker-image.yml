@@ -8,6 +8,9 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [ linux/amd64, linux/arm64/v8 ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -36,4 +39,4 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: finalpi/wechat2tg-pad-dev:${{ steps.version.outputs.version }}, finalpi/wechat2tg-pad-dev:latest
-          platforms: linux/amd64
+          platforms: ${{ matrix.platform }}

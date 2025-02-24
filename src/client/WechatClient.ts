@@ -305,9 +305,9 @@ export class WeChatClient extends AbstractClient {
         if (wxId && wxId.startsWith('gh_') && !configuration.receivePublicAccount) {
             return
         }
-        // 企业微信无 wxId 过滤掉
+        // 企业微信 wxId
         if (!wxId) {
-            return
+            wxId = msg.fromId
         }
         let bindGroup = await this.bindGroupService.getByWxId(wxId)
         // 如果找不到就创建一个新的群组
@@ -327,6 +327,12 @@ export class WeChatClient extends AbstractClient {
                     bindGroup.alias = contact._alias
                 }
                 bindGroup.avatarLink = await contact.avatar()
+                if (wxId.includes('@openim')) {
+                    // 企业微信
+                    if (bindGroup.name === 'no name') {
+                        bindGroup.name = msg._pushContent.split(':')[0].slice(0, -1)
+                    }
+                }
             }
             bindGroup = await this.groupOperate.createGroup(bindGroup)
         }
