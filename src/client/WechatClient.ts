@@ -392,7 +392,7 @@ export class WeChatClient extends AbstractClient {
                 appLinkList = msgJson.msg.appmsg.mmreader?.category?.item
                 if (appLinkList && appLinkList.length > 0) {
                     messageParam.content = appLinkList.map((it, index) => {
-                        return `<a href="${it.url}">${it.title}</a><blockquote expandable>${msgJson.msg.appmsg.mmreader?.category?.item[0].summary}</blockquote>`
+                        return `<a href="${it.url}">${it.title}</a><blockquote expandable>${it.summary || it.digest}</blockquote>`
                     }).join('\n')
                 } else {
                     messageParam.content = `<a href="${msgJson.msg.appmsg.url}">${msgJson.msg.appmsg.title}</a>`
