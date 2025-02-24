@@ -33,7 +33,7 @@ jobs:
           outputs: type=docker,dest=/tmp/amd64.tar
 
       - name: Upload amd64 artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: amd64-image
           path: /tmp/amd64.tar
@@ -66,7 +66,7 @@ jobs:
           outputs: type=docker,dest=/tmp/arm64.tar
 
       - name: Upload arm64 artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: arm64-image
           path: /tmp/arm64.tar
@@ -81,13 +81,13 @@ jobs:
         run: echo "VERSION=${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
 
       - name: Download amd64 image
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: amd64-image
           path: /tmp
 
       - name: Download arm64 image
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: arm64-image
           path: /tmp
