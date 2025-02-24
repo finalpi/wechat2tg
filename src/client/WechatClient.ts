@@ -390,10 +390,15 @@ export class WeChatClient extends AbstractClient {
                 // @ts-ignore
                 msgJson = this.client.Message.getXmlToJson(msg._xml)
                 appLinkList = msgJson.msg.appmsg.mmreader?.category?.item
-                if (appLinkList && appLinkList.length > 0) {
-                    messageParam.content = appLinkList.map((it, index) => {
-                        return `<a href="${it.url}">${it.title}</a><blockquote expandable>${it.summary || it.digest}</blockquote>`
-                    }).join('\n')
+                if (appLinkList) {
+                    // 判断是否是数组，有可能是对象
+                    if (Array.isArray(appLinkList)) {
+                        messageParam.content = appLinkList.map((it, index) => {
+                            return `<a href="${it.url}">${it.title}</a><blockquote expandable>${it.summary || it.digest}</blockquote>`
+                        }).join('\n')
+                    }else {
+                        messageParam.content = `<a href="${appLinkList.url}">${appLinkList.title}</a><blockquote expandable>${appLinkList.summary || appLinkList.digest}</blockquote>`
+                    }
                 } else {
                     messageParam.content = `<a href="${msgJson.msg.appmsg.url}">${msgJson.msg.appmsg.title}</a>`
                 }
