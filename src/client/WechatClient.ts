@@ -320,6 +320,9 @@ export class WeChatClient extends AbstractClient {
                 bindGroup.name = room.name
                 const avatar = await room.avatar()
                 bindGroup.avatarLink = avatar.url
+                if (!bindGroup.name) {
+                    bindGroup.name = '企业微信群'
+                }
             } else {
                 bindGroup.type = 0
                 bindGroup.name = contact.name()
@@ -332,6 +335,7 @@ export class WeChatClient extends AbstractClient {
                     if (bindGroup.name === 'no name') {
                         bindGroup.name = msg._pushContent.split(':')[0].slice(0, -1)
                     }
+                    bindGroup.avatarLink = 'https://raw.githubusercontent.com/finalpi/wechat2tg/wx2tg-pad/qywx.jpg'
                 }
             }
             bindGroup = await this.groupOperate.createGroup(bindGroup)
