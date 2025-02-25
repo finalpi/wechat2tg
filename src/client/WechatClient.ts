@@ -508,6 +508,11 @@ export class WeChatClient extends AbstractClient {
                     WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                     break
                 }
+            case this.client.Message.Type.Location:
+                // 位置消息处理
+                messageParam.type = 5
+                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                break
             default:
                 if (MessageTypeUtils.SKIP_TYPE_LIST.includes(msg.type() + '')) {
                     break
