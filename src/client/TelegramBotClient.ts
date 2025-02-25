@@ -158,6 +158,22 @@ export class TelegramBotClient extends AbstractClient {
             }).catch(e => {
                 this.dealException(e, message)
             })
+        } else if (message.type === 5) {
+            // 位置消息处理
+            const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            const msgJson = TelegramBotClient.getSpyClient('wxClient').client.Message.getXmlToJson(message.source_text)
+            client.telegram.sendLocation(message.chatId,parseFloat(msgJson.msg.location.x),parseFloat(msgJson.msg.location.y), {
+                reply_markup: {
+                    inline_keyboard: [[Markup.button.callback(msgJson.msg.location.poiname || msgJson.msg.location.label, 'null')]]
+                }
+            }).then(async msgRes => {
+                messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
+                this.messageService.createOrUpdate(messageEntity)
+            }).catch(e => {
+                this.dealException(e, message)
+            })
         }
         return true
     }

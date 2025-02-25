@@ -305,9 +305,9 @@ export class WeChatClient extends AbstractClient {
         if (wxId && wxId.startsWith('gh_') && !configuration.receivePublicAccount) {
             return
         }
-        // 企业微信无 wxId 过滤掉
+        // 企业微信 wxId
         if (!wxId) {
-            return
+            wxId = msg.fromId
         }
         let bindGroup = await this.bindGroupService.getByWxId(wxId)
         // 如果找不到就创建一个新的群组
@@ -320,6 +320,9 @@ export class WeChatClient extends AbstractClient {
                 bindGroup.name = room.name
                 const avatar = await room.avatar()
                 bindGroup.avatarLink = avatar.url
+                if (!bindGroup.name) {
+                    bindGroup.name = '企业微信群'
+                }
             } else {
                 bindGroup.type = 0
                 bindGroup.name = contact.name()
@@ -327,6 +330,13 @@ export class WeChatClient extends AbstractClient {
                     bindGroup.alias = contact._alias
                 }
                 bindGroup.avatarLink = await contact.avatar()
+                if (wxId.includes('@openim')) {
+                    // 企业微信
+                    if (bindGroup.name === 'no name') {
+                        bindGroup.name = msg._pushContent.split(':')[0].slice(0, -1)
+                    }
+                    bindGroup.avatarLink = 'https://raw.githubusercontent.com/finalpi/wechat2tg/wx2tg-pad/qywx.jpg'
+                }
             }
             bindGroup = await this.groupOperate.createGroup(bindGroup)
         }
@@ -390,10 +400,15 @@ export class WeChatClient extends AbstractClient {
                 // @ts-ignore
                 msgJson = this.client.Message.getXmlToJson(msg._xml)
                 appLinkList = msgJson.msg.appmsg.mmreader?.category?.item
-                if (appLinkList && appLinkList.length > 1) {
-                    messageParam.content = appLinkList.map((it, index) => {
-                        return `<a href="${it.url}">${it.title}</a>\n`
-                    }).join('\n')
+                if (appLinkList) {
+                    // 判断是否是数组，有可能是对象
+                    if (Array.isArray(appLinkList)) {
+                        messageParam.content = appLinkList.map((it, index) => {
+                            return `<a href="${it.url}">${it.title}</a><blockquote expandable>${it.summary || it.digest}</blockquote>`
+                        }).join('\n')
+                    }else {
+                        messageParam.content = `<a href="${appLinkList.url}">${appLinkList.title}</a><blockquote expandable>${appLinkList.summary || appLinkList.digest}</blockquote>`
+                    }
                 } else {
                     messageParam.content = `<a href="${msgJson.msg.appmsg.url}">${msgJson.msg.appmsg.title}</a>`
                 }
@@ -497,6 +512,19 @@ export class WeChatClient extends AbstractClient {
                     WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                     break
                 }
+            case this.client.Message.Type.Location:
+                // 位置消息处理
+                messageParam.type = 5
+                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                break
+            case this.client.Message.Type.Transfer:
+                // 转账消息处理
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                msgJson = this.client.Message.getXmlToJson(msg._xml)
+                messageParam.content = `收到一条${MessageTypeUtils.getTypeName(msg.type() + '')}消息，请在手机上接收<blockquote expandable>金额：${msgJson.msg.appmsg.wcpayinfo.feedesc}\n转账备注：${msgJson.msg.appmsg.wcpayinfo.pay_memo || ''}</blockquote>`
+                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                break
             default:
                 if (MessageTypeUtils.SKIP_TYPE_LIST.includes(msg.type() + '')) {
                     break

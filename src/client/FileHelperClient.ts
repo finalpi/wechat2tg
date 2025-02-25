@@ -151,7 +151,20 @@ export class FileHelperClient extends AbstractClient {
             })
             return
         }
-        this.client.start()
+        this.hasLogin = false
+        if (fs.existsSync('storage/fileHelper.memory-card.json')) {
+            setTimeout(()=>{
+                // token 过期检测
+                if (!this.hasLogin) {
+                    this.restartClient()
+                }
+            },10000)
+        }
+        this.client.start().then(() => {
+            //
+        }).catch(err => {
+            console.log(err)
+        })
         return true
     }
     logout(): Promise<boolean> {
