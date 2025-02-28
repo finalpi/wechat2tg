@@ -359,7 +359,7 @@ export class WeChatClient extends AbstractClient {
         // 身份
         let identityType
         if (bindGroup.type === 0) {
-            if (wxId && (wxId.startsWith('gh_') || wxId === 'app')) {
+            if (wxId && wxId.startsWith('gh_')) {
                 identityType = config.OFFICIAL_MESSAGE_GROUP
             } else {
                 identityType = config.CONTACT_MESSAGE_GROUP
@@ -367,7 +367,12 @@ export class WeChatClient extends AbstractClient {
         } else {
             identityType = config.ROOM_MESSAGE_GROUP
         }
-        const identity = FormatUtils.transformTitleStr(identityType, fromContact._alias !== fromContact.name() ? fromContact._alias : '', fromContact.name(), topic)
+        let identity
+        if (wxId && wxId === 'app') {
+            identity = FormatUtils.transformTitleStr(config.OFFICIAL_MESSAGE_GROUP, '', '服务通知', topic)
+        } else {
+            identity = FormatUtils.transformTitleStr(identityType, fromContact._alias !== fromContact.name() ? fromContact._alias : '', fromContact.name(), topic)
+        }
         const messageParam: BaseMessage = {
             id: msg._newMsgId,
             senderId: contact._wxid,
@@ -415,7 +420,7 @@ export class WeChatClient extends AbstractClient {
                         messageParam.content = appLinkList.map((it, index) => {
                             return `<a href="${it.url}">${it.title}</a><blockquote expandable>${it.summary || it.digest}</blockquote>`
                         }).join('\n')
-                    }else {
+                    } else {
                         messageParam.content = `<a href="${appLinkList.url}">${appLinkList.title}</a><blockquote expandable>${appLinkList.summary || appLinkList.digest}</blockquote>`
                     }
                 } else {
