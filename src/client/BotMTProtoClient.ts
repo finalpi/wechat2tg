@@ -5,6 +5,9 @@ import {AbstractClient} from '../base/BaseClient'
 import {StoreSession} from 'telegram/sessions'
 import BaseMessage from '../base/BaseMessage'
 import {ClientFactory} from './factory/ClientFactory'
+import {DeletedMessage} from 'telegram/events/DeletedMessage'
+import {MessageService} from '../service/MessageService'
+import {WeChatClient} from './WechatClient'
 
 export class BotMTProtoClient extends AbstractClient {
     logout(): Promise<boolean> {
@@ -67,6 +70,21 @@ export class BotMTProtoClient extends AbstractClient {
         this.client.start({
             botAuthToken: config.BOT_TOKEN,
         }).then(async () => {//
+            this.client?.addEventHandler(async event => {
+                // let id = event.peer?.id
+                // this.logInfo(`Deleted message: ${event.inputChat}`)
+                for (const deletedId of event.deletedIds) {
+                    const msg = await MessageService.getInstance().getByBotMsgId(undefined, deletedId)
+                    if (!msg) {
+                        return
+                    }
+                    const wxClient: WeChatClient = BotMTProtoClient.getSpyClient('wxClient') as WeChatClient
+                    if (wxClient.wxInfo.wxid !== msg.wxSenderId) {
+                        return
+                    }
+                    await wxClient.revokeMessage(msg)
+                }
+            }, new DeletedMessage({}))
         })
         return true
     }
