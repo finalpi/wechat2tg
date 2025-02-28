@@ -68,4 +68,22 @@ export class Message {
         nullable: true
     })
     sender: string
+
+    // toWxid
+    @Column({
+        nullable: true
+    })
+    toWxid: string
+
+    // msgId
+    @Column({
+        nullable: true
+    })
+    msgId: string
+
+    // createTime
+    @Column({
+        nullable: true
+    })
+    createTime: number
 }

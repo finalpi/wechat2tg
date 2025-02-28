@@ -98,6 +98,9 @@ export class TelegramBotClient extends AbstractClient {
         messageEntity.source_type = message.source_type
         messageEntity.source_text = message.source_text
         messageEntity.sender = message.sender
+        messageEntity.toWxid = message.toWxid
+        messageEntity.msgId = message.msgId
+        messageEntity.createTime = message.createTime
         await this.messageService.createOrUpdate(messageEntity)
         // 文本消息放进队列发送
         if (message.type === 0) {
@@ -1031,6 +1034,23 @@ export class TelegramBotClient extends AbstractClient {
             ctx.reply(text, {
                 reply_markup: page.getMarkup()
             })
+        })
+
+        bot.command('revoke', async ctx => {
+            const replyMessageId = ctx.update.message['reply_to_message']?.message_id
+            if (!replyMessageId) {
+                return ctx.reply('请回复需要撤回的消息')
+            }
+            const msg = await this.messageService.getByBotMsgId(ctx.chat.id, replyMessageId)
+            if (!msg) {
+                return ctx.reply('撤回失败')
+            }
+            const wxClient: WeChatClient = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
+            if (wxClient.wxInfo.wxid !== msg.wxSenderId) {
+                return ctx.reply('撤回失败,无法撤回其他人发送的消息')
+            }
+            await wxClient.revokeMessage(msg)
+            ctx.reply('撤回请求已发送')
         })
     }
 
