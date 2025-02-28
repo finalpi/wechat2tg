@@ -380,7 +380,7 @@ export class WeChatClient extends AbstractClient {
             sender: identity,
             chatId: bindGroup.chatId,
             type: 0,
-            content: msg.text(),
+            content: msg.text() + '',
             source_type: msg.type(),
             source_text: msg.text()
         }
