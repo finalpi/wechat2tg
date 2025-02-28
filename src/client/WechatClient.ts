@@ -309,6 +309,10 @@ export class WeChatClient extends AbstractClient {
         if (!wxId) {
             wxId = msg.fromId
         }
+        if (wxId.includes('@app')) {
+            // 服务通知
+            wxId = 'app'
+        }
         let bindGroup = await this.bindGroupService.getByWxId(wxId)
         // 如果找不到就创建一个新的群组
         if (!bindGroup && wxId !== this.wxInfo.wxid) {
@@ -337,6 +341,11 @@ export class WeChatClient extends AbstractClient {
                     }
                     bindGroup.avatarLink = 'https://raw.githubusercontent.com/finalpi/wechat2tg/wx2tg-pad/qywx.jpg'
                 }
+                if (wxId === 'app') {
+                    // 服务通知
+                    bindGroup.name = '服务通知'
+                    bindGroup.avatarLink = 'https://raw.githubusercontent.com/finalpi/wechat2tg/wx2tg-pad/fwtz.png'
+                }
             }
             bindGroup = await this.groupOperate.createGroup(bindGroup)
         }
@@ -350,7 +359,7 @@ export class WeChatClient extends AbstractClient {
         // 身份
         let identityType
         if (bindGroup.type === 0) {
-            if (wxId && wxId.startsWith('gh_')) {
+            if (wxId && (wxId.startsWith('gh_') || wxId === 'app')) {
                 identityType = config.OFFICIAL_MESSAGE_GROUP
             } else {
                 identityType = config.CONTACT_MESSAGE_GROUP
