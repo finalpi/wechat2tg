@@ -47,7 +47,7 @@ export class WeChatClient extends AbstractClient {
         this.bindGroupService = BindGroupService.getInstance()
         this.messageService = MessageService.getInstance()
         this.client = new GeweBot({
-            debug: false, // 是否开启调试模式 默认false
+            debug: config.DEBUG_MODE, // 是否开启调试模式 默认false
             base_api: config.BASE_API,
             file_api: config.FILE_API,
             proxy: config.CALLBACK_API,

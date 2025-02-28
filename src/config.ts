@@ -26,6 +26,7 @@ export const config = {
     BASE_API: process.env.BASE_API?.toString(),
     FILE_API: process.env.FILE_API?.toString(),
     CALLBACK_API: process.env.CALLBACK_API?.toString(),
+    DEBUG_MODE: process.env.DEBUG_MODE === 'true' ? true : false,
 }
 
 export const useProxy = config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== ''
