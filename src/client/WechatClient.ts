@@ -21,6 +21,9 @@ import {MessageTypeUtils} from '../util/MessageTypeUtils'
 import {EmojiConverter} from '../util/EmojiUtils'
 
 export class WeChatClient extends AbstractClient {
+    get wxInfo() {
+        return this._wxInfo
+    }
     private configurationService = ConfigurationService.getInstance()
     private groupOperate: TelegramGroupOperateService
     private bindGroupService: BindGroupService
@@ -28,7 +31,7 @@ export class WeChatClient extends AbstractClient {
     private scanMsgId: number = undefined
     private messageService: MessageService
     private friendshipList = []
-    private wxInfo
+    private _wxInfo
     // 登陆时间
     private startTime
 
@@ -96,6 +99,9 @@ export class WeChatClient extends AbstractClient {
             const messageEntity = await this.messageService.getByBotMsgId(bindGroup.chatId, parseInt(message.id))
             if (msgResult && messageEntity) {
                 messageEntity.wxMsgId = msgResult.newMsgId
+                messageEntity.msgId = msgResult.msgId
+                messageEntity.createTime = msgResult.createTime
+                messageEntity.toWxid = msgResult.toWxid
                 this.messageService.createOrUpdate(messageEntity)
             }
         }
@@ -135,7 +141,7 @@ export class WeChatClient extends AbstractClient {
     }
 
     private async loginSuccess() {
-        this.wxInfo = await this.client.info()
+        this._wxInfo = await this.client.info()
         this.hasLogin = true
         const config = await this.configurationService.getConfig()
         const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
@@ -168,7 +174,7 @@ export class WeChatClient extends AbstractClient {
         const messageEntity = new Message()
         messageEntity.chatId = message.chatId
         messageEntity.tgBotMsgId = parseInt(message.id)
-        messageEntity.wxSenderId = this.wxInfo.wxid
+        messageEntity.wxSenderId = this._wxInfo.wxid
         messageEntity.type = message.type
         messageEntity.content = message.content
         await this.messageService.createOrUpdate(messageEntity)
@@ -206,6 +212,9 @@ export class WeChatClient extends AbstractClient {
                 const messageEntity = await this.messageService.getByBotMsgId(bindGroup.chatId, parseInt(message.id))
                 if (msgResult && messageEntity) {
                     messageEntity.wxMsgId = msgResult.newMsgId
+                    messageEntity.msgId = msgResult.msgId
+                    messageEntity.createTime = msgResult.createTime
+                    messageEntity.toWxid = msgResult.toWxid
                     this.messageService.createOrUpdate(messageEntity)
                 }
             }
@@ -309,9 +318,13 @@ export class WeChatClient extends AbstractClient {
         if (!wxId) {
             wxId = msg.fromId
         }
+        if (wxId.includes('@app')) {
+            // 服务通知
+            wxId = 'app'
+        }
         let bindGroup = await this.bindGroupService.getByWxId(wxId)
         // 如果找不到就创建一个新的群组
-        if (!bindGroup && wxId !== this.wxInfo.wxid) {
+        if (!bindGroup && wxId !== this._wxInfo.wxid) {
             bindGroup = new BindGroup()
             bindGroup.wxId = wxId
             bindGroup.isReceive = true
@@ -337,6 +350,11 @@ export class WeChatClient extends AbstractClient {
                     }
                     bindGroup.avatarLink = 'https://raw.githubusercontent.com/finalpi/wechat2tg/wx2tg-pad/qywx.jpg'
                 }
+                if (wxId === 'app') {
+                    // 服务通知
+                    bindGroup.name = '服务通知'
+                    bindGroup.avatarLink = 'https://raw.githubusercontent.com/finalpi/wechat2tg/wx2tg-pad/fwtz.png'
+                }
             }
             bindGroup = await this.groupOperate.createGroup(bindGroup)
         }
@@ -358,7 +376,12 @@ export class WeChatClient extends AbstractClient {
         } else {
             identityType = config.ROOM_MESSAGE_GROUP
         }
-        const identity = FormatUtils.transformTitleStr(identityType, fromContact._alias !== fromContact.name() ? fromContact._alias : '', fromContact.name(), topic)
+        let identity
+        if (wxId && wxId === 'app') {
+            identity = FormatUtils.transformTitleStr(config.OFFICIAL_MESSAGE_GROUP, '', '服务通知', topic)
+        } else {
+            identity = FormatUtils.transformTitleStr(identityType, fromContact._alias !== fromContact.name() ? fromContact._alias : '', fromContact.name(), topic)
+        }
         const messageParam: BaseMessage = {
             id: msg._newMsgId,
             senderId: contact._wxid,
@@ -366,9 +389,12 @@ export class WeChatClient extends AbstractClient {
             sender: identity,
             chatId: bindGroup.chatId,
             type: 0,
-            content: msg.text(),
+            content: msg.text() + '',
             source_type: msg.type(),
-            source_text: msg.text()
+            source_text: msg.text(),
+            toWxid: msg.toId,
+            msgId: msg._msgId,
+            createTime: msg._createTime
         }
         let referMsg
         let filebox
@@ -386,9 +412,9 @@ export class WeChatClient extends AbstractClient {
                 if (await msg.mentionSelf()) {
                     // 如果自己被 @ 了
                     const tgId = configuration.chatId
-                    if (this.wxInfo) {
-                        messageParam.content = messageParam.content.replaceAll(`@${this.wxInfo.nickName}`,
-                            `<a href="tg://user?id=${tgId}">@${this.wxInfo.nickName}</a>`)
+                    if (this._wxInfo) {
+                        messageParam.content = messageParam.content.replaceAll(`@${this._wxInfo.nickName}`,
+                            `<a href="tg://user?id=${tgId}">@${this._wxInfo.nickName}</a>`)
                         messageParam.content = messageParam.content.replaceAll('@所有人',
                             `<a href="tg://user?id=${tgId}">@所有人</a>`)
                     }
@@ -406,7 +432,7 @@ export class WeChatClient extends AbstractClient {
                         messageParam.content = appLinkList.map((it, index) => {
                             return `<a href="${it.url}">${it.title}</a><blockquote expandable>${it.summary || it.digest}</blockquote>`
                         }).join('\n')
-                    }else {
+                    } else {
                         messageParam.content = `<a href="${appLinkList.url}">${appLinkList.title}</a><blockquote expandable>${appLinkList.summary || appLinkList.digest}</blockquote>`
                     }
                 } else {
@@ -581,5 +607,15 @@ export class WeChatClient extends AbstractClient {
             default:
                 return 'document'
         }
+    }
+
+    // 撤回消息
+    async revokeMessage(message: Message) {
+        return await this.client.Message.revoke({
+            toWxid: message.toWxid,
+            msgId: message.msgId,
+            newMsgId: message.wxMsgId,
+            createTime: message.createTime
+        })
     }
 }

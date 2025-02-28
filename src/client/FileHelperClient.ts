@@ -94,6 +94,7 @@ export class FileHelperClient extends AbstractClient {
                 tgBotClient.telegram.deleteMessage(config.chatId, this.scanMsgId)
                 this.scanMsgId = undefined
             }
+            this.hasReady = true
             this.hasLogin = true
         })
         this.client.on('ready',() => {
@@ -104,7 +105,7 @@ export class FileHelperClient extends AbstractClient {
         })
         this.client.on('error',err => {
             console.log('error',err)
-            if (err.message === '重启时网络错误，60s后进行最后一次重启' || err.message.includes('同步失败')) {
+            if (this.hasLogin && (err.message === '重启时网络错误，60s后进行最后一次重启' || err.message.includes('同步失败'))) {
                 this.restartClient()
             }
         })
