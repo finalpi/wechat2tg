@@ -8,6 +8,9 @@ import BaseMessage from '../base/BaseMessage'
 import {ClientFactory} from './factory/ClientFactory'
 import {Api} from 'telegram'
 import {ConfigurationService} from '../service/ConfigurationService'
+import {MessageService} from '../service/MessageService'
+import {WeChatClient} from './WechatClient'
+import {DeletedMessage} from 'telegram/events/DeletedMessage'
 
 export class UserMTProtoClient extends AbstractClient {
     private readonly DEFAULT_FILTER_ID = 115
@@ -26,6 +29,21 @@ export class UserMTProtoClient extends AbstractClient {
                 // 登录成功逻辑
                 this.hasLogin = true
                 this.createFolder()
+                this.client?.addEventHandler(async event => {
+                    // let id = event.peer?.id
+                    // this.logInfo(`Deleted message: ${event.inputChat}`)
+                    for (const deletedId of event.deletedIds) {
+                        const msg = await MessageService.getInstance().getByBotMsgId(undefined, deletedId)
+                        if (!msg) {
+                            return
+                        }
+                        const wxClient: WeChatClient = UserMTProtoClient.getSpyClient('wxClient') as WeChatClient
+                        if (wxClient.wxInfo.wxid !== msg.wxSenderId) {
+                            return
+                        }
+                        await wxClient.revokeMessage(msg)
+                    }
+                }, new DeletedMessage({}))
             }).catch((e) => {
                 //
             })
