@@ -24,6 +24,7 @@ export class WeChatClient extends AbstractClient {
     get wxInfo() {
         return this._wxInfo
     }
+
     private configurationService = ConfigurationService.getInstance()
     private groupOperate: TelegramGroupOperateService
     private bindGroupService: BindGroupService
@@ -308,7 +309,6 @@ export class WeChatClient extends AbstractClient {
         } else {
             wxId = contact._wxid
         }
-        const fh = await this.client.Contact.find({id: 'filehelper'})
         if (wxId === 'filehelper') {
             return
         }
@@ -525,7 +525,7 @@ export class WeChatClient extends AbstractClient {
                 // 转发文件和视频消息到文件传输助手
                 messageParam.type = 2
                 if (configuration.useFileHelper && WeChatClient.getSpyClient('fhClient').hasLogin) {
-                    const result = await msg.forward(fh)
+                    const result = await this.client.Message.forwardTo(messageParam.content, 'filehelper', msg.type())
                     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                     // @ts-ignore
                     messageParam.fhMsgId = result.newMsgId.c.join('')

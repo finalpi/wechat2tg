@@ -28,6 +28,7 @@ import {KeyboardPageUtils} from '../util/KeyboardPageUtils'
 import {BindGroup} from '../entity/BindGroup'
 import {WxRoomRepository} from '../repository/WxRoomRepository'
 import {WeChatClient} from './WechatClient'
+import {FileHelperClient} from './FileHelperClient'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -130,6 +131,12 @@ export class TelegramBotClient extends AbstractClient {
             }).then(async msgRes => {
                 messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
                 this.messageService.createOrUpdate(messageEntity)
+                // 文件传输助手添加等待中的状态
+                const client = TelegramBotClient.getSpyClient('fhClient') as FileHelperClient
+                client.waitingMessage.push({
+                    date: new Date().getTime(),
+                    msgId: message.fhMsgId
+                })
             }).catch(e => {
                 this.dealException(e, message)
             })
@@ -149,7 +156,7 @@ export class TelegramBotClient extends AbstractClient {
         } else if (message.type === 4) {
             const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
             // 名片消息
-            client.telegram.sendPhoto(message.chatId, {source: message.file.file, filename: message.file.fileName},{
+            client.telegram.sendPhoto(message.chatId, {source: message.file.file, filename: message.file.fileName}, {
                 caption: message.content,
                 parse_mode: 'HTML',
                 reply_markup: {
@@ -167,7 +174,7 @@ export class TelegramBotClient extends AbstractClient {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             const msgJson = TelegramBotClient.getSpyClient('wxClient').client.Message.getXmlToJson(message.source_text)
-            client.telegram.sendLocation(message.chatId,parseFloat(msgJson.msg.location.x),parseFloat(msgJson.msg.location.y), {
+            client.telegram.sendLocation(message.chatId, parseFloat(msgJson.msg.location.x), parseFloat(msgJson.msg.location.y), {
                 reply_markup: {
                     inline_keyboard: [[Markup.button.callback(msgJson.msg.location.poiname || msgJson.msg.location.label, 'null')]]
                 }
@@ -349,6 +356,7 @@ export class TelegramBotClient extends AbstractClient {
     }
 
     private async dealException(e, message: BaseMessage) {
+        console.error(e)
         if (e.response.error_code === 403) {
             this.bindGroupService.removeByChatIdOrWxId(message.chatId, message.senderId)
             const config = await this.configurationService.getConfig()
@@ -608,6 +616,12 @@ export class TelegramBotClient extends AbstractClient {
             // @ts-ignore
             msg.fhMsgId = result.newMsgId.c.join('')
             this.messageService.createOrUpdate(msg)
+            // 文件传输助手添加等待中的状态
+            const client = TelegramBotClient.getSpyClient('fhClient') as FileHelperClient
+            client.waitingMessage.push({
+                date: new Date().getTime(),
+                msgId: msg.fhMsgId
+            })
         })
     }
 
@@ -962,7 +976,7 @@ export class TelegramBotClient extends AbstractClient {
             const match = messageText.match(/\/add\s+([\p{L}\p{N}_]+)/u)
             if (match && match.length > 1) {
                 const contact = await TelegramBotClient.getSpyClient('wxClient').client.Friendship.search(match[1])
-                if (!contact.v3){
+                if (!contact.v3) {
                     return ctx.reply('没有搜索到该用户')
                 }
                 TelegramBotClient.getSpyClient('wxClient').client.Friendship.add(contact, '你好')
