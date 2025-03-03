@@ -188,6 +188,7 @@ export class WeChatClient extends AbstractClient {
                 let msgResult
                 let file
                 if (message.file.fileName.endsWith('.mp4')) {
+                    message.file.fileName = 'video.mp4'
                     const url = FileUtils.saveFile(message.file.file, message.file.fileName)
                     // 提取视频封面
                     const ffmpegUtil = await new ConverterHelper()
