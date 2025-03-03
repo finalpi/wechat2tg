@@ -551,6 +551,15 @@ export class WeChatClient extends AbstractClient {
                 messageParam.content = `收到一条${MessageTypeUtils.getTypeName(msg.type() + '')}消息，请在手机上接收<blockquote expandable>金额：${msgJson.msg.appmsg.wcpayinfo.feedesc}\n转账备注：${msgJson.msg.appmsg.wcpayinfo.pay_memo || ''}</blockquote>`
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
+            case this.client.Message.Type.Revoke:
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                msgJson = this.client.Message.getXmlToJson(msg._xml)
+                messageParam.content = msgJson.sysmsg.revokemsg.replacemsg
+                messageParam.type = 6
+                messageParam.revokeMsgId = msgJson.sysmsg.revokemsg.newmsgid
+                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                break
             default:
                 if (MessageTypeUtils.SKIP_TYPE_LIST.includes(msg.type() + '')) {
                     break

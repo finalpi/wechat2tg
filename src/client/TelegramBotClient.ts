@@ -177,6 +177,23 @@ export class TelegramBotClient extends AbstractClient {
             }).catch(e => {
                 this.dealException(e, message)
             })
+        } else if (message.type === 6) {
+            const revokeMsg = await this.messageService.getByWxMsgId(message.revokeMsgId)
+            const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
+            let param = undefined
+            if (revokeMsg) {
+                param = {
+                    reply_parameters: {
+                        message_id: revokeMsg.tgBotMsgId
+                    }
+                }
+            }
+            client.telegram.sendMessage(message.chatId, message.content, param).then(async msgRes => {
+                messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
+                this.messageService.createOrUpdate(messageEntity)
+            }).catch(e => {
+                this.dealException(e, message)
+            })
         }
         return true
     }
@@ -253,6 +270,9 @@ export class TelegramBotClient extends AbstractClient {
     private async sendTextMsg(message: BaseMessage) {
         // 发送文本消息的方法
         const bindGroup = await this.bindGroupService.getByWxId(message.wxId)
+        if (!bindGroup) {
+            return
+        }
         const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content)
         const option: Option = {
             parse_mode: 'HTML'
