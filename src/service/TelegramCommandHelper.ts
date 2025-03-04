@@ -18,6 +18,7 @@ export default class TgCommandHelper {
             {command: 'settings', description: '程序设置'},
             {command: 'user', description: '查看联系人'},
             {command: 'room', description: '查看微信群'},
+            {command: 'getqr', description: '获取我的二维码名片'},
             {command: 'unbind', description: '解绑群组'},
         ]
 

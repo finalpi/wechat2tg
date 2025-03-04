@@ -1086,6 +1086,18 @@ export class TelegramBotClient extends AbstractClient {
             await wxClient.revokeMessage(msg)
             ctx.reply('撤回请求已发送')
         })
+
+        bot.command('getqr', async ctx => {
+            if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
+                ctx.reply('请先登录微信')
+                return
+            }
+            const wxClient = TelegramBotClient.getSpyClient('wxClient').client
+            const qr = await wxClient.qrcode()
+            const base64Data = qr.qrCode.replace(/^data:image\/\w+;base64,/, '')
+            const imageBuffer = Buffer.from(base64Data, 'base64')
+            ctx.replyWithPhoto({source: imageBuffer})
+        })
     }
 
     private async updateGroupByChatId(chatId: number) {
