@@ -70,6 +70,7 @@ export class BotMTProtoClient extends AbstractClient {
         this.client.start({
             botAuthToken: config.BOT_TOKEN,
         }).then(async () => {//
+            this.hasLogin = true
             this.client?.addEventHandler(async event => {
                 // let id = event.peer?.id
                 // this.logInfo(`Deleted message: ${event.inputChat}`)

@@ -878,6 +878,19 @@ export class TelegramBotClient extends AbstractClient {
         TgCommandHelper.setCommand(bot)
         TgCommandHelper.setSimpleCommandHandler(bot)
 
+        bot.start(ctx => {
+            ctx.reply('请输入 /login 登陆,或者输入 /help 查看帮助\n请注意执行/login 后你就是该机器的所有者', Markup.removeKeyboard())
+        })
+
+        bot.help((ctx) => ctx.replyWithMarkdownV2(`**欢迎使用微信消息转发bot**
+
+[本项目](https://github.com/finalpi/wechat2tg)是基于 gewechty 开发的 pad 协议实现微信消息的收发。
+**本项目仅用于技术研究和学习，不得用于非法用途。**
+
+1\\. 使用 /start 或 /login 命令来启动微信客户端实例，使用 /login 命令进行扫码登录。
+2\\. 使用 /user 或者 /room 命令搜索联系人或者群聊（可以加名称或者备注,例如"/user 张"可以搜索名称或备注含有"张"的用户）。
+3\\. /settings 打开设置。
+4\\. 更多功能请查看 github 仓库（For more features, please check the GitHub repository README）。`))
 
         bot.command('login', async ctx => {
             if (ctx.chat && ctx.chat.type.includes('group')) {
@@ -1151,7 +1164,9 @@ export class TelegramBotClient extends AbstractClient {
                 client: clientFactory.create('wxClient')
             })
         }
-        TelegramBotClient.getSpyClient('wxClient').login()
+        if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
+            TelegramBotClient.getSpyClient('wxClient').login()
+        }
     }
 
     private loginFileHelperClient() {
@@ -1162,7 +1177,9 @@ export class TelegramBotClient extends AbstractClient {
                 client: clientFactory.create('fhClient')
             })
         }
-        TelegramBotClient.getSpyClient('fhClient').login()
+        if (!TelegramBotClient.getSpyClient('fhClient').hasLogin) {
+            TelegramBotClient.getSpyClient('fhClient').login()
+        }
     }
 
     private loginMTPClient() {
@@ -1173,7 +1190,9 @@ export class TelegramBotClient extends AbstractClient {
                 client: clientFactory.create('botMTPClient')
             })
         }
-        TelegramBotClient.getSpyClient('botMTPClient').login()
+        if (!TelegramBotClient.getSpyClient('botMTPClient').hasLogin) {
+            TelegramBotClient.getSpyClient('botMTPClient').login()
+        }
     }
 
     public async loginUserClient() {
@@ -1257,7 +1276,9 @@ export class TelegramBotClient extends AbstractClient {
                     })
                 }),
         }
-        TelegramBotClient.getSpyClient('userMTPClient').login(authParams)
+        if (!TelegramBotClient.getSpyClient('userMTPClient').hasLogin) {
+            TelegramBotClient.getSpyClient('userMTPClient').login(authParams)
+        }
     }
 
 
