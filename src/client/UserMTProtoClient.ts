@@ -74,6 +74,11 @@ export class UserMTProtoClient extends AbstractClient {
                 }
                 const botId = returnBigInt(config.botId)
                 const msgChatId = msg.chatId?.toJSNumber()
+                const exist = await BindGroupService.getInstance().getByChatId(msgChatId)
+                if (!exist) {
+                    // 未绑定消息直接返回
+                    return
+                }
                 if (msg.fromId instanceof Api.PeerUser && !msg.fromId.userId.eq(mineId)
                     && !msg.fromId.userId.eq(botId) && chatIds.includes(msgChatId)) {
                     const doSend = () => {

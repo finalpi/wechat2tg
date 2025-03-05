@@ -645,6 +645,11 @@ export class TelegramBotClient extends AbstractClient {
             const text = ctx.message.text
             const messageId = ctx.message.message_id
             const chatId = ctx.chat.id
+            const exist = await this.bindGroupService.getByChatId(chatId)
+            if (!exist) {
+                // 未绑定消息直接返回
+                return
+            }
             const replyMessageId = ctx.update.message['reply_to_message']?.message_id
             // 其他 bot 的命令会进来，不处理
             if (text.startsWith('/')) {
@@ -686,9 +691,15 @@ export class TelegramBotClient extends AbstractClient {
         bot.on(message('photo'), ctx =>
             this.handleFileMessage.call(this, ctx, 'photo'))
 
-        bot.on(message('sticker'), ctx => {
+        bot.on(message('sticker'), async ctx => {
             if (!TelegramBotClient.getSpyClient('wxClient').hasReady || !TelegramBotClient.getSpyClient('wxClient').hasLogin) {
                 ctx.reply('请先登录微信')
+                return
+            }
+            const chatId = ctx.chat.id
+            const exist = await this.bindGroupService.getByChatId(chatId)
+            if (!exist) {
+                // 未绑定消息直接返回
                 return
             }
             const fileId = ctx.message.sticker.file_id
@@ -792,6 +803,11 @@ export class TelegramBotClient extends AbstractClient {
         }
         const messageId = ctx.message.message_id
         const chatId = ctx.chat.id
+        const exist = await this.bindGroupService.getByChatId(chatId)
+        if (!exist) {
+            // 未绑定消息直接返回
+            return
+        }
         const baseMessage: BaseMessage = {
             id: messageId + '',
             senderId: '',
