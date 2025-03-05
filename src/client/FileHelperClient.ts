@@ -68,8 +68,22 @@ export class FileHelperClient extends AbstractClient {
                     const fileName = fBox.name
                     fBox.toBuffer().then(buffer => {
                         if (buffer.length > 0) {
-                            this.receiveFile(messageEntity, fileName, buffer)
+                            this.receiveFile(messageEntity, fileName, buffer).catch(err => {
+                                console.error('接收失败', err)
+                                this.pendingIds = this.pendingIds.filter(id => id !== msg.id)
+                                this._waitingMessage.push({
+                                    date: new Date().getTime(),
+                                    msgId: msg.id
+                                })
+                            })
                         }
+                    }).catch(err => {
+                        console.error('接收失败', err)
+                        this.pendingIds = this.pendingIds.filter(id => id !== msg.id)
+                        this._waitingMessage.push({
+                            date: new Date().getTime(),
+                            msgId: msg.id
+                        })
                     })
                 })
             }
