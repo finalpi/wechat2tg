@@ -30,4 +30,10 @@ export class BindGroup {
         default: true
     })
     isReceive: boolean
+
+    // 是否转发群组内其他人的消息
+    @Column({
+        default: false
+    })
+    isForwardOthers: boolean
 }

@@ -15,6 +15,7 @@
   "dependencies": {
     "7zip-min": "^1.4.4",
     "better-telegraph": "^2.1.1",
+    "crypto": "^1.0.1",
     "dotenv": "^16.0.3",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.2",

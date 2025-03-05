@@ -467,6 +467,21 @@ export class TelegramBotClient extends AbstractClient {
             ctx.answerCbQuery()
         })
 
+        bot.action(/^forward/, async ctx => {
+            const bindGroup = await this.bindGroupService.getByChatId(ctx.chat.id)
+            if (bindGroup) {
+                bindGroup.isForwardOthers = !bindGroup.isForwardOthers
+                await this.bindGroupService.createOrUpdate(bindGroup)
+                ctx.editMessageReplyMarkup({
+                    inline_keyboard: [[{
+                        text: `状态：${bindGroup.isForwardOthers ? '转发' : '不转发'}`,
+                        callback_data: 'forward'
+                    }]]
+                })
+            }
+            ctx.answerCbQuery()
+        })
+
         bot.action(/^st:/, async ctx => {
             const booleanKey = ctx.match.input.split(':')[1]
             const config = await this.configurationService.getConfig()
@@ -872,6 +887,19 @@ export class TelegramBotClient extends AbstractClient {
                 })
             })
         }
+        // 带有文本的消息单独发送文本
+        if (ctx.text) {
+            const textMessage: BaseMessage = {
+                id: messageId + '',
+                senderId: '',
+                wxId: '',
+                sender: '{me}',
+                chatId: chatId,
+                content: ctx.text,
+                type: 0
+            }
+            TelegramBotClient.getSpyClient('wxClient').sendMessage(textMessage)
+        }
     }
 
     private onBotCommand(bot: Telegraf) {
@@ -968,6 +996,28 @@ export class TelegramBotClient extends AbstractClient {
                             {
                                 text: `当前状态：${bindGroup.isReceive ? '接收消息' : '屏蔽消息'}`,
                                 callback_data: 'message'
+                            }
+                        ]]
+                    }
+                })
+            } else {
+                return ctx.reply('仅支持群组中使用')
+            }
+        })
+
+        bot.command('forward', async (ctx) => {
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                const bindGroup = await this.bindGroupService.getByChatId(ctx.chat.id)
+                if (!bindGroup) {
+                    ctx.reply('该群组暂未绑定')
+                    return
+                }
+                ctx.reply('是否转发群组内其他人的消息', {
+                    reply_markup: {
+                        inline_keyboard: [[
+                            {
+                                text: `当前状态：${bindGroup.isForwardOthers ? '转发' : '不转发'}`,
+                                callback_data: 'forward'
                             }
                         ]]
                     }

@@ -14,6 +14,7 @@ export default class TgCommandHelper {
             {command: 'update', description: '更新群组头像和名称'},
             {command: 'add', description: '根据手机号添加好友，在后面加上你需要添加用户的手机号'},
             {command: 'message', description: '是否接收该群组消息'},
+            {command: 'forward', description: '是否转发群组内其他人的消息'},
             {command: 'revoke', description: '撤回消息'},
             {command: 'settings', description: '程序设置'},
             {command: 'user', description: '查看联系人'},
