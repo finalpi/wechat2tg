@@ -8,6 +8,17 @@ import BaseMessage from '../base/BaseMessage'
 import {ClientFactory} from './factory/ClientFactory'
 import {Api} from 'telegram'
 import {ConfigurationService} from '../service/ConfigurationService'
+import {MessageService} from '../service/MessageService'
+import {WeChatClient} from './WechatClient'
+import {DeletedMessage} from 'telegram/events/DeletedMessage'
+import {BindGroupService} from '../service/BindGroupService'
+import {NewMessage} from 'telegram/events'
+import {returnBigInt} from 'telegram/Helpers'
+import sharp from 'sharp'
+import fs from 'node:fs'
+import {ConverterHelper} from '../util/FfmpegUtils'
+import crypto from 'crypto'
+import path from 'node:path'
 
 export class UserMTProtoClient extends AbstractClient {
     private readonly DEFAULT_FILTER_ID = 115
@@ -26,11 +37,154 @@ export class UserMTProtoClient extends AbstractClient {
                 // 登录成功逻辑
                 this.hasLogin = true
                 this.createFolder()
+                this.client?.addEventHandler(async event => {
+                    // let id = event.peer?.id
+                    // this.logInfo(`Deleted message: ${event.inputChat}`)
+                    for (const deletedId of event.deletedIds) {
+                        const msg = await MessageService.getInstance().getByBotMsgId(undefined, deletedId)
+                        if (!msg) {
+                            return
+                        }
+                        const wxClient: WeChatClient = UserMTProtoClient.getSpyClient('wxClient') as WeChatClient
+                        if (wxClient.wxInfo.wxid !== msg.wxSenderId) {
+                            return
+                        }
+                        await wxClient.revokeMessage(msg)
+                    }
+                }, new DeletedMessage({}))
+                this.listenMessage()
             }).catch((e) => {
                 //
             })
         }
         return true
+    }
+
+    public async listenMessage() {
+        const config = await ConfigurationService.getInstance().getConfig()
+        this.client?.getMe().then(me => {
+            const mineId = me.id
+            this.client.addEventHandler(async event => {
+                const chatIdsAll = await BindGroupService.getInstance().getAll()
+                const chatIds = chatIdsAll.filter(i => i.isForwardOthers).map(i => i.chatId)
+                const msg = event.message
+                if (msg.fromId instanceof Api.PeerUser && msg.fromId.userId.eq(mineId)) {
+                    // 我发送的消息
+                    return
+                }
+                const botId = returnBigInt(config.botId)
+                const msgChatId = msg.chatId?.toJSNumber()
+                const exist = await BindGroupService.getInstance().getByChatId(msgChatId)
+                if (!exist) {
+                    // 未绑定消息直接返回
+                    return
+                }
+                if (msg.fromId instanceof Api.PeerUser && !msg.fromId.userId.eq(mineId)
+                    && !msg.fromId.userId.eq(botId) && chatIds.includes(msgChatId)) {
+                    const doSend = () => {
+                        if (msg.message) {
+                            if (msg.message.startsWith('/')) {
+                                return
+                            }
+                            const textMessage: BaseMessage = {
+                                id: msg.id + '',
+                                senderId: '',
+                                wxId: '',
+                                sender: '{me}',
+                                chatId: msgChatId,
+                                content: msg.message,
+                                type: 0
+                            }
+                            UserMTProtoClient.getSpyClient('wxClient').sendMessage(textMessage)
+                        }
+                        if (msg.media) {
+                            const baseMessage: BaseMessage = {
+                                id: msg.id + '',
+                                senderId: '',
+                                wxId: '',
+                                sender: '{me}',
+                                chatId: msgChatId,
+                                content: '',
+                                type: 1
+                            }
+                            const fileName = UserMTProtoClient.getFileName(msg)
+                            msg.downloadMedia().then((buff) => {
+                                if (Buffer.byteLength(buff) < 100 * 1024 && (fileName?.endsWith('jpg') || fileName?.endsWith('jpeg') || fileName?.endsWith('png'))) {
+                                    // 构造包含无用信息的 EXIF 元数据
+                                    const exifData = {
+                                        IFD0: {
+                                            // 添加一个长字符串作为无用信息
+                                            ImageDescription: '0'.repeat(110_000 - Buffer.byteLength(buff))
+                                        }
+                                    }
+                                    // 保存带有新元数据的图片
+                                    sharp(buff)
+                                        .toFormat('png')
+                                        .withExif(exifData)
+                                        .toBuffer()
+                                        .then(buffer => {
+                                            baseMessage.file = {
+                                                fileName: fileName,
+                                                file: buffer,
+                                            }
+                                            UserMTProtoClient.getSpyClient('wxClient').sendMessage(baseMessage)
+                                        })
+                                    return
+                                }
+                                if (fileName.endsWith('.tgs') || fileName.endsWith('.webm') || fileName.endsWith('.webp')) {
+                                    const hash = crypto.createHash('md5')
+                                    hash.update(buff)
+                                    const md5 = hash.digest('hex')
+                                    const saveFile = `save-files/${md5}${fileName.slice(fileName.lastIndexOf('.'))}`
+                                    const gifFile = `save-files/${md5}.gif`
+                                    const lottie_config = {
+                                        width: 128,
+                                        height: 128
+                                    }
+                                    // 微信不能发超过1Mb的gif文件
+                                    if (saveFile.endsWith('.tgs')) {
+                                        lottie_config.width = 512
+                                        lottie_config.height = 512
+                                    }
+                                    fs.writeFile(saveFile, buff, async (err) => {
+                                        if (!err) {
+                                            if (!fs.existsSync(gifFile)) {
+                                                if (fileName.endsWith('.tgs')) {
+                                                    await new ConverterHelper().tgsToGif(saveFile, gifFile, lottie_config)
+                                                } else if (fileName.endsWith('.webm')) {
+                                                    await new ConverterHelper().webmToGif(saveFile, gifFile)
+                                                } else if (fileName.endsWith('.webp')) {
+                                                    await new ConverterHelper().webpToGif(saveFile, gifFile)
+                                                }
+                                            }
+                                        }
+
+                                        const buffer = fs.readFileSync(gifFile)
+
+                                        // 提取文件名
+                                        const newFileName = path.basename(gifFile)
+                                        baseMessage.content = newFileName
+                                        baseMessage.file = {
+                                            fileName: newFileName,
+                                            file: Buffer.from(buffer),
+                                        }
+                                        UserMTProtoClient.getSpyClient('wxClient').sendMessage(baseMessage)
+                                    })
+                                } else {
+                                    baseMessage.file = {
+                                        fileName: fileName,
+                                        file: buff,
+                                    }
+                                    UserMTProtoClient.getSpyClient('wxClient').sendMessage(baseMessage)
+                                }
+                            })
+                        }
+                    }
+                    doSend()
+                }
+                // }, new NewMessage())
+            }, new NewMessage({func: (event) => event.isGroup}))
+        })
     }
 
     logout(): Promise<boolean> {
@@ -127,4 +281,30 @@ export class UserMTProtoClient extends AbstractClient {
             })
         }
     }
+
+    private static getFileName(msg: Api.Message) {
+        let fileName = undefined
+        switch (msg.media.className) {
+            case 'MessageMediaDocument':
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                fileName = msg.document?.attributes?.find(attr => attr instanceof Api.DocumentAttributeFilename)?.fileName
+                if (!fileName && msg.document.mimeType) {
+                    if (msg.document.mimeType.includes('ogg')) {
+                        const nowShangHaiZh = new Date().toLocaleString('zh', {
+                            timeZone: 'Asia/ShangHai'
+                        }).toString().replaceAll('/', '')
+                        fileName = `语音-${nowShangHaiZh.toLocaleLowerCase()}.mp3`
+                    } else {
+                        fileName = 'file.' + msg.document.mimeType.split('/')[1]
+                    }
+                }
+                break
+            case 'MessageMediaPhoto':
+                fileName = 'photo.png'
+                break
+        }
+        return fileName
+    }
+
 }
