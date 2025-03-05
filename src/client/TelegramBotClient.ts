@@ -646,6 +646,10 @@ export class TelegramBotClient extends AbstractClient {
             const messageId = ctx.message.message_id
             const chatId = ctx.chat.id
             const replyMessageId = ctx.update.message['reply_to_message']?.message_id
+            // 其他 bot 的命令会进来，不处理
+            if (text.startsWith('/')) {
+                return
+            }
             // 处理等待用户输入的指令
             if (await this.dealWithCommand(ctx, text)) {
                 return
