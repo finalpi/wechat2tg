@@ -332,6 +332,7 @@ export class WeChatClient extends AbstractClient {
             if (room) {
                 bindGroup.type = 1
                 bindGroup.name = room.name
+                bindGroup.alias = room.remark
                 const avatar = await room.avatar()
                 bindGroup.avatarLink = avatar.url
                 if (!bindGroup.name) {
@@ -595,6 +596,7 @@ export class WeChatClient extends AbstractClient {
                 if (wxRoom) {
                     await wxRoom.sync()
                     bindItem.name = wxRoom.name
+                    bindItem.alias = wxRoom.remark
                     const avatar = await wxRoom.avatar()
                     bindItem.avatarLink = avatar.url
                     telegramGroupOperateService.updateGroup(bindItem)

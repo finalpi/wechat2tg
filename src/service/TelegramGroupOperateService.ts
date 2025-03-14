@@ -91,7 +91,7 @@ export class TelegramGroupOperateService {
                 }
                 name = FormatUtils.transformTitleStr(config.CREATE_CONTACT_NAME, contactOrRoom.alias, contactOrRoom.name, '')
             } else {
-                name = FormatUtils.transformTitleStr(config.CREATE_ROOM_NAME, '', '', contactOrRoom.name)
+                name = FormatUtils.transformTitleStr(config.CREATE_ROOM_NAME, contactOrRoom.alias, '', contactOrRoom.name)
             }
             if (name !== oldBindGroup.name) {
                 oldBindGroup.name = name

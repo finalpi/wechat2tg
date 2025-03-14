@@ -1205,6 +1205,7 @@ export class TelegramBotClient extends AbstractClient {
                 if (wxRoom) {
                     await wxRoom.sync()
                     bindItem.name = wxRoom.name
+                    bindItem.alias = wxRoom.remark
                     const avatar = await wxRoom.avatar()
                     bindItem.avatarLink = avatar.url
                     telegramGroupOperateService.updateGroup(bindItem)
