@@ -32,32 +32,35 @@ export class UserMTProtoClient extends AbstractClient {
                 client: clientFactory.create('userMTPClient')
             })
         }
+
         if (!await this.client?.checkAuthorization()) {
-            this.client?.start(authParams).then(res => {
-                // 登录成功逻辑
+            try {
+                await this.client?.start(authParams)
                 this.hasLogin = true
                 this.createFolder()
+
+                // 添加事件处理器
                 this.client?.addEventHandler(async event => {
-                    // let id = event.peer?.id
-                    // this.logInfo(`Deleted message: ${event.inputChat}`)
                     for (const deletedId of event.deletedIds) {
                         const msg = await MessageService.getInstance().getByBotMsgId(undefined, deletedId)
-                        if (!msg) {
-                            return
-                        }
+                        if (!msg) return
+
                         const wxClient: WeChatClient = UserMTProtoClient.getSpyClient('wxClient') as WeChatClient
-                        if (wxClient.wxInfo.wxid !== msg.wxSenderId) {
-                            return
-                        }
+                        if (wxClient.wxInfo.wxid !== msg.wxSenderId) return
+
                         await wxClient.revokeMessage(msg)
                     }
                 }, new DeletedMessage({}))
+
                 this.listenMessage()
-            }).catch((e) => {
-                //
-            })
+                return true
+            } catch (e) {
+                console.error('Login failed:', e)
+                throw e
+            }
+        } else {
+            return true
         }
-        return true
     }
 
     public async listenMessage() {

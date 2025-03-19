@@ -646,12 +646,11 @@ export class TelegramBotClient extends AbstractClient {
             const messageId = ctx.message.message_id
             const chatId = ctx.chat.id
             const exist = await this.bindGroupService.getByChatId(chatId)
- 
             // 处理等待用户输入的指令
             if (await this.dealWithCommand(ctx, text)) {
                 return
             }
-           if (!exist) {
+            if (!exist) {
                 // 未绑定消息直接返回
                 return
             }
@@ -958,8 +957,6 @@ export class TelegramBotClient extends AbstractClient {
             }
             // todo 先判断是否登录 TG user client
             this.loginUserClient()
-            // 登录微信客户端
-            this.loginWechatClient()
         })
 
         bot.command('flogin', async ctx => {
@@ -1281,7 +1278,7 @@ export class TelegramBotClient extends AbstractClient {
             },
             phoneNumber: async () =>
                 new Promise((resolve) => {
-                    this.client.telegram.sendMessage(this.chatId, '请输入你的手机号码（需要带国家区号，例如：+8613355558888）').then(res => {
+                    this.client.telegram.sendMessage(this.chatId, '请先登录 Telegram 客户端，请输入你的 Telegram 账户的手机号码（需要带国家区号，例如：+8613355558888）').then(res => {
                         this.waitInputCommand = 'phoneNumber'
                         const intervalId = setInterval(() => {
                             if (this.phoneNumber) {
@@ -1349,7 +1346,12 @@ export class TelegramBotClient extends AbstractClient {
                 }),
         }
         if (!TelegramBotClient.getSpyClient('userMTPClient').hasLogin) {
-            TelegramBotClient.getSpyClient('userMTPClient').login(authParams)
+            TelegramBotClient.getSpyClient('userMTPClient').login(authParams).then(login => {
+                if (login) {
+                    this.client.telegram.sendMessage(this.chatId, 'Telegram 客户端登录成功！')
+                    this.loginWechatClient()
+                }
+            })
         }
     }
 
@@ -1367,8 +1369,6 @@ export class TelegramBotClient extends AbstractClient {
                     this.hasLogin = true
                     if (config.chatId > 0) {
                         this.loginUserClient()
-                        // 登录微信客户端
-                        this.loginWechatClient()
                         // 登录 botMTP 客户端
                         this.loginMTPClient()
                         if (config.useFileHelper) {
