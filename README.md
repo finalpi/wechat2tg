@@ -83,7 +83,7 @@ services:
     env_file: ".env"
     restart: always
   gewechat:
-     image: registry.cn-chengdu.aliyuncs.com/tu1h/wechotd:alpine # 拉取镜像
+     image: xleat/gewe:latest # 拉取镜像
      container_name: gewechat
      ports:
         - "2531:2531"
