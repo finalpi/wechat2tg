@@ -44,4 +44,10 @@ export class Configuration {
         default: true
     })
     selfMessage: boolean
+
+    // 启动时同步群组信息
+    @Column({
+        default: true
+    })
+    syncWechat: boolean
 }

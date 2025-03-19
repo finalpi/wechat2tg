@@ -6,41 +6,47 @@ import {Settings} from '../entity/Settings'
 export class ConfigurationService {
     private configurationRepository = ConfigurationRepository.getInstance()
     private static instance
+
     static getInstance(): ConfigurationService {
         if (!ConfigurationService.instance) {
             ConfigurationService.instance = new ConfigurationService()
         }
         return ConfigurationService.instance
     }
+
     constructor() {
         //
     }
-    async getConfig():Promise<Configuration>{
+
+    async getConfig(): Promise<Configuration> {
         return await this.configurationRepository.getOne()
     }
 
-    async getSetting(){
+    async getSetting() {
         const config = await this.getConfig()
         const settingMap = new Map<string, Settings<any>>()
         // 质量压缩
         // this.setBooleanOptions(settingMap,'compression',config.compression, '媒体质量压缩')
 
         // 文件传输助手
-        this.setBooleanOptions(settingMap,'useFileHelper',config.useFileHelper, '文件传输助手接收视频和文件')
+        this.setBooleanOptions(settingMap, 'useFileHelper', config.useFileHelper, '文件传输助手接收视频和文件')
 
         // 公众号消息
-        this.setBooleanOptions(settingMap,'receivePublicAccount',config.receivePublicAccount, '接收公众号消息')
+        this.setBooleanOptions(settingMap, 'receivePublicAccount', config.receivePublicAccount, '接收公众号消息')
 
         // 原始 emoji 是否以图片链接方式显示
-        this.setBooleanOptions(settingMap,'emojiPicture',config.emojiPicture, '微信emoji是否以图片链接显示')
+        this.setBooleanOptions(settingMap, 'emojiPicture', config.emojiPicture, '微信emoji是否以图片链接显示')
 
         // 转发自己发送的消息
-        this.setBooleanOptions(settingMap,'selfMessage',config.selfMessage, '转发自己在微信发送的消息')
+        this.setBooleanOptions(settingMap, 'selfMessage', config.selfMessage, '转发自己在微信发送的消息')
+
+        // 启动时同步群组信息
+        this.setBooleanOptions(settingMap, 'syncWechat', config.syncWechat, '启动时同步群组信息')
 
         return settingMap
     }
 
-    private setBooleanOptions(settingMap: Map<string, Settings<any>>,key: string,value: boolean, description: string) {
+    private setBooleanOptions(settingMap: Map<string, Settings<any>>, key: string, value: boolean, description: string) {
         const booleanSettings = new Settings<boolean>()
         booleanSettings.description = description
         booleanSettings.value = value
@@ -51,7 +57,7 @@ export class ConfigurationService {
         settingMap.set(key, booleanSettings)
     }
 
-    async saveConfig(config: Configuration){
+    async saveConfig(config: Configuration) {
         return this.configurationRepository.updateConfig(config)
     }
 }

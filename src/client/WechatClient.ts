@@ -146,22 +146,24 @@ export class WeChatClient extends AbstractClient {
         this.hasLogin = true
         const config = await this.configurationService.getConfig()
         const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
-        tgBotClient.telegram.sendMessage(config.chatId, '微信登录成功')
+        tgBotClient.telegram.sendMessage(config.chatId, '微信客户端登录成功！')
         if (this.scanMsgId) {
             tgBotClient.telegram.deleteMessage(config.chatId, this.scanMsgId)
             this.scanMsgId = undefined
         }
 
         // 登录后更新群组绑定信息
-        setTimeout(async () => {
-            const allBind = await this.bindGroupService.getAll()
-            for (const bindGroup of allBind) {
-                // 添加延迟防止接口调用过快
-                setTimeout(() => {
-                    this.updateGroupByChatId(bindGroup.chatId)
-                }, 500)
-            }
-        }, 10000)
+        if (config.syncWechat) {
+            setTimeout(async () => {
+                const allBind = await this.bindGroupService.getAll()
+                for (const bindGroup of allBind) {
+                    // 添加延迟防止接口调用过快
+                    setTimeout(() => {
+                        this.updateGroupByChatId(bindGroup.chatId)
+                    }, 500)
+                }
+            }, 10000)
+        }
     }
 
     logout(): Promise<boolean> {
@@ -332,6 +334,7 @@ export class WeChatClient extends AbstractClient {
             if (room) {
                 bindGroup.type = 1
                 bindGroup.name = room.name
+                bindGroup.alias = room.remark
                 const avatar = await room.avatar()
                 bindGroup.avatarLink = avatar.url
                 if (!bindGroup.name) {
@@ -595,6 +598,7 @@ export class WeChatClient extends AbstractClient {
                 if (wxRoom) {
                     await wxRoom.sync()
                     bindItem.name = wxRoom.name
+                    bindItem.alias = wxRoom.remark
                     const avatar = await wxRoom.avatar()
                     bindItem.avatarLink = avatar.url
                     telegramGroupOperateService.updateGroup(bindItem)

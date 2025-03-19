@@ -7,7 +7,7 @@ export class FormatUtils{
     }
 
     static transformTitleStr(inputString: string, alias: string, name: string, topic: string): string {
-        const alias_first = alias || name
+        const alias_first = alias || name || topic
         inputString = inputString.replace(this.NAME_REGEXP, (match, p1) => {
             if (p1.includes('alias_first')) {
                 return alias_first ? p1.replaceAll('alias_first', alias_first) : ''
