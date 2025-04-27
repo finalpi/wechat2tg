@@ -29,6 +29,7 @@ import {BindGroup} from '../entity/BindGroup'
 import {WxRoomRepository} from '../repository/WxRoomRepository'
 import {WeChatClient} from './WechatClient'
 import {FileHelperClient} from './FileHelperClient'
+import {handleSticker} from '../util/handleSticker'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -703,6 +704,26 @@ export class TelegramBotClient extends AbstractClient {
                 return
             }
             const fileId = ctx.message.sticker.file_id
+            // 使用md5发送贴纸
+            const messageId = ctx.message.message_id
+            const stickerMessage: BaseMessage = {
+                id: messageId + '',
+                senderId: '',
+                wxId: '',
+                sender: '{me}',
+                chatId: chatId,
+                content: '',
+                type: 0
+            }
+            const stickerEmoji = await handleSticker(ctx)
+            stickerMessage.content = stickerEmoji
+            TelegramBotClient.getSpyClient('wxClient').sendMessage(stickerMessage)
+            if (stickerEmoji) {
+                return;
+            } else {
+                console.log('TG贴纸ID:', ctx.message.sticker.file_id);
+            }
+            // 若匹配不到md5则使用静态图片形式发送
             ctx.telegram.getFileLink(fileId).then(async fileLink => {
                 const uniqueId = ctx.message.sticker.file_unique_id
                 const href = fileLink.href
