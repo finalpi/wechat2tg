@@ -648,28 +648,38 @@ export class TelegramBotClient extends AbstractClient {
             let text;
             let linkTitle;
             let linkUrl;
+            let linkDesc;
             text = ctx.message.text;
             if (ctx.message && 'entities' in ctx.message) {
                 const msgEntities = ctx.message.entities as any[];
                 if (msgEntities && msgEntities.length > 0) {
-                    const entity = msgEntities[0];
+                    let entity = msgEntities[0];
+                    for (const item of msgEntities) {
+                        // 只处理第一个链接
+                        if (item.type === 'text_link' || item.type === 'url') {
+                            entity = item;
+                            break;
+                        }
+                    }
                     
                     if (entity.type === 'text_link' && entity.url) {
                         linkTitle = ctx.message.text;
                         linkUrl = entity.url;
+                        linkDesc = "";
                     } else if (entity.type === 'url') {
-                        linkTitle = "链接";
+                        linkTitle = "非公众号链接";
                         linkUrl = ctx.message.text.substring(
                             entity.offset, 
                             entity.offset + entity.length
                         );
+                        linkDesc = linkUrl;
                     }
                     
                     if (linkTitle && linkUrl) {
                         text = new UrlLink({
                             title: linkTitle,
-                            desc: "",
-                            thumbUrl: `https://weixin.qq.com`,
+                            desc: linkDesc,
+                            thumbUrl: `https://raw.githubusercontent.com/hououinkami/docker/refs/heads/main/wx2tg/wechat.png`,
                             linkUrl: linkUrl,
                         });
                     }
