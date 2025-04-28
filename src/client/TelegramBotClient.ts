@@ -30,6 +30,7 @@ import {WxRoomRepository} from '../repository/WxRoomRepository'
 import {WeChatClient} from './WechatClient'
 import {FileHelperClient} from './FileHelperClient'
 import {handleSticker} from '../util/handleSticker'
+import { UrlLink } from 'gewechaty'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -643,7 +644,38 @@ export class TelegramBotClient extends AbstractClient {
 
     onMessage(bot: Telegraf) {
         bot.on(message('text'), async ctx => {
-            const text = ctx.message.text
+            // 识别文本类型
+            let text;
+            let linkTitle;
+            let linkUrl;
+            text = ctx.message.text;
+            if (ctx.message && 'entities' in ctx.message) {
+                const msgEntities = ctx.message.entities as any[];
+                if (msgEntities && msgEntities.length > 0) {
+                    const entity = msgEntities[0];
+                    
+                    if (entity.type === 'text_link' && entity.url) {
+                        linkTitle = ctx.message.text;
+                        linkUrl = entity.url;
+                    } else if (entity.type === 'url') {
+                        linkTitle = "链接";
+                        linkUrl = ctx.message.text.substring(
+                            entity.offset, 
+                            entity.offset + entity.length
+                        );
+                    }
+                    
+                    if (linkTitle && linkUrl) {
+                        text = new UrlLink({
+                            title: linkTitle,
+                            desc: "",
+                            thumbUrl: `https://weixin.qq.com`,
+                            linkUrl: linkUrl,
+                        });
+                    }
+                }
+            }
+            // 处理完毕
             const messageId = ctx.message.message_id
             const chatId = ctx.chat.id
             const exist = await this.bindGroupService.getByChatId(chatId)
@@ -657,7 +689,7 @@ export class TelegramBotClient extends AbstractClient {
             }
             const replyMessageId = ctx.update.message['reply_to_message']?.message_id
             // 其他 bot 的命令会进来，不处理
-            if (text.startsWith('/')) {
+            if (typeof text === 'string' && text.startsWith('/')) {
                 return
             }
             const message: BaseMessage = {
