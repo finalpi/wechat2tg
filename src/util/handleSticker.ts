@@ -20,7 +20,7 @@ interface StickerData {
 let stickerDataCache: StickerData | null = null;
 let lastModified = 0;
 
-// 使用本地相对路径
+// 指定贴纸json路径
 const stickerInfoPath = path.join(__dirname, '../../sticker/sticker.json');
 
 // 获取贴纸信息，带缓存机制
@@ -269,8 +269,8 @@ function initJsonFile(filePath: string): void {
     // 创建初始化数据
     const initialData = {
       "stickerToEmojiMap": {
-        "Telegram贴纸ID": {
-          "md5": "微信贴纸md5",
+        "Telegram贴纸ID（输出在容器log中）": {
+          "md5": "微信贴纸md5（新接收到的微信贴纸md5和size信息将自动存储在stickerSave.json中，gif文件将保存在sticker文件夹中）",
           "size": 27053,
           "name": "备注名（可选）"
         }
