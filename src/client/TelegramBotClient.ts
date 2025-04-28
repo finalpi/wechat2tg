@@ -748,9 +748,9 @@ export class TelegramBotClient extends AbstractClient {
                 type: 0
             }
             const stickerEmoji = await handleSticker(ctx)
-            stickerMessage.content = stickerEmoji
-            TelegramBotClient.getSpyClient('wxClient').sendMessage(stickerMessage)
             if (stickerEmoji) {
+                stickerMessage.content = stickerEmoji
+                TelegramBotClient.getSpyClient('wxClient').sendMessage(stickerMessage)
                 return;
             } else {
                 console.log('TG贴纸ID:', ctx.message.sticker.file_id);
