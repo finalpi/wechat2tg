@@ -29,6 +29,8 @@ import {BindGroup} from '../entity/BindGroup'
 import {WxRoomRepository} from '../repository/WxRoomRepository'
 import {WeChatClient} from './WechatClient'
 import {FileHelperClient} from './FileHelperClient'
+import {handleSticker} from '../util/handleSticker'
+import { UrlLink } from 'gewechaty'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -642,7 +644,48 @@ export class TelegramBotClient extends AbstractClient {
 
     onMessage(bot: Telegraf) {
         bot.on(message('text'), async ctx => {
-            const text = ctx.message.text
+            // 识别文本类型
+            let text;
+            let linkTitle;
+            let linkUrl;
+            let linkDesc;
+            text = ctx.message.text;
+            if (ctx.message && 'entities' in ctx.message) {
+                const msgEntities = ctx.message.entities as any[];
+                if (msgEntities && msgEntities.length > 0) {
+                    let entity = msgEntities[0];
+                    for (const item of msgEntities) {
+                        // 只处理第一个链接
+                        if (item.type === 'text_link' || item.type === 'url') {
+                            entity = item;
+                            break;
+                        }
+                    }
+                    
+                    if (entity.type === 'text_link' && entity.url) {
+                        linkTitle = ctx.message.text;
+                        linkUrl = entity.url;
+                        linkDesc = "";
+                    } else if (entity.type === 'url') {
+                        linkTitle = "非公众号链接";
+                        linkUrl = ctx.message.text.substring(
+                            entity.offset, 
+                            entity.offset + entity.length
+                        );
+                        linkDesc = linkUrl;
+                    }
+                    
+                    if (linkTitle && linkUrl) {
+                        text = new UrlLink({
+                            title: linkTitle,
+                            desc: linkDesc,
+                            thumbUrl: `https://raw.githubusercontent.com/hououinkami/docker/refs/heads/main/wx2tg/wechat.png`,
+                            linkUrl: linkUrl,
+                        });
+                    }
+                }
+            }
+            // 处理完毕
             const messageId = ctx.message.message_id
             const chatId = ctx.chat.id
             const exist = await this.bindGroupService.getByChatId(chatId)
@@ -656,7 +699,7 @@ export class TelegramBotClient extends AbstractClient {
             }
             const replyMessageId = ctx.update.message['reply_to_message']?.message_id
             // 其他 bot 的命令会进来，不处理
-            if (text.startsWith('/')) {
+            if (typeof text === 'string' && text.startsWith('/')) {
                 return
             }
             const message: BaseMessage = {
@@ -703,6 +746,26 @@ export class TelegramBotClient extends AbstractClient {
                 return
             }
             const fileId = ctx.message.sticker.file_id
+            // 使用md5发送贴纸
+            const messageId = ctx.message.message_id
+            const stickerMessage: BaseMessage = {
+                id: messageId + '',
+                senderId: '',
+                wxId: '',
+                sender: '{me}',
+                chatId: chatId,
+                content: '',
+                type: 0
+            }
+            const stickerEmoji = await handleSticker(ctx)
+            if (stickerEmoji) {
+                stickerMessage.content = stickerEmoji
+                TelegramBotClient.getSpyClient('wxClient').sendMessage(stickerMessage)
+                return;
+            } else {
+                console.log('TG贴纸ID:', ctx.message.sticker.file_id);
+            }
+            // 若匹配不到md5则使用静态图片形式发送
             ctx.telegram.getFileLink(fileId).then(async fileLink => {
                 const uniqueId = ctx.message.sticker.file_unique_id
                 const href = fileLink.href
