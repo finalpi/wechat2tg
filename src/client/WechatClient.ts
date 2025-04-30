@@ -95,7 +95,12 @@ export class WeChatClient extends AbstractClient {
                 if (quoteMsg) {
                     msgResult = await room.quoteSay(message.content, quoteMsg.wxMsgId, quoteMsg.wxSenderId, quoteMsg.content)
                 } else {
-                    msgResult = await room.say(message.content)
+                    if (message.content.startsWith('@all')) {
+                        message.content = message.content.replace('@all', '')
+                        msgResult = await room.say(message.content,'@all')
+                    }else {
+                        msgResult = await room.say(message.content)
+                    }
                 }
             }
             // 将 msgId 更新到数据库
