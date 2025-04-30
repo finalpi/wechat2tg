@@ -132,13 +132,13 @@ export class WeChatClient extends AbstractClient {
         this.client.start().then(async ({app, router}) => {
             //
             app.use(router.routes()).use(router.allowedMethods())
+            await this.loginSuccess()
             getGeWeChatDataSource().initialize().then(() => {
                 console.log('GeWeChatDataSource initialized')
             }).catch((e) => {
                 console.error('GeWeChatDataSource initialize failed', e)
             })
             this.startTime = new Date().getTime() / 1000
-            this.loginSuccess()
         })
         return true
     }
@@ -545,7 +545,7 @@ export class WeChatClient extends AbstractClient {
                 } else {
                     // 未登录
                     messageParam.type = 3
-                    messageParam.content = `[${MessageTypeUtils.getTypeName(msg.type() + "")}]`
+                    messageParam.content = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]`
                     WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                     break
                 }
@@ -559,7 +559,7 @@ export class WeChatClient extends AbstractClient {
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
                 msgJson = this.client.Message.getXmlToJson(msg._xml)
-                messageParam.content = `[${MessageTypeUtils.getTypeName(msg.type() + "")}]<blockquote>金额：${msgJson.msg.appmsg.wcpayinfo.feedesc}\n转账备注：${msgJson.msg.appmsg.wcpayinfo.pay_memo || ''}</blockquote>`
+                messageParam.content = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]<blockquote>金额：${msgJson.msg.appmsg.wcpayinfo.feedesc}\n转账备注：${msgJson.msg.appmsg.wcpayinfo.pay_memo || ''}</blockquote>`
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case this.client.Message.Type.Revoke:

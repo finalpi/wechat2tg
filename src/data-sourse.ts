@@ -5,6 +5,7 @@ import {Message} from './entity/Message'
 import fs from 'node:fs'
 import {WxContact} from './entity/WxContact'
 import {WxRoom} from './entity/WxRoom'
+import {WeChatClient} from './client/WechatClient'
 
 export const AppDataSource = new DataSource({
     type: 'sqlite',
@@ -21,9 +22,10 @@ export function getGeWeChatDataSource(): DataSource {
         const dsJson = fs.readFileSync('storage/ds.json', 'utf-8')
         const ds = JSON.parse(dsJson)
         if (!gewechatDataSource) {
+            const wxClient = WeChatClient.getSpyClient('wxClient') as WeChatClient
             gewechatDataSource = new DataSource({
                 type: 'sqlite',
-                database: 'storage/db/' + ds.appid + '.db',
+                database: 'storage/db/' + wxClient.wxInfo.wxid + '.db',
                 // database: 'wx_J2acELrtPBGJqoEffcNWL.db',
                 entities: [WxContact,WxRoom],
                 logger: 'debug',
