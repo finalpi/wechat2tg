@@ -589,17 +589,25 @@ export class WeChatClient extends AbstractClient {
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
                 msgJson = this.client.Message.getXmlToJson(msg._xml)
-                const miniprogramTitle = msgJson.msg.appmsg.title;
-                messageParam.content = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]\n${miniprogramTitle}`;
+                const miniprogramTitle = msgJson.msg.appmsg.title
+                messageParam.content = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]\n${miniprogramTitle}`
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case this.client.Message.Type.VideoAccount:
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
                 msgJson = this.client.Message.getXmlToJson(msg._xml)
-                const channelName = msgJson.msg.appmsg.finderFeed.nickname ?? "";
-                const videoTitle = msgJson.msg.appmsg.finderFeed.desc ?? "";
-                messageParam.content = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]${channelName}\n${videoTitle}`;
+                const channelName = msgJson.msg.appmsg.finderFeed.nickname ?? ""
+                const videoTitle = msgJson.msg.appmsg.finderFeed.desc ?? ""
+                messageParam.content = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]${channelName}\n${videoTitle}`
+                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                break
+            case this.client.Message.Type.Pat:
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                msgJson = this.client.Message.getXmlToJson(msg._xml)
+                const patTemplate = msgJson.sysmsg.pat.template ?? ""
+                messageParam.content = `[${patTemplate}]`
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             default:
