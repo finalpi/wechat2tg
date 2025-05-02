@@ -95,7 +95,7 @@ export class WeChatClient extends AbstractClient {
                 if (quoteMsg) {
                     msgResult = await room.quoteSay(message.content, quoteMsg.wxMsgId, quoteMsg.wxSenderId, quoteMsg.content)
                 } else {
-                    if (message.content.startsWith('@all')) {
+                    if (typeof message.content === 'string' && message.content.startsWith('@all')) {
                         message.content = message.content.replace('@all', '')
                         msgResult = await room.say(message.content,'@all')
                     }else {
