@@ -106,7 +106,7 @@ export async function handleSticker(ctx: any): Promise<any> {
     
     // 遍历映射表查找匹配的贴纸
     for (const [mappedStickerId, emojiInfo] of Object.entries(stickerToEmojiMap)) {
-        if (stickerId === mappedStickerId) {
+        if (stickerId.slice(-25) === mappedStickerId.slice(-25)) {
         try {
             // 创建表情对象
             const emoji = new Emoji({
