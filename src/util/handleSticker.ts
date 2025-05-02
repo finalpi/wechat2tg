@@ -94,7 +94,7 @@ process.on('exit', () => {
 // 生成发送所需的Emoji对象
 export async function handleSticker(ctx: any): Promise<any> {
     // 获取TG贴纸ID
-    const stickerId = ctx.message.sticker.file_id;
+    const stickerId = ctx.message.sticker.file_unique_id;
     
     // 如果没有贴纸ID，直接返回 false 继续后续操作
     if (!stickerId) {
@@ -106,7 +106,7 @@ export async function handleSticker(ctx: any): Promise<any> {
     
     // 遍历映射表查找匹配的贴纸
     for (const [mappedStickerId, emojiInfo] of Object.entries(stickerToEmojiMap)) {
-        if (stickerId.slice(-25) === mappedStickerId.slice(-25)) {
+        if (stickerId === mappedStickerId) {
         try {
             // 创建表情对象
             const emoji = new Emoji({
