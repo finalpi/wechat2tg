@@ -745,7 +745,6 @@ export class TelegramBotClient extends AbstractClient {
                 // 未绑定消息直接返回
                 return
             }
-            const fileId = ctx.message.sticker.file_id
             // 使用md5发送贴纸
             const messageId = ctx.message.message_id
             const stickerMessage: BaseMessage = {
@@ -763,9 +762,10 @@ export class TelegramBotClient extends AbstractClient {
                 TelegramBotClient.getSpyClient('wxClient').sendMessage(stickerMessage)
                 return
             } else {
-                console.log('TG贴纸ID:', ctx.message.sticker.file_id)
+                console.log('TG贴纸ID:', ctx.message.sticker.file_unique_id)
             }
             // 若匹配不到md5则使用静态图片形式发送
+            const fileId = ctx.message.sticker.file_id
             ctx.telegram.getFileLink(fileId).then(async fileLink => {
                 const uniqueId = ctx.message.sticker.file_unique_id
                 const href = fileLink.href

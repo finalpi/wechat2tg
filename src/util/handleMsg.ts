@@ -92,26 +92,6 @@ export async function getChatHistory(
     }
   }
   
-// 处理小程序
-export async function getMiniprogram(
-  msgJson: any,
-  msg: { type: () => any; text: () => string }
-): Promise<string> {
-    try {
-      // 获取标题
-      const miniprogramTitle = msgJson.msg.appmsg.title;
-      
-      // 适配Telegram的HTML模式
-      const htmlText = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]\n${miniprogramTitle}`;
-  
-      return htmlText;
-      
-    } catch (error) {
-      console.error('小程序信息处理出错:', error);
-      return `[${MessageTypeUtils.getTypeName(msg.type() + '')}]`;
-    }
-  }
-  
   // 时间格式处理函数
   async function formatTime(timestamp: string) {
     // 拆分日期和时间部分

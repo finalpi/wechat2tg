@@ -19,7 +19,7 @@ import {getGeWeChatDataSource} from '../data-sourse'
 import {ConverterHelper} from '../util/FfmpegUtils'
 import {MessageTypeUtils} from '../util/MessageTypeUtils'
 import {EmojiConverter} from '../util/EmojiUtils'
-import {getChatHistory, getMiniprogram} from '../util/handleMsg'
+import {getChatHistory} from '../util/handleMsg'
 import {saveEmoji} from '../util/handleSticker'
 
 export class WeChatClient extends AbstractClient {
@@ -95,7 +95,7 @@ export class WeChatClient extends AbstractClient {
                 if (quoteMsg) {
                     msgResult = await room.quoteSay(message.content, quoteMsg.wxMsgId, quoteMsg.wxSenderId, quoteMsg.content)
                 } else {
-                    if (message.content.startsWith('@all')) {
+                    if (typeof message.content === 'string' && message.content.startsWith('@all')) {
                         message.content = message.content.replace('@all', '')
                         msgResult = await room.say(message.content,'@all')
                     }else {
@@ -589,8 +589,25 @@ export class WeChatClient extends AbstractClient {
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
                 msgJson = this.client.Message.getXmlToJson(msg._xml)
-                const miniProgram = await getMiniprogram(msgJson, msg)
-                messageParam.content = miniProgram
+                const miniprogramTitle = msgJson.msg.appmsg.title
+                messageParam.content = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]\n${miniprogramTitle}`
+                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                break
+            case this.client.Message.Type.VideoAccount:
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                msgJson = this.client.Message.getXmlToJson(msg._xml)
+                const channelName = msgJson.msg.appmsg.finderFeed.nickname ?? ""
+                const videoTitle = msgJson.msg.appmsg.finderFeed.desc ?? ""
+                messageParam.content = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]${channelName}\n${videoTitle}`
+                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                break
+            case this.client.Message.Type.Pat:
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                msgJson = this.client.Message.getXmlToJson(msg._xml)
+                const patTemplate = msgJson.sysmsg.pat.template ?? ""
+                messageParam.content = `[${patTemplate}]`
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             default:

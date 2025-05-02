@@ -94,7 +94,7 @@ process.on('exit', () => {
 // 生成发送所需的Emoji对象
 export async function handleSticker(ctx: any): Promise<any> {
     // 获取TG贴纸ID
-    const stickerId = ctx.message.sticker.file_id;
+    const stickerId = ctx.message.sticker.file_unique_id;
     
     // 如果没有贴纸ID，直接返回 false 继续后续操作
     if (!stickerId) {
