@@ -1,3 +1,6 @@
+> [!CAUTION]
+> 由于 [Gewechat](https://github.com/Devo919/Gewechat) 项目停止维护，本项目不再可用。
+
 # wechat2tg-pad
 
 基于 [gewechaty](https://github.com/mikoshu/gewechaty) 重构的基于 pad 协议收发微信消息
