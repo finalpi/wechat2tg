@@ -1302,16 +1302,16 @@ export class TelegramBotClient extends AbstractClient {
     }
 
     private loginFileHelperClient() {
-        if (!TelegramBotClient.getSpyClient('fhClient')) {
-            const clientFactory = new ClientFactory()
-            TelegramBotClient.addSpyClient({
-                interfaceId: 'fhClient',
-                client: clientFactory.create('fhClient')
-            })
-        }
-        if (!TelegramBotClient.getSpyClient('fhClient').hasLogin) {
-            TelegramBotClient.getSpyClient('fhClient').login()
-        }
+        // if (!TelegramBotClient.getSpyClient('fhClient')) {
+        //     const clientFactory = new ClientFactory()
+        //     TelegramBotClient.addSpyClient({
+        //         interfaceId: 'fhClient',
+        //         client: clientFactory.create('fhClient')
+        //     })
+        // }
+        // if (!TelegramBotClient.getSpyClient('fhClient').hasLogin) {
+        //     TelegramBotClient.getSpyClient('fhClient').login()
+        // }
     }
 
     private loginMTPClient() {

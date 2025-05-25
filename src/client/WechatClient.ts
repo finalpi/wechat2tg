@@ -1,4 +1,4 @@
-import {WxBot} from 'wx2tg-puppet'
+import {Voice, WxBot} from 'wx2tg-puppet'
 import {Message as WxMessage} from 'wx2tg-puppet'
 import {ConfigurationService} from '../service/ConfigurationService'
 import QRCode from 'qrcode'
@@ -205,6 +205,13 @@ export class WeChatClient extends AbstractClient {
                         thumbBase64: await fbt.toBase64(), // 视频封面
                         videoBase64: await fbv.toBase64(), // 视频文件url
                         videoDuration: 9, // 视频时长单位秒 似乎随便传个值就行
+                    })
+                } else if(message.file.fileName.startsWith('语音') && message.file.fileName.endsWith('mp3')){
+                    const fbv = FileBox.fromBuffer(message.file.file, message.file.fileName)
+                    file = new Voice({
+                        voiceBase64: await fbv.toBase64(),
+                        voiceDuration: 9,
+                        type: 2
                     })
                 } else {
                     file = FileBox.fromBuffer(message.file.file, message.file.fileName)
@@ -430,8 +437,6 @@ export class WeChatClient extends AbstractClient {
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.Link:
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
                 msgJson = WxMessage.getXmlToJson(msg._xml)
                 appLinkList = msgJson.msg.appmsg.mmreader?.category?.item
                 if (appLinkList) {
@@ -504,6 +509,19 @@ export class WeChatClient extends AbstractClient {
                 }
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
+            case WxMessage.Type.Voice:
+                filebox = await msg.toFileBox()
+                if (!filebox) {
+                    return
+                }
+                fileBuff = await filebox.toBuffer()
+                messageParam.type = 1
+                messageParam.file = {
+                    fileName: filebox.name,
+                    file: fileBuff,
+                    sendType: this.wxFileType2TgFileType(msg.type().toString())
+                }
+                break
             case WxMessage.Type.Location:
                 // 位置消息处理
                 messageParam.type = 5
@@ -511,15 +529,11 @@ export class WeChatClient extends AbstractClient {
                 break
             case WxMessage.Type.Transfer:
                 // 转账消息处理
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
                 msgJson = WxMessage.getXmlToJson(msg._xml)
                 messageParam.content = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]<blockquote>金额：${msgJson.msg.appmsg.wcpayinfo.feedesc}\n转账备注：${msgJson.msg.appmsg.wcpayinfo.pay_memo || ''}</blockquote>`
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.Revoke:
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
                 msgJson = WxMessage.getXmlToJson(msg._xml)
                 messageParam.content = msgJson.sysmsg.revokemsg.replacemsg
                 messageParam.type = 6
@@ -527,8 +541,6 @@ export class WeChatClient extends AbstractClient {
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.ChatHistroy:
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
                 msgJson = WxMessage.getXmlToJson(msg._xml)
                 const recordJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.recorditem)
                 const chatHistory = await getChatHistory(recordJson, msg, WxMessage.Type)
@@ -536,8 +548,6 @@ export class WeChatClient extends AbstractClient {
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.MiniApp:
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
                 msgJson = WxMessage.getXmlToJson(msg._xml)
                 const miniProgram = await getMiniprogram(msgJson, msg)
                 messageParam.content = miniProgram

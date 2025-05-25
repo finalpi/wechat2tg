@@ -29,7 +29,7 @@ export class ConfigurationService {
         // this.setBooleanOptions(settingMap,'compression',config.compression, '媒体质量压缩')
 
         // 文件传输助手
-        this.setBooleanOptions(settingMap, 'useFileHelper', config.useFileHelper, '文件传输助手接收视频和文件')
+        // this.setBooleanOptions(settingMap, 'useFileHelper', config.useFileHelper, '文件传输助手接收视频和文件')
 
         // 公众号消息
         this.setBooleanOptions(settingMap, 'receivePublicAccount', config.receivePublicAccount, '接收公众号消息')
