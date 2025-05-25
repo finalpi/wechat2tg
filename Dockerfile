@@ -17,10 +17,24 @@ COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
 
 FROM node:18-slim
 
-RUN apt update && apt-get --no-install-recommends install -y \
+# 安装 ffmpeg 和 gcc 以及其他运行时依赖
+RUN apt update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    gcc \
+    g++ \
+    make \
+    python3 \
     fonts-wqy-microhei \
-    libpixman-1-0 libcairo2 libpango1.0-0 libgif7 libjpeg62-turbo libpng16-16 librsvg2-2 libvips42 librlottie0-1 \
-    python3 make gcc g++
+    libpixman-1-0 \
+    libcairo2 \
+    libpango1.0-0 \
+    libgif7 \
+    libjpeg62-turbo \
+    libpng16-16 \
+    librsvg2-2 \
+    libvips42 \
+    librlottie0-1 \
+ && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /app/storage /app/save-files
 
@@ -30,8 +44,8 @@ COPY --from=builder-lottie-to-png /application/bin/lottie_to_png /usr/bin/lottie
 COPY --from=builder-lottie-to-png /application/bin/lottie_common.sh /usr/bin
 COPY --from=builder-lottie-to-png /application/bin/lottie_to_gif.sh /usr/bin
 RUN chmod +x /usr/bin/lottie_to_png /usr/bin/lottie_common.sh /usr/bin/lottie_to_gif.sh
-COPY package*.json tsconfig.json ./
 
+COPY package*.json tsconfig.json ./
 RUN npm install -g npm@10.7.0 && npm install
 
 COPY . .
