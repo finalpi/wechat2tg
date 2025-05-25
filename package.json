@@ -18,6 +18,7 @@
     "crypto": "^1.0.1",
     "dotenv": "^16.0.3",
     "ffmpeg-static": "^5.2.0",
+    "file-box": "^1.4.15",
     "fluent-ffmpeg": "^2.1.2",
     "https-proxy-agent": "^7.0.4",
     "jsdom": "^24.1.0",
@@ -29,7 +30,6 @@
     "simple-xml-to-json": "^1.2.2",
     "socks-proxy-agent": "^7.0.0",
     "sqlite3": "^5.1.7",
-    "file-box": "^1.4.15",
     "telegraf": "^4.12.2",
     "telegram": "2.21.2",
     "tencentcloud-sdk-nodejs": "^4.0.977",
@@ -38,7 +38,7 @@
     "typeorm": "^0.3.24",
     "wechaty": "^1.20.2",
     "wechaty-puppet-wechat4u": "https://github.com/finalpi/puppet-wechat4file/releases/download/1.14.29/wechaty-puppet-wechat4u-1.14.29.tgz",
-    "wx2tg-puppet": "file:../wx2tg-puppet/dist",
+    "wx2tg-puppet": "^1.0.0",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
