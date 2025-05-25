@@ -47,6 +47,9 @@ RUN chmod +x /usr/bin/lottie_to_png /usr/bin/lottie_common.sh /usr/bin/lottie_to
 
 COPY package*.json tsconfig.json ./
 RUN npm install -g npm@10.7.0 && npm install
+RUN npm install wx-voice -g
+RUN wx-voice compile
+
 
 COPY . .
 
