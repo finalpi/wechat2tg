@@ -133,9 +133,7 @@ docker-compose up -d
 |`BOT_TOKEN`| 是    | Telegram Bot 的 token，通过 [BotFather](https://t.me/BotFather) 创建 |
 |`API_ID`| 是    | Telegram API 的 API ID                                          |
 |`API_HASH`| 是    | Telegram API 的 API HASH                                        |
-|`BASE_API`| 是    | gewechat 容器的 API 请求地址，需要填入完整路径名                                |
-|`FILE_API`| 是    | gewechat 容器的文件请求地址，需要填入完整路径名                                   |
-|`CALLBACK_API`| 是    | wechat2tg 容器的回调服务的地址（3000 端口映射后的地址）                            |
+|`BASE_API`| 是    | wx2tg-server 容器的 API 请求地址，需要填入完整路径名                            | |
 |`PROXY_PROTOCOL`| 否    | 代理类型可选值（socks5,http,https）                                     |
 |`PROXY_HOST`| 否    | 代理的 URL                                                        |
 |`PROXY_PORT`| 否    | 代理的端口号                                                         |
