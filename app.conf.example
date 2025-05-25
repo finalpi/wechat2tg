@@ -1,0 +1,22 @@
+appname = wxapi
+httpaddr = "0.0.0.0"
+httpport = 8058
+runmode = dev
+viewspath = "template"
+autorender = false
+copyrequestbody = true
+EnableDocs = true
+redislink = wx2tg-redis:6379
+redispass = ""
+redisdbnum = 7
+ocrurl = ""
+syncmessagebusinessuri = "http://127.0.0.1:5000/wic/wechat/{0}/SyncMessage"
+logoutbusinessuri = ""
+
+sessionon = true
+
+SessionName = "wxapi"
+ServerName = "wxapi"
+
+longlinkenabled = true
+longlinkconnecttimeout = "1m"

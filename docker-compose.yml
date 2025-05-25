@@ -2,14 +2,26 @@ version: '3'
 
 services:
   wx2tg-pad:
-    image: finalpi/wechat2tg-pad:latest
+    image: finalpi/wechat2tg-mac-dev:latest
     container_name: wx2tg-pad
-    ports:
-      - "3000:3000"
     volumes:
       - ./config:/app/storage
-      - ./save-files:/app/save-files # 保存文件夹挂载后表情不需要重新转换
-      - ./logs:/app/logs # 日志文件夹
-    # use env file or you can jest set environment here
+      - ./save-files:/app/save-files # 保存文件夹挂载后贴纸文件不需要重新转换
     env_file: ".env"
+    restart: unless-stopped
+
+  wx2tg-server:
+    image: finalpi/wx2tg-server:latest # 拉取镜像
+    container_name: wx2tg-server
+    ports:
+      - "8058:8058"
+    volumes:
+      - ./conf:/usr/wic-go/conf
+    restart: unless-stopped
+
+  wx2tg-redis:
+    image: redis:7.2
+    container_name: wx2tg-redis
+    ports:
+      - "16379:6379"
     restart: unless-stopped

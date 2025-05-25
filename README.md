@@ -1,9 +1,9 @@
-> [!CAUTION]
-> 由于 [Gewechat](https://github.com/Devo919/Gewechat) 项目停止维护，本项目不再可用。
+> [!WARNING]
+> 该分支处于测试状态，欢迎反馈问题
 
-# wechat2tg-pad
+# wechat2tg-mac
 
-基于 [gewechaty](https://github.com/mikoshu/gewechaty) 重构的基于 pad 协议收发微信消息
+基于 855 Mac 协议收发微信消息
 
 ## TG 群组: [@Wx2TgUserGroup](https://t.me/+AD02MEZa-og3ZGY1)
 
@@ -31,9 +31,9 @@
 + [x] emoji
 + [x] 位置消息
 + [x] 撤回消息
++ [x] 语音消息
 + [ ] 红包消息（提醒，无法获取红包内容）
 + [ ] 小程序消息
-+ [ ] 语音消息
 
 ### Telegram 消息类型支持列表
 
@@ -49,22 +49,11 @@
 1. 本项目仅用于技术研究和学习，不得用于非法用途
 2. 无论遇到什么问题都欢迎提交 issue
 
-### [gewechat](https://github.com/Devo919/Gewechat) 容器的注意事项(原项目 readme 已删除)
-
-> [!WARNING]
-> gewechat 容器并非开源，使用风险自行判断，以下是原项目的注意事项，建议参考原项目使用说明
-
-#### 注意事项：
-- 1、系统环境推荐：Centos7或Ubantu2204
-- 2、硬件环境推荐：4核8G
-- 3、由于容器需要用到2531和2532端口，要保证服务器这两个端口没有被占用
-- 4、容器启动后会访问腾讯服务，因此要保证服务器能够访问外网，并且出网没有被限制，否则会导致容器无法正常启动
-- 5、使用者必须搭建服务到同省服务器或者电脑里方可正常使用
-- 6、本框架面向个人娱乐使用，请勿用于任何商用场景
-
 ## 部署安装
 
 先复制一份 `.env.example` 为 `.env` 文件，然后配置 `.env` 文件中的环境变量
+
+复制项目中的 `app.conf.example` 为 `app.conf` 文件到 `conf` 目录
 
 ### docker-compose
 
@@ -75,25 +64,29 @@ version: '3'
 
 services:
   wx2tg-pad:
-    image: finalpi/wechat2tg-pad:latest
+    image: finalpi/wechat2tg-mac-dev:latest
     container_name: wx2tg-pad
-    ports:
-      - "3000:3000"
     volumes:
       - ./config:/app/storage
       - ./save-files:/app/save-files # 保存文件夹挂载后贴纸文件不需要重新转换
-    # env_file 指定环境变量文件
     env_file: ".env"
-    restart: always
-  gewechat:
-     image: xleat/gewe:latest # 拉取镜像
-     container_name: gewechat
-     ports:
-        - "2531:2531"
-        - "2532:2532"
-     volumes:
-        - ./temp:/root/temp
-     restart: always
+    restart: unless-stopped
+
+  wx2tg-server:
+    image: finalpi/wx2tg-server:latest # 拉取镜像
+    container_name: wx2tg-server
+    ports:
+      - "8058:8058"
+    volumes:
+      - ./conf:/usr/wic-go/conf
+    restart: unless-stopped
+
+  wx2tg-redis:
+    image: redis:7.2
+    container_name: wx2tg-redis
+    ports:
+      - "16379:6379"
+    restart: unless-stopped
 ```
 
 #### 运行
@@ -206,9 +199,6 @@ docker-compose up -d
 
 ## 常见问题
 
-### 重启 gewechat 容器后日志提示：“回调地址设置失败，请确定gewechat能访问到回调地址网络
-
-删掉配置目录内的 `ds.json`，然后重启 wx2tg 容器即可
 
 ## 参与开发
 
