@@ -1,5 +1,5 @@
-import {WxBot} from 'wx2tg-puppet/src/index'
-import {Message as WxMessage} from 'wx2tg-puppet/src/core/Message'
+import {WxBot} from 'wx2tg-puppet'
+import {Message as WxMessage} from 'wx2tg-puppet'
 import {ConfigurationService} from '../service/ConfigurationService'
 import QRCode from 'qrcode'
 import {config} from '../config'
@@ -22,7 +22,7 @@ import {MessageTypeUtils} from '../util/MessageTypeUtils'
 import {EmojiConverter} from '../util/EmojiUtils'
 import {getChatHistory, getMiniprogram} from '../util/handleMsg'
 import {saveEmoji} from '../util/handleSticker'
-import {WeVideo} from 'wx2tg-puppet/src/core/WEVIDEO'
+import {WeVideo} from 'wx2tg-puppet'
 import {FileBox} from 'file-box'
 
 export class WeChatClient extends AbstractClient {
@@ -199,9 +199,11 @@ export class WeChatClient extends AbstractClient {
                     const ffmpegUtil = await new ConverterHelper()
                     const videoPath = `save-files/_gewetemp/${message.file.fileName}`
                     await ffmpegUtil.extractThumbnail(videoPath, `save-files/_gewetemp/${message.file.fileName}.jpg`)
+                    const fbv = FileBox.fromBuffer(message.file.file, message.file.fileName)
+                    const fbt = FileBox.fromFile(`save-files/_gewetemp/${message.file.fileName}.jpg`, message.file.fileName + '.jpg')
                     file = new WeVideo({
-                        thumbUrl: `${config.CALLBACK_API}/_gewetemp/${message.file.fileName}.jpg`, // 视频封面
-                        videoUrl: url, // 视频文件url
+                        thumbBase64: await fbt.toBase64(), // 视频封面
+                        videoBase64: await fbv.toBase64(), // 视频文件url
                         videoDuration: 9, // 视频时长单位秒 似乎随便传个值就行
                     })
                 } else {
@@ -604,8 +606,8 @@ export class WeChatClient extends AbstractClient {
     async revokeMessage(message: Message) {
         return await WxMessage.revoke({
             toWxid: message.toWxid,
-            msgId: message.msgId,
-            newMsgId: message.wxMsgId,
+            msgId: parseInt(message.msgId),
+            newMsgId: parseInt(message.wxMsgId),
             createTime: message.createTime
         })
     }

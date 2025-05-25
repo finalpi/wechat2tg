@@ -30,7 +30,7 @@ import {WxRoomRepository} from '../repository/WxRoomRepository'
 import {WeChatClient} from './WechatClient'
 import {FileHelperClient} from './FileHelperClient'
 import {handleSticker} from '../util/handleSticker'
-import { UrlLink } from 'wx2tg-puppet/src/core/URLLINK'
+import { UrlLink } from 'wx2tg-puppet'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {

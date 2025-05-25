@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import axios from 'axios'
-import { Emoji } from 'wx2tg-puppet/src/core/EMOJI'
+import { Emoji } from 'wx2tg-puppet'
 
 // 定义类型
 interface StickerInfo {
