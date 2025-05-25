@@ -19,14 +19,10 @@ let gewechatDataSource: DataSource
 export function getGeWeChatDataSource(): DataSource {
     // 读取 ds.json 文件，获取数据库文件路径
     try {
-        const dsJson = fs.readFileSync('storage/ds.json', 'utf-8')
-        const ds = JSON.parse(dsJson)
         if (!gewechatDataSource) {
-            const wxClient = WeChatClient.getSpyClient('wxClient') as WeChatClient
             gewechatDataSource = new DataSource({
                 type: 'sqlite',
-                database: 'storage/db/' + wxClient.wxInfo.wxid + '.db',
-                // database: 'wx_J2acELrtPBGJqoEffcNWL.db',
+                database: 'storage/db/puppet.db',
                 entities: [WxContact,WxRoom],
                 logger: 'debug',
                 logging: 'all',

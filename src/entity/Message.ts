@@ -60,7 +60,7 @@ export class Message {
     @Column({
         nullable: true
     })
-    source_type: number
+    source_type: string
 
     // 发送者
     @Column({

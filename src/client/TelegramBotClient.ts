@@ -30,7 +30,7 @@ import {WxRoomRepository} from '../repository/WxRoomRepository'
 import {WeChatClient} from './WechatClient'
 import {FileHelperClient} from './FileHelperClient'
 import {handleSticker} from '../util/handleSticker'
-import { UrlLink } from 'gewechaty'
+import { UrlLink } from 'wx2tg-puppet/src/core/URLLINK'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -1145,7 +1145,7 @@ export class TelegramBotClient extends AbstractClient {
                 const userName = match[1]
                 data = await WxContactRepository.getInstance().getByNickNameOrRemark(userName)
             } else {
-                data = TelegramBotClient.getSpyClient('wxClient').client.db.findAllContacts()
+                data = await WxContactRepository.getInstance().getAll()
             }
             if (!data || data.length === 0) {
                 ctx.reply('未查找到联系人')
@@ -1187,7 +1187,7 @@ export class TelegramBotClient extends AbstractClient {
                 const userName = match[1]
                 data = await WxRoomRepository.getInstance().getByNickNameOrRemark(userName)
             } else {
-                data = TelegramBotClient.getSpyClient('wxClient').client.db.findAllRooms()
+                data = await WxRoomRepository.getInstance().getAll()
             }
             if (!data || data.length === 0) {
                 ctx.reply('未查找到群组')

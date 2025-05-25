@@ -21,7 +21,7 @@ export default interface BaseMessage {
     businessCardId?: string,
     param?: any,
     source_text?: string,
-    source_type?: number,
+    source_type?: string,
     toWxid?: string,
     createTime?: number,
     msgId?: string,

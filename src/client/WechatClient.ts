@@ -1,4 +1,5 @@
-import {GeweBot, Filebox, Message as WeChatMessage, WeVideo, Voice} from 'gewechaty'
+import {WxBot} from 'wx2tg-puppet/src/index'
+import {Message as WxMessage} from 'wx2tg-puppet/src/core/Message'
 import {ConfigurationService} from '../service/ConfigurationService'
 import QRCode from 'qrcode'
 import {config} from '../config'
@@ -21,6 +22,8 @@ import {MessageTypeUtils} from '../util/MessageTypeUtils'
 import {EmojiConverter} from '../util/EmojiUtils'
 import {getChatHistory, getMiniprogram} from '../util/handleMsg'
 import {saveEmoji} from '../util/handleSticker'
+import {WeVideo} from 'wx2tg-puppet/src/core/WEVIDEO'
+import {FileBox} from 'file-box'
 
 export class WeChatClient extends AbstractClient {
     get wxInfo() {
@@ -52,14 +55,9 @@ export class WeChatClient extends AbstractClient {
         this.groupOperate = new TelegramGroupOperateService(BindGroupService.getInstance(), UserMTProtoClient.getInstance().client)
         this.bindGroupService = BindGroupService.getInstance()
         this.messageService = MessageService.getInstance()
-        this.client = new GeweBot({
-            debug: config.DEBUG_MODE, // 是否开启调试模式 默认false
-            base_api: config.BASE_API,
-            file_api: config.FILE_API,
-            proxy: config.CALLBACK_API,
-            static: 'save-files',
-            ds_path: 'storage/ds.json',
-            db_path: 'storage/db/'
+        this.client = new WxBot({
+            baseUrl: config.BASE_API,
+            databasePath: 'storage/db/puppet.db'
         })
         this.hasReady = true
         this.init()
@@ -97,8 +95,8 @@ export class WeChatClient extends AbstractClient {
                 } else {
                     if (message.content.startsWith('@all')) {
                         message.content = message.content.replace('@all', '')
-                        msgResult = await room.say(message.content,'@all')
-                    }else {
+                        msgResult = await room.say(message.content, '@all')
+                    } else {
                         msgResult = await room.say(message.content)
                     }
                 }
@@ -134,10 +132,7 @@ export class WeChatClient extends AbstractClient {
             })
             return
         }
-        this.client.start().then(async ({app, router}) => {
-            //
-            app.use(router.routes()).use(router.allowedMethods())
-            await this.loginSuccess()
+        this.client.start().then(async () => {
             getGeWeChatDataSource().initialize().then(() => {
                 console.log('GeWeChatDataSource initialized')
             }).catch((e) => {
@@ -210,7 +205,7 @@ export class WeChatClient extends AbstractClient {
                         videoDuration: 9, // 视频时长单位秒 似乎随便传个值就行
                     })
                 } else {
-                    file = Filebox.fromBuff(message.file.file, message.file.fileName)
+                    file = FileBox.fromBuffer(message.file.file, message.file.fileName)
                 }
                 if (bindGroup.type === 0) {
                     const contact = await this.client.Contact.find({id: bindGroup.wxId})
@@ -286,13 +281,13 @@ export class WeChatClient extends AbstractClient {
         })
     }
 
-    async onMessage(msg: WeChatMessage) {
+    async onMessage(msg: WxMessage) {
         // TODO: 只处理新消息，丢弃历史消息（未来可以增加选项更好的保存聊天记录）
-        if (msg._createTime < this.startTime) {
+        if (msg.date() < this.startTime) {
             return
         }
         // 过滤重复消息
-        const oldMsg = await this.messageService.getByWxMsgId(msg._newMsgId)
+        const oldMsg = await this.messageService.getByWxMsgId(msg.newMsgId)
         if (oldMsg) {
             return
         }
@@ -394,7 +389,7 @@ export class WeChatClient extends AbstractClient {
             identity = FormatUtils.transformTitleStr(identityType, fromContact._alias !== fromContact.name() ? fromContact._alias : '', fromContact.name(), topic)
         }
         const messageParam: BaseMessage = {
-            id: msg._newMsgId,
+            id: msg.newMsgId,
             senderId: contact._wxid,
             wxId: wxId,
             sender: identity,
@@ -414,7 +409,7 @@ export class WeChatClient extends AbstractClient {
         let appLinkList
         const emojiConverter = new EmojiConverter()
         switch (msg.type()) {
-            case this.client.Message.Type.Text:
+            case WxMessage.Type.Text:
                 // 因为是html模式 原始的文本中的<>需要转义
                 messageParam.content = messageParam.content.replaceAll(/</g, '&lt;')
                     .replaceAll(/>/g, '&gt;')
@@ -432,10 +427,10 @@ export class WeChatClient extends AbstractClient {
                 }
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
-            case this.client.Message.Type.Link:
+            case WxMessage.Type.Link:
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
-                msgJson = this.client.Message.getXmlToJson(msg._xml)
+                msgJson = WxMessage.getXmlToJson(msg._xml)
                 appLinkList = msgJson.msg.appmsg.mmreader?.category?.item
                 if (appLinkList) {
                     // 判断是否是数组，有可能是对象
@@ -451,10 +446,7 @@ export class WeChatClient extends AbstractClient {
                 }
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
-            case this.client.Message.Type.Quote:
-                // TODO: 错误
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
+            case WxMessage.Type.Quote:
                 referMsg = await this.messageService.getByWxMsgId(msg.refer.svrid)
                 // 因为是html模式 原始的文本中的<>需要转义
                 messageParam.content = messageParam.content.replaceAll(/</g, '&lt;')
@@ -467,20 +459,16 @@ export class WeChatClient extends AbstractClient {
                     }
                 } else {
                     // 找不到上下文
-                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                    // @ts-ignore
-                    msgJson = this.client.Message.getXmlToJson(msg._xml)
+                    msgJson = WxMessage.getXmlToJson(msg._xml)
                     if (msgJson.msg.appmsg.refermsg.content) {
                         messageParam.content = `<blockquote>${msgJson.msg.appmsg.refermsg.content}</blockquote>${messageParam.content}`
                     }
                 }
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
-            case this.client.Message.Type.Contact:
+            case WxMessage.Type.Contact:
                 // 名片消息处理
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                msgJson = this.client.Message.getXmlToJson(msg._xml)
+                msgJson = WxMessage.getXmlToJson(msg._xml)
                 this.friendshipList.push(msgJson.msg)
                 messageParam.type = 4
                 if (msgJson.msg.bigheadimgurl) {
@@ -497,36 +485,15 @@ export class WeChatClient extends AbstractClient {
                 messageParam.businessCardId = msgJson.msg.username
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
-            case this.client.Message.Type.Image:
-            case this.client.Message.Type.Emoji:
-                if (this.client.Message.Type.Image === msg.type()) {
-                    filebox = await msg.toFileBox(1)
-                    if (filebox.url === config.FILE_API) {
-                        filebox = await msg.toFileBox(2)
-                    }
-                    if (filebox.url === config.FILE_API) {
-                        filebox = await msg.toFileBox(3)
-                    }
-                } else if (this.client.Message.Type.Emoji === msg.type()) {
-                    // 保存微信贴纸信息
-                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                    // @ts-ignore
-                    const wxEmoji = msg.emoji
-                    saveEmoji(wxEmoji)
-                    filebox = {
-                        name: 'emoji.gif',
-                        // TODO: 错误
-                        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                        // @ts-ignore
-                        url: msg.emoji.cdnurl,
-                    }
-                } else {
-                    filebox = await msg.toFileBox()
-                }
-                if (!filebox || filebox.url === config.FILE_API) {
+            case WxMessage.Type.Image:
+            case WxMessage.Type.Emoji:
+            case WxMessage.Type.Video:
+            case WxMessage.Type.File:
+                filebox = await msg.toFileBox()
+                if (!filebox) {
                     return
                 }
-                fileBuff = await FileUtils.getInstance().downloadUrl2Buffer(filebox.url)
+                fileBuff = await filebox.toBuffer()
                 messageParam.type = 1
                 messageParam.file = {
                     fileName: filebox.name,
@@ -535,60 +502,41 @@ export class WeChatClient extends AbstractClient {
                 }
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
-            case this.client.Message.Type.Video:
-            case this.client.Message.Type.File:
-                // 转发文件和视频消息到文件传输助手
-                messageParam.type = 2
-                if (configuration.useFileHelper && WeChatClient.getSpyClient('fhClient').hasLogin) {
-                    const result = await this.client.Message.forwardTo(messageParam.content, 'filehelper', msg.type())
-                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                    // @ts-ignore
-                    messageParam.fhMsgId = result.newMsgId.c.join('')
-                    messageParam.content = identity
-                    WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
-                    break
-                } else {
-                    // 未登录
-                    messageParam.type = 3
-                    messageParam.content = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]`
-                    WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
-                    break
-                }
-            case this.client.Message.Type.Location:
+            case WxMessage.Type.Location:
                 // 位置消息处理
                 messageParam.type = 5
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
-            case this.client.Message.Type.Transfer:
+            case WxMessage.Type.Transfer:
                 // 转账消息处理
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
-                msgJson = this.client.Message.getXmlToJson(msg._xml)
+                msgJson = WxMessage.getXmlToJson(msg._xml)
                 messageParam.content = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]<blockquote>金额：${msgJson.msg.appmsg.wcpayinfo.feedesc}\n转账备注：${msgJson.msg.appmsg.wcpayinfo.pay_memo || ''}</blockquote>`
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
-            case this.client.Message.Type.Revoke:
+            case WxMessage.Type.Revoke:
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
-                msgJson = this.client.Message.getXmlToJson(msg._xml)
+                msgJson = WxMessage.getXmlToJson(msg._xml)
                 messageParam.content = msgJson.sysmsg.revokemsg.replacemsg
                 messageParam.type = 6
                 messageParam.revokeMsgId = msgJson.sysmsg.revokemsg.newmsgid
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
-            case this.client.Message.Type.ChatHistroy:
+            case WxMessage.Type.ChatHistroy:
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
-                msgJson = this.client.Message.getXmlToJson(msg._xml)
-                const recordJson = this.client.Message.getXmlToJson(msgJson.msg.appmsg.recorditem)
-                const chatHistory = await getChatHistory(recordJson, msg, this.client.Message.Type)
+                msgJson = WxMessage.getXmlToJson(msg._xml)
+                const recordJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.recorditem)
+                const chatHistory = await getChatHistory(recordJson, msg, WxMessage.Type)
                 messageParam.content = chatHistory
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
-            case this.client.Message.Type.MiniApp:
+            case WxMessage.Type.MiniApp:
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
-                msgJson = this.client.Message.getXmlToJson(msg._xml)
+                msgJson = WxMessage.getXmlToJson(msg._xml)
                 const miniProgram = await getMiniprogram(msgJson, msg)
                 messageParam.content = miniProgram
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
@@ -639,13 +587,13 @@ export class WeChatClient extends AbstractClient {
     // 微信文件类型转为tg类型
     wxFileType2TgFileType(messageType: string): 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice' {
         switch (messageType) {
-            case this.client.Message.Type.Emoji:
+            case WxMessage.Type.Emoji:
                 return 'animation'
-            case this.client.Message.Type.Image:
+            case WxMessage.Type.Image:
                 return 'photo'
-            case this.client.Message.Type.Voice:
+            case WxMessage.Type.Voice:
                 return 'voice'
-            case this.client.Message.Type.Video:
+            case WxMessage.Type.Video:
                 return 'video'
             default:
                 return 'document'
@@ -654,7 +602,7 @@ export class WeChatClient extends AbstractClient {
 
     // 撤回消息
     async revokeMessage(message: Message) {
-        return await this.client.Message.revoke({
+        return await WxMessage.revoke({
             toWxid: message.toWxid,
             msgId: message.msgId,
             newMsgId: message.wxMsgId,
