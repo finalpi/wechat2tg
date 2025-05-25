@@ -496,19 +496,6 @@ export class WeChatClient extends AbstractClient {
             case WxMessage.Type.Emoji:
             case WxMessage.Type.Video:
             case WxMessage.Type.File:
-                filebox = await msg.toFileBox()
-                if (!filebox) {
-                    return
-                }
-                fileBuff = await filebox.toBuffer()
-                messageParam.type = 1
-                messageParam.file = {
-                    fileName: filebox.name,
-                    file: fileBuff,
-                    sendType: this.wxFileType2TgFileType(msg.type().toString())
-                }
-                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
-                break
             case WxMessage.Type.Voice:
                 filebox = await msg.toFileBox()
                 if (!filebox) {
@@ -521,6 +508,7 @@ export class WeChatClient extends AbstractClient {
                     file: fileBuff,
                     sendType: this.wxFileType2TgFileType(msg.type().toString())
                 }
+                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.Location:
                 // 位置消息处理
