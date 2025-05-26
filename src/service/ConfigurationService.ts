@@ -43,6 +43,9 @@ export class ConfigurationService {
         // 启动时同步群组信息
         this.setBooleanOptions(settingMap, 'syncWechat', config.syncWechat, '启动时同步群组信息')
 
+        // 语音转文字
+        this.setBooleanOptions(settingMap, 'autoTranscript', config.autoTranscript, '语音转文字')
+
         return settingMap
     }
 

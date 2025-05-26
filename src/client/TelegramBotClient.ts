@@ -31,6 +31,7 @@ import {WeChatClient} from './WechatClient'
 import {FileHelperClient} from './FileHelperClient'
 import {handleSticker} from '../util/handleSticker'
 import { UrlLink } from 'wx2tg-puppet'
+import {SpeechService} from '../service/SpeechService'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -110,6 +111,14 @@ export class TelegramBotClient extends AbstractClient {
             // 文本消息走队列
             this.sendQueueHelper.addMessageWithMsgId(parseInt(message.id), message)
         } else if (message.type === 1) {
+            const configuration = await this.configurationService.getConfig()
+            if (message.file.sendType === 'voice' && config.TENCENT_SECRET_ID && config.TENCENT_SECRET_KEY && configuration.autoTranscript) {
+                SpeechService.getInstance().getTranscript(message.file.file).then(audioTranscript => {
+                    message.sender = `${message.sender}<br>${audioTranscript}`
+                }).catch(() => {
+                    console.error('语音转文字失败')
+                })
+            }
             // 图片消息逻辑
             this.messageSender.sendFile(message.chatId, {
                 buff: message.file.file,

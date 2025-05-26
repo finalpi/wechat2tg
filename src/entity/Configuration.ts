@@ -50,4 +50,10 @@ export class Configuration {
         default: true
     })
     syncWechat: boolean
+
+    // 语音转文字
+    @Column({
+        default: true
+    })
+    autoTranscript: boolean
 }

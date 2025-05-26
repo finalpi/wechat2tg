@@ -13,6 +13,8 @@ export const config = {
     PASSWORD: process.env.PROXY_PASSWORD?.toString() || '', // 代理服务器密码
     API_ID: process.env.API_ID?.toString() || '',
     API_HASH: process.env.API_HASH?.toString() || '',
+    TENCENT_SECRET_ID: process.env.TENCENT_SECRET_ID?.toString() || '',
+    TENCENT_SECRET_KEY: process.env.TENCENT_SECRET_KEY?.toString() || '',
     DB_SQLITE_PATH: process.env.DB_SQLITE_PATH?.toString() || 'storage/db/wechat2Tg.db',
     CONTACT_MESSAGE: process.env.CONTACT_MESSAGE?.toString() || '<b>👤#[alias_first]: </b>',
     OFFICIAL_MESSAGE: process.env.OFFICIAL_MESSAGE?.toString() || '<b>📣#[name]: </b>',
