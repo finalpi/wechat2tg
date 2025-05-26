@@ -495,7 +495,7 @@ export class TelegramBotClient extends AbstractClient {
 
         bot.action(/^us:page-/, async ctx => {
             const pageNum = ctx.match.input.split('-')[1]
-            const data = TelegramBotClient.getSpyClient('wxClient').client.db.findAllContacts()
+            const data = await WxContactRepository.getInstance().getAll()
             const dataMap = data.map(item => {
                 return {
                     remark: item.remark ? item.remark : item.nickName,
@@ -552,7 +552,7 @@ export class TelegramBotClient extends AbstractClient {
 
         bot.action(/^ro:page-/, async ctx => {
             const pageNum = ctx.match.input.split('-')[1]
-            const data = TelegramBotClient.getSpyClient('wxClient').client.db.findAllRooms()
+            const data = await WxRoomRepository.getInstance().getAll()
             const dataMap = data.map(item => {
                 return {
                     remark: item.remark ? item.remark : item.nickName,

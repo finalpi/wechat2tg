@@ -468,7 +468,13 @@ export class WeChatClient extends AbstractClient {
                     // 找不到上下文
                     msgJson = WxMessage.getXmlToJson(msg._xml)
                     if (msgJson.msg.appmsg.refermsg.content) {
-                        messageParam.content = `<blockquote>${msgJson.msg.appmsg.refermsg.content}</blockquote>${messageParam.content}`
+                        // 解决嵌套引用
+                        const newJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.refermsg.content)
+                        let quoteContent = msgJson.msg.appmsg.refermsg.content
+                        if (newJson) {
+                            quoteContent = newJson.msg.appmsg.title
+                        }
+                        messageParam.content = `<blockquote>${quoteContent}</blockquote>${messageParam.content}`
                     }
                 }
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
