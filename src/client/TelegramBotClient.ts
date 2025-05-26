@@ -114,7 +114,7 @@ export class TelegramBotClient extends AbstractClient {
             const configuration = await this.configurationService.getConfig()
             if (message.file.sendType === 'voice' && config.TENCENT_SECRET_ID && config.TENCENT_SECRET_KEY && configuration.autoTranscript) {
                 SpeechService.getInstance().getTranscript(message.file.file).then(audioTranscript => {
-                    message.sender = `${message.sender}<br>${audioTranscript}`
+                    message.sender = `${message.sender}${audioTranscript}`
                 }).catch(() => {
                     console.error('语音转文字失败')
                 })
