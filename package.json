@@ -38,7 +38,7 @@
     "typeorm": "^0.3.24",
     "wechaty": "^1.20.2",
     "wechaty-puppet-wechat4u": "https://github.com/finalpi/puppet-wechat4file/releases/download/1.14.29/wechaty-puppet-wechat4u-1.14.29.tgz",
-    "wx2tg-puppet": "^1.0.4",
+    "wx2tg-puppet": "^1.0.5",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
