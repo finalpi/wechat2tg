@@ -30,7 +30,6 @@ import {WxRoomRepository} from '../repository/WxRoomRepository'
 import {WeChatClient} from './WechatClient'
 import {FileHelperClient} from './FileHelperClient'
 import {handleSticker} from '../util/handleSticker'
-import { UrlLink } from 'wx2tg-puppet'
 import {SpeechService} from '../service/SpeechService'
 
 export class TelegramBotClient extends AbstractClient {
@@ -113,12 +112,13 @@ export class TelegramBotClient extends AbstractClient {
         } else if (message.type === 1) {
             const configuration = await this.configurationService.getConfig()
             if (message.file.sendType === 'voice' && config.TENCENT_SECRET_ID && config.TENCENT_SECRET_KEY && configuration.autoTranscript) {
-                console.log('开始语音转文字')
-                SpeechService.getInstance().getTranscript(message.file.file).then(audioTranscript => {
-                    message.sender = `${message.sender}${audioTranscript}`
-                }).catch(() => {
-                    console.error('语音转文字失败')
-                })
+                try {
+                    const audioTranscript = await SpeechService.getInstance().getTranscript(message.file.file)
+                    console.log('语音转文字转换成功文本内容：', audioTranscript)
+                    message.sender = `${message.sender}\n${audioTranscript}`
+                }catch (e) {
+                    console.error(e)
+                }
             }
             // 图片消息逻辑
             this.messageSender.sendFile(message.chatId, {

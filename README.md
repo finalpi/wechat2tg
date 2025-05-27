@@ -162,6 +162,14 @@ docker-compose up -d
 
 ---
 
+### 语音转文字
+
+1. 配置 `TENCENT_SECRET_ID` 和 `TENCENT_SECRET_KEY` ，可在腾讯[语音识别控制台](https://console.cloud.tencent.com/asr)开通
+   。有免费的使用额度
+2. 在 `/settings` 中开启自动文字转语音功能
+
+---
+
 ### 获取`API_ID` 和 `API_HASH`
 
 1. 登录 [telegram account](https://my.telegram.org/)
