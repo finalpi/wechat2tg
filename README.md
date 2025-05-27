@@ -60,9 +60,9 @@
 version: '3'
 
 services:
-  wx2tg-pad:
-    image: finalpi/wechat2tg-mac-dev:latest
-    container_name: wx2tg-pad
+  wx2tg-mac:
+    image: finalpi/wechat2tg-mac:latest
+    container_name: wx2tg-mac
     volumes:
       - ./config:/app/storage
       - ./save-files:/app/save-files # 保存文件夹挂载后贴纸文件不需要重新转换
