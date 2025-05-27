@@ -21,9 +21,9 @@
 + [x] 企业微信消息
 + [x] 微信表情包
 + [x] 图片消息
-+ [x] 视频消息（需要登录文件传输助手）
++ [x] 视频消息
 + [x] 音频/视频通话 (仅消息提醒)
-+ [x] 文件消息（需要登录文件传输助手）
++ [x] 文件消息
 + [x] 链接消息
 + [x] 群聊消息
 + [x] 群聊@消息（@所有人和@你 会转换成 Telegram @你）
@@ -86,6 +86,9 @@ services:
     container_name: wx2tg-redis
     ports:
       - "16379:6379"
+    volumes:
+      - ./redis-data:/data
+    command: ["redis-server", "--appendonly", "yes"]
     restart: unless-stopped
 ```
 

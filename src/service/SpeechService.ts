@@ -1,6 +1,7 @@
 import { Client } from 'tencentcloud-sdk-nodejs/tencentcloud/services/asr/v20190614/asr_client'
 import { ClientConfig } from 'tencentcloud-sdk-nodejs/tencentcloud/common/interface'
 import { SentenceRecognitionRequest } from 'tencentcloud-sdk-nodejs/tencentcloud/services/asr/v20190614/asr_models'
+import {config} from '../config'
 
 export class SpeechService {
     private static instance?: SpeechService = undefined
@@ -9,8 +10,8 @@ export class SpeechService {
     private constructor() {
         const clientConfig: ClientConfig = {
             credential: {
-                secretId: process.env.TENCENT_SECRET_ID,
-                secretKey: process.env.TENCENT_SECRET_KEY,
+                secretId: config.TENCENT_SECRET_ID,
+                secretKey: config.TENCENT_SECRET_KEY,
             },
             region: 'ap-guangzhou',
             profile: {

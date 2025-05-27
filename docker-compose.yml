@@ -24,4 +24,7 @@ services:
     container_name: wx2tg-redis
     ports:
       - "16379:6379"
+    volumes:
+      - ./redis-data:/data
+    command: ["redis-server", "--appendonly", "yes"]
     restart: unless-stopped
