@@ -1,9 +1,6 @@
-> [!WARNING]
-> 该分支处于测试状态，欢迎反馈问题
-
 # wechat2tg-mac
 
-基于 855 Mac 协议收发微信消息
+基于微信 Mac 协议在 Telegram 收发微信消息，wx2tg-server 服务端出于安全考虑不开源
 
 ## TG 群组: [@Wx2TgUserGroup](https://t.me/+AD02MEZa-og3ZGY1)
 
@@ -53,7 +50,7 @@
 
 先复制一份 `.env.example` 为 `.env` 文件，然后配置 `.env` 文件中的环境变量
 
-复制项目中的 `app.conf.example` 为 `app.conf` 文件到 `conf` 目录
+复制项目中的 `app.conf.example` 为 `app.conf` 文件到 `conf` 目录，将 Redis 地址设置为你部署的 Redis 的地址
 
 ### docker-compose
 
@@ -113,8 +110,6 @@ docker-compose up -d
 
 - `/update`：更新群组头像和昵称信息
 
-- `/add`：根据手机号添加微信好友，例如 `/add 18888888888`
-
 - `/message`：开关群组消息接收
 
 - `/forward`：开关转发群组内其他人或者 bot 的消息
@@ -124,8 +119,6 @@ docker-compose up -d
 - `/room`：获取微信群列表；点击按钮后可创建新群组或者绑定微信群（可通过名称或备注搜索，例如： `/room 外卖` 查找含有「外卖」的微信群）
 
 - `/settings`：程序设置
-
-- `/getqr`：获取自己的二维码名片
 
 - `/unbind`：解绑微信群或微信用户（仅支持在群组使用）
 
@@ -156,9 +149,9 @@ docker-compose up -d
 
 ### 设置项`/settings`命令说明
 
-1. 文件传输助手接收文件和视频消息：是否使用文件传输助手接收文件和视频消息（上游没办法下载视频和文件，所以需要用文件传输助手接收）
+1.微信emoji是否以图片链接显示: 开启后会将好友发过来的小黄人表情转为图片链接的方式显示
 
-2. 接受公众号消息：是否接受公众号消息
+1.启动时同步群组信息: 开启后会在程序刚启动时同步所有人的信息，会更新群组头像和名称
 
 ---
 
@@ -211,8 +204,8 @@ docker-compose up -d
 
 ## 参与开发
 
-1. fork 项目，切换到 `wx2tg-pad-dev` 分支，或者新建一个分支。请不要直接提交代码到主分支
-2. 提交 Pull Request 到 `wx2tg-pad-dev` 分支
+1. fork 项目，切换到 `wx2tg-mac-dev` 分支，或者新建一个分支。请不要直接提交代码到主分支
+2. 提交 Pull Request 到 `wx2tg-mac-dev` 分支
 
 
 ## License
