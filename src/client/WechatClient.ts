@@ -1,4 +1,4 @@
-import {Voice, WxBot} from 'wx2tg-puppet'
+import {Emoji, Voice, WxBot} from 'wx2tg-puppet'
 import {Message as WxMessage} from 'wx2tg-puppet'
 import {ConfigurationService} from '../service/ConfigurationService'
 import QRCode from 'qrcode'
@@ -21,7 +21,6 @@ import {ConverterHelper} from '../util/FfmpegUtils'
 import {MessageTypeUtils} from '../util/MessageTypeUtils'
 import {EmojiConverter} from '../util/EmojiUtils'
 import {getChatHistory, getMiniprogram} from '../util/handleMsg'
-import {saveEmoji} from '../util/handleSticker'
 import {WeVideo} from 'wx2tg-puppet'
 import {FileBox} from 'file-box'
 
@@ -212,6 +211,11 @@ export class WeChatClient extends AbstractClient {
                         voiceBase64: await fbv.toBase64(),
                         voiceDuration: 9,
                         type: 2
+                    })
+                }else if(message.file.fileName.endsWith('.gif')) {
+                    const fbe = FileBox.fromBuffer(message.file.file, message.file.fileName)
+                    file = new Emoji({
+                        emojiBase64: await fbe.toBase64()
                     })
                 } else {
                     file = FileBox.fromBuffer(message.file.file, message.file.fileName)
@@ -499,7 +503,6 @@ export class WeChatClient extends AbstractClient {
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.Image:
-            case WxMessage.Type.Emoji:
             case WxMessage.Type.Video:
             case WxMessage.Type.File:
             case WxMessage.Type.Voice:
