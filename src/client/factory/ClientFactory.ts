@@ -4,7 +4,6 @@ import {TelegramBotClient} from '../TelegramBotClient'
 import {WeChatClient} from '../WechatClient'
 import {UserMTProtoClient} from '../UserMTProtoClient'
 import {BotMTProtoClient} from '../BotMTProtoClient'
-import {FileHelperClient} from '../FileHelperClient'
 
 export class ClientFactory implements BaseFactory {
     create(type: botType): IClient {
@@ -17,8 +16,6 @@ export class ClientFactory implements BaseFactory {
                 return UserMTProtoClient.getInstance()
             case 'botMTPClient':
                 return BotMTProtoClient.getInstance()
-            case 'fhClient':
-                return FileHelperClient.getInstance()
         }
     }
 }
