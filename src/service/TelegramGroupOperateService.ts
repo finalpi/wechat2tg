@@ -18,7 +18,8 @@ export class TelegramGroupOperateService {
     private readonly folderName = 'WeChat'
     // 创建群组队列，保证不重复
     private createGroupQueue: BindGroup[] = []
-    constructor(bindGroupService: BindGroupService,client: GramClient) {
+
+    constructor(bindGroupService: BindGroupService, client: GramClient) {
         this.bindGroupService = bindGroupService
         this.client = client
     }
@@ -43,13 +44,13 @@ export class TelegramGroupOperateService {
                     if (contactOrRoom.avatarLink) {
                         buff = await FileUtils.getInstance().downloadUrl2Buffer(contactOrRoom.avatarLink)
                     }
-                }catch (e) {
+                } catch (e) {
                     console.error(e)
                 }
                 if (!buff) {
                     return
                 }
-                sharp(buff).toFormat('png').resize(200).toBuffer(async (err,buff)=>{
+                sharp(buff).toFormat('png').resize(200).toBuffer(async (err, buff) => {
                     const toUpload = new CustomFile('avatar.png', buff.length, '', buff)
                     const file = await this.client?.uploadFile({
                         file: toUpload,
@@ -67,7 +68,7 @@ export class TelegramGroupOperateService {
                                 )
                             }
                         ))
-                    }else {
+                    } else {
                         // 普通群
                         await this.client?.invoke(new Api.messages.EditChatPhoto(
                             {
@@ -90,9 +91,16 @@ export class TelegramGroupOperateService {
                     contactOrRoom.alias = ''
                 }
                 name = FormatUtils.transformTitleStr(config.CREATE_CONTACT_NAME, contactOrRoom.alias, contactOrRoom.name, '')
+                if (!name) {
+                    name = '未命名'
+                }
             } else {
                 name = FormatUtils.transformTitleStr(config.CREATE_ROOM_NAME, contactOrRoom.alias, '', contactOrRoom.name)
+                if (!name) {
+                    name = '未命名群聊'
+                }
             }
+
             if (name !== oldBindGroup.name) {
                 oldBindGroup.name = name
                 // 超级群
@@ -105,7 +113,7 @@ export class TelegramGroupOperateService {
                             })
                         )
                     }
-                } else if (entity.className === 'Chat' ){
+                } else if (entity.className === 'Chat') {
                     if (entity.title !== name) {
                         await this.client?.invoke(
                             new Api.messages.EditChatTitle({
@@ -117,7 +125,7 @@ export class TelegramGroupOperateService {
                 }
             }
             this.bindGroupService.createOrUpdate(oldBindGroup)
-        }catch (e) {
+        } catch (e) {
             console.log(e)
         }
     }
@@ -134,12 +142,15 @@ export class TelegramGroupOperateService {
             contactOrRoom.chatId = oldGourp.chatId
             this.updateGroup(contactOrRoom)
             return oldGourp
-        }else {
+        } else {
             // 删除之前绑定过的群组
-            await this.bindGroupService.removeByChatIdOrWxId(contactOrRoom.chatId,contactOrRoom.wxId)
+            await this.bindGroupService.removeByChatIdOrWxId(contactOrRoom.chatId, contactOrRoom.wxId)
         }
         // 创建群组
         const config = await this.configService.getConfig()
+        if (!contactOrRoom.name){
+            contactOrRoom.name = '未命名'
+        }
         const result = await this.client?.invoke(
             new Api.messages.CreateChat({
                 users: [config.chatId, config.botId],
@@ -171,7 +182,7 @@ export class TelegramGroupOperateService {
         await this.updateGroup(contactOrRoom)
         // 添加到文件夹
         this.addToFolder(bindGroup.chatId)
-        this.createGroupQueue = this.createGroupQueue.filter(i=> i.chatId !== contactOrRoom.chatId)
+        this.createGroupQueue = this.createGroupQueue.filter(i => i.chatId !== contactOrRoom.chatId)
         // 添加绑定
         return bindGroup
     }

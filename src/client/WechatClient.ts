@@ -353,7 +353,7 @@ export class WeChatClient extends AbstractClient {
                 const avatar = await room.avatar()
                 bindGroup.avatarLink = avatar.url
                 if (!bindGroup.name) {
-                    bindGroup.name = '企业微信群'
+                    bindGroup.name = '未命名群聊'
                 }
             } else {
                 bindGroup.type = 0
