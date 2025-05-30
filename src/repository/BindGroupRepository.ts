@@ -1,6 +1,7 @@
 import {AppDataSource} from '../data-sourse'
 import {Repository} from 'typeorm/repository/Repository'
 import {BindGroup} from '../entity/BindGroup'
+import {Like} from 'typeorm'
 
 export class BindGroupRepository {
     private bindGroupRepository: Repository<BindGroup>
@@ -13,6 +14,19 @@ export class BindGroupRepository {
     }
     constructor() {
         this.bindGroupRepository = AppDataSource.getRepository(BindGroup)
+    }
+
+    async fixGroup() {
+        const wrongList = await this.bindGroupRepository.find({
+            where: {
+                wxId: Like('%@chatroom'),
+                type: 0
+            }
+        })
+        wrongList.forEach((item) => {
+            item.type = 1
+            this.createOrUpdate(item)
+        })
     }
 
     async removeByChatIdOrWxId(chatId: number,wxId: string) {

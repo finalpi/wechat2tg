@@ -154,6 +154,8 @@ export class WeChatClient extends AbstractClient {
         }
 
         // 登录后更新群组绑定信息
+        // 修复错误绑定的群聊信息
+        await this.bindGroupService.fixGroup()
         if (config.syncWechat) {
             setTimeout(async () => {
                 const allBind = await this.bindGroupService.getAll()
