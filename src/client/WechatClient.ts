@@ -504,6 +504,7 @@ export class WeChatClient extends AbstractClient {
                 break
             case WxMessage.Type.Image:
             case WxMessage.Type.Video:
+            case WxMessage.Type.Emoji:
             case WxMessage.Type.File:
             case WxMessage.Type.Voice:
                 filebox = await msg.toFileBox()
