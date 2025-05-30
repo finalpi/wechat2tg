@@ -28,8 +28,6 @@ import {KeyboardPageUtils} from '../util/KeyboardPageUtils'
 import {BindGroup} from '../entity/BindGroup'
 import {WxRoomRepository} from '../repository/WxRoomRepository'
 import {WeChatClient} from './WechatClient'
-import {FileHelperClient} from './FileHelperClient'
-import {handleSticker} from '../util/handleSticker'
 import {SpeechService} from '../service/SpeechService'
 
 export class TelegramBotClient extends AbstractClient {
@@ -134,38 +132,7 @@ export class TelegramBotClient extends AbstractClient {
             }).catch(e => {
                 this.dealException(e, message)
             })
-        } else if (message.type === 2) {
-            this.messageSender.sendFile(message.chatId, {
-                buff: Buffer.from('0'),
-                filename: 'temp_file',
-                caption: '文件接收中',
-                fileType: 'document'
-            }).then(async msgRes => {
-                messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
-                this.messageService.createOrUpdate(messageEntity)
-                // 文件传输助手添加等待中的状态
-                const client = TelegramBotClient.getSpyClient('fhClient') as FileHelperClient
-                client.waitingMessage.push({
-                    date: new Date().getTime(),
-                    msgId: message.fhMsgId
-                })
-            }).catch(e => {
-                this.dealException(e, message)
-            })
-        } else if (message.type === 3) {
-            const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
-            client.telegram.sendMessage(message.chatId, FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content), {
-                reply_markup: {
-                    inline_keyboard: [[Markup.button.callback('使用文件传输助手接收', `fl:${messageEntity.wxMsgId}`)]]
-                },
-                parse_mode: 'HTML'
-            }).then(async msgRes => {
-                messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
-                this.messageService.createOrUpdate(messageEntity)
-            }).catch(e => {
-                this.dealException(e, message)
-            })
-        } else if (message.type === 4) {
+        }  else if (message.type === 4) {
             const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
             // 名片消息
             client.telegram.sendPhoto(message.chatId, {source: message.file.file, filename: message.file.fileName}, {
@@ -433,22 +400,6 @@ export class TelegramBotClient extends AbstractClient {
             ctx.answerCbQuery()
         })
 
-        bot.action(/^fl:/, async ctx => {
-            if (!TelegramBotClient.getSpyClient('fhClient').hasLogin) {
-                ctx.sendMessage('请先在 bot 中使用 /flogin 指令登录文件传输助手')
-                ctx.answerCbQuery()
-                return
-            }
-
-            const msg = await this.messageService.getByBotMsgId(ctx.chat.id, ctx.msgId)
-            if (msg) {
-                ctx.deleteMessage()
-                this.downloadFileByFileHelper(msg)
-            }
-
-            ctx.answerCbQuery()
-        })
-
         bot.action(/^af:/, async ctx => {
             const wxId = ctx.match.input.split(':')[1]
             const wxClient = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
@@ -629,29 +580,6 @@ export class TelegramBotClient extends AbstractClient {
         })
     }
 
-    async downloadFileByFileHelper(msg: Message) {
-        this.messageSender.sendFile(msg.chatId, {
-            buff: Buffer.from('0'),
-            filename: 'temp_file',
-            caption: '文件接收中',
-            fileType: 'document'
-        }).then(async msgRes => {
-            msg.tgBotMsgId = parseInt(msgRes.message_id + '')
-            const wxClient = TelegramBotClient.getSpyClient('wxClient').client
-            const result = await wxClient.Message.forwardTo(msg.source_text, 'filehelper', msg.source_type)
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            msg.fhMsgId = result.newMsgId.c.join('')
-            this.messageService.createOrUpdate(msg)
-            // 文件传输助手添加等待中的状态
-            const client = TelegramBotClient.getSpyClient('fhClient') as FileHelperClient
-            client.waitingMessage.push({
-                date: new Date().getTime(),
-                msgId: msg.fhMsgId
-            })
-        })
-    }
-
     onMessage(bot: Telegraf) {
         bot.on(message('text'), async ctx => {
             // 识别文本类型
@@ -717,26 +645,7 @@ export class TelegramBotClient extends AbstractClient {
                 return
             }
             const fileId = ctx.message.sticker.file_id
-            // 使用md5发送贴纸
-            const messageId = ctx.message.message_id
-            const stickerMessage: BaseMessage = {
-                id: messageId + '',
-                senderId: '',
-                wxId: '',
-                sender: '{me}',
-                chatId: chatId,
-                content: '',
-                type: 0
-            }
-            const stickerEmoji = await handleSticker(ctx)
-            if (stickerEmoji) {
-                stickerMessage.content = stickerEmoji
-                TelegramBotClient.getSpyClient('wxClient').sendMessage(stickerMessage)
-                return
-            } else {
-                console.log('TG贴纸ID:', ctx.message.sticker.file_id)
-            }
-            // 若匹配不到md5则使用静态图片形式发送
+
             ctx.telegram.getFileLink(fileId).then(async fileLink => {
                 const uniqueId = ctx.message.sticker.file_unique_id
                 const href = fileLink.href
@@ -1008,8 +917,6 @@ export class TelegramBotClient extends AbstractClient {
                 this.chatId = ctx.chat.id
                 await this.configurationService.saveConfig(config)
             }
-            // 登录文件传输助手客户端
-            this.loginFileHelperClient()
         })
 
         bot.command('settings', async ctx => {
@@ -1272,19 +1179,6 @@ export class TelegramBotClient extends AbstractClient {
         }
     }
 
-    private loginFileHelperClient() {
-        // if (!TelegramBotClient.getSpyClient('fhClient')) {
-        //     const clientFactory = new ClientFactory()
-        //     TelegramBotClient.addSpyClient({
-        //         interfaceId: 'fhClient',
-        //         client: clientFactory.create('fhClient')
-        //     })
-        // }
-        // if (!TelegramBotClient.getSpyClient('fhClient').hasLogin) {
-        //     TelegramBotClient.getSpyClient('fhClient').login()
-        // }
-    }
-
     private loginMTPClient() {
         if (!TelegramBotClient.getSpyClient('botMTPClient')) {
             const clientFactory = new ClientFactory()
@@ -1405,9 +1299,6 @@ export class TelegramBotClient extends AbstractClient {
                         this.loginUserClient()
                         // 登录 botMTP 客户端
                         this.loginMTPClient()
-                        if (config.useFileHelper) {
-                            this.loginFileHelperClient()
-                        }
                     }
                 })
             }).then(() => {
