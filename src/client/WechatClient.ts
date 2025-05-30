@@ -154,6 +154,8 @@ export class WeChatClient extends AbstractClient {
         }
 
         // 登录后更新群组绑定信息
+        // 修复错误绑定的群聊信息
+        await this.bindGroupService.fixGroup()
         if (config.syncWechat) {
             setTimeout(async () => {
                 const allBind = await this.bindGroupService.getAll()
@@ -353,7 +355,7 @@ export class WeChatClient extends AbstractClient {
                 const avatar = await room.avatar()
                 bindGroup.avatarLink = avatar.url
                 if (!bindGroup.name) {
-                    bindGroup.name = '企业微信群'
+                    bindGroup.name = '未命名群聊'
                 }
             } else {
                 bindGroup.type = 0
