@@ -900,7 +900,13 @@ export class TelegramBotClient extends AbstractClient {
                 await this.configurationService.saveConfig(config)
             }
             // todo 先判断是否登录 TG user client
-            this.loginUserClient()
+            const userClient = TelegramBotClient.getSpyClient('userMTPClient')
+
+            if (userClient && userClient.hasLogin){
+                this.loginWechatClient()
+            }else {
+                this.loginUserClient()
+            }
         })
 
         bot.command('logout', async ctx => {
