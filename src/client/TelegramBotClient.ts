@@ -29,6 +29,7 @@ import {BindGroup} from '../entity/BindGroup'
 import {WxRoomRepository} from '../repository/WxRoomRepository'
 import {WeChatClient} from './WechatClient'
 import {SpeechService} from '../service/SpeechService'
+import {WxBot} from 'wx2tg-puppet'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -900,6 +901,17 @@ export class TelegramBotClient extends AbstractClient {
             }
             // todo 先判断是否登录 TG user client
             this.loginUserClient()
+        })
+
+        bot.command('logout', async ctx => {
+            if (ctx.chat && ctx.chat.type.includes('group')) {
+                return ctx.reply('该命令无法在群组中使用')
+            }
+            const wxClient = TelegramBotClient.getSpyClient('wxClient')
+            const wxBot = wxClient.client as WxBot
+            await wxBot.clearCache()
+            wxClient.hasLogin = false
+            return ctx.reply('退出登录成功')
         })
 
         bot.command('flogin', async ctx => {

@@ -10,6 +10,7 @@ export default class TgCommandHelper {
             {command: 'help', description: '帮助'},
             {command: 'start', description: '开始'},
             {command: 'login', description: '登录'},
+            {command: 'logout', description: '退出登录并清空缓存'},
             // {command: 'flogin', description: '登录文件传输助手接收文件消息'},
             {command: 'update', description: '更新群组头像和名称'},
             {command: 'add', description: '根据手机号添加好友，在后面加上你需要添加用户的手机号'},

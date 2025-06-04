@@ -170,8 +170,9 @@ export class WeChatClient extends AbstractClient {
         }
     }
 
-    logout(): Promise<boolean> {
-        throw new Error('Method not implemented.')
+    async logout(): Promise<boolean> {
+        this.hasLogin = false
+        return true
     }
 
     async sendMessage(message: BaseMessage): Promise<boolean> {
