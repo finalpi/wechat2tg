@@ -1,6 +1,6 @@
 # wechat2tg-mac
 
-基于微信 Mac 协议在 Telegram 收发微信消息，wx2tg-server 服务端出于安全考虑不开源
+基于微信协议在 Telegram 收发微信消息，wx2tg-server 服务端出于安全考虑不开源
 
 ## TG 群组: [@Wx2TgUserGroup](https://t.me/+AD02MEZa-og3ZGY1)
 
@@ -60,9 +60,9 @@
 version: '3'
 
 services:
-  wx2tg-mac:
-    image: finalpi/wechat2tg-mac:latest
-    container_name: wx2tg-mac
+  wx2tg-v3:
+    image: finalpi/wechat2tg-v3-dev:latest
+    container_name: wx2tg-v3
     volumes:
       - ./config:/app/storage
       - ./save-files:/app/save-files # 保存文件夹挂载后贴纸文件不需要重新转换
@@ -70,7 +70,7 @@ services:
     restart: unless-stopped
 
   wx2tg-server:
-    image: finalpi/wx2tg-server:latest # 拉取镜像
+    image: finalpi/wx2tg-server:857-latest # 拉取镜像
     container_name: wx2tg-server
     ports:
       - "8058:8058"

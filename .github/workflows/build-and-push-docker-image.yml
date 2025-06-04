@@ -3,7 +3,7 @@ name: Build and Push Docker Image
 on:
   push:
     branches:
-      - 'wx2tg-mac-dev'
+      - 'wx2tg-v3-dev'
 
 jobs:
   build-and-push:
@@ -35,5 +35,5 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: finalpi/wechat2tg-mac-dev:${{ steps.version.outputs.version }}, finalpi/wechat2tg-mac-dev:latest
+          tags: finalpi/wechat2tg-v3-dev:${{ steps.version.outputs.version }}, finalpi/wechat2tg-v3-dev:latest
           platforms: linux/amd64

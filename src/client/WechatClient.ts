@@ -56,7 +56,8 @@ export class WeChatClient extends AbstractClient {
         this.messageService = MessageService.getInstance()
         this.client = new WxBot({
             baseUrl: config.BASE_API,
-            databasePath: 'storage/db/puppet.db'
+            databasePath: 'storage/db/puppet.db',
+            deviceType: config.DEVICE_TYPE,
         })
         this.hasReady = true
         this.init()

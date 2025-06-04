@@ -29,6 +29,7 @@ export const config = {
     FILE_API: process.env.FILE_API?.toString(),
     CALLBACK_API: process.env.CALLBACK_API?.toString(),
     DEBUG_MODE: process.env.DEBUG_MODE === 'true' ? true : false,
+    DEVICE_TYPE: process.env.DEVICE_TYPE?.toString() || 'ipad',
 }
 
 export const useProxy = config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== ''
