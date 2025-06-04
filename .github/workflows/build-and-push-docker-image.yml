@@ -34,6 +34,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          provenance: false
           push: true
           tags: finalpi/wechat2tg-v3-dev:${{ steps.version.outputs.version }}, finalpi/wechat2tg-v3-dev:latest
           platforms: linux/amd64
