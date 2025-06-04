@@ -2,7 +2,7 @@ version: '3'
 
 services:
   wx2tg-v3:
-    image: finalpi/wechat2tg-v3-dev:latest
+    image: finalpi/wechat2tg-v3:latest
     container_name: wx2tg-v3
     volumes:
       - ./config:/app/storage
@@ -11,7 +11,7 @@ services:
     restart: unless-stopped
 
   wx2tg-server:
-    image: finalpi/wx2tg-server:857-latest # 拉取镜像
+    image: finalpi/wx2tg-server:v3-latest # 拉取镜像
     container_name: wx2tg-server
     ports:
       - "8058:8058"
