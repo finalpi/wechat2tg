@@ -91,6 +91,8 @@ export class TelegramBotClient extends AbstractClient {
     }
 
     async sendMessage(message: BaseMessage): Promise<boolean> {
+        console.log(`[MessageOrder] 接收到消息: ${message.id}, 类型: ${message.type}, 时间: ${new Date().toISOString()}`)
+
         // 检查消息是否已经在处理中（避免重复发送）
         const existingMessageId = `${message.chatId}_${message.id}`
         if (this.processingMessages.has(existingMessageId)) {
@@ -105,13 +107,17 @@ export class TelegramBotClient extends AbstractClient {
             // 将消息添加到缓冲区
             const messageId = this.messageBufferService.addMessage(message)
 
+            // 文本消息立即加入顺序队列，避免异步操作导致顺序混乱
+            if (message.type === 0) {
+                this.addTextMessageToQueue(message, messageId)
+                return true
+            }
+
+            // 非文本消息才进行数据库操作
             const messageEntity = this.createMessageEntity(message)
             await this.messageService.createOrUpdate(messageEntity)
 
-            // 文本消息加入顺序队列
-            if (message.type === 0) {
-                this.addTextMessageToQueue(message, messageId)
-            } else if (message.type === 1) {
+            if (message.type === 1) {
                 const success = await this.sendFileMessage(message, messageEntity)
                 if (success) {
                     this.messageBufferService.markMessageAsSent(messageId)
@@ -352,92 +358,9 @@ export class TelegramBotClient extends AbstractClient {
     }
 
     private async sendTextMsg(message: BaseMessage): Promise<boolean> {
-        // 发送文本消息的方法
-        const bindGroup = await this.bindGroupService.getByWxId(message.wxId)
-        if (!bindGroup) {
-            console.log(`[MessageBuffer] 文本消息发送失败: 未找到绑定群组 - ${message.id}`)
-            return false
-        }
-        const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content)
-        const option: Option = {
-            parse_mode: 'HTML'
-        }
-        if (message.param?.reply_id) {
-            option.reply_id = message.param.reply_id
-        }
-        let newMsg
-        let success = true
-        // 长文本分片发送
-        const html = message.content
-        const maxLength = 9000
-        if (html.length > maxLength) {
-            // 分割长文本,分多次发送
-            const result = []
-            let currentLength = 0
-            let currentChunk = ''
-
-            // 使用正则表达式匹配HTML标签
-            const regex = /(<[^>]+>|[^<]+)/g
-            let match
-
-            while ((match = regex.exec(html)) !== null) {
-                const chunk = match[0] // 获取当前匹配的片段
-                const chunkLength = chunk.length
-
-                // 检查当前片段加上当前块的长度是否超过最大长度
-                if (currentLength + chunkLength > maxLength) {
-                    // 如果超过最大长度，先将当前块存入结果
-                    result.push(currentChunk)
-                    // 重置当前块和当前长度
-                    currentChunk = ''
-                    currentLength = 0
-                }
-
-                // 将当前片段添加到当前块
-                currentChunk += chunk
-                currentLength += chunkLength
-            }
-
-            // 添加最后一块（如果有）
-            if (currentChunk) {
-                result.push(currentChunk)
-            }
-
-            for (let i = 0; i < result.length; i++) {
-                let sendMsg = result[i]
-                if (result.length > 1) {
-                    sendMsg = `<b>part${i + 1}:</b>` + sendMsg
-                }
-                const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, sendMsg)
-                try {
-                    if (i == 0) {
-                        newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
-                    } else {
-                        await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
-                    }
-                } catch (e) {
-                    console.log(`[MessageBuffer] 文本消息发送失败 (分片${i + 1}): ${message.id} - ${e.message}`)
-                    await this.dealException(e, message)
-                    success = false
-                }
-            }
-        } else {
-            try {
-                newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
-            } catch (e) {
-                console.log(`[MessageBuffer] 文本消息发送失败: ${message.id} - ${e.message}`)
-                await this.dealException(e, message)
-                success = false
-            }
-        }
-
-        // 更新chatId
-        const messageEntity = await this.messageService.getByWxMsgId(message.id)
-        if (newMsg && messageEntity) {
-            messageEntity.tgBotMsgId = parseInt(newMsg.message_id + '')
-            this.messageService.createOrUpdate(messageEntity)
-        }
-        return success
+        // 为了保持向后兼容性，保留此方法，但建议使用 sendTextMsgSynchronously
+        console.log(`[MessageBuffer] 使用legacy sendTextMsg方法: ${message.id}`)
+        return await this.sendTextMsgSynchronously(message)
     }
 
     private async dealException(e, message: BaseMessage) {
@@ -1460,7 +1383,7 @@ export class TelegramBotClient extends AbstractClient {
         // 将消息和messageId一起存储
         const queueItem = { message, messageId }
         this.textMessageQueue.push(queueItem)
-        console.log(`[MessageQueue] 文本消息加入队列: ${message.id}, 队列长度: ${this.textMessageQueue.length}`)
+        console.log(`[MessageOrder] 消息加入队列: ${message.id}, 队列长度: ${this.textMessageQueue.length}, 队列中的消息: [${this.textMessageQueue.map(item => item.message.id).join(', ')}]`)
 
         if (!this.isProcessingQueue) {
             this.processTextMessageQueue()
@@ -1469,39 +1392,131 @@ export class TelegramBotClient extends AbstractClient {
 
     private async processTextMessageQueue() {
         this.isProcessingQueue = true
-        console.log(`[MessageQueue] 开始处理文本消息队列，共 ${this.textMessageQueue.length} 条消息`)
+        console.log(`[MessageOrder] 开始处理文本消息队列，共 ${this.textMessageQueue.length} 条消息`)
+        console.log(`[MessageOrder] 队列中的消息顺序: [${this.textMessageQueue.map(item => item.message.id).join(', ')}]`)
 
         while (this.textMessageQueue.length > 0) {
             const queueItem = this.textMessageQueue.shift()
             if (!queueItem) continue
 
             const { message, messageId } = queueItem
-            console.log(`[MessageQueue] 处理消息: ${message.id}`)
 
             try {
-                const success = await this.sendTextMsg(message)
+                // 确保消息完全发送完成后再处理下一个
+                const success = await this.sendTextMsgSynchronously(message)
                 if (success) {
                     this.messageBufferService.markMessageAsSent(messageId)
-                    console.log(`[MessageQueue] 消息发送成功: ${message.id}`)
                 } else {
                     this.messageBufferService.markMessageAsFailed(messageId, async (msg) => {
                         // 重试的消息不进入队列，直接发送（保持顺序）
-                        console.log(`[MessageQueue] 消息重试，不进入队列: ${msg.id}`)
-                        return await this.sendTextMsg(msg)
+                        console.log(`[MessageOrder] 消息重试，不进入队列: ${msg.id}`)
+                        return await this.sendTextMsgSynchronously(msg)
                     })
                 }
             } catch (error) {
-                console.error(`[MessageQueue] 消息处理出错: ${message.id}`, error)
+                console.error(`[MessageOrder] 消息处理出错: ${message.id}`, error)
                 this.messageBufferService.markMessageAsFailed(messageId, async (msg) => {
-                    return await this.sendTextMsg(msg)
+                    return await this.sendTextMsgSynchronously(msg)
                 })
             }
 
-            // 添加小延迟确保发送顺序
-            await new Promise(resolve => setTimeout(resolve, 100))
+            // 增加延迟确保发送完全完成
+            await new Promise(resolve => setTimeout(resolve, 200))
         }
 
         this.isProcessingQueue = false
-        console.log('[MessageQueue] 队列处理完成')
+    }
+
+    // 新增：同步发送文本消息，确保严格顺序
+    private async sendTextMsgSynchronously(message: BaseMessage): Promise<boolean> {
+        // 在实际发送时才进行数据库操作，确保顺序
+        const messageEntity = this.createMessageEntity(message)
+        await this.messageService.createOrUpdate(messageEntity)
+
+        const bindGroup = await this.bindGroupService.getByWxId(message.wxId)
+        if (!bindGroup) {
+            console.log(`[MessageBuffer] 文本消息发送失败: 未找到绑定群组 - ${message.id}`)
+            return false
+        }
+
+        const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content)
+        const option: Option = {
+            parse_mode: 'HTML'
+        }
+        if (message.param?.reply_id) {
+            option.reply_id = message.param.reply_id
+        }
+
+        let newMsg
+        let success = true
+
+        // 长文本分片发送 - 确保每片都按顺序发送
+        const html = message.content
+        const maxLength = 9000
+        if (html.length > maxLength) {
+            const result = []
+            let currentLength = 0
+            let currentChunk = ''
+
+            const regex = /(<[^>]+>|[^<]+)/g
+            let match
+
+            while ((match = regex.exec(html)) !== null) {
+                const chunk = match[0]
+                const chunkLength = chunk.length
+
+                if (currentLength + chunkLength > maxLength) {
+                    result.push(currentChunk)
+                    currentChunk = ''
+                    currentLength = 0
+                }
+
+                currentChunk += chunk
+                currentLength += chunkLength
+            }
+
+            if (currentChunk) {
+                result.push(currentChunk)
+            }
+
+            // 按顺序发送每个分片，等待每个完成后再发送下一个
+            for (let i = 0; i < result.length; i++) {
+                let sendMsg = result[i]
+                if (result.length > 1) {
+                    sendMsg = `<b>part${i + 1}:</b>` + sendMsg
+                }
+                const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, sendMsg)
+                try {
+                    if (i == 0) {
+                        newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
+                    } else {
+                        await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
+                    }
+                    // 等待分片发送完成
+                    await new Promise(resolve => setTimeout(resolve, 50))
+                } catch (e) {
+                    console.log(`[MessageBuffer] 文本消息发送失败 (分片${i + 1}): ${message.id} - ${e.message}`)
+                    await this.dealException(e, message)
+                    success = false
+                    break // 如果某个分片失败，停止发送后续分片
+                }
+            }
+        } else {
+            try {
+                newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
+            } catch (e) {
+                console.log(`[MessageBuffer] 文本消息发送失败: ${message.id} - ${e.message}`)
+                await this.dealException(e, message)
+                success = false
+            }
+        }
+
+        // 更新chatId
+        if (newMsg && success) {
+            messageEntity.tgBotMsgId = parseInt(newMsg.message_id + '')
+            await this.messageService.createOrUpdate(messageEntity)
+        }
+
+        return success
     }
 }
