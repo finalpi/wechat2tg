@@ -30,6 +30,7 @@ import {WxRoomRepository} from '../repository/WxRoomRepository'
 import {WeChatClient} from './WechatClient'
 import {SpeechService} from '../service/SpeechService'
 import {WxBot} from 'wx2tg-puppet'
+import {MessageBufferService} from '../util/MessageBufferService'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -90,6 +91,81 @@ export class TelegramBotClient extends AbstractClient {
     }
 
     async sendMessage(message: BaseMessage): Promise<boolean> {
+        // 检查消息是否已经在处理中（避免重复发送）
+        const existingMessageId = `${message.chatId}_${message.id}`
+        if (this.processingMessages.has(existingMessageId)) {
+            console.log(`[MessageBuffer] 消息已在处理中，跳过重复发送: ${message.id}`)
+            return true
+        }
+
+        // 标记消息正在处理
+        this.processingMessages.add(existingMessageId)
+
+        try {
+            // 将消息添加到缓冲区
+            const messageId = this.messageBufferService.addMessage(message)
+
+            const messageEntity = this.createMessageEntity(message)
+            await this.messageService.createOrUpdate(messageEntity)
+
+            // 文本消息加入顺序队列
+            if (message.type === 0) {
+                this.addTextMessageToQueue(message, messageId)
+            } else if (message.type === 1) {
+                const success = await this.sendFileMessage(message, messageEntity)
+                if (success) {
+                    this.messageBufferService.markMessageAsSent(messageId)
+                } else {
+                    this.messageBufferService.markMessageAsFailed(messageId, async (msg) => await this.sendFileMessage(msg, messageEntity))
+                }
+            } else if (message.type === 4) {
+                const success = await this.sendBusinessCardMessage(message, messageEntity)
+                if (success) {
+                    this.messageBufferService.markMessageAsSent(messageId)
+                } else {
+                    this.messageBufferService.markMessageAsFailed(messageId, async (msg) => {
+                        const retryEntity = this.createMessageEntity(msg)
+                        await this.messageService.createOrUpdate(retryEntity)
+                        return await this.sendBusinessCardMessage(msg, retryEntity)
+                    })
+                }
+            } else if (message.type === 5) {
+                const success = await this.sendLocationMessage(message, messageEntity)
+                if (success) {
+                    this.messageBufferService.markMessageAsSent(messageId)
+                } else {
+                    this.messageBufferService.markMessageAsFailed(messageId, async (msg) => {
+                        const retryEntity = this.createMessageEntity(msg)
+                        await this.messageService.createOrUpdate(retryEntity)
+                        return await this.sendLocationMessage(msg, retryEntity)
+                    })
+                }
+            } else if (message.type === 6) {
+                const success = await this.sendRevokeMessage(message, messageEntity)
+                if (success) {
+                    this.messageBufferService.markMessageAsSent(messageId)
+                } else {
+                    this.messageBufferService.markMessageAsFailed(messageId, async (msg) => {
+                        const retryEntity = this.createMessageEntity(msg)
+                        await this.messageService.createOrUpdate(retryEntity)
+                        return await this.sendRevokeMessage(msg, retryEntity)
+                    })
+                }
+            }
+            return true
+        } catch (error) {
+            console.error('发送消息失败:', error)
+            // 不要在这里调用markMessageAsFailed，避免重复添加
+            return false
+        } finally {
+            // 处理完成后移除标记（延迟移除，避免重试时被阻止）
+            setTimeout(() => {
+                this.processingMessages.delete(existingMessageId)
+            }, 30000) // 30秒后移除
+        }
+    }
+
+    private createMessageEntity(message: BaseMessage): Message {
         const messageEntity = new Message()
         messageEntity.chatId = message.chatId
         messageEntity.wxMsgId = message.id
@@ -103,68 +179,81 @@ export class TelegramBotClient extends AbstractClient {
         messageEntity.toWxid = message.toWxid
         messageEntity.msgId = message.msgId
         messageEntity.createTime = message.createTime
-        await this.messageService.createOrUpdate(messageEntity)
-        // 文本消息放进队列发送
-        if (message.type === 0) {
-            // 文本消息走队列
-            this.sendQueueHelper.addMessageWithMsgId(parseInt(message.id), message)
-        } else if (message.type === 1) {
+        return messageEntity
+    }
+
+    private async sendFileMessage(message: BaseMessage, messageEntity: Message): Promise<boolean> {
+        try {
             const configuration = await this.configurationService.getConfig()
             if (message.file.sendType === 'voice' && config.TENCENT_SECRET_ID && config.TENCENT_SECRET_KEY && configuration.autoTranscript) {
                 try {
                     const audioTranscript = await SpeechService.getInstance().getTranscript(message.file.file)
                     console.log('语音转文字转换成功文本内容：', audioTranscript)
                     message.sender = `${message.sender}\n${audioTranscript}`
-                }catch (e) {
+                } catch (e) {
                     console.error(e)
                 }
             }
-            // 图片消息逻辑
-            this.messageSender.sendFile(message.chatId, {
+
+            const msgRes = await this.messageSender.sendFile(message.chatId, {
                 buff: message.file.file,
                 filename: message.file.fileName,
                 fileType: message.file.sendType,
                 caption: message.sender
             }, {
                 parse_mode: 'HTML'
-            }).then(msgRes => {
-                messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
-                this.messageService.createOrUpdate(messageEntity)
-            }).catch(e => {
-                this.dealException(e, message)
             })
-        }  else if (message.type === 4) {
+
+            messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
+            await this.messageService.createOrUpdate(messageEntity)
+            return true
+        } catch (e) {
+            this.dealException(e, message)
+            return false
+        }
+    }
+
+    private async sendBusinessCardMessage(message: BaseMessage, messageEntity: Message): Promise<boolean> {
+        try {
             const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
-            // 名片消息
-            client.telegram.sendPhoto(message.chatId, {source: message.file.file, filename: message.file.fileName}, {
+            const msgRes = await client.telegram.sendPhoto(message.chatId, {source: message.file.file, filename: message.file.fileName}, {
                 caption: message.content,
                 parse_mode: 'HTML',
                 reply_markup: {
                     inline_keyboard: [[Markup.button.callback('添加为好友', `af:${message.businessCardId}`)]]
                 },
-            }).then(async msgRes => {
-                messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
-                this.messageService.createOrUpdate(messageEntity)
-            }).catch(e => {
-                this.dealException(e, message)
             })
-        } else if (message.type === 5) {
-            // 位置消息处理
+
+            messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
+            await this.messageService.createOrUpdate(messageEntity)
+            return true
+        } catch (e) {
+            this.dealException(e, message)
+            return false
+        }
+    }
+
+    private async sendLocationMessage(message: BaseMessage, messageEntity: Message): Promise<boolean> {
+        try {
             const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
             const msgJson = TelegramBotClient.getSpyClient('wxClient').client.Message.getXmlToJson(message.source_text)
-            client.telegram.sendLocation(message.chatId, parseFloat(msgJson.msg.location.x), parseFloat(msgJson.msg.location.y), {
+            const msgRes = await client.telegram.sendLocation(message.chatId, parseFloat(msgJson.msg.location.x), parseFloat(msgJson.msg.location.y), {
                 reply_markup: {
                     inline_keyboard: [[Markup.button.callback(msgJson.msg.location.poiname || msgJson.msg.location.label, 'null')]]
                 }
-            }).then(async msgRes => {
-                messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
-                this.messageService.createOrUpdate(messageEntity)
-            }).catch(e => {
-                this.dealException(e, message)
             })
-        } else if (message.type === 6) {
+
+            messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
+            await this.messageService.createOrUpdate(messageEntity)
+            return true
+        } catch (e) {
+            this.dealException(e, message)
+            return false
+        }
+    }
+
+    private async sendRevokeMessage(message: BaseMessage, messageEntity: Message): Promise<boolean> {
+        try {
             const revokeMsg = await this.messageService.getByWxMsgId(message.revokeMsgId)
             const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
             let param = undefined
@@ -175,14 +264,15 @@ export class TelegramBotClient extends AbstractClient {
                     }
                 }
             }
-            client.telegram.sendMessage(message.chatId, message.content, param).then(async msgRes => {
-                messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
-                this.messageService.createOrUpdate(messageEntity)
-            }).catch(e => {
-                this.dealException(e, message)
-            })
+            const msgRes = await client.telegram.sendMessage(message.chatId, message.content, param)
+
+            messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
+            await this.messageService.createOrUpdate(messageEntity)
+            return true
+        } catch (e) {
+            this.dealException(e, message)
+            return false
         }
-        return true
     }
 
     handlerMessage(event: Event, message: BaseMessage): Promise<unknown> {
@@ -204,6 +294,13 @@ export class TelegramBotClient extends AbstractClient {
     // bot 启动时间
     private startTime: Date
     config: Configuration | undefined
+    // 添加消息缓冲服务
+    private messageBufferService = MessageBufferService.getInstance()
+    // 正在处理的消息集合，避免重复发送
+    private processingMessages = new Set<string>()
+    // 文本消息顺序队列
+    private textMessageQueue: { message: BaseMessage, messageId: string }[] = []
+    private isProcessingQueue = false
 
     static getInstance(): TelegramBotClient {
         if (!TelegramBotClient.instance) {
@@ -254,11 +351,12 @@ export class TelegramBotClient extends AbstractClient {
         this.messageSender = SenderFactory.createSender(this.client)
     }
 
-    private async sendTextMsg(message: BaseMessage) {
+    private async sendTextMsg(message: BaseMessage): Promise<boolean> {
         // 发送文本消息的方法
         const bindGroup = await this.bindGroupService.getByWxId(message.wxId)
         if (!bindGroup) {
-            return
+            console.log(`[MessageBuffer] 文本消息发送失败: 未找到绑定群组 - ${message.id}`)
+            return false
         }
         const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content)
         const option: Option = {
@@ -268,6 +366,7 @@ export class TelegramBotClient extends AbstractClient {
             option.reply_id = message.param.reply_id
         }
         let newMsg
+        let success = true
         // 长文本分片发送
         const html = message.content
         const maxLength = 9000
@@ -310,20 +409,26 @@ export class TelegramBotClient extends AbstractClient {
                     sendMsg = `<b>part${i + 1}:</b>` + sendMsg
                 }
                 const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, sendMsg)
-                if (i == 0) {
-                    newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option).catch(async e => {
-                        await this.dealException(e, message)
-                    })
-                } else {
-                    await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option).catch(async e => {
-                        await this.dealException(e, message)
-                    })
+                try {
+                    if (i == 0) {
+                        newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
+                    } else {
+                        await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
+                    }
+                } catch (e) {
+                    console.log(`[MessageBuffer] 文本消息发送失败 (分片${i + 1}): ${message.id} - ${e.message}`)
+                    await this.dealException(e, message)
+                    success = false
                 }
             }
         } else {
-            newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option).catch(async e => {
+            try {
+                newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
+            } catch (e) {
+                console.log(`[MessageBuffer] 文本消息发送失败: ${message.id} - ${e.message}`)
                 await this.dealException(e, message)
-            })
+                success = false
+            }
         }
 
         // 更新chatId
@@ -332,29 +437,35 @@ export class TelegramBotClient extends AbstractClient {
             messageEntity.tgBotMsgId = parseInt(newMsg.message_id + '')
             this.messageService.createOrUpdate(messageEntity)
         }
-        return
+        return success
     }
 
     private async dealException(e, message: BaseMessage) {
         console.error(e)
-        if (e.response.error_code === 403) {
-            this.bindGroupService.removeByChatIdOrWxId(message.chatId, message.senderId)
-            const config = await this.configurationService.getConfig()
-            message.chatId = config.botId
-            this.sendTextMsg(message)
-        }
-        // Telegram Too Many Requests
-        else if (e.response.error_code === 429) {
-            setTimeout(() => {
-                // this._tgClient.bot.telegram.sendMessage(message.chatId,
-                //     SimpleMessageSender.send(
-                //         {
-                //             body: this.t('common.tooManyRequests', e.response.parameters.retry_after),
-                //             chatId: message.chatId,
-                //         }))
-                this.logError(e.response.parameters.retry_after)
+
+        // 检查是否是Telegram API响应错误
+        if (e.response && e.response.error_code) {
+            if (e.response.error_code === 403) {
+                this.bindGroupService.removeByChatIdOrWxId(message.chatId, message.senderId)
+                const config = await this.configurationService.getConfig()
+                message.chatId = config.botId
+                this.sendTextMsg(message)
+            }
+            // Telegram Too Many Requests
+            else if (e.response.error_code === 429) {
+                const retryAfter = e.response.parameters?.retry_after || 20
+                console.log(`[MessageBuffer] 429错误，${retryAfter}秒后通过缓冲区重试: ${message.id}`)
                 this.sendMessage(message)
-            }, e.response.parameters.retry_after * 1000 || 20000)
+            }
+        }
+        // 处理网络错误 (如 FetchError, ECONNRESET 等)
+        else if (e.code === 'ECONNRESET' || e.type === 'system' || e.name === 'FetchError') {
+            console.log(`[MessageBuffer] 网络错误，消息将通过缓冲区重试: ${message.id} - ${e.message}`)
+            // 网络错误让缓冲区处理重试
+        }
+        // 其他未知错误
+        else {
+            console.log(`[MessageBuffer] 未知错误，消息将通过缓冲区重试: ${message.id} - ${e.message || e}`)
         }
     }
 
@@ -682,7 +793,6 @@ export class TelegramBotClient extends AbstractClient {
                 })
             })
         })
-
     }
 
     private async sendGif(saveFile: string, gifFile: string, ctx: any,
@@ -737,7 +847,6 @@ export class TelegramBotClient extends AbstractClient {
                 }
             })
         }
-
     }
 
     private async handleFileMessage(ctx: any, fileType: string | 'audio' | 'video' | 'document' | 'photo' | 'voice') {
@@ -1301,7 +1410,6 @@ export class TelegramBotClient extends AbstractClient {
         }
     }
 
-
     private async botLaunch(bot: Telegraf, retryCount = 5) {
         if (retryCount >= 0) {
             bot.launch(() => {
@@ -1348,4 +1456,52 @@ export class TelegramBotClient extends AbstractClient {
         return false
     }
 
+    private addTextMessageToQueue(message: BaseMessage, messageId: string) {
+        // 将消息和messageId一起存储
+        const queueItem = { message, messageId }
+        this.textMessageQueue.push(queueItem)
+        console.log(`[MessageQueue] 文本消息加入队列: ${message.id}, 队列长度: ${this.textMessageQueue.length}`)
+
+        if (!this.isProcessingQueue) {
+            this.processTextMessageQueue()
+        }
+    }
+
+    private async processTextMessageQueue() {
+        this.isProcessingQueue = true
+        console.log(`[MessageQueue] 开始处理文本消息队列，共 ${this.textMessageQueue.length} 条消息`)
+
+        while (this.textMessageQueue.length > 0) {
+            const queueItem = this.textMessageQueue.shift()
+            if (!queueItem) continue
+
+            const { message, messageId } = queueItem
+            console.log(`[MessageQueue] 处理消息: ${message.id}`)
+
+            try {
+                const success = await this.sendTextMsg(message)
+                if (success) {
+                    this.messageBufferService.markMessageAsSent(messageId)
+                    console.log(`[MessageQueue] 消息发送成功: ${message.id}`)
+                } else {
+                    this.messageBufferService.markMessageAsFailed(messageId, async (msg) => {
+                        // 重试的消息不进入队列，直接发送（保持顺序）
+                        console.log(`[MessageQueue] 消息重试，不进入队列: ${msg.id}`)
+                        return await this.sendTextMsg(msg)
+                    })
+                }
+            } catch (error) {
+                console.error(`[MessageQueue] 消息处理出错: ${message.id}`, error)
+                this.messageBufferService.markMessageAsFailed(messageId, async (msg) => {
+                    return await this.sendTextMsg(msg)
+                })
+            }
+
+            // 添加小延迟确保发送顺序
+            await new Promise(resolve => setTimeout(resolve, 100))
+        }
+
+        this.isProcessingQueue = false
+        console.log('[MessageQueue] 队列处理完成')
+    }
 }
