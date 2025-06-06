@@ -91,7 +91,6 @@ export class TelegramBotClient extends AbstractClient {
     }
 
     async sendMessage(message: BaseMessage): Promise<boolean> {
-        console.log(`[MessageOrder] 接收到消息: ${message.id}, 类型: ${message.type}, 时间: ${new Date().toISOString()}`)
 
         // 检查消息是否已经在处理中（避免重复发送）
         const existingMessageId = `${message.chatId}_${message.id}`
