@@ -6,6 +6,8 @@ export class SimpleMessageSendQueueHelper {
     private processFlag = false
     // 消息最大重试次数
     private messageMaxRetries = 2
+    // 添加定时器引用管理
+    private processInterval: NodeJS.Timeout | null = null
 
     constructor(sendFunction: (...args) => Promise<any>, interval: number) {
         this.sendFunction = sendFunction
@@ -36,7 +38,7 @@ export class SimpleMessageSendQueueHelper {
     }
 
     private startSend(): void {
-        setInterval(async () => {
+        this.processInterval = setInterval(async () => {
             await this.processQueue()
         }, this.loopTime)
     }
@@ -67,7 +69,51 @@ export class SimpleMessageSendQueueHelper {
             }
             this.processFlag = false
         }
+    }
 
+    /**
+     * 获取队列统计信息
+     */
+    getQueueStats(): {
+        queueLength: number
+        isProcessing: boolean
+        hasInterval: boolean
+    } {
+        return {
+            queueLength: this.messageQueue.length,
+            isProcessing: this.processFlag,
+            hasInterval: this.processInterval !== null
+        }
+    }
+
+    /**
+     * 清空队列
+     */
+    clearQueue(): void {
+        const count = this.messageQueue.length
+        this.messageQueue = []
+        console.log(`已清空发送队列，删除了 ${count} 条消息`)
+    }
+
+    /**
+     * 停止定时器并清理资源
+     */
+    destroy(): void {
+        console.log('正在销毁SimpleMessageSendQueueHelper...')
+        
+        // 清理定时器
+        if (this.processInterval) {
+            clearInterval(this.processInterval)
+            this.processInterval = null
+        }
+        
+        // 清空队列
+        this.clearQueue()
+        
+        // 重置处理标志
+        this.processFlag = false
+        
+        console.log('SimpleMessageSendQueueHelper已销毁')
     }
 }
 
