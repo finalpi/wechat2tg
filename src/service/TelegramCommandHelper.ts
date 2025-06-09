@@ -22,6 +22,7 @@ export default class TgCommandHelper {
             {command: 'room', description: '查看微信群'},
             {command: 'getqr', description: '获取我的二维码名片'},
             {command: 'unbind', description: '解绑群组'},
+            {command: 'quit', description: '退出并解绑群组'},
         ]
 
         bot.telegram.setMyCommands(commands).then(r => {

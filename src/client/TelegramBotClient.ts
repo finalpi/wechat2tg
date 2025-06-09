@@ -968,6 +968,14 @@ export class TelegramBotClient extends AbstractClient {
             }
         })
 
+        bot.command('quit', async ctx => {
+            if (!TelegramBotClient.getSpyClient('userMTPClient').hasLogin) {
+                return ctx.reply('请先登录 user bot')
+            }
+            const telegramGroupOperateService = new TelegramGroupOperateService(this.bindGroupService, TelegramBotClient.getSpyClient('userMTPClient').client)
+            telegramGroupOperateService.quitChat(ctx.chat.id)
+        })
+
         bot.command('settings', async ctx => {
             ctx.sendMessage('程序设置:', {
                 reply_markup: await this.getSettingButton()

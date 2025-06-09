@@ -148,7 +148,7 @@ export class TelegramGroupOperateService {
         }
         // 创建群组
         const config = await this.configService.getConfig()
-        if (!contactOrRoom.name){
+        if (!contactOrRoom.name) {
             contactOrRoom.name = '未命名'
         }
         const result = await this.client?.invoke(
@@ -185,6 +185,16 @@ export class TelegramGroupOperateService {
         this.createGroupQueue = this.createGroupQueue.filter(i => i.chatId !== contactOrRoom.chatId)
         // 添加绑定
         return bindGroup
+    }
+
+    async quitChat(chatId: any): Promise<void> {
+        const id: any = 0 - chatId
+        await this.client?.invoke(
+            new Api.messages.DeleteChat({
+                chatId: id
+            })
+        )
+        await this.bindGroupService.removeByChatIdOrWxId(chatId, undefined)
     }
 
     async addToFolder(chatId: number): Promise<void> {
