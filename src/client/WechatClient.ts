@@ -78,28 +78,38 @@ export class WeChatClient extends AbstractClient {
         if (bindGroup) {
             let msgResult
             let quoteMsg: Message
-            if (message.param?.replyMessageId) {
-                quoteMsg = await this.messageService.getByBotMsgId(bindGroup.chatId, message.param?.replyMessageId)
-            }
-            if (bindGroup.type === 0) {
-                const contact = await this.client.Contact.find({id: bindGroup.wxId})
-                if (quoteMsg) {
-                    msgResult = await contact.quoteSay(message.content, quoteMsg.wxMsgId, quoteMsg.wxSenderId, quoteMsg.content)
-                } else {
-                    msgResult = await contact.say(message.content)
+            try {
+                if (message.param?.replyMessageId) {
+                    quoteMsg = await this.messageService.getByBotMsgId(bindGroup.chatId, message.param?.replyMessageId)
                 }
-            } else {
-                const room = await this.client.Room.find({id: bindGroup.wxId})
-                if (quoteMsg) {
-                    msgResult = await room.quoteSay(message.content, quoteMsg.wxMsgId, quoteMsg.wxSenderId, quoteMsg.content)
-                } else {
-                    if (message.content.startsWith('@all')) {
-                        message.content = message.content.replace('@all', '')
-                        msgResult = await room.say(message.content, '@all')
+                if (bindGroup.type === 0) {
+                    const contact = await this.client.Contact.find({id: bindGroup.wxId})
+                    if (quoteMsg) {
+                        msgResult = await contact.quoteSay(message.content, quoteMsg.wxMsgId, quoteMsg.wxSenderId, quoteMsg.content)
                     } else {
-                        msgResult = await room.say(message.content)
+                        msgResult = await contact.say(message.content)
+                    }
+                } else {
+                    const room = await this.client.Room.find({id: bindGroup.wxId})
+                    if (quoteMsg) {
+                        msgResult = await room.quoteSay(message.content, quoteMsg.wxMsgId, quoteMsg.wxSenderId, quoteMsg.content)
+                    } else {
+                        if (message.content.startsWith('@all')) {
+                            message.content = message.content.replace('@all', '')
+                            msgResult = await room.say(message.content, '@all')
+                        } else {
+                            msgResult = await room.say(message.content)
+                        }
                     }
                 }
+            }catch (e) {
+                this.logger.error(e)
+                const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
+                tgBotClient.telegram.sendMessage(message.chatId, '消息发送失败！',{
+                    reply_parameters: {
+                        message_id: parseInt(message.id)
+                    }
+                })
             }
             // 将 msgId 更新到数据库
             const messageEntity = await this.messageService.getByBotMsgId(bindGroup.chatId, parseInt(message.id))
@@ -179,68 +189,78 @@ export class WeChatClient extends AbstractClient {
         if (!this.hasReady || !this.hasLogin) {
             return
         }
-        const messageEntity = new Message()
-        messageEntity.chatId = message.chatId
-        messageEntity.tgBotMsgId = parseInt(message.id)
-        messageEntity.wxSenderId = this._wxInfo.wxid
-        messageEntity.type = message.type
-        messageEntity.content = message.content
-        await this.messageService.createOrUpdate(messageEntity)
-        if (message.type === 0) {
-            // 文本消息走队列
-            this.sendQueueHelper.addMessageWithMsgId(parseInt(message.id), message)
-        } else {
-            // 文件消息
-            const bindGroup = await this.bindGroupService.getByChatId(message.chatId)
-            if (bindGroup) {
-                let msgResult
-                let file
-                if (message.file.fileName.endsWith('.mp4')) {
-                    message.file.fileName = new Date().getTime() + 'video.mp4'
-                    const url = FileUtils.saveFile(message.file.file, message.file.fileName)
-                    // 提取视频封面
-                    const ffmpegUtil = await new ConverterHelper()
-                    const videoPath = `save-files/_gewetemp/${message.file.fileName}`
-                    await ffmpegUtil.extractThumbnail(videoPath, `save-files/_gewetemp/${message.file.fileName}.jpg`)
-                    const fbv = FileBox.fromBuffer(message.file.file, message.file.fileName)
-                    const fbt = FileBox.fromFile(`save-files/_gewetemp/${message.file.fileName}.jpg`, message.file.fileName + '.jpg')
-                    file = new WeVideo({
-                        thumbBase64: await fbt.toBase64(), // 视频封面
-                        videoBase64: await fbv.toBase64(), // 视频文件url
-                        videoDuration: 9, // 视频时长单位秒 似乎随便传个值就行
-                    })
-                } else if(message.file.fileName.startsWith('语音') && message.file.fileName.endsWith('mp3')){
-                    const fbv = FileBox.fromBuffer(message.file.file, message.file.fileName)
-                    file = new Voice({
-                        voiceBase64: await fbv.toBase64(),
-                        voiceDuration: 9,
-                        type: 2
-                    })
-                }else if(message.file.fileName.endsWith('.gif')) {
-                    const fbe = FileBox.fromBuffer(message.file.file, message.file.fileName)
-                    file = new Emoji({
-                        emojiBase64: await fbe.toBase64()
-                    })
-                } else {
-                    file = FileBox.fromBuffer(message.file.file, message.file.fileName)
-                }
-                if (bindGroup.type === 0) {
-                    const contact = await this.client.Contact.find({id: bindGroup.wxId})
-                    msgResult = await contact.say(file)
-                } else {
-                    const room = await this.client.Room.find({id: bindGroup.wxId})
-                    msgResult = await room.say(file)
-                }
-                // 将 msgId 更新到数据库
-                const messageEntity = await this.messageService.getByBotMsgId(bindGroup.chatId, parseInt(message.id))
-                if (msgResult && messageEntity) {
-                    messageEntity.wxMsgId = msgResult.newMsgId
-                    messageEntity.msgId = msgResult.msgId
-                    messageEntity.createTime = msgResult.createTime
-                    messageEntity.toWxid = msgResult.toWxid
-                    this.messageService.createOrUpdate(messageEntity)
+        try {
+            const messageEntity = new Message()
+            messageEntity.chatId = message.chatId
+            messageEntity.tgBotMsgId = parseInt(message.id)
+            messageEntity.wxSenderId = this._wxInfo.wxid
+            messageEntity.type = message.type
+            messageEntity.content = message.content
+            await this.messageService.createOrUpdate(messageEntity)
+            if (message.type === 0) {
+                // 文本消息走队列
+                this.sendQueueHelper.addMessageWithMsgId(parseInt(message.id), message)
+            } else {
+                // 文件消息
+                const bindGroup = await this.bindGroupService.getByChatId(message.chatId)
+                if (bindGroup) {
+                    let msgResult
+                    let file
+                    if (message.file.fileName.endsWith('.mp4')) {
+                        message.file.fileName = new Date().getTime() + 'video.mp4'
+                        const url = FileUtils.saveFile(message.file.file, message.file.fileName)
+                        // 提取视频封面
+                        const ffmpegUtil = await new ConverterHelper()
+                        const videoPath = `save-files/_gewetemp/${message.file.fileName}`
+                        await ffmpegUtil.extractThumbnail(videoPath, `save-files/_gewetemp/${message.file.fileName}.jpg`)
+                        const fbv = FileBox.fromBuffer(message.file.file, message.file.fileName)
+                        const fbt = FileBox.fromFile(`save-files/_gewetemp/${message.file.fileName}.jpg`, message.file.fileName + '.jpg')
+                        file = new WeVideo({
+                            thumbBase64: await fbt.toBase64(), // 视频封面
+                            videoBase64: await fbv.toBase64(), // 视频文件url
+                            videoDuration: 9, // 视频时长单位秒 似乎随便传个值就行
+                        })
+                    } else if(message.file.fileName.startsWith('语音') && message.file.fileName.endsWith('mp3')){
+                        const fbv = FileBox.fromBuffer(message.file.file, message.file.fileName)
+                        file = new Voice({
+                            voiceBase64: await fbv.toBase64(),
+                            voiceDuration: 9,
+                            type: 2
+                        })
+                    }else if(message.file.fileName.endsWith('.gif')) {
+                        const fbe = FileBox.fromBuffer(message.file.file, message.file.fileName)
+                        file = new Emoji({
+                            emojiBase64: await fbe.toBase64()
+                        })
+                    } else {
+                        file = FileBox.fromBuffer(message.file.file, message.file.fileName)
+                    }
+                    if (bindGroup.type === 0) {
+                        const contact = await this.client.Contact.find({id: bindGroup.wxId})
+                        msgResult = await contact.say(file)
+                    } else {
+                        const room = await this.client.Room.find({id: bindGroup.wxId})
+                        msgResult = await room.say(file)
+                    }
+                    // 将 msgId 更新到数据库
+                    const messageEntity = await this.messageService.getByBotMsgId(bindGroup.chatId, parseInt(message.id))
+                    if (msgResult && messageEntity) {
+                        messageEntity.wxMsgId = msgResult.newMsgId
+                        messageEntity.msgId = msgResult.msgId
+                        messageEntity.createTime = msgResult.createTime
+                        messageEntity.toWxid = msgResult.toWxid
+                        this.messageService.createOrUpdate(messageEntity)
+                    }
                 }
             }
+        }catch (e) {
+            this.logger.error(e)
+            const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
+            tgBotClient.telegram.sendMessage(message.chatId, '消息发送失败！',{
+                reply_parameters: {
+                    message_id: parseInt(message.id)
+                }
+            })
         }
         return true
     }
