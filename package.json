@@ -36,7 +36,7 @@
     "ts-md5": "^1.3.1",
     "ts-node": "^10.9.1",
     "typeorm": "^0.3.24",
-    "wx2tg-puppet": "^2.0.8",
+    "wx2tg-puppet": "^2.0.9",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
