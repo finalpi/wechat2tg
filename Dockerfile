@@ -23,6 +23,8 @@ RUN apt update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     make \
+    python3 \
+    fonts-wqy-microhei \
     libpixman-1-0 \
     libcairo2 \
     libpango1.0-0 \
