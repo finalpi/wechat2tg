@@ -1,56 +1,68 @@
-FROM rust:buster as builder-gifski
+# Stage 1: Build gifski
+FROM rust:1.70-slim as builder-gifski
 RUN cargo install --version 1.7.0 gifski
 
-FROM gcc:13 as builder-lottie-to-png
-
-RUN apt update && \
-    apt install --assume-yes git cmake python3 python3-pip && \
+# Stage 2: Build lottie-to-png
+FROM gcc:13-slim as builder-lottie-to-png
+RUN apt-get update && \
+    apt-get install --no-install-recommends -y git cmake python3 python3-pip && \
+    pip3 install --break-system-packages conan==2.0.10 && \
     rm -rf /var/lib/apt/lists/*
-RUN pip3 install --break-system-packages conan==2.0.10
-RUN git clone --branch v1.1.1 https://github.com/ed-asriyan/lottie-converter.git /application
 
+RUN git clone --depth 1 --branch v1.1.1 https://github.com/ed-asriyan/lottie-converter.git /application
 WORKDIR /application
-RUN conan profile detect
-RUN conan install . --build=missing -s build_type=Release
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOTTIE_MODULE=OFF CMakeLists.txt && cmake --build . --config Release
-COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
+RUN conan profile detect && \
+    conan install . --build=missing -s build_type=Release && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DLOTTIE_MODULE=OFF CMakeLists.txt && \
+    cmake --build . --config Release
 
-FROM node:18-slim
+# Stage 3: Build Node.js application
+FROM node:18-alpine as builder-node
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production && npm cache clean --force
 
-# 安装 ffmpeg 和 gcc 以及其他运行时依赖
-RUN apt update && apt-get install -y --no-install-recommends \
+# Stage 4: Final runtime image
+FROM node:18-alpine
+RUN apk add --no-cache \
     ffmpeg \
-    gcc \
-    g++ \
-    make \
-    python3 \
-    fonts-wqy-microhei \
-    libpixman-1-0 \
-    libcairo2 \
-    libpango1.0-0 \
-    libgif7 \
-    libjpeg62-turbo \
-    libpng16-16 \
-    librsvg2-2 \
-    libvips42 \
-    librlottie0-1 \
- && rm -rf /var/lib/apt/lists/*
+    font-noto-cjk \
+    pixman \
+    cairo \
+    pango \
+    giflib \
+    libjpeg-turbo \
+    libpng \
+    librsvg \
+    vips && \
+    rm -rf /var/cache/apk/*
 
-RUN mkdir -p /app/storage /app/save-files
+# Install wx-voice globally
+RUN npm install -g wx-voice@latest && \
+    wx-voice compile && \
+    npm cache clean --force
 
 WORKDIR /app
+
+# Copy built binaries
 COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
 COPY --from=builder-lottie-to-png /application/bin/lottie_to_png /usr/bin/lottie_to_png
-COPY --from=builder-lottie-to-png /application/bin/lottie_common.sh /usr/bin
-COPY --from=builder-lottie-to-png /application/bin/lottie_to_gif.sh /usr/bin
+COPY --from=builder-lottie-to-png /application/bin/lottie_common.sh /usr/bin/
+COPY --from=builder-lottie-to-png /application/bin/lottie_to_gif.sh /usr/bin/
 RUN chmod +x /usr/bin/lottie_to_png /usr/bin/lottie_common.sh /usr/bin/lottie_to_gif.sh
 
-COPY package*.json tsconfig.json ./
-RUN npm install -g npm@10.7.0 && npm install
-RUN npm install wx-voice -g
-RUN wx-voice compile
-
-
+# Copy node modules and app
+COPY --from=builder-node /app/node_modules ./node_modules
 COPY . .
 
-CMD [ "npm", "start" ]
+# Create necessary directories
+RUN mkdir -p storage save-files
+
+# Build TypeScript
+RUN npm run build && \
+    rm -rf src tsconfig.json && \
+    npm prune --production
+
+USER node
+EXPOSE 3000
+CMD ["node", "dist/app.js"]
