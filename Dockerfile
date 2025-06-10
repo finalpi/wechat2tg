@@ -15,16 +15,11 @@ RUN conan install . --build=missing -s build_type=Release
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOTTIE_MODULE=OFF CMakeLists.txt && cmake --build . --config Release
 COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
 
-FROM node:18-alpine
+FROM node:18-slim
 
 # 安装 ffmpeg 和 gcc 以及其他运行时依赖
 RUN apt update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    gcc \
-    g++ \
-    make \
-    python3 \
-    fonts-wqy-microhei \
     libpixman-1-0 \
     libcairo2 \
     libpango1.0-0 \
