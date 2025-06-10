@@ -20,6 +20,9 @@ FROM node:18-slim
 # 安装 ffmpeg 和 gcc 以及其他运行时依赖
 RUN apt update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    gcc \
+    g++ \
+    make \
     libpixman-1-0 \
     libcairo2 \
     libpango1.0-0 \
