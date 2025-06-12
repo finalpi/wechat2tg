@@ -10,7 +10,7 @@ redislink = wx2tg-redis:6379
 redispass = ""
 redisdbnum = 7
 ocrurl = ""
-syncmessagebusinessuri = "http://127.0.0.1:5000/wic/wechat/{0}/SyncMessage"
+syncmessagebusinessuri = "http://wx2tg-v3:8056/message/callback/{0}"
 logoutbusinessuri = ""
 
 sessionon = true
