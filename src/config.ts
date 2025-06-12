@@ -30,6 +30,8 @@ export const config = {
     CALLBACK_API: process.env.CALLBACK_API?.toString(),
     DEBUG_MODE: process.env.DEBUG_MODE === 'true' ? true : false,
     DEVICE_TYPE: process.env.DEVICE_TYPE?.toString() || 'ipad',
+    MODE: process.env.MODE?.toString() || 'polling',
+    CALLBACK_PORT: process.env.CALLBACK_PORT?.toString() || '8056',
 }
 
 export const useProxy = config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== ''

@@ -63,6 +63,8 @@ services:
   wx2tg-v3:
     image: finalpi/wechat2tg-v3:latest
     container_name: wx2tg-v3
+    # ports:
+       # - "8056:8056" # callback 模式才需要暴露端口
     volumes:
       - ./config:/app/storage
       - ./save-files:/app/save-files # 保存文件夹挂载后贴纸文件不需要重新转换

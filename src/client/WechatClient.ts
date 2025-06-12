@@ -58,6 +58,8 @@ export class WeChatClient extends AbstractClient {
             baseUrl: config.BASE_API,
             databasePath: 'storage/db/puppet.db',
             deviceType: config.DEVICE_TYPE,
+            mode: config.MODE,
+            callbackPort: parseInt(config.CALLBACK_PORT)
         })
         this.hasReady = true
         this.init()
