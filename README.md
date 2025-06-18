@@ -1,6 +1,6 @@
 # wechat2tg-v3
 
-基于微信协议在 Telegram 收发微信消息，支持 ipad,mac,car,windows,安卓 pad 多种协议
+基于微信协议在 Telegram 收发微信消息，支持 ipad,mac,car,windows,pad 多种协议
 
 ## TG 群组: [@Wx2TgUserGroup](https://t.me/+AD02MEZa-og3ZGY1)
 
@@ -45,6 +45,8 @@
 
 1. 本项目仅用于技术研究和学习，不得用于非法用途
 2. 无论遇到什么问题都欢迎提交 issue
+3. 需要保证 wx2tg-server 服务的 ip 和你登录的地区是一致的，否则会要求输入验证码
+4. wx2tg-server 使用 arm-64 架构运行时由于缺少 arm 环境的 so 文件会报错，甚至无法使用
 
 ## 部署安装
 
@@ -204,6 +206,9 @@ docker-compose up -d
 
 ## 常见问题
 
+### 为什么提示我输入验证码
+
+wx2tg-server 需要保证和你登陆地在同一个区域，如果遇到输入验证码的情况，检查一下是否在同一区域
 
 ## 参与开发
 
