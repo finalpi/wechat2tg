@@ -31,6 +31,7 @@ import {WeChatClient} from './WechatClient'
 import {SpeechService} from '../service/SpeechService'
 import {WxBot} from 'wx2tg-puppet'
 import {MessageBufferService} from '../util/MessageBufferService'
+import {FileBox} from 'file-box'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -796,6 +797,7 @@ export class TelegramBotClient extends AbstractClient {
             let fileId = ctx.message[fileType].file_id
             let fileSize = ctx.message[fileType].file_size
             let fileName = ctx.message[fileType].file_name || ''
+            const duration = ctx.message[fileType].duration
             if (!fileName && fileType === 'photo') {
                 fileName = new Date().getTime() + '.png'
             }
@@ -836,7 +838,7 @@ export class TelegramBotClient extends AbstractClient {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             ctx.telegram.getFileLink(fileId).then(async fileLink => {
-                FileUtils.downloadBufferWithProxy(fileLink.toString()).then(buffer => {
+                FileUtils.downloadBufferWithProxy(fileLink.toString()).then(async buffer => {
                     // 如果图片大小小于100k,则添加元数据使其大小达到100k,否则会被微信压缩质量
                     if (fileSize && fileSize < 100 * 1024 && (fileType === 'photo' || (fileName.endsWith('jpg') || fileName.endsWith('jpeg') || fileName.endsWith('png')))) {
                         baseMessage.content = fileName
@@ -865,12 +867,17 @@ export class TelegramBotClient extends AbstractClient {
                         return
                     }
                     if (fileType === 'voice') {
-                        fileName = `语音-${new Date().getTime()}.mp3`
+                        const nameTemp = `语音-${new Date().getTime()}`
+                        fileName = `${nameTemp}.mp3`
+                        const fb = FileBox.fromBuffer(buffer)
+                        await fb.toFile(`save-files/${nameTemp}.ogg`)
+                        buffer = await new ConverterHelper().oggToMp3(`save-files/${nameTemp}.ogg`, `save-files/${nameTemp}.mp3`)
                     }
                     baseMessage.content = fileName
                     baseMessage.file = {
                         fileName: fileName,
                         file: buffer,
+                        duration: duration
                     }
                     TelegramBotClient.getSpyClient('wxClient').sendMessage(baseMessage)
                 }).catch(() => ctx.reply('发送失败'))

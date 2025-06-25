@@ -220,13 +220,13 @@ export class WeChatClient extends AbstractClient {
                         file = new WeVideo({
                             thumbBase64: await fbt.toBase64(), // 视频封面
                             videoBase64: await fbv.toBase64(), // 视频文件url
-                            videoDuration: 9, // 视频时长单位秒 似乎随便传个值就行
+                            videoDuration: message.file.duration || 9, // 视频时长单位秒 似乎随便传个值就行
                         })
                     } else if(message.file.fileName.startsWith('语音') && message.file.fileName.endsWith('mp3')){
                         const fbv = FileBox.fromBuffer(message.file.file, message.file.fileName)
                         file = new Voice({
                             voiceBase64: await fbv.toBase64(),
-                            voiceDuration: 9,
+                            voiceDuration: message.file.duration || 9,
                             type: 2
                         })
                     }else if(message.file.fileName.endsWith('.gif')) {
