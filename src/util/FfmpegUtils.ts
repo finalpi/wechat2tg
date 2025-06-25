@@ -10,7 +10,7 @@ const ffmpeg = require('fluent-ffmpeg')
 export class ConverterHelper {
     constructor() {
         // 设置 ffmpeg-static 的路径
-        ffmpeg.setFfmpegPath('C:\\Users\\Administrator\\AppData\\Local\\VideoCaptioner\\resource\\bin\\ffmpeg.exe')
+        ffmpeg.setFfmpegPath(ffmpegStatic)
     }
 
     async webpToGif(inputFile: string | Buffer, outputFile: string): Promise<void> {
@@ -125,8 +125,7 @@ export class ConverterHelper {
 
     getVideoDuration(videoPath): Promise<number> {
         return new Promise((resolve, reject) => {
-            ffmpeg(videoPath).
-            ffmpeg.ffprobe(videoPath, (err, metadata) => {
+            ffmpeg(videoPath).ffmpeg.ffprobe(videoPath, (err, metadata) => {
                 if (err) {
                     reject(err)
                 } else {
