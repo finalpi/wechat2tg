@@ -3,13 +3,14 @@ import * as fs from 'node:fs'
 import TgsUtils from './TgsUtils'
 import WxLimitConstants from '../constant/WxLimitConstant'
 import sharp from 'sharp'
+import {FileBox} from 'file-box'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ffmpeg = require('fluent-ffmpeg')
 
 export class ConverterHelper {
     constructor() {
         // 设置 ffmpeg-static 的路径
-        ffmpeg.setFfmpegPath(ffmpegStatic)
+        ffmpeg.setFfmpegPath('C:\\Users\\Administrator\\AppData\\Local\\VideoCaptioner\\resource\\bin\\ffmpeg.exe')
     }
 
     async webpToGif(inputFile: string | Buffer, outputFile: string): Promise<void> {
@@ -22,6 +23,28 @@ export class ConverterHelper {
             console.error('Error during conversion:', err)
             throw err
         }
+    }
+
+    async oggToMp3(inputFile: string | Buffer, outputFile: string): Promise<Buffer> {
+        return new Promise((resolve, reject) => {
+            // 使用 ffmpeg 处理转换
+            ffmpeg(inputFile)
+                .inputFormat('ogg')  // 指定输入格式为 OGG
+                .outputFormat('mp3') // 指定输出格式为 MP3
+                .on('error', (err) => {
+                    reject(`Error during conversion: ${err.message}`)
+                })
+                .on('end', () => {
+                    console.log('Conversion finished!')
+                    const fb = FileBox.fromFile(outputFile)
+                    fb.toBuffer().then(buffer => {
+                        fs.unlinkSync(inputFile)
+                        fs.unlinkSync(outputFile)
+                        resolve(buffer) // 转换完成后 resolve
+                    })
+                })
+                .save(outputFile) // 将转换后的 MP3 保存为指定文件
+        })
     }
 
     async webmToGif(inputFile: string | Buffer, outputFile: string): Promise<void> {

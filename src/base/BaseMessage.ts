@@ -15,7 +15,8 @@ export default interface BaseMessage {
         fileName: string,
         file: Buffer,
         // 发送的类型
-        sendType?: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
+        sendType?: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice',
+        duration?: number,
     },
     // 名片微信id
     businessCardId?: string,
