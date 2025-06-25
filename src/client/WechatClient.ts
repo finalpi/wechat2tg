@@ -226,7 +226,7 @@ export class WeChatClient extends AbstractClient {
                         const fbv = FileBox.fromBuffer(message.file.file, message.file.fileName)
                         file = new Voice({
                             voiceBase64: await fbv.toBase64(),
-                            voiceDuration: message.file.duration || 9,
+                            voiceDuration: message.file.duration * 1000 || 9000,
                             type: 2
                         })
                     }else if(message.file.fileName.endsWith('.gif')) {
