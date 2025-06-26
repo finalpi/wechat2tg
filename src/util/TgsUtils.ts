@@ -27,15 +27,16 @@ export default class TgsUtils {
                 }
                 const statSync = fs.statSync(outputFile)
                 if (statSync.size > WxLimitConstants.MAX_GIF_SIZE) {
-                    args.push('--fps', '24')
-                    const zoom = 17_000 / fs.statSync(inputFile).size
-                    let quality = Math.floor(70 * zoom)
-                    if (quality < 0) {
-                        quality = 1
-                    } else if (quality > 100) {
-                        quality = 99
-                    }
-                    args.push('--quality', quality.toString())
+                    // 第二次压缩，quality 用经验公式拟合到 1MB，优先不降分辨率
+                    const b = 0.85
+                    const S0 = statSync.size // 第一次 GIF 大小（字节）
+                    const Q0 = 90 // 第一次用的 quality
+                    const targetSize = WxLimitConstants.MAX_GIF_SIZE // 1MB
+                    let Q1 = Math.floor(Q0 * Math.pow(targetSize / S0, 1 / b))
+                    if (Q1 < 1) Q1 = 1
+                    if (Q1 > 99) Q1 = 99
+                    args.push('--fps', '30')
+                    args.push('--quality', Q1.toString())
                     // console.log('tgsToGif 第二次转换 args: ' + args.join(' '))
                     spawn('bash', args, {
                         shell: true
@@ -52,7 +53,7 @@ export default class TgsUtils {
                             const minFps = 8
                             const minWidth = 32
                             const minHeight = 32
-                            let curQuality = quality
+                            let curQuality = Q1
                             let curFps = 24
                             let curWidth = lottieConfig?.width || 128
                             let curHeight = lottieConfig?.height || 128
