@@ -10,7 +10,7 @@
   "help.description": "[This project](https://github.com/finalpi/wechat2tg) is a project for sending and receiving WeChat messages in Telegram based on WeChat protocol, supporting multiple protocols including ipad, mac, car, windows, pad\\.\n**This project is only for technical research and learning, not for illegal purposes\\.**",
   "help.instructions": "1\\. Use the /start or /login command to start the WeChat client instance, and use the /login command to scan the code to log in\\.\n2\\. Use the /user or /room command to search for contacts or group chats \\(you can add names or remarks, for example, \"/user Zhang\" can search for users whose names or remarks contain \"Zhang\"\\)\\.\n3\\. /settings to open settings\\.\n4\\. For more features, please check the GitHub repository README\\.",
   "settings.title": "Program settings:",
-  "settings.language": "Interface Language",
+  "settings.language": "Language",
   "settings.language_changed": "Language changed to English",
   "settings.receive_public_account": "Receive public account messages",
   "settings.emoji_picture": "Display WeChat emoji as image links",
