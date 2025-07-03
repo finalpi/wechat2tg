@@ -50,7 +50,8 @@ RUN npm install -g npm@10.7.0 && npm install
 RUN npm install wx-voice -g
 RUN wx-voice compile
 
-
+# 复制源代码并编译
 COPY . .
+RUN npm run build
 
 CMD [ "npm", "start" ]
