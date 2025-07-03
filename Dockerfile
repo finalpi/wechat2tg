@@ -39,18 +39,21 @@ RUN apt update && apt-get install -y --no-install-recommends \
 RUN mkdir -p /app/storage /app/save-files
 
 WORKDIR /app
+
+# 复制特殊的二进制文件
 COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
 COPY --from=builder-lottie-to-png /application/bin/lottie_to_png /usr/bin/lottie_to_png
 COPY --from=builder-lottie-to-png /application/bin/lottie_common.sh /usr/bin
 COPY --from=builder-lottie-to-png /application/bin/lottie_to_gif.sh /usr/bin
 RUN chmod +x /usr/bin/lottie_to_png /usr/bin/lottie_common.sh /usr/bin/lottie_to_gif.sh
 
+# 仅复制必要的文件进行构建
 COPY package*.json tsconfig.json ./
 RUN npm install -g npm@10.7.0 && npm install
 RUN npm install wx-voice -g
 RUN wx-voice compile
 
-
-COPY . .
+# 复制编译后的 dist 目录和必要的配置文件
+COPY dist ./dist
 
 CMD [ "npm", "start" ]
