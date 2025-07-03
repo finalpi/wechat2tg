@@ -1,4 +1,4 @@
-{
+const enUS = {
   "login.welcome": "Please enter /login to log in, or enter /help to view help\nPlease note that after executing /login, you will be the owner of this bot",
   "login.already_logged_in": "Already logged in, please do not log in repeatedly",
   "login.success": "Telegram client login successful!",
@@ -79,4 +79,6 @@
   "wechat.accept": "Accept",
   "wechat.login_success": "WeChat client login successful!",
   "wechat.service_notification": "Service Notification"
-} 
+};
+
+export default enUS;

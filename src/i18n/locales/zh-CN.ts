@@ -1,4 +1,4 @@
-{
+const zhCN = {
   "login.welcome": "请输入 /login 登陆,或者输入 /help 查看帮助\n请注意执行/login 后你就是该机器的所有者",
   "login.already_logged_in": "已登录，请勿重复登录",
   "login.success": "Telegram 客户端登录成功！",
@@ -79,4 +79,6 @@
   "wechat.accept": "接受",
   "wechat.login_success": "微信客户端登录成功！",
   "wechat.service_notification": "服务通知"
-} 
+};
+
+export default zhCN;
