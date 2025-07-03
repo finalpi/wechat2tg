@@ -17,8 +17,9 @@ export class ConverterHelper {
         try {
             const info = await sharp(inputFile)
                 .toFormat('gif')
-                .toFile(outputFile).then().catch().finally()
+                .toFile(outputFile)
             console.log('Conversion finished!', info)
+            fs.unlinkSync(inputFile)
         } catch (err) {
             console.error('Error during conversion:', err)
             throw err
@@ -74,6 +75,7 @@ export class ConverterHelper {
                             }
                         } else {
                             console.log(`文件大小 ${fileSizeInBytes} 满足要求`)
+                            fs.unlinkSync(inputFile)
                             resolve()
                         }
                     })
