@@ -1,6 +1,6 @@
 # wechat2tg-v3
 
-[中文](README_zh.md) | [English](README.md)
+[中文](README_zh.md) | English
 
 Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad, Mac, Car, Windows, Pad)
 

@@ -1,6 +1,6 @@
 # wechat2tg-v3
 
-[中文](README_zh.md) | [English](README.md)
+中文 | [English](README.md)
 
 基于微信协议在 Telegram 收发微信消息，支持 ipad,mac,car,windows,pad 多种协议
 
