@@ -33,39 +33,8 @@ import {WxBot} from 'wx2tg-puppet'
 import {MessageBufferService} from '../util/MessageBufferService'
 import {FileBox} from 'file-box'
 import I18n from '../i18n'
-import {Agent} from 'https'
 
 export class TelegramBotClient extends AbstractClient {
-    private getProxyAgent(): Agent | undefined {
-        if (!useProxy) return undefined
-
-        const proxyConfig = {
-            protocol: config.PROTOCOL,
-            host: config.HOST,
-            port: parseInt(config.PORT),
-            username: config.USERNAME || undefined,
-            password: config.PASSWORD || undefined
-        }
-
-        if (config.PROTOCOL.startsWith('socks')) {
-            return new SocksProxyAgent({
-                type: config.PROTOCOL === 'socks5' ? 5 : 4,
-                host: proxyConfig.host,
-                port: proxyConfig.port,
-                username: proxyConfig.username,
-                password: proxyConfig.password
-            }) as Agent
-        } else if (config.PROTOCOL.startsWith('http')) {
-            const proxyUrl = config.USERNAME && config.PASSWORD
-                ? `${config.PROTOCOL}://${config.USERNAME}:${config.PASSWORD}@${config.HOST}:${config.PORT}`
-                : `${config.PROTOCOL}://${config.HOST}:${config.PORT}`
-
-            return new HttpsProxyAgent(proxyUrl) as Agent
-        }
-
-        return undefined
-    }
-
     async login(): Promise<boolean> {
         if (!TelegramBotClient.getSpyClient('botClient')) {
             const clientFactory = new ClientFactory()
@@ -351,11 +320,25 @@ export class TelegramBotClient extends AbstractClient {
 
     private constructor() {
         super()
-        const proxyAgent = this.getProxyAgent()
-        if (proxyAgent) {
+        if (config.PROTOCOL === 'socks5' && config.HOST !== '' && config.PORT !== '') {
+            const info = {
+                hostname: config.HOST,
+                port: config.PORT,
+                username: config.USERNAME,
+                password: config.PASSWORD
+            }
+
+            const socksAgent = new SocksProxyAgent(info)
             this.client = new Telegraf(config.BOT_TOKEN, {
                 telegram: {
-                    agent: proxyAgent
+                    agent: socksAgent
+                }
+            })
+        } else if ((config.PROTOCOL === 'http' || config.PROTOCOL === 'https') && config.HOST !== '' && config.PORT !== '') {
+            const httpAgent = new HttpsProxyAgent(`${config.PROTOCOL}://${config.USERNAME}:${config.PASSWORD}@${config.HOST}:${config.PORT}`)
+            this.client = new Telegraf(config.BOT_TOKEN, {
+                telegram: {
+                    agent: httpAgent
                 }
             })
         } else {
