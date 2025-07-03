@@ -15,7 +15,7 @@ RUN conan install . --build=missing -s build_type=Release
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOTTIE_MODULE=OFF CMakeLists.txt && cmake --build . --config Release
 COPY --from=builder-gifski /usr/local/cargo/bin/gifski /usr/bin/gifski
 
-FROM node:18-slim
+FROM node:18-alpine
 
 # 安装 ffmpeg 和 gcc 以及其他运行时依赖
 RUN apt update && apt-get install -y --no-install-recommends \
@@ -53,7 +53,14 @@ RUN npm install -g npm@10.7.0 && npm install
 RUN npm install wx-voice -g
 RUN wx-voice compile
 
-# 复制编译后的 dist 目录和必要的配置文件
-COPY dist ./dist
+# 复制源代码并编译
+COPY src ./src
+RUN npm run build
+
+# 清理不必要的文件
+RUN npm prune --production
+
+# 设置环境变量
+ENV NODE_ENV=production
 
 CMD [ "npm", "start" ]
