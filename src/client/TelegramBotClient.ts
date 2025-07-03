@@ -33,6 +33,7 @@ import {WxBot} from 'wx2tg-puppet'
 import {MessageBufferService} from '../util/MessageBufferService'
 import {FileBox} from 'file-box'
 import I18n from '../i18n'
+import http from 'http'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -328,14 +329,15 @@ export class TelegramBotClient extends AbstractClient {
                 password: config.PASSWORD
             }
 
-            const socksAgent = new SocksProxyAgent(info)
+            const socksAgent = new SocksProxyAgent(info) as unknown as http.Agent
             this.client = new Telegraf(config.BOT_TOKEN, {
                 telegram: {
                     agent: socksAgent
                 }
             })
         } else if ((config.PROTOCOL === 'http' || config.PROTOCOL === 'https') && config.HOST !== '' && config.PORT !== '') {
-            const httpAgent = new HttpsProxyAgent(`${config.PROTOCOL}://${config.USERNAME}:${config.PASSWORD}@${config.HOST}:${config.PORT}`)
+            const proxyUrl = `${config.PROTOCOL}://${config.USERNAME}:${config.PASSWORD}@${config.HOST}:${config.PORT}`
+            const httpAgent = new HttpsProxyAgent(proxyUrl) as unknown as http.Agent
             this.client = new Telegraf(config.BOT_TOKEN, {
                 telegram: {
                     agent: httpAgent
