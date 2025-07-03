@@ -3,8 +3,11 @@
 import * as tg from 'telegraf/src/core/types/typegram'
 import {Markup} from 'telegraf'
 import {InlineKeyboardButton} from '@telegraf/types/markup'
+import I18n from '../i18n'
 
 export class KeyboardPageUtils {
+    private i18n = I18n.getInstance()
+    
     constructor(
         public data: dataType[],
         public page: number,
@@ -32,10 +35,10 @@ export class KeyboardPageUtils {
 
         const option = []
         if (this.page > 1) {
-            option.push(Markup.button.callback('上一页', `${this.actionMark}:page-${this.page - 1}`))
+            option.push(Markup.button.callback(this.i18n.t('pagination.previous'), `${this.actionMark}:page-${this.page - 1}`))
         }
         if (this.hasNext()) {
-            option.push(Markup.button.callback('下一页', `${this.actionMark}:page-${this.page + 1}`))
+            option.push(Markup.button.callback(this.i18n.t('pagination.next'), `${this.actionMark}:page-${this.page + 1}`))
         }
         if (option.length > 0) {
             buttons.push(option)

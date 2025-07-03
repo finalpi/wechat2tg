@@ -23,6 +23,7 @@ import {EmojiConverter} from '../util/EmojiUtils'
 import {getChatHistory, getMiniprogram} from '../util/handleMsg'
 import {WeVideo} from 'wx2tg-puppet'
 import {FileBox} from 'file-box'
+import I18n from '../i18n'
 
 export class WeChatClient extends AbstractClient {
     get wxInfo() {
@@ -160,7 +161,8 @@ export class WeChatClient extends AbstractClient {
         this.hasLogin = true
         const config = await this.configurationService.getConfig()
         const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
-        tgBotClient.telegram.sendMessage(config.chatId, '微信客户端登录成功！')
+        const i18n = I18n.getInstance()
+        tgBotClient.telegram.sendMessage(config.chatId, i18n.t('wechat.login_success'))
         if (this.scanMsgId) {
             tgBotClient.telegram.deleteMessage(config.chatId, this.scanMsgId)
             this.scanMsgId = undefined
@@ -272,6 +274,8 @@ export class WeChatClient extends AbstractClient {
     }
 
     private init() {
+        const i18n = I18n.getInstance()
+
         this.client.on('scan', qr => { // 需要用户扫码时返回对象qrcode.content为二维码内容 qrcode.url为转化好的图片地址
             this.configurationService.getConfig().then(config => {
                 QRCode.toBuffer(qr.content, {
@@ -282,10 +286,10 @@ export class WeChatClient extends AbstractClient {
                         if (this.scanMsgId) {
                             tgBotClient.telegram.editMessageMedia(config.chatId, this.scanMsgId, undefined, {
                                 type: 'photo',
-                                media: {source: buffer}, caption: '请扫描二维码登录,第一次登录加载时间较长，请耐心等待'
+                                media: {source: buffer}, caption: i18n.t('wechat.scan_qr_code')
                             })
                         } else {
-                            tgBotClient.telegram.sendPhoto(config.chatId, {source: buffer}, {caption: '请扫描二维码登录,第一次登录加载时间较长，请耐心等待'}).then(msg => {
+                            tgBotClient.telegram.sendPhoto(config.chatId, {source: buffer}, {caption: i18n.t('wechat.scan_qr_code')}).then(msg => {
                                 this.scanMsgId = msg.message_id
                             })
                         }
@@ -301,10 +305,14 @@ export class WeChatClient extends AbstractClient {
             this.friendshipList.push(friendship)
             const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
             this.configurationService.getConfig().then(config => {
-                tgBotClient.telegram.sendMessage(config.chatId, `<b>${friendship.fromName}</b> 请求添加您为好友:\n  ${friendship.hello()}`, {
+                tgBotClient.telegram.sendMessage(config.chatId,
+                    i18n.t('wechat.friend_request', {
+                        name: `<b>${friendship.fromName}</b>`,
+                        hello: friendship.hello()
+                    }), {
                     parse_mode: 'HTML',
                     reply_markup: {
-                        inline_keyboard: [[Markup.button.callback('接受', `fr:${friendship.formId}`)]]
+                        inline_keyboard: [[Markup.button.callback(i18n.t('wechat.accept'), `fr:${friendship.formId}`)]]
                     }
                 })
             })
@@ -397,7 +405,7 @@ export class WeChatClient extends AbstractClient {
                 }
                 if (wxId === 'app') {
                     // 服务通知
-                    bindGroup.name = '服务通知'
+                    bindGroup.name = I18n.getInstance().t('wechat.service_notification')
                     bindGroup.avatarLink = 'https://raw.githubusercontent.com/finalpi/wechat2tg/wx2tg-pad/fwtz.png'
                 }
             }

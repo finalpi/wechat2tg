@@ -32,6 +32,7 @@ import {SpeechService} from '../service/SpeechService'
 import {WxBot} from 'wx2tg-puppet'
 import {MessageBufferService} from '../util/MessageBufferService'
 import {FileBox} from 'file-box'
+import I18n from '../i18n'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -77,7 +78,7 @@ export class TelegramBotClient extends AbstractClient {
             }
 
             if (!ctx.chat?.type.includes('group') && ctx.message && !ctx.message.from.is_bot) {
-                return ctx.reply('Sorry, you are not authorized to interact with this bot.') // 如果用户未授权，发送提示消息
+                return ctx.reply(this.i18n.t('auth.not_authorized')) // 如果用户未授权，发送提示消息
             }
         })
         this.onBotCommand(bot)
@@ -307,6 +308,8 @@ export class TelegramBotClient extends AbstractClient {
     // 文本消息顺序队列
     private textMessageQueue: { message: BaseMessage, messageId: string }[] = []
     private isProcessingQueue = false
+    // i18n实例
+    private i18n = I18n.getInstance()
 
     static getInstance(): TelegramBotClient {
         if (!TelegramBotClient.instance) {
@@ -346,6 +349,10 @@ export class TelegramBotClient extends AbstractClient {
         this.configurationService.getConfig().then(config => {
             this.chatId = config.chatId
             this.config = config
+            // 设置语言
+            if (config.language) {
+                this.i18n.setLanguage(config.language)
+            }
         })
         this.bindGroupService = BindGroupService.getInstance()
         this.messageService = MessageService.getInstance()
@@ -441,10 +448,10 @@ export class TelegramBotClient extends AbstractClient {
             const friend = wxClient.getCardByWxId(wxId)
             if (friend) {
                 friend.v3 = friend.username
-                TelegramBotClient.getSpyClient('wxClient').client.Friendship.add(friend, '你好')
-                ctx.reply('好友请求已发送')
+                TelegramBotClient.getSpyClient('wxClient').client.Friendship.add(friend, this.i18n.t('add.greeting'))
+                ctx.reply(this.i18n.t('add.request_sent'))
             } else {
-                ctx.reply('名片已过期')
+                ctx.reply(this.i18n.t('add.no_user'))
             }
             ctx.deleteMessage()
             ctx.answerCbQuery()
@@ -489,6 +496,23 @@ export class TelegramBotClient extends AbstractClient {
             ctx.answerCbQuery()
         })
 
+        // 处理语言切换
+        bot.action(/^lang:switch/, async ctx => {
+            const config = await this.configurationService.getConfig()
+            // 切换语言
+            config.language = config.language === 'zh-CN' ? 'en-US' : 'zh-CN'
+            // 保存设置
+            await this.configurationService.saveConfig(config)
+            // 设置i18n当前语言
+            this.i18n.setLanguage(config.language)
+            // 更新按钮
+            ctx.editMessageReplyMarkup(await this.getSettingButton())
+            // 更新设置
+            TgCommandHelper.setCommand(bot)
+            // 发送语言已切换的提示
+            ctx.answerCbQuery(this.i18n.t('settings.language_changed'))
+        })
+
         bot.action(/^us:page-/, async ctx => {
             const pageNum = ctx.match.input.split('-')[1]
             const data = await WxContactRepository.getInstance().getAll()
@@ -517,7 +541,7 @@ export class TelegramBotClient extends AbstractClient {
                     group.name = contact.name()
                     await this.bindGroupService.createOrUpdate(group)
                     this.updateGroupByChatId(group.chatId)
-                    ctx.reply('绑定成功')
+                    ctx.reply(this.i18n.t('binding.success'))
                 } else {
                     // bot中使用，创建新的群组
                     const telegramGroupOperateService = new TelegramGroupOperateService(this.bindGroupService, TelegramBotClient.getSpyClient('userMTPClient').client)
@@ -533,10 +557,10 @@ export class TelegramBotClient extends AbstractClient {
                     bindGroup = await telegramGroupOperateService.createGroup(bindGroup)
                     const inviteLink = await ctx.telegram.exportChatInviteLink(bindGroup.chatId)
                     if (inviteLink) {
-                        ctx.reply('创建群组成功', {
+                        ctx.reply(this.i18n.t('group.create_success'), {
                             reply_markup: {
                                 inline_keyboard: [
-                                    [{text: '打开群组 🚀', url: inviteLink}]
+                                    [{text: this.i18n.t('group.open'), url: inviteLink}]
                                 ]
                             }
                         })
@@ -574,7 +598,7 @@ export class TelegramBotClient extends AbstractClient {
                     group.name = room.name
                     await this.bindGroupService.createOrUpdate(group)
                     this.updateGroupByChatId(group.chatId)
-                    ctx.reply('绑定成功')
+                    ctx.reply(this.i18n.t('binding.success'))
                 } else {
                     // bot中使用，创建新的群组
                     const telegramGroupOperateService = new TelegramGroupOperateService(this.bindGroupService, TelegramBotClient.getSpyClient('userMTPClient').client)
@@ -587,10 +611,10 @@ export class TelegramBotClient extends AbstractClient {
                     bindGroup = await telegramGroupOperateService.createGroup(bindGroup)
                     const inviteLink = await ctx.telegram.exportChatInviteLink(bindGroup.chatId)
                     if (inviteLink) {
-                        ctx.reply('创建群组成功', {
+                        ctx.reply(this.i18n.t('group.create_success'), {
                             reply_markup: {
                                 inline_keyboard: [
-                                    [{text: '打开群组 🚀', url: inviteLink}]
+                                    [{text: this.i18n.t('group.open'), url: inviteLink}]
                                 ]
                             }
                         })
@@ -606,9 +630,9 @@ export class TelegramBotClient extends AbstractClient {
             const friend = wxClient.getFriendShipByWxId(wxId)
             if (friend) {
                 friend.accept()
-                ctx.reply('添加成功')
+                ctx.reply(this.i18n.t('add.request_sent'))
             } else {
-                ctx.reply('好友请求已过期')
+                ctx.reply(this.i18n.t('add.no_user'))
             }
             ctx.deleteMessage()
             ctx.answerCbQuery()
@@ -670,7 +694,7 @@ export class TelegramBotClient extends AbstractClient {
 
         bot.on(message('sticker'), async ctx => {
             if (!TelegramBotClient.getSpyClient('wxClient').hasReady || !TelegramBotClient.getSpyClient('wxClient').hasLogin) {
-                ctx.reply('请先登录微信')
+                ctx.reply(this.i18n.t('login.please_login_wx'))
                 return
             }
             const chatId = ctx.chat.id
@@ -704,12 +728,16 @@ export class TelegramBotClient extends AbstractClient {
                 } else if (!fs.existsSync(saveFile)) {
                     FileUtils.downloadWithProxy(fileLink.toString(), saveFile).then(() => {
                         this.sendGif(saveFile, gifFile, ctx, lottie_config)
-                    }).catch(() => ctx.reply('发送失败'))
+                    }).catch(() => ctx.reply(this.i18n.t('send.failed'), {
+                        reply_parameters: {
+                            message_id: ctx.message.message_id
+                        }
+                    }))
                 } else {
                     this.sendGif(saveFile, gifFile, ctx, lottie_config)
                 }
             }).catch(e => {
-                ctx.reply('发送失败', {
+                ctx.reply(this.i18n.t('send.failed'), {
                     reply_parameters: {
                         message_id: ctx.message.message_id
                     }
@@ -734,7 +762,7 @@ export class TelegramBotClient extends AbstractClient {
                 }
             }
             if (!fs.existsSync(gifFile)) {
-                await ctx.reply('表情转换失败', {
+                await ctx.reply(this.i18n.t('send.sticker_convert_failed'), {
                     reply_parameters: {
                         message_id: ctx.message.message_id
                     }
@@ -763,8 +791,8 @@ export class TelegramBotClient extends AbstractClient {
             }
             TelegramBotClient.getSpyClient('wxClient').sendMessage(baseMessage)
         } catch (e) {
-            this.logError('发送失败')
-            await ctx.reply('发送失败', {
+            this.logError(this.i18n.t('send.failed'))
+            await ctx.reply(this.i18n.t('send.failed'), {
                 reply_parameters: {
                     message_id: ctx.message.message_id
                 }
@@ -774,7 +802,7 @@ export class TelegramBotClient extends AbstractClient {
 
     private async handleFileMessage(ctx: any, fileType: string | 'audio' | 'video' | 'document' | 'photo' | 'voice') {
         if (!TelegramBotClient.getSpyClient('wxClient').hasReady || !TelegramBotClient.getSpyClient('wxClient').hasLogin) {
-            ctx.reply('请先登录微信')
+            ctx.reply(this.i18n.t('login.please_login_wx'))
             return
         }
         const messageId = ctx.message.message_id
@@ -819,7 +847,7 @@ export class TelegramBotClient extends AbstractClient {
                         }
                         TelegramBotClient.getSpyClient('wxClient').sendMessage(baseMessage)
                     } else {
-                        ctx.reply('发送失败', {
+                        ctx.reply(this.i18n.t('send.failed'), {
                             reply_parameters: {
                                 message_id: ctx.message.message_id
                             }
@@ -827,7 +855,7 @@ export class TelegramBotClient extends AbstractClient {
                     }
                 }).catch(err => {
                     this.logError('use telegram api download file error: ' + err)
-                    ctx.reply('发送失败', {
+                    ctx.reply(this.i18n.t('send.failed'), {
                         reply_parameters: {
                             message_id: ctx.message.message_id
                         }
@@ -862,7 +890,11 @@ export class TelegramBotClient extends AbstractClient {
                                 }
                                 TelegramBotClient.getSpyClient('wxClient').sendMessage(baseMessage)
                             }).catch((err) => {
-                            ctx.reply('发送失败')
+                            ctx.reply(this.i18n.t('send.failed'), {
+                                reply_parameters: {
+                                    message_id: ctx.message.message_id
+                                }
+                            })
                         })
                         return
                     }
@@ -880,9 +912,13 @@ export class TelegramBotClient extends AbstractClient {
                         duration: duration
                     }
                     TelegramBotClient.getSpyClient('wxClient').sendMessage(baseMessage)
-                }).catch(() => ctx.reply('发送失败'))
+                }).catch(() => ctx.reply(this.i18n.t('send.failed'), {
+                    reply_parameters: {
+                        message_id: ctx.message.message_id
+                    }
+                }))
             }).catch(reason => {
-                ctx.reply('发送失败', {
+                ctx.reply(this.i18n.t('send.failed'), {
                     reply_parameters: {
                         message_id: ctx.message.message_id
                     }
@@ -909,26 +945,22 @@ export class TelegramBotClient extends AbstractClient {
         TgCommandHelper.setSimpleCommandHandler(bot)
 
         bot.start(ctx => {
-            ctx.reply('请输入 /login 登陆,或者输入 /help 查看帮助\n请注意执行/login 后你就是该机器的所有者', Markup.removeKeyboard())
+            ctx.reply(this.i18n.t('login.welcome'), Markup.removeKeyboard())
         })
 
-        bot.help((ctx) => ctx.replyWithMarkdownV2(`**欢迎使用微信消息转发bot**
+        bot.help((ctx) => ctx.replyWithMarkdownV2(`${this.i18n.t('help.title')}
 
-[本项目](https://github.com/finalpi/wechat2tg)是基于 gewechty 开发的 pad 协议实现微信消息的收发。
-**本项目仅用于技术研究和学习，不得用于非法用途。**
+${this.i18n.t('help.description')}
 
-1\\. 使用 /start 或 /login 命令来启动微信客户端实例，使用 /login 命令进行扫码登录。
-2\\. 使用 /user 或者 /room 命令搜索联系人或者群聊（可以加名称或者备注,例如"/user 张"可以搜索名称或备注含有"张"的用户）。
-3\\. /settings 打开设置。
-4\\. 更多功能请查看 github 仓库（For more features, please check the GitHub repository README）。`))
+${this.i18n.t('help.instructions')}`))
 
         bot.command('login', async ctx => {
             if (ctx.chat && ctx.chat.type.includes('group')) {
-                return ctx.reply('该命令无法在群组中使用')
+                return ctx.reply(this.i18n.t('login.group_not_allowed'))
             }
             const wxClient = TelegramBotClient.getSpyClient('wxClient')
             if (wxClient && wxClient.hasLogin) {
-                return ctx.reply('已登录，请勿重复登录')
+                return ctx.reply(this.i18n.t('login.already_logged_in'))
             }
             // 首次登录设置主人 chatId
             const config = await this.configurationService.getConfig()
@@ -949,22 +981,22 @@ export class TelegramBotClient extends AbstractClient {
 
         bot.command('logout', async ctx => {
             if (ctx.chat && ctx.chat.type.includes('group')) {
-                return ctx.reply('该命令无法在群组中使用')
+                return ctx.reply(this.i18n.t('login.group_not_allowed'))
             }
             const wxClient = TelegramBotClient.getSpyClient('wxClient')
             const wxBot = wxClient.client as WxBot
             await wxBot.clearCache()
             wxClient.hasLogin = false
-            return ctx.reply('退出登录成功')
+            return ctx.reply(this.i18n.t('logout.success'))
         })
 
         bot.command('flogin', async ctx => {
             if (ctx.chat && ctx.chat.type.includes('group')) {
-                return ctx.reply('该命令无法在群组中使用')
+                return ctx.reply(this.i18n.t('login.group_not_allowed'))
             }
             const fhClient = TelegramBotClient.getSpyClient('fhClient')
             if (fhClient && fhClient.hasLogin) {
-                return ctx.reply('已登录，请勿重复登录')
+                return ctx.reply(this.i18n.t('login.already_logged_in'))
             }
             // 首次登录设置主人 chatId
             const config = await this.configurationService.getConfig()
@@ -977,14 +1009,14 @@ export class TelegramBotClient extends AbstractClient {
 
         bot.command('quit', async ctx => {
             if (!TelegramBotClient.getSpyClient('userMTPClient').hasLogin) {
-                return ctx.reply('请先登录 user bot')
+                return ctx.reply(this.i18n.t('login.please_login_user_bot'))
             }
             const telegramGroupOperateService = new TelegramGroupOperateService(this.bindGroupService, TelegramBotClient.getSpyClient('userMTPClient').client)
             telegramGroupOperateService.quitChat(ctx.chat.id)
         })
 
         bot.command('settings', async ctx => {
-            ctx.sendMessage('程序设置:', {
+            ctx.sendMessage(this.i18n.t('settings.title'), {
                 reply_markup: await this.getSettingButton()
             })
         })
@@ -993,16 +1025,16 @@ export class TelegramBotClient extends AbstractClient {
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 await this.updateGroupByChatId(ctx.chat.id)
             } else {
-                return ctx.reply('仅支持群组中使用')
+                return ctx.reply(this.i18n.t('update.group_only'))
             }
         })
 
         bot.command('unbind', async (ctx) => {
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 await this.bindGroupService.removeByChatIdOrWxId(ctx.chat.id, undefined)
-                ctx.reply('解绑成功')
+                ctx.reply(this.i18n.t('unbind.success'))
             } else {
-                return ctx.reply('仅支持群组中使用')
+                return ctx.reply(this.i18n.t('unbind.group_only'))
             }
         })
 
@@ -1010,21 +1042,21 @@ export class TelegramBotClient extends AbstractClient {
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 const bindGroup = await this.bindGroupService.getByChatId(ctx.chat.id)
                 if (!bindGroup) {
-                    ctx.reply('该群组暂未绑定')
+                    ctx.reply(this.i18n.t('message.not_bound'))
                     return
                 }
-                ctx.reply('是否接收该群组消息', {
+                ctx.reply(this.i18n.t('message.status_prompt'), {
                     reply_markup: {
                         inline_keyboard: [[
                             {
-                                text: `当前状态：${bindGroup.isReceive ? '接收消息' : '屏蔽消息'}`,
+                                text: `${this.i18n.t('message.status_receiving')}：${bindGroup.isReceive ? this.i18n.t('message.status_receiving') : this.i18n.t('message.status_blocking')}`,
                                 callback_data: 'message'
                             }
                         ]]
                     }
                 })
             } else {
-                return ctx.reply('仅支持群组中使用')
+                return ctx.reply(this.i18n.t('message.group_only'))
             }
         })
 
@@ -1032,27 +1064,27 @@ export class TelegramBotClient extends AbstractClient {
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 const bindGroup = await this.bindGroupService.getByChatId(ctx.chat.id)
                 if (!bindGroup) {
-                    ctx.reply('该群组暂未绑定')
+                    ctx.reply(this.i18n.t('forward.not_bound'))
                     return
                 }
-                ctx.reply('是否转发群组内其他人的消息', {
+                ctx.reply(this.i18n.t('forward.status_prompt'), {
                     reply_markup: {
                         inline_keyboard: [[
                             {
-                                text: `当前状态：${bindGroup.isForwardOthers ? '转发' : '不转发'}`,
+                                text: `${this.i18n.t('forward.status_on')}：${bindGroup.isForwardOthers ? this.i18n.t('forward.status_on') : this.i18n.t('forward.status_off')}`,
                                 callback_data: 'forward'
                             }
                         ]]
                     }
                 })
             } else {
-                return ctx.reply('仅支持群组中使用')
+                return ctx.reply(this.i18n.t('forward.group_only'))
             }
         })
 
         bot.command('add', async ctx => {
             if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
-                ctx.reply('请先登录微信')
+                ctx.reply(this.i18n.t('login.please_login_wx'))
                 return
             }
             // 获取消息文本
@@ -1063,18 +1095,18 @@ export class TelegramBotClient extends AbstractClient {
             if (match && match.length > 1) {
                 const contact = await TelegramBotClient.getSpyClient('wxClient').client.Friendship.search(match[1])
                 if (!contact.v3) {
-                    return ctx.reply('没有搜索到该用户')
+                    return ctx.reply(this.i18n.t('add.no_user'))
                 }
-                TelegramBotClient.getSpyClient('wxClient').client.Friendship.add(contact, '你好')
-                ctx.reply('好友请求已发送')
+                TelegramBotClient.getSpyClient('wxClient').client.Friendship.add(contact, this.i18n.t('add.greeting'))
+                ctx.reply(this.i18n.t('add.request_sent'))
             } else {
-                ctx.reply('请在 /add 命令后面加上你要添加的联系人的手机号，例如：/add 18888888888')
+                ctx.reply(this.i18n.t('add.usage'))
             }
         })
 
         bot.command('user', async ctx => {
             if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
-                ctx.reply('请先登录微信')
+                ctx.reply(this.i18n.t('login.please_login_wx'))
                 return
             }
             // 获取消息文本
@@ -1090,7 +1122,7 @@ export class TelegramBotClient extends AbstractClient {
                 data = await WxContactRepository.getInstance().getAll()
             }
             if (!data || data.length === 0) {
-                ctx.reply('未查找到联系人')
+                ctx.reply(this.i18n.t('user.no_contacts'))
                 return
             }
             const dataMap = data.map(item => {
@@ -1105,9 +1137,9 @@ export class TelegramBotClient extends AbstractClient {
             }
             let text
             if (ctx.chat && ctx.chat.type.includes('group')) {
-                text = '绑定联系人'
+                text = this.i18n.t('user.bind_contact')
             } else {
-                text = '创建联系人群组'
+                text = this.i18n.t('user.create_contact_group')
             }
             ctx.reply(text, {
                 reply_markup: page.getMarkup()
@@ -1116,7 +1148,7 @@ export class TelegramBotClient extends AbstractClient {
 
         bot.command('room', async ctx => {
             if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
-                ctx.reply('请先登录微信')
+                ctx.reply(this.i18n.t('login.please_login_wx'))
                 return
             }
             // 获取消息文本
@@ -1132,7 +1164,7 @@ export class TelegramBotClient extends AbstractClient {
                 data = await WxRoomRepository.getInstance().getAll()
             }
             if (!data || data.length === 0) {
-                ctx.reply('未查找到群组')
+                ctx.reply(this.i18n.t('room.no_groups'))
                 return
             }
             const dataMap = data.map(item => {
@@ -1147,9 +1179,9 @@ export class TelegramBotClient extends AbstractClient {
             }
             let text
             if (ctx.chat && ctx.chat.type.includes('group')) {
-                text = '绑定微信群'
+                text = this.i18n.t('room.bind_group')
             } else {
-                text = '创建微信群群组'
+                text = this.i18n.t('room.create_wx_group')
             }
             ctx.reply(text, {
                 reply_markup: page.getMarkup()
@@ -1159,23 +1191,23 @@ export class TelegramBotClient extends AbstractClient {
         bot.command('revoke', async ctx => {
             const replyMessageId = ctx.update.message['reply_to_message']?.message_id
             if (!replyMessageId) {
-                return ctx.reply('请回复需要撤回的消息')
+                return ctx.reply(this.i18n.t('revoke.reply_required'))
             }
             const msg = await this.messageService.getByBotMsgId(ctx.chat.id, replyMessageId)
             if (!msg) {
-                return ctx.reply('撤回失败')
+                return ctx.reply(this.i18n.t('revoke.failed'))
             }
             const wxClient: WeChatClient = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
             if (wxClient.wxInfo.wxid !== msg.wxSenderId) {
-                return ctx.reply('撤回失败,无法撤回其他人发送的消息')
+                return ctx.reply(this.i18n.t('revoke.cannot_revoke_others'))
             }
             await wxClient.revokeMessage(msg)
-            ctx.reply('撤回请求已发送')
+            ctx.reply(this.i18n.t('revoke.request_sent'))
         })
 
         bot.command('getqr', async ctx => {
             if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
-                ctx.reply('请先登录微信')
+                ctx.reply(this.i18n.t('login.please_login_wx'))
                 return
             }
             const wxClient = TelegramBotClient.getSpyClient('wxClient').client
@@ -1214,7 +1246,7 @@ export class TelegramBotClient extends AbstractClient {
                 }
             }
         } else {
-            this.messageSender.sendText(chatId, '当前未绑定联系人或微信群')
+            this.messageSender.sendText(chatId, this.i18n.t('message.not_bound'))
         }
     }
 
@@ -1225,6 +1257,14 @@ export class TelegramBotClient extends AbstractClient {
         for (const key of keys) {
             inline_keyboard.push([Markup.button.callback(`${settings.get(key).description}(${settings.get(key).options.get(settings.get(key).value)})`, `st:${key}`)])
         }
+
+        // 添加语言切换按钮
+        const config = await this.configurationService.getConfig()
+        const currentLang = config.language || 'zh-CN'
+        inline_keyboard.push([
+            Markup.button.callback(`${this.i18n.t('settings.language')}(${currentLang === 'zh-CN' ? '中文' : 'English'})`, 'lang:switch')
+        ])
+
         return {
             inline_keyboard: inline_keyboard,
         }
@@ -1270,7 +1310,7 @@ export class TelegramBotClient extends AbstractClient {
             },
             phoneNumber: async () =>
                 new Promise((resolve) => {
-                    this.client.telegram.sendMessage(this.chatId, '请先登录 Telegram 客户端，请输入你的 Telegram 账户的手机号码（需要带国家区号，例如：+8613355558888）').then(res => {
+                    this.client.telegram.sendMessage(this.chatId, this.i18n.t('auth.phone_number')).then(res => {
                         this.waitInputCommand = 'phoneNumber'
                         const intervalId = setInterval(() => {
                             if (this.phoneNumber) {
@@ -1285,7 +1325,7 @@ export class TelegramBotClient extends AbstractClient {
                 }),
             password: async (hint?: string) =>
                 new Promise((resolve) => {
-                    this.client.telegram.sendMessage(this.chatId, '请输入你的二步验证密码:').then(res => {
+                    this.client.telegram.sendMessage(this.chatId, this.i18n.t('auth.password')).then(res => {
                         this.waitInputCommand = 'password'
                         const intervalId = setInterval(() => {
                             if (this.password) {
@@ -1300,7 +1340,7 @@ export class TelegramBotClient extends AbstractClient {
                 }),
             phoneCode: async (isCodeViaApp?) =>
                 new Promise((resolve) => {
-                    this.client.telegram.sendMessage(this.chatId, '请输入你收到的验证码:_ _ _ _ _\n', {
+                    this.client.telegram.sendMessage(this.chatId, this.i18n.t('auth.verification_code'), {
                         reply_markup: {
                             inline_keyboard: [
                                 [
@@ -1340,7 +1380,7 @@ export class TelegramBotClient extends AbstractClient {
         if (!TelegramBotClient.getSpyClient('userMTPClient').hasLogin) {
             TelegramBotClient.getSpyClient('userMTPClient').login(authParams).then(login => {
                 if (login) {
-                    this.client.telegram.sendMessage(this.chatId, 'Telegram 客户端登录成功！')
+                    this.client.telegram.sendMessage(this.chatId, this.i18n.t('login.success'))
                     this.loginWechatClient()
                 }
             })
