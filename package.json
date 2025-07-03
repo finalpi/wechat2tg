@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "ts-node src/app.ts",
     "build": "tsc",
-    "start": "NODE_ENV=production tsc && node dist/app.js"
+    "start": "NODE_ENV=production node dist/app.js"
   },
   "keywords": [],
   "author": "",
