@@ -48,7 +48,8 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 1. This project is for technical research and learning purposes only, strictly prohibited for illegal use
 2. Welcome to submit issues for any problems encountered during use
 3. Ensure that the IP of wx2tg-server matches the login region, otherwise verification code may be required
-4. On arm-64 architecture, due to missing system files, runtime errors or inability to use may occur
+4. On arm-64 architecture, due to missing dependencies, the wx2tg-server image cannot be used.
+5. After logging in, you may be logged out once after one day; after logging in again, the connection will remain stable.
 
 ## Installation & Deployment
 
