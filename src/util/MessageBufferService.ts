@@ -17,7 +17,7 @@ export class MessageBufferService {
     private readonly BUFFER_CLEANUP_INTERVAL = 60000 // 1分钟
     private readonly MESSAGE_EXPIRE_TIME = 300000 // 5分钟
     private logger = LogUtils.config().getLogger('MessageBuffer')
-    
+
     // 添加定时器引用管理
     private cleanupInterval: NodeJS.Timeout | null = null
     private retryTimeouts: Map<string, NodeJS.Timeout> = new Map()
@@ -61,20 +61,20 @@ export class MessageBufferService {
         const bufferedMessage = this.messageBuffer.get(messageId)
         if (bufferedMessage) {
             bufferedMessage.status = 'sent'
-            
+
             // 清理可能存在的重试定时器
             const retryTimeout = this.retryTimeouts.get(messageId)
             if (retryTimeout) {
                 clearTimeout(retryTimeout)
                 this.retryTimeouts.delete(messageId)
             }
-            
+
             // 发送成功后，延迟删除消息（防止重复发送）
             const deleteTimeout = setTimeout(() => {
                 this.messageBuffer.delete(messageId)
                 this.deleteTimeouts.delete(messageId)
             }, 10000) // 10秒后删除
-            
+
             this.deleteTimeouts.set(messageId, deleteTimeout)
         }
     }
@@ -111,7 +111,7 @@ export class MessageBufferService {
                     this.retryTimeouts.delete(messageId)
                 }
             }, retryDelay)
-            
+
             // 存储定时器引用
             this.retryTimeouts.set(messageId, retryTimeout)
         } else {
@@ -195,13 +195,13 @@ export class MessageBufferService {
                     clearTimeout(retryTimeout)
                     this.retryTimeouts.delete(messageId)
                 }
-                
+
                 const deleteTimeout = this.deleteTimeouts.get(messageId)
                 if (deleteTimeout) {
                     clearTimeout(deleteTimeout)
                     this.deleteTimeouts.delete(messageId)
                 }
-                
+
                 this.messageBuffer.delete(messageId)
                 cleanupCount++
             }
@@ -228,22 +228,22 @@ export class MessageBufferService {
      */
     clearBuffer(): void {
         const count = this.messageBuffer.size
-        
+
         // 清理所有重试定时器
         for (const timeout of this.retryTimeouts.values()) {
             clearTimeout(timeout)
         }
         this.retryTimeouts.clear()
-        
+
         // 清理所有删除定时器
         for (const timeout of this.deleteTimeouts.values()) {
             clearTimeout(timeout)
         }
         this.deleteTimeouts.clear()
-        
+
         // 清理消息缓冲区
         this.messageBuffer.clear()
-        
+
         this.logger.info(`已清空缓冲区，删除了 ${count} 条消息和所有相关定时器`)
     }
 
@@ -252,19 +252,19 @@ export class MessageBufferService {
      */
     destroy(): void {
         this.logger.info('正在销毁MessageBufferService...')
-        
+
         // 清理主清理定时器
         if (this.cleanupInterval) {
             clearInterval(this.cleanupInterval)
             this.cleanupInterval = null
         }
-        
+
         // 清理所有消息和定时器
         this.clearBuffer()
-        
+
         // 重置实例
         MessageBufferService.instance = undefined
-        
+
         this.logger.info('MessageBufferService已销毁')
     }
 }

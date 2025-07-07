@@ -1,62 +1,65 @@
 # wechat2tg-v3
 
-基于微信协议在 Telegram 收发微信消息，支持 ipad,mac,car,windows,pad 多种协议
+[中文](README_zh.md) | English
 
-## TG 群组: [@Wx2TgUserGroup](https://t.me/+AD02MEZa-og3ZGY1)
+Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad, Mac, Car, Windows, Pad)
 
-## 主要功能
+## Telegram Group: [@Wx2TgUserGroup](https://t.me/+AD02MEZa-og3ZGY1)
 
-1. 微信单聊消息、微信群消息、公众号消息的接收、企业微信消息的接收
-2. Telegram 向指定的微信用户、微信群、公众号发送消息
-3. 屏蔽指定群组的消息
+## Main Features
 
-## 支持的消息类型
+1. Receive messages from WeChat personal chats, group chats, official accounts, and enterprise WeChat
+2. Send messages via Telegram to specific WeChat users, groups, and official accounts
+3. Flexible group message blocking functionality
 
-### 微信消息类型支持列表
+## Supported Message Types
 
-+ [x] 文本消息
-+ [x] 企业微信消息
-+ [x] 微信表情包
-+ [x] 图片消息
-+ [x] 视频消息
-+ [x] 音频/视频通话 (仅消息提醒)
-+ [x] 文件消息
-+ [x] 链接消息
-+ [x] 群聊消息
-+ [x] 群聊@消息（@所有人和@你 会转换成 Telegram @你）
-+ [x] 公众号消息
-+ [x] emoji
-+ [x] 位置消息
-+ [x] 撤回消息
-+ [x] 语音消息
-+ [ ] 红包消息（提醒，无法获取红包内容）
-+ [ ] 小程序消息
+### WeChat Message Type Support List
 
-### Telegram 消息类型支持列表
++ [x] Text messages
++ [x] Enterprise WeChat messages
++ [x] WeChat stickers
++ [x] Image messages
++ [x] Video messages
++ [x] Audio/Video calls (notification only)
++ [x] File messages
++ [x] Link messages
++ [x] Group chat messages
++ [x] Group chat @mentions (converts @everyone and @you to Telegram @you)
++ [x] Official account messages
++ [x] Emoji
++ [x] Location messages
++ [x] Message recall
++ [x] Voice messages
++ [ ] Red packet messages (notification only, cannot retrieve content)
++ [ ] Mini program messages
 
-+ [x] 文本消息
-+ [x] 贴纸表情
-+ [x] 图片消息
-+ [x] 视频消息
-+ [x] 文件消息
-+ [x] 语音消息
+### Telegram Message Type Support List
 
-## 注意事项
++ [x] Text messages
++ [x] Sticker emotes
++ [x] Image messages
++ [x] Video messages
++ [x] File messages
++ [x] Voice messages
 
-1. 本项目仅用于技术研究和学习，不得用于非法用途
-2. 无论遇到什么问题都欢迎提交 issue
-3. 需要保证 wx2tg-server 服务的 ip 和你登录的地区是一致的，否则会要求输入验证码
-4. wx2tg-server 使用 arm-64 架构运行时由于缺少 arm 环境的 so 文件会报错，甚至无法使用
+## Precautions
 
-## 部署安装
+1. This project is for technical research and learning purposes only, strictly prohibited for illegal use
+2. Welcome to submit issues for any problems encountered during use
+3. Ensure that the IP of wx2tg-server matches the login region, otherwise verification code may be required
+4. On arm-64 architecture, due to missing dependencies, the wx2tg-server image cannot be used.
+5. After logging in, you may be logged out once after one day; after logging in again, the connection will remain stable.
 
-先复制一份 `.env.example` 为 `.env` 文件，然后配置 `.env` 文件中的环境变量
+## Installation & Deployment
 
-复制项目中的 `app.conf.example` 为 `app.conf` 文件到 `conf` 目录，将 Redis 地址设置为你部署的 Redis 的地址
+First, copy `.env.example` to `.env` and configure the environment variables.
+
+Copy `app.conf.example` to `app.conf` in the `conf` directory and set the Redis address to your deployed Redis address.
 
 ### docker-compose
 
-创建 `docker-compose.yml` 文件：
+Create a `docker-compose.yml` file:
 
 ```yaml
 version: '3'
@@ -66,15 +69,15 @@ services:
     image: finalpi/wechat2tg-v3:latest
     container_name: wx2tg-v3
     # ports:
-       # - "8056:8056" # callback 模式才需要暴露端口
+       # - "8056:8056" # Only needed for callback mode
     volumes:
       - ./config:/app/storage
-      - ./save-files:/app/save-files # 保存文件夹挂载后贴纸文件不需要重新转换
+      - ./save-files:/app/save-files # After mounting save-files folder, sticker files do not need to be converted again
     env_file: ".env"
     restart: unless-stopped
 
   wx2tg-server:
-    image: finalpi/wx2tg-server:v3-latest # 拉取镜像
+    image: finalpi/wx2tg-server:v3-latest # Pull image
     container_name: wx2tg-server
     ports:
       - "8058:8058"
@@ -93,136 +96,116 @@ services:
     restart: unless-stopped
 ```
 
-#### 运行
+#### Run
 
 ```shell
 docker-compose up -d
 ```
 
-#### 关闭 bot 隐私模式
+#### Disable Bot Privacy Mode
 
-关闭掉机器人的隐私模式，打开 BotFather，输入 `/mybots`，选择你的bot。点击 `Bot Settings` - `Group Privacy` - `Turn off`
-，出现 `Privacy mode is disabled for xxx` 就说明关闭成功了
+Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot. Click `Bot Settings` - `Group Privacy` - `Turn off`. When `Privacy mode is disabled for xxx` appears, it means the disabling is successful.
 
-## 使用说明
+## Bot Commands
 
-### BOT命令
+- `/login`: Get login QR code; the first person to send this command during initial deployment will become the bot owner
 
-- `/login`：获取登录二维码；首次部署启动时，最先发送 `/login` 命令的人将成为 `BOT` 的所有者
+- `/flogin`: Get file transfer assistant login QR code, supports receiving videos and files
 
-- `/flogin`：获取文件传输助手登录二维码，支持接收视频和文件
+- `/update`: Update group avatar and nickname information
 
-- `/update`：更新群组头像和昵称信息
+- `/message`: Toggle group message reception
 
-- `/message`：开关群组消息接收
+- `/forward`: Toggle forwarding of messages from other people or bots in the group
 
-- `/forward`：开关转发群组内其他人或者 bot 的消息
+- `/user`: Get WeChat user list; click the button to create a new group or bind a user (can search by name or remarks, e.g., `/user Zhang` to find WeChat users containing "Zhang")
 
-- `/user`：获取微信用户列表；点击按钮后可创建新群组或者绑定用户（可通过名称或备注搜索，例如： `/user 张` 查找包含「张」的微信用户）
+- `/room`: Get WeChat group list; click the button to create a new group or bind a WeChat group (can search by name or remarks, e.g., `/room takeout` to find WeChat groups containing "takeout")
 
-- `/room`：获取微信群列表；点击按钮后可创建新群组或者绑定微信群（可通过名称或备注搜索，例如： `/room 外卖` 查找含有「外卖」的微信群）
+- `/settings`: Program settings
 
-- `/settings`：程序设置
+- `/unbind`: Unbind WeChat group or WeChat user (only supported in group usage)
 
-- `/unbind`：解绑微信群或微信用户（仅支持在群组使用）
+## Environment Variables
 
-### 环境变量说明
+| Name | Required | Description |
+|------|----------|-------------|
+|`BOT_TOKEN`| Yes | Telegram Bot token, created via [BotFather](https://t.me/BotFather) |
+|`API_ID`| Yes | Telegram API ID |
+|`API_HASH`| Yes | Telegram API HASH |
+|`DEVICE_TYPE`| Yes | WeChat login protocol: ipad, car, mac, pad, win |
+|`BASE_API`| Yes | wx2tg-server container API request address, full path required | |
+|`PROXY_PROTOCOL`| No | Proxy type optional values (socks5, http, https) |
+|`PROXY_HOST`| No | Proxy URL |
+|`PROXY_PORT`| No | Proxy port number |
+|`PROXY_USERNAME`| No | Proxy username |
+|`PROXY_PASSWORD`| No | Proxy password |
+|`ROOM_MESSAGE`| No | Display format of WeChat group messages in Bot |
+|`OFFICIAL_MESSAGE`| No | Display format of official account messages in Bot |
+|`CONTACT_MESSAGE`| No | Display format of WeChat user messages in Bot |
+|`ROOM_MESSAGE_GROUP`| No | Display format of WeChat group messages in group |
+|`CONTACT_MESSAGE_GROUP`| No | Display format of WeChat user messages in group |
+|`OFFICIAL_MESSAGE_GROUP`| No | Display format of official account messages in group |
+|`CREATE_ROOM_NAME`| No | Format of group name when automatically creating WeChat groups |
+|`CREATE_CONTACT_NAME`| No | Format of group name when automatically creating WeChat contacts |
+|`MESSAGE_DISPLAY`| No | Display format of text messages |
 
-|名称| 是否必填 | 描述                                                           |
-|--|------|--------------------------------------------------------------|
-|`BOT_TOKEN`| 是    | Telegram Bot 的 token，通过 [BotFather](https://t.me/BotFather) 创建 |
-|`API_ID`| 是    | Telegram API 的 API ID                                        |
-|`API_HASH`| 是    | Telegram API 的 API HASH                                      |
-|`DEVICE_TYPE`| 是    | 微信登录协议:ipad,car,mac,pad,win                                  |
-|`BASE_API`| 是    | wx2tg-server 容器的 API 请求地址，需要填入完整路径名                          | |
-|`PROXY_PROTOCOL`| 否    | 代理类型可选值（socks5,http,https）                                   |
-|`PROXY_HOST`| 否    | 代理的 URL                                                      |
-|`PROXY_PORT`| 否    | 代理的端口号                                                       |
-|`PROXY_USERNAME`| 否    | 代理的用户名                                                       |
-|`PROXY_PASSWORD`| 否    | 代理的密码                                                        |
-|`ROOM_MESSAGE`| 否    | 在 BOT 中微信群消息的显示格式                                            |
-|`OFFICIAL_MESSAGE`| 否    | 在 BOT 中公众号消息的显示格式                                            |
-|`CONTACT_MESSAGE`| 否    | 在 BOT 中微信用户消息的显示格式                                           |
-|`ROOM_MESSAGE_GROUP`| 否    | 在群组中微信群消息的显示格式                                               |
-|`CONTACT_MESSAGE_GROUP`| 否    | 在群组中微信用户消息的显示格式                                              |
-|`OFFICIAL_MESSAGE_GROUP`| 否    | 在群组中公众号消息的显示格式                                               |
-|`CREATE_ROOM_NAME`| 否    | 自动创建微信群的群组时， 群组名称的格式                                         |
-|`CREATE_CONTACT_NAME`| 否    | 自动创建微信联系人的群组时， 群组名称的格式                                       |
-|`MESSAGE_DISPLAY`| 否    | 文字消息的显示格式                                                    |
+## Settings Command `/settings`
 
- ---
+1. WeChat emoji display as image links: When enabled, friend-sent Minions emojis will be converted to image links
 
-### 设置项`/settings`命令说明
+2. Synchronize group information on startup: When enabled, all user information will be synchronized when the program starts, updating group avatars and names
 
-1.微信emoji是否以图片链接显示: 开启后会将好友发过来的小黄人表情转为图片链接的方式显示
+## Voice-to-Text
 
-1.启动时同步群组信息: 开启后会在程序刚启动时同步所有人的信息，会更新群组头像和名称
+1. Configure `TENCENT_SECRET_ID` and `TENCENT_SECRET_KEY`, which can be activated in the Tencent [Speech Recognition Console](https://console.cloud.tencent.com/asr). Free usage quota is available.
 
----
+2. Enable automatic text-to-speech function in `/settings`
 
-### 语音转文字
+## Obtaining `API_ID` and `API_HASH`
 
-1. 配置 `TENCENT_SECRET_ID` 和 `TENCENT_SECRET_KEY` ，可在腾讯[语音识别控制台](https://console.cloud.tencent.com/asr)开通
-   。有免费的使用额度
-2. 在 `/settings` 中开启自动文字转语音功能
+1. Log in to [telegram account](https://my.telegram.org/)
 
----
+2. Click "API development tools" and fill in application details (only application title and short name are required)
 
-### 获取`API_ID` 和 `API_HASH`
+3. Finally, click "Create application"
 
-1. 登录 [telegram account](https://my.telegram.org/)
+## Custom Message Templates
 
-2. 然后点击「API development tools」并填写应用程序详细信息（只需应用程序标题和简称）
+If you want to modify the message sender's format, you can modify the environment variables in docker or the `.env` file
 
-3. 最后点击「Create application」
+Custom message template placeholders:
 
----
+`#[alias]`: Contact remarks
 
-### 自定义消息模板
+`#[name]`: Contact nickname
 
-如果你想修改消息发送者的格式，你可以修改 docker 中的环境变量或者 `.env` 文件
+`#[topic]`: Group chat nickname
 
-自定义消息模板占位符:
+`#[alias_first]`: Remarks priority, if no remarks, display contact's nickname
 
-`#[alias]`：联系人备注
+`#[identity]`: Identity information text
 
-`#[name]`：联系人昵称
+`#[body]`: Message body text
 
-`#[topic]`：群聊昵称
+`#[br]`: Line break
 
-`#[alias_first]`：备注优先，如果没有备注就显示联系人的昵称
+## How to @everyone
 
-`#[identity]`：身份信息文本
+Send a message starting with `@all` to @everyone, only supports text messages @everyone
 
-`#[body]`：消息体文本
+## Participating in Development
 
-`#[br]`：换行
+1. Fork the project, switch to the `wx2tg-v3-dev` branch, or create a new branch. Please do not directly submit code to the main branch.
 
-### 如何 @所有人
-
-发送以 `@all` 开头的消息会 @所有人，仅支持文本消息 @所有人
-
----
-
-## 常见问题
-
-### 为什么提示我输入验证码
-
-wx2tg-server 需要保证和你登陆地在同一个区域，如果遇到输入验证码的情况，检查一下是否在同一区域
-
-## 参与开发
-
-1. fork 项目，切换到 `wx2tg-v3-dev` 分支，或者新建一个分支。请不要直接提交代码到主分支
-2. 提交 Pull Request 到 `wx2tg-v3-dev` 分支
-
+2. Submit a Pull Request to the `wx2tg-v3-dev` branch
 
 ## License
 
 [MIT](LICENSE)
 
-
 ## Thanks
 
-感谢Jetbrains对本项目的支持
+Thanks to Jetbrains for supporting this project
 
 [<img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.png" width="200">](https://www.jetbrains.com)

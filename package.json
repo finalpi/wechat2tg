@@ -7,30 +7,30 @@
   "scripts": {
     "dev": "ts-node src/app.ts",
     "build": "tsc",
-    "start": "NODE_ENV=production tsc && node dist/app.js"
+    "start": "NODE_ENV=production node dist/app.js"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "axios": "^1.9.0",
     "crypto": "^1.0.1",
     "dotenv": "^16.0.3",
     "ffmpeg-static": "^5.2.0",
     "file-box": "^1.4.15",
     "fluent-ffmpeg": "^2.1.2",
-    "https-proxy-agent": "^7.0.4",
+    "https-proxy-agent": "^6.2.1",
     "log4js": "^6.9.1",
     "qrcode": "^1.5.1",
     "reflect-metadata": "^0.2.2",
     "sharp": "^0.33.4",
-    "socks-proxy-agent": "^7.0.0",
+    "socks-proxy-agent": "^6.2.1",
     "sqlite3": "^5.1.7",
-    "telegraf": "^4.12.2",
+    "telegraf": "^4.16.3",
     "telegram": "2.21.2",
     "tencentcloud-sdk-nodejs": "^4.0.977",
     "typeorm": "^0.3.24",
-    "wx2tg-puppet": "^2.2.0",
-    "axios": "^1.9.0"
+    "wx2tg-puppet": "^2.2.2"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.5",

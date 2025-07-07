@@ -1,4 +1,5 @@
 import {Entity, Column, PrimaryColumn} from 'typeorm'
+import { Language } from '../i18n'
 
 @Entity()
 export class Configuration {
@@ -56,4 +57,10 @@ export class Configuration {
         default: true
     })
     autoTranscript: boolean
+
+    // 界面语言设置
+    @Column({
+        default: 'zh-CN'
+    })
+    language: Language
 }

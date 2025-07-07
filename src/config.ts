@@ -32,6 +32,9 @@ export const config = {
     DEVICE_TYPE: process.env.DEVICE_TYPE?.toString() || 'ipad',
     MODE: process.env.MODE?.toString() || 'polling',
     CALLBACK_PORT: process.env.CALLBACK_PORT?.toString() || '8056',
+    WX_PROXY_HOST: process.env.WX_PROXY_HOST?.toString() || '',
+    WX_PROXY_USERNAME: process.env.WX_PROXY_USERNAME?.toString() || '',
+    WX_PROXY_PASSWORD: process.env.WX_PROXY_PASSWORD?.toString() || '',
 }
 
 export const useProxy = config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== ''

@@ -2,10 +2,20 @@ import {ConfigurationRepository} from '../repository/ConfigurationRepository'
 import {Configuration} from '../entity/Configuration'
 import {AppDataSource} from '../data-sourse'
 import {Settings} from '../entity/Settings'
+import I18n from '../i18n'
 
 export class ConfigurationService {
     private configurationRepository = ConfigurationRepository.getInstance()
     private static instance
+    private _i18n: I18n | null = null
+
+    // 懒加载i18n实例
+    private get i18n(): I18n {
+        if (!this._i18n) {
+            this._i18n = I18n.getInstance()
+        }
+        return this._i18n
+    }
 
     static getInstance(): ConfigurationService {
         if (!ConfigurationService.instance) {
@@ -32,19 +42,19 @@ export class ConfigurationService {
         // this.setBooleanOptions(settingMap, 'useFileHelper', config.useFileHelper, '文件传输助手接收视频和文件')
 
         // 公众号消息
-        this.setBooleanOptions(settingMap, 'receivePublicAccount', config.receivePublicAccount, '接收公众号消息')
+        this.setBooleanOptions(settingMap, 'receivePublicAccount', config.receivePublicAccount, this.i18n.t('settings.receive_public_account'))
 
         // 原始 emoji 是否以图片链接方式显示
-        this.setBooleanOptions(settingMap, 'emojiPicture', config.emojiPicture, '微信emoji是否以图片链接显示')
+        this.setBooleanOptions(settingMap, 'emojiPicture', config.emojiPicture, this.i18n.t('settings.emoji_picture'))
 
         // 转发自己发送的消息
-        this.setBooleanOptions(settingMap, 'selfMessage', config.selfMessage, '转发自己在微信发送的消息')
+        this.setBooleanOptions(settingMap, 'selfMessage', config.selfMessage, this.i18n.t('settings.self_message'))
 
         // 启动时同步群组信息
-        this.setBooleanOptions(settingMap, 'syncWechat', config.syncWechat, '启动时同步群组信息')
+        this.setBooleanOptions(settingMap, 'syncWechat', config.syncWechat, this.i18n.t('settings.sync_wechat'))
 
         // 语音转文字
-        this.setBooleanOptions(settingMap, 'autoTranscript', config.autoTranscript, '语音转文字')
+        this.setBooleanOptions(settingMap, 'autoTranscript', config.autoTranscript, this.i18n.t('settings.auto_transcript'))
 
         return settingMap
     }
@@ -54,8 +64,8 @@ export class ConfigurationService {
         booleanSettings.description = description
         booleanSettings.value = value
         const options = new Map<boolean, string>()
-        options.set(true, '开启')
-        options.set(false, '关闭')
+        options.set(true, this.i18n.t('settings.option_on'))
+        options.set(false, this.i18n.t('settings.option_off'))
         booleanSettings.options = options
         settingMap.set(key, booleanSettings)
     }
