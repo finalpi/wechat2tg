@@ -131,27 +131,27 @@ docker-compose up -d
 
 ### 环境变量说明
 
-|名称| 是否必填 | 描述                                                           |
-|--|------|--------------------------------------------------------------|
+|名称| 是否必填 | 描述                                                             |
+|--|------|----------------------------------------------------------------|
 |`BOT_TOKEN`| 是    | Telegram Bot 的 token，通过 [BotFather](https://t.me/BotFather) 创建 |
-|`API_ID`| 是    | Telegram API 的 API ID                                        |
-|`API_HASH`| 是    | Telegram API 的 API HASH                                      |
-|`DEVICE_TYPE`| 是    | 微信登录协议:ipad,car,mac,pad,win                                  |
-|`BASE_API`| 是    | wx2tg-server 容器的 API 请求地址，需要填入完整路径名                          | |
-|`PROXY_PROTOCOL`| 否    | 代理类型可选值（socks5,http,https）                                   |
-|`PROXY_HOST`| 否    | 代理的 URL                                                      |
-|`PROXY_PORT`| 否    | 代理的端口号                                                       |
-|`PROXY_USERNAME`| 否    | 代理的用户名                                                       |
-|`PROXY_PASSWORD`| 否    | 代理的密码                                                        |
-|`ROOM_MESSAGE`| 否    | 在 BOT 中微信群消息的显示格式                                            |
-|`OFFICIAL_MESSAGE`| 否    | 在 BOT 中公众号消息的显示格式                                            |
-|`CONTACT_MESSAGE`| 否    | 在 BOT 中微信用户消息的显示格式                                           |
-|`ROOM_MESSAGE_GROUP`| 否    | 在群组中微信群消息的显示格式                                               |
-|`CONTACT_MESSAGE_GROUP`| 否    | 在群组中微信用户消息的显示格式                                              |
-|`OFFICIAL_MESSAGE_GROUP`| 否    | 在群组中公众号消息的显示格式                                               |
-|`CREATE_ROOM_NAME`| 否    | 自动创建微信群的群组时， 群组名称的格式                                         |
-|`CREATE_CONTACT_NAME`| 否    | 自动创建微信联系人的群组时， 群组名称的格式                                       |
-|`MESSAGE_DISPLAY`| 否    | 文字消息的显示格式                                                    |
+|`API_ID`| 是    | Telegram API 的 API ID                                          |
+|`API_HASH`| 是    | Telegram API 的 API HASH                                        |
+|`DEVICE_TYPE`| 是    | 微信登录协议:ipad,car,mac,pad,win,ipadX                              |
+|`BASE_API`| 是    | wx2tg-server 容器的 API 请求地址，需要填入完整路径名                            | |
+|`PROXY_PROTOCOL`| 否    | 代理类型可选值（socks5,http,https）                                     |
+|`PROXY_HOST`| 否    | 代理的 URL                                                        |
+|`PROXY_PORT`| 否    | 代理的端口号                                                         |
+|`PROXY_USERNAME`| 否    | 代理的用户名                                                         |
+|`PROXY_PASSWORD`| 否    | 代理的密码                                                          |
+|`ROOM_MESSAGE`| 否    | 在 BOT 中微信群消息的显示格式                                              |
+|`OFFICIAL_MESSAGE`| 否    | 在 BOT 中公众号消息的显示格式                                              |
+|`CONTACT_MESSAGE`| 否    | 在 BOT 中微信用户消息的显示格式                                             |
+|`ROOM_MESSAGE_GROUP`| 否    | 在群组中微信群消息的显示格式                                                 |
+|`CONTACT_MESSAGE_GROUP`| 否    | 在群组中微信用户消息的显示格式                                                |
+|`OFFICIAL_MESSAGE_GROUP`| 否    | 在群组中公众号消息的显示格式                                                 |
+|`CREATE_ROOM_NAME`| 否    | 自动创建微信群的群组时， 群组名称的格式                                           |
+|`CREATE_CONTACT_NAME`| 否    | 自动创建微信联系人的群组时， 群组名称的格式                                         |
+|`MESSAGE_DISPLAY`| 否    | 文字消息的显示格式                                                      |
 
  ---
 

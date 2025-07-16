@@ -78,7 +78,8 @@ const zhCN = {
   'wechat.friend_request': '{{name}} 请求添加您为好友:\n  {{hello}}',
   'wechat.accept': '接受',
   'wechat.login_success': '微信客户端登录成功！',
-  'wechat.service_notification': '服务通知'
+  'wechat.service_notification': '服务通知',
+  'wechat.login_fail': '登录失败，可以尝试以下方案登录：\n1.使用 ipadX 协议尝试登录\n2.配置使用微信代理环境变量 WX_PROXY_HOST 代理到常用地登录\n3.在常用地登录后，迁移 Redis 登录的数据到服务器（存在风险）'
 }
 
 export default zhCN
