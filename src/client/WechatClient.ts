@@ -301,6 +301,16 @@ export class WeChatClient extends AbstractClient {
             })
         })
 
+        this.client.on('loginFail', content => {
+            this.configurationService.getConfig().then(config => {
+                const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
+                const i18n = I18n.getInstance()
+                if (content.msg.includes('请提交验证码后登录')) {
+                    tgBotClient.telegram.sendMessage(config.chatId, i18n.t('wechat.login_fail'))
+                }
+            })
+        })
+
         this.client.on('all', msg => { // 如需额外的处理逻辑可以监听 all 事件 该事件将返回回调地址接收到的所有原始数据
         })
 

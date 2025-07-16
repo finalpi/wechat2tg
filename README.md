@@ -128,27 +128,27 @@ Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot
 
 ## Environment Variables
 
-| Name | Required | Description |
-|------|----------|-------------|
+| Name | Required | Description                                                         |
+|------|----------|---------------------------------------------------------------------|
 |`BOT_TOKEN`| Yes | Telegram Bot token, created via [BotFather](https://t.me/BotFather) |
-|`API_ID`| Yes | Telegram API ID |
-|`API_HASH`| Yes | Telegram API HASH |
-|`DEVICE_TYPE`| Yes | WeChat login protocol: ipad, car, mac, pad, win |
-|`BASE_API`| Yes | wx2tg-server container API request address, full path required | |
-|`PROXY_PROTOCOL`| No | Proxy type optional values (socks5, http, https) |
-|`PROXY_HOST`| No | Proxy URL |
-|`PROXY_PORT`| No | Proxy port number |
-|`PROXY_USERNAME`| No | Proxy username |
-|`PROXY_PASSWORD`| No | Proxy password |
-|`ROOM_MESSAGE`| No | Display format of WeChat group messages in Bot |
-|`OFFICIAL_MESSAGE`| No | Display format of official account messages in Bot |
-|`CONTACT_MESSAGE`| No | Display format of WeChat user messages in Bot |
-|`ROOM_MESSAGE_GROUP`| No | Display format of WeChat group messages in group |
-|`CONTACT_MESSAGE_GROUP`| No | Display format of WeChat user messages in group |
-|`OFFICIAL_MESSAGE_GROUP`| No | Display format of official account messages in group |
-|`CREATE_ROOM_NAME`| No | Format of group name when automatically creating WeChat groups |
-|`CREATE_CONTACT_NAME`| No | Format of group name when automatically creating WeChat contacts |
-|`MESSAGE_DISPLAY`| No | Display format of text messages |
+|`API_ID`| Yes | Telegram API ID                                                     |
+|`API_HASH`| Yes | Telegram API HASH                                                   |
+|`DEVICE_TYPE`| Yes | WeChat login protocol: ipad, car, mac, pad, win, ipadX              |
+|`BASE_API`| Yes | wx2tg-server container API request address, full path required      | |
+|`PROXY_PROTOCOL`| No | Proxy type optional values (socks5, http, https)                    |
+|`PROXY_HOST`| No | Proxy URL                                                           |
+|`PROXY_PORT`| No | Proxy port number                                                   |
+|`PROXY_USERNAME`| No | Proxy username                                                      |
+|`PROXY_PASSWORD`| No | Proxy password                                                      |
+|`ROOM_MESSAGE`| No | Display format of WeChat group messages in Bot                      |
+|`OFFICIAL_MESSAGE`| No | Display format of official account messages in Bot                  |
+|`CONTACT_MESSAGE`| No | Display format of WeChat user messages in Bot                       |
+|`ROOM_MESSAGE_GROUP`| No | Display format of WeChat group messages in group                    |
+|`CONTACT_MESSAGE_GROUP`| No | Display format of WeChat user messages in group                     |
+|`OFFICIAL_MESSAGE_GROUP`| No | Display format of official account messages in group                |
+|`CREATE_ROOM_NAME`| No | Format of group name when automatically creating WeChat groups      |
+|`CREATE_CONTACT_NAME`| No | Format of group name when automatically creating WeChat contacts    |
+|`MESSAGE_DISPLAY`| No | Display format of text messages                                     |
 
 ## Settings Command `/settings`
 

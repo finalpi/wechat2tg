@@ -30,7 +30,7 @@
     "telegram": "2.21.2",
     "tencentcloud-sdk-nodejs": "^4.0.977",
     "typeorm": "^0.3.24",
-    "wx2tg-puppet": "^2.2.2"
+    "wx2tg-puppet": "^2.2.3"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.5",

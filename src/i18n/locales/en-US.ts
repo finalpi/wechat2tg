@@ -78,7 +78,8 @@ const enUS = {
   'wechat.friend_request': '{{name}} wants to add you as a friend:\n  {{hello}}',
   'wechat.accept': 'Accept',
   'wechat.login_success': 'WeChat client login successful!',
-  'wechat.service_notification': 'Service Notification'
+  'wechat.service_notification': 'Service Notification',
+  'wechat.login_fail': 'Login failed. You can try the following solutions:\n1. Try logging in with the ipadX protocol\n2. Set the WX_PROXY_HOST environment variable to proxy login from a common location\n3. After logging in from a common location, migrate the Redis login data to the server (risky)'
 }
 
 export default enUS
