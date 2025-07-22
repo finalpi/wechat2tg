@@ -1439,7 +1439,6 @@ ${this.i18n.t('help.instructions')}`))
         // 将消息和messageId一起存储
         const queueItem = { message, messageId }
         this.textMessageQueue.push(queueItem)
-        console.log(`[MessageOrder] 消息加入队列: ${message.id}, 队列长度: ${this.textMessageQueue.length}, 队列中的消息: [${this.textMessageQueue.map(item => item.message.id).join(', ')}]`)
 
         if (!this.isProcessingQueue) {
             this.processTextMessageQueue()
@@ -1448,8 +1447,6 @@ ${this.i18n.t('help.instructions')}`))
 
     private async processTextMessageQueue() {
         this.isProcessingQueue = true
-        console.log(`[MessageOrder] 开始处理文本消息队列，共 ${this.textMessageQueue.length} 条消息`)
-        console.log(`[MessageOrder] 队列中的消息顺序: [${this.textMessageQueue.map(item => item.message.id).join(', ')}]`)
 
         while (this.textMessageQueue.length > 0) {
             const queueItem = this.textMessageQueue.shift()
