@@ -150,9 +150,9 @@ export class WeChatClient extends AbstractClient {
         }
         this.client.start().then(async () => {
             getGeWeChatDataSource().initialize().then(() => {
-                console.log('GeWeChatDataSource initialized')
+                console.log('DataSource initialized')
             }).catch((e) => {
-                console.error('GeWeChatDataSource initialize failed', e)
+                console.error('DataSource initialize failed', e)
             })
             this.startTime = new Date().getTime() / 1000
         })
@@ -218,10 +218,10 @@ export class WeChatClient extends AbstractClient {
                         const url = FileUtils.saveFile(message.file.file, message.file.fileName)
                         // 提取视频封面
                         const ffmpegUtil = await new ConverterHelper()
-                        const videoPath = `save-files/_gewetemp/${message.file.fileName}`
-                        await ffmpegUtil.extractThumbnail(videoPath, `save-files/_gewetemp/${message.file.fileName}.jpg`)
+                        const videoPath = `save-files/_temp/${message.file.fileName}`
+                        await ffmpegUtil.extractThumbnail(videoPath, `save-files/_temp/${message.file.fileName}.jpg`)
                         const fbv = FileBox.fromBuffer(message.file.file, message.file.fileName)
-                        const fbt = FileBox.fromFile(`save-files/_gewetemp/${message.file.fileName}.jpg`, message.file.fileName + '.jpg')
+                        const fbt = FileBox.fromFile(`save-files/_temp/${message.file.fileName}.jpg`, message.file.fileName + '.jpg')
                         file = new WeVideo({
                             thumbBase64: await fbt.toBase64(), // 视频封面
                             videoBase64: await fbv.toBase64(), // 视频文件url

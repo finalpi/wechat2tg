@@ -120,7 +120,7 @@ export class FileUtils {
 
     static saveFile(buff: Buffer,fileName: string) {
         const staticUrl = 'save-files'
-        const tempname = '_gewetemp'
+        const tempname = '_temp'
         const proxyUrl = config.CALLBACK_API
         const tempDir = join(staticUrl, tempname)
         // 检查 temp 目录是否存在，如果不存在则创建
