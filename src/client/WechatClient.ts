@@ -159,7 +159,7 @@ export class WeChatClient extends AbstractClient {
         return true
     }
 
-    private async loginSuccess() {
+    async loginSuccess() {
         this._wxInfo = await this.client.info()
         this.hasLogin = true
         const config = await this.configurationService.getConfig()

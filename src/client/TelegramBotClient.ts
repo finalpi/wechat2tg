@@ -982,14 +982,14 @@ ${this.i18n.t('help.instructions')}`))
         })
 
         bot.command('relogin', async ctx => {
-            const wxClient = TelegramBotClient.getSpyClient('wxClient')
+            const wxClient = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
 
             if (wxClient && wxClient.hasLogin) {
                 return ctx.reply(this.i18n.t('login.already_logged_in'))
             }
             const status = await wxClient.client.loginTwice()
             if (status) {
-                return ctx.reply(this.i18n.t('wechat.login_success'))
+                await wxClient.loginSuccess()
             } else {
                 return ctx.reply(this.i18n.t('login.failed'))
             }
