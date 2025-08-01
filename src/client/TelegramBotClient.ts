@@ -981,6 +981,20 @@ ${this.i18n.t('help.instructions')}`))
             }
         })
 
+        bot.command('relogin', async ctx => {
+            const wxClient = TelegramBotClient.getSpyClient('wxClient')
+
+            if (wxClient && wxClient.hasLogin) {
+                return ctx.reply(this.i18n.t('login.already_logged_in'))
+            }
+            const status = await wxClient.client.loginTwice()
+            if (status) {
+                return ctx.reply(this.i18n.t('wechat.login_success'))
+            } else {
+                return ctx.reply(this.i18n.t('login.failed'))
+            }
+        })
+
         bot.command('logout', async ctx => {
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 return ctx.reply(this.i18n.t('login.group_not_allowed'))
