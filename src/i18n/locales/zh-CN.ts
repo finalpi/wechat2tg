@@ -75,7 +75,7 @@ const zhCN = {
   'command.room': '查看微信群',
   'command.getqr': '获取我的二维码名片',
   'command.unbind': '解绑群组',
-  'command.quit': '退出并解绑群组',
+  'command.quit': '退出并解散群组',
   'wechat.scan_qr_code': '请扫描二维码登录,第一次登录加载时间较长，请耐心等待',
   'wechat.friend_request': '{{name}} 请求添加您为好友:\n  {{hello}}',
   'wechat.accept': '接受',

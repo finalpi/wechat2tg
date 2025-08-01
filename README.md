@@ -6,6 +6,9 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 
 ## Telegram Group: [@Wx2TgUserGroup](https://t.me/+AD02MEZa-og3ZGY1)
 
+> [!WARNING]
+> According to feedback, the Windows protocol has the risk of account suspension, please do not use this protocol
+
 ## Main Features
 
 1. Receive messages from WeChat personal chats, group chats, official accounts, and enterprise WeChat
@@ -110,7 +113,7 @@ Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot
 
 - `/login`: Get login QR code; the first person to send this command during initial deployment will become the bot owner
 
-- `/flogin`: Get file transfer assistant login QR code, supports receiving videos and files
+- `/logout`: Logout and delete login cache
 
 - `/update`: Update group avatar and nickname information
 
@@ -122,9 +125,17 @@ Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot
 
 - `/room`: Get WeChat group list; click the button to create a new group or bind a WeChat group (can search by name or remarks, e.g., `/room takeout` to find WeChat groups containing "takeout")
 
+- `/revoke`: Revoke message (reply to the message to be revoked)
+
+- `/relogin`: Secondary login (use only when unexpectedly logged out after login, try to login with previously cached login information)
+
+- `/getqr`: Get personal QR code information
+
 - `/settings`: Program settings
 
 - `/unbind`: Unbind WeChat group or WeChat user (only supported in group usage)
+
+- `/quit`: Exit and disband group
 
 ## Environment Variables
 
@@ -193,6 +204,16 @@ Custom message template placeholders:
 ## How to @everyone
 
 Send a message starting with `@all` to @everyone, only supports text messages @everyone
+
+---
+
+## Frequently Asked Questions
+
+### Why am I prompted to enter a verification code
+
+wx2tg-server needs to be in the same region as your login. If you encounter a verification code prompt, check if they are in the same region.
+
+If not in the same region, you can configure WeChat proxy login in environment variables, or migrate already logged Redis data.
 
 ## Participating in Development
 
