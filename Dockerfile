@@ -1,4 +1,9 @@
-FROM rust:buster as builder-gifski
+FROM rust:1.80 AS builder-gifski
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libpng-dev \
+    libimagequant-dev \
+    && rm -rf /var/lib/apt/lists/*
 RUN cargo install --locked --version 1.7.0 gifski
 
 FROM gcc:13 as builder-lottie-to-png
