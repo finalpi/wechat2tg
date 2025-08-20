@@ -1,5 +1,5 @@
-FROM rust:buster as builder-gifski
-RUN cargo install --version 1.7.0 gifski
+FROM rust:1.80-buster as builder-gifski
+RUN cargo install --locked --version 1.7.0 gifski
 
 FROM gcc:13 as builder-lottie-to-png
 
