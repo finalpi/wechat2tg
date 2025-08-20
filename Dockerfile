@@ -4,7 +4,10 @@ RUN apt-get update && apt-get install -y \
     libpng-dev \
     libimagequant-dev \
     && rm -rf /var/lib/apt/lists/*
-RUN cargo install --locked --version 1.7.0 gifski
+RUN git clone https://github.com/ImageOptim/gifski.git /gifski
+WORKDIR /gifski
+RUN cargo build --release
+RUN cp target/release/gifski /usr/bin/gifski
 
 FROM gcc:13 as builder-lottie-to-png
 
