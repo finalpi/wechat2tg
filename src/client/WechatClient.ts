@@ -280,6 +280,7 @@ export class WeChatClient extends AbstractClient {
         const i18n = I18n.getInstance()
 
         this.client.on('scan', qr => { // 需要用户扫码时返回对象qrcode.content为二维码内容 qrcode.url为转化好的图片地址
+            this.hasLogin = false
             this.configurationService.getConfig().then(config => {
                 QRCode.toBuffer(qr.content, {
                     width: 300

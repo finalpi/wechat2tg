@@ -12,6 +12,9 @@ redisdbnum = 7
 ocrurl = ""
 syncmessagebusinessuri = "http://wx2tg-v3:8056/message/callback/{0}"
 logoutbusinessuri = ""
+syncmessage = false
+msgpush = false
+rabbitmq = false
 
 sessionon = true
 

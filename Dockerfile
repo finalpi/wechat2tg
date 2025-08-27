@@ -1,5 +1,13 @@
-FROM rust:buster as builder-gifski
-RUN cargo install --version 1.7.0 gifski
+FROM rust:1.80 AS builder-gifski
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libpng-dev \
+    libimagequant-dev \
+    && rm -rf /var/lib/apt/lists/*
+RUN git clone https://github.com/ImageOptim/gifski.git /gifski
+WORKDIR /gifski
+RUN cargo build --release
+RUN cp target/release/gifski /usr/local/cargo/bin/gifski
 
 FROM gcc:13 as builder-lottie-to-png
 
