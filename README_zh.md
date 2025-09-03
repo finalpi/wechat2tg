@@ -78,6 +78,8 @@ services:
       - ./save-files:/app/save-files # 保存文件夹挂载后贴纸文件不需要重新转换
     env_file: ".env"
     restart: unless-stopped
+    depends_on:
+      - wx2tg-server
 
   wx2tg-server:
     image: finalpi/wx2tg-server:v3-latest # 拉取镜像
@@ -87,6 +89,8 @@ services:
     volumes:
       - ./conf:/usr/wic-go/conf
     restart: unless-stopped
+    depends_on:
+      - wx2tg-redis
 
   wx2tg-redis:
     image: redis:7.2
@@ -96,6 +100,11 @@ services:
     volumes:
       - ./redis-data:/data
     command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: unless-stopped
 ```
 
