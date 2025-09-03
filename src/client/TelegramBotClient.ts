@@ -403,20 +403,20 @@ export class TelegramBotClient extends AbstractClient {
 
     private onBotAction(bot: Telegraf) {
         // 数字键盘点击
-        bot.action(/num-(\d+)/, ctx => {
+        bot.action(/num-(.+)/, ctx => {
             const match = ctx.match[1]
-            if (match !== '100') {
-                this.phoneCode = this.phoneCode + match
-            } else {
+            if (match === '100') {
                 this.phoneCode = this.phoneCode.substring(0, this.phoneCode.length - 1)
+            } else {
+                this.phoneCode = this.phoneCode + match
             }
-            let inputCode = this.phoneCode
-            if (this.phoneCode.length < 5) {
-                for (let i = 0; i < 5 - this.phoneCode.length; i++) {
-                    inputCode = inputCode + '_ '
-                }
+            let inputCode
+            if (match === '#') {
+                inputCode = this.phoneCode.substring(0, this.phoneCode.length - 1)
+            }else {
+                inputCode = this.phoneCode
             }
-            ctx.editMessageText(`请输入你收到的验证码: ${inputCode}`, {
+            ctx.editMessageText(`${this.i18n.t('auth.verification_code_2')}: ${inputCode}`, {
                 reply_markup: {
                     inline_keyboard: [
                         [
@@ -435,8 +435,9 @@ export class TelegramBotClient extends AbstractClient {
                             {text: '9', callback_data: 'num-9'},
                         ],
                         [
+                            {text: 'Del⬅️', callback_data: 'num-100'},
                             {text: '0', callback_data: 'num-0'},
-                            {text: 'Del', callback_data: 'num-100'},
+                            {text: 'Sub✅', callback_data: 'num-#'},
                         ]
                     ]
                 }
@@ -1375,19 +1376,20 @@ ${this.i18n.t('help.instructions')}`))
                                     {text: '9', callback_data: 'num-9'}
                                 ],
                                 [
+                                    {text: 'Del⬅️', callback_data: 'num-100'},
                                     {text: '0', callback_data: 'num-0'},
-                                    {text: 'Del', callback_data: 'num--1'},
+                                    {text: 'Sub✅', callback_data: 'num-#'},
                                 ]
                             ]
                         }
                     }).then(res => {
                         const intervalId = setInterval(() => {
-                            if (this.phoneCode && this.phoneCode.length === 5) {
+                            if (this.phoneCode && this.phoneCode.endsWith('#')) {
                                 const phoneCode = this.phoneCode
                                 this.phoneCode = ''
                                 clearInterval(intervalId)
                                 this.client.telegram.deleteMessage(this.chatId, res.message_id)
-                                resolve(phoneCode)
+                                resolve(phoneCode.substring(0, phoneCode.length - 1))
                             }
                         }, 1000)
                     })
