@@ -1515,9 +1515,20 @@ ${this.i18n.t('help.instructions')}`))
         const messageEntity = this.createMessageEntity(message)
         await this.messageService.createOrUpdate(messageEntity)
 
-        const bindGroup = await this.bindGroupService.getByWxId(message.wxId)
-        if (!bindGroup) {
-            console.log(`[MessageBuffer] 文本消息发送失败: 未找到绑定群组 - ${message.id}`)
+        // 优先使用 message.chatId（已经在 WechatClient.onMessage 中设置好了）
+        // 只有在 chatId 无效时才通过 wxId 查询数据库
+        let targetChatId = message.chatId
+        if (!targetChatId) {
+            const bindGroup = await this.bindGroupService.getByWxId(message.wxId)
+            if (!bindGroup) {
+                console.log(`[MessageBuffer] 文本消息发送失败: 未找到绑定群组 - wxId=${message.wxId}, msgId=${message.id}`)
+                return false
+            }
+            targetChatId = bindGroup.chatId
+        }
+
+        if (!targetChatId) {
+            console.log(`[MessageBuffer] 文本消息发送失败: chatId 无效 - wxId=${message.wxId}, msgId=${message.id}`)
             return false
         }
 
@@ -1570,9 +1581,9 @@ ${this.i18n.t('help.instructions')}`))
                 const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, sendMsg)
                 try {
                     if (i == 0) {
-                        newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
+                        newMsg = await this.messageSender.sendText(targetChatId, sendTextFormat, option)
                     } else {
-                        await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
+                        await this.messageSender.sendText(targetChatId, sendTextFormat, option)
                     }
                     // 等待分片发送完成
                     await new Promise(resolve => setTimeout(resolve, 50))
@@ -1585,7 +1596,7 @@ ${this.i18n.t('help.instructions')}`))
             }
         } else {
             try {
-                newMsg = await this.messageSender.sendText(bindGroup.chatId, sendTextFormat, option)
+                newMsg = await this.messageSender.sendText(targetChatId, sendTextFormat, option)
             } catch (e) {
                 console.log(`[MessageBuffer] 文本消息发送失败: ${message.id} - ${e.message}`)
                 await this.dealException(e, message)
