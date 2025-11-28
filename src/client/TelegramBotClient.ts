@@ -1484,9 +1484,11 @@ ${this.i18n.t('help.instructions')}`))
                 }
             } catch (error) {
                 console.error(`[MessageOrder] 消息处理出错: ${message.id}`, error)
+                // 检查是否是超时错误
+                const isTimeoutError = this.isTimeoutError(error)
                 this.messageBufferService.markMessageAsFailed(messageId, async (msg) => {
                     return await this.sendTextMsgSynchronously(msg)
-                })
+                }, isTimeoutError)
             }
 
             // 增加延迟确保发送完全完成
@@ -1494,6 +1496,17 @@ ${this.i18n.t('help.instructions')}`))
         }
 
         this.isProcessingQueue = false
+    }
+
+    /**
+     * 检查错误是否是超时类型错误
+     * 超时错误时消息可能已经发送成功，不应该重试
+     */
+    private isTimeoutError(error: any): boolean {
+        return error.code === 'ETIMEDOUT' ||
+               error.code === 'ECONNRESET' ||
+               error.code === 'ESOCKETTIMEDOUT' ||
+               (error.message && error.message.includes('timeout'))
     }
 
     // 新增：同步发送文本消息，确保严格顺序
