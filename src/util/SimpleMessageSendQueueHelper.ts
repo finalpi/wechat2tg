@@ -49,24 +49,38 @@ export class SimpleMessageSendQueueHelper {
             const sendMessage = this.messageQueue.shift()
             if (sendMessage && sendMessage.success !== true && sendMessage.sending !== true) {
                 sendMessage.sending = true
-                this.sendFunction(...sendMessage.message).then(() => {
+                try {
+                    // 使用 await 确保发送完成后再处理下一条消息
+                    await this.sendFunction(...sendMessage.message)
                     sendMessage.success = true
                     sendMessage.sending = false
                     sendMessage.message = []
-                }).catch(async e => {
-                    console.error(e)
+                } catch (e) {
+                    console.error('消息发送失败:', e)
                     sendMessage.success = false
                     sendMessage.sending = false
-                    if (sendMessage.retries_number < this.messageMaxRetries) {
+
+                    // 检查是否是网络超时错误（这种情况消息可能已经发送成功）
+                    const isTimeoutError = e.code === 'ETIMEDOUT' ||
+                                          e.code === 'ECONNRESET' ||
+                                          e.code === 'ESOCKETTIMEDOUT' ||
+                                          (e.message && e.message.includes('timeout'))
+
+                    // 只有非超时错误才重试，超时错误可能消息已发送成功
+                    if (!isTimeoutError && sendMessage.retries_number < this.messageMaxRetries) {
                         sendMessage.retries_number++
-                        this.messageQueue.push(sendMessage)
+                        // 延迟重试，避免立即重试
+                        setTimeout(() => {
+                            this.messageQueue.push(sendMessage)
+                        }, 2000 * sendMessage.retries_number) // 指数退避
+                    } else if (isTimeoutError) {
+                        console.warn(`消息可能已发送（超时），跳过重试: msg_id=${sendMessage.msg_id}`)
                     }
-                }).finally(() => {
-                    sendMessage.sending = false
-                })
-            } else if (!sendMessage.success && sendMessage.time.getTime() + this.interval < new Date().getTime()) {
+                }
+            } else if (sendMessage && !sendMessage.success && sendMessage.time.getTime() + this.interval < new Date().getTime()) {
                 this.messageQueue.push(sendMessage)
             }
+            // 在异步操作完成后才重置标志
             this.processFlag = false
         }
     }
@@ -100,19 +114,19 @@ export class SimpleMessageSendQueueHelper {
      */
     destroy(): void {
         console.log('正在销毁SimpleMessageSendQueueHelper...')
-        
+
         // 清理定时器
         if (this.processInterval) {
             clearInterval(this.processInterval)
             this.processInterval = null
         }
-        
+
         // 清空队列
         this.clearQueue()
-        
+
         // 重置处理标志
         this.processFlag = false
-        
+
         console.log('SimpleMessageSendQueueHelper已销毁')
     }
 }

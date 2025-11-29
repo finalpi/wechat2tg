@@ -132,8 +132,9 @@ export class TelegramGroupOperateService {
 
     // 创建并绑定群组
     public async createGroup(contactOrRoom: BindGroup): Promise<BindGroup> {
-        const item = this.createGroupQueue.find(value => contactOrRoom.chatId === value.chatId)
-        if (item) {
+        // 使用 wxId 来去重，而不是 chatId（因为新建群组时 chatId 可能是 undefined）
+        const item = this.createGroupQueue.find(value => contactOrRoom.wxId && contactOrRoom.wxId === value.wxId)
+        if (item && item.chatId) {
             return item
         }
         this.createGroupQueue.push(contactOrRoom)
@@ -146,45 +147,69 @@ export class TelegramGroupOperateService {
             // 删除之前绑定过的群组
             await this.bindGroupService.removeByChatIdOrWxId(contactOrRoom.chatId, contactOrRoom.wxId)
         }
+
+        // 检查 client 是否可用
+        if (!this.client) {
+            console.error('[TelegramGroupOperateService] 创建群组失败: Telegram User Client 未连接')
+            this.createGroupQueue = this.createGroupQueue.filter(i => i.wxId !== contactOrRoom.wxId)
+            return null
+        }
+
         // 创建群组
         const config = await this.configService.getConfig()
         if (!contactOrRoom.name) {
             contactOrRoom.name = '未命名'
         }
-        const result = await this.client?.invoke(
-            new Api.messages.CreateChat({
-                users: [config.chatId, config.botId],
-                title: contactOrRoom.name,
-                ttlPeriod: 0
-            })
-        )
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        const id = result?.updates.chats[0].id
-        contactOrRoom.chatId = 0 - id.valueOf()
-        // 设置管理员
-        this.client?.invoke(
-            new Api.messages.EditChatAdmin({
-                chatId: id,
-                userId: config.botId,
-                isAdmin: true
-            })
-        )
-        let bindGroup = new BindGroup()
-        bindGroup.chatId = contactOrRoom.chatId
-        bindGroup.name = contactOrRoom.name
-        bindGroup.type = contactOrRoom.type
-        bindGroup.alias = contactOrRoom.alias
-        bindGroup.wxId = contactOrRoom.wxId
-        bindGroup = await this.bindGroupService.createOrUpdate(bindGroup)
 
-        // 更新信息
-        await this.updateGroup(contactOrRoom)
-        // 添加到文件夹
-        this.addToFolder(bindGroup.chatId)
-        this.createGroupQueue = this.createGroupQueue.filter(i => i.chatId !== contactOrRoom.chatId)
-        // 添加绑定
-        return bindGroup
+        try {
+            const result = await this.client.invoke(
+                new Api.messages.CreateChat({
+                    users: [config.chatId, config.botId],
+                    title: contactOrRoom.name,
+                    ttlPeriod: 0
+                })
+            )
+
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            const id = result?.updates?.chats?.[0]?.id
+            if (!id) {
+                console.error('[TelegramGroupOperateService] 创建群组失败: 无法获取群组ID')
+                this.createGroupQueue = this.createGroupQueue.filter(i => i.wxId !== contactOrRoom.wxId)
+                return null
+            }
+
+            contactOrRoom.chatId = 0 - id.valueOf()
+
+            // 设置管理员
+            this.client.invoke(
+                new Api.messages.EditChatAdmin({
+                    chatId: id,
+                    userId: config.botId,
+                    isAdmin: true
+                })
+            )
+
+            let bindGroup = new BindGroup()
+            bindGroup.chatId = contactOrRoom.chatId
+            bindGroup.name = contactOrRoom.name
+            bindGroup.type = contactOrRoom.type
+            bindGroup.alias = contactOrRoom.alias
+            bindGroup.wxId = contactOrRoom.wxId
+            bindGroup = await this.bindGroupService.createOrUpdate(bindGroup)
+
+            // 更新信息
+            await this.updateGroup(contactOrRoom)
+            // 添加到文件夹
+            this.addToFolder(bindGroup.chatId)
+            this.createGroupQueue = this.createGroupQueue.filter(i => i.wxId !== contactOrRoom.wxId)
+            // 添加绑定
+            return bindGroup
+        } catch (e) {
+            console.error('[TelegramGroupOperateService] 创建群组失败:', e)
+            this.createGroupQueue = this.createGroupQueue.filter(i => i.wxId !== contactOrRoom.wxId)
+            return null
+        }
     }
 
     async quitChat(chatId: any): Promise<void> {

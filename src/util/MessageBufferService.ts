@@ -81,10 +81,26 @@ export class MessageBufferService {
 
     /**
      * 标记消息发送失败并尝试重发
+     * @param messageId 消息ID
+     * @param sendCallback 发送回调函数
+     * @param isTimeoutError 是否是超时错误（超时时消息可能已成功发送）
      */
-    markMessageAsFailed(messageId: string, sendCallback: (message: BaseMessage) => Promise<boolean>): void {
+    markMessageAsFailed(messageId: string, sendCallback: (message: BaseMessage) => Promise<boolean>, isTimeoutError = false): void {
         const bufferedMessage = this.messageBuffer.get(messageId)
         if (!bufferedMessage) return
+
+        // 如果是超时错误，消息可能已经发送成功，标记为已发送并记录警告
+        if (isTimeoutError) {
+            this.logger.warn(`消息可能已发送（超时），跳过重试并标记为已发送: ${messageId}`)
+            bufferedMessage.status = 'sent'
+            // 延迟删除
+            const deleteTimeout = setTimeout(() => {
+                this.messageBuffer.delete(messageId)
+                this.deleteTimeouts.delete(messageId)
+            }, 10000)
+            this.deleteTimeouts.set(messageId, deleteTimeout)
+            return
+        }
 
         bufferedMessage.retryCount++
         bufferedMessage.status = 'failed'
@@ -106,7 +122,12 @@ export class MessageBufferService {
                     }
                 } catch (error) {
                     this.logger.error(`重试发送消息失败: ${messageId}`, error)
-                    this.markMessageAsFailed(messageId, sendCallback)
+                    // 检查是否是超时错误
+                    const isTimeout = error.code === 'ETIMEDOUT' ||
+                                     error.code === 'ECONNRESET' ||
+                                     error.code === 'ESOCKETTIMEDOUT' ||
+                                     (error.message && error.message.includes('timeout'))
+                    this.markMessageAsFailed(messageId, sendCallback, isTimeout)
                 } finally {
                     this.retryTimeouts.delete(messageId)
                 }
