@@ -1,11 +1,13 @@
+import {config} from '../config'
+
 export class SimpleMessageSendQueueHelper {
     private sendFunction: (...args) => Promise<any>
     private interval: number
     private messageQueue: SendMessageWarps[] = []
     private loopTime = 503
     private processFlag = false
-    // 消息最大重试次数
-    private messageMaxRetries = 2
+    // 消息最大重试次数，从配置读取，0 表示无限重试
+    private messageMaxRetries = config.SEND_TO_WX_MAX_RETRIES
     // 添加定时器引用管理
     private processInterval: NodeJS.Timeout | null = null
 
@@ -13,6 +15,7 @@ export class SimpleMessageSendQueueHelper {
         this.sendFunction = sendFunction
         this.interval = interval
         this.startSend()
+        console.log(`[SimpleMessageSendQueueHelper] 初始化完成，最大重试次数: ${this.messageMaxRetries === 0 ? '无限' : this.messageMaxRetries}`)
     }
 
     public addMessageWithMsgId(msgId: number, ...message: any): void {
@@ -67,14 +70,20 @@ export class SimpleMessageSendQueueHelper {
                                           (e.message && e.message.includes('timeout'))
 
                     // 只有非超时错误才重试，超时错误可能消息已发送成功
-                    if (!isTimeoutError && sendMessage.retries_number < this.messageMaxRetries) {
+                    // messageMaxRetries === 0 表示无限重试
+                    const shouldRetry = this.messageMaxRetries === 0 || sendMessage.retries_number < this.messageMaxRetries
+                    if (!isTimeoutError && shouldRetry) {
                         sendMessage.retries_number++
-                        // 延迟重试，避免立即重试
+                        // 延迟重试，避免立即重试，最大延迟 30 秒
+                        const delay = Math.min(2000 * sendMessage.retries_number, 30000)
+                        console.log(`[SimpleMessageSendQueueHelper] 消息发送失败，${delay}ms 后重试 (${sendMessage.retries_number}/${this.messageMaxRetries === 0 ? '∞' : this.messageMaxRetries}): msg_id=${sendMessage.msg_id}`)
                         setTimeout(() => {
                             this.messageQueue.push(sendMessage)
-                        }, 2000 * sendMessage.retries_number) // 指数退避
+                        }, delay)
                     } else if (isTimeoutError) {
-                        console.warn(`消息可能已发送（超时），跳过重试: msg_id=${sendMessage.msg_id}`)
+                        console.warn(`[SimpleMessageSendQueueHelper] 消息可能已发送（超时），跳过重试: msg_id=${sendMessage.msg_id}`)
+                    } else {
+                        console.error(`[SimpleMessageSendQueueHelper] 消息重试次数已达上限，放弃发送: msg_id=${sendMessage.msg_id}`)
                     }
                 }
             } else if (sendMessage && !sendMessage.success && sendMessage.time.getTime() + this.interval < new Date().getTime()) {
