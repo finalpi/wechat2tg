@@ -40,6 +40,8 @@ export class WeChatClient extends AbstractClient {
     private _wxInfo
     // 登陆时间
     private startTime
+    // 正在创建的群组 Map，用于防止并发创建重复群组
+    private creatingGroups: Map<string, Promise<BindGroup>> = new Map()
 
     private static instance = undefined
 
@@ -380,6 +382,13 @@ export class WeChatClient extends AbstractClient {
         if (wxId && wxId.startsWith('gh_') && !configuration.receivePublicAccount) {
             return
         }
+        // 公众号仅接收通知消息模式
+        if (wxId && wxId.startsWith('gh_') && configuration.onlyReceiveOfficialNotify) {
+            const sourceText = msg.text()
+            if (sourceText && !sourceText.includes('<notify_msg')) {
+                return
+            }
+        }
         // 企业微信 wxId
         if (!wxId) {
             wxId = msg.fromId
@@ -391,39 +400,62 @@ export class WeChatClient extends AbstractClient {
         let bindGroup = await this.bindGroupService.getByWxId(wxId)
         // 如果找不到就创建一个新的群组
         if (!bindGroup && wxId !== this._wxInfo.wxid) {
-            bindGroup = new BindGroup()
-            bindGroup.wxId = wxId
-            bindGroup.isReceive = true
-            if (room) {
-                bindGroup.type = 1
-                bindGroup.name = room.name
-                bindGroup.alias = room.remark
-                const avatar = await room.avatar()
-                bindGroup.avatarLink = avatar.url
-                if (!bindGroup.name) {
-                    bindGroup.name = '未命名群聊'
-                }
+            // 检查是否正在创建该群组
+            if (this.creatingGroups.has(wxId)) {
+                // 等待正在进行的创建操作完成
+                bindGroup = await this.creatingGroups.get(wxId)
             } else {
-                bindGroup.type = 0
-                bindGroup.name = contact.name()
-                if (alias !== bindGroup.name) {
-                    bindGroup.alias = contact._alias
-                }
-                bindGroup.avatarLink = await contact.avatar()
-                if (wxId.includes('@openim')) {
-                    // 企业微信
-                    if (bindGroup.name === 'no name') {
-                        bindGroup.name = msg._pushContent.split(':')[0].slice(0, -1)
+                // 创建新的群组
+                const createPromise = (async () => {
+                    try {
+                        // 再次检查数据库，防止在等待期间已经被创建
+                        let existingGroup = await this.bindGroupService.getByWxId(wxId)
+                        if (existingGroup) {
+                            return existingGroup
+                        }
+
+                        const newBindGroup = new BindGroup()
+                        newBindGroup.wxId = wxId
+                        newBindGroup.isReceive = true
+                        if (room) {
+                            newBindGroup.type = 1
+                            newBindGroup.name = room.name
+                            newBindGroup.alias = room.remark
+                            const avatar = await room.avatar()
+                            newBindGroup.avatarLink = avatar.url
+                            if (!newBindGroup.name) {
+                                newBindGroup.name = '未命名群聊'
+                            }
+                        } else {
+                            newBindGroup.type = 0
+                            newBindGroup.name = contact.name()
+                            if (alias !== newBindGroup.name) {
+                                newBindGroup.alias = contact._alias
+                            }
+                            newBindGroup.avatarLink = await contact.avatar()
+                            if (wxId.includes('@openim')) {
+                                // 企业微信
+                                if (newBindGroup.name === 'no name') {
+                                    newBindGroup.name = msg._pushContent.split(':')[0].slice(0, -1)
+                                }
+                                newBindGroup.avatarLink = 'https://raw.githubusercontent.com/finalpi/wechat2tg/wx2tg-pad/qywx.jpg'
+                            }
+                            if (wxId === 'app') {
+                                // 服务通知
+                                newBindGroup.name = I18n.getInstance().t('wechat.service_notification')
+                                newBindGroup.avatarLink = 'https://raw.githubusercontent.com/finalpi/wechat2tg/wx2tg-pad/fwtz.png'
+                            }
+                        }
+                        return await this.groupOperate.createGroup(newBindGroup)
+                    } finally {
+                        // 创建完成后从 Map 中移除
+                        this.creatingGroups.delete(wxId)
                     }
-                    bindGroup.avatarLink = 'https://raw.githubusercontent.com/finalpi/wechat2tg/wx2tg-pad/qywx.jpg'
-                }
-                if (wxId === 'app') {
-                    // 服务通知
-                    bindGroup.name = I18n.getInstance().t('wechat.service_notification')
-                    bindGroup.avatarLink = 'https://raw.githubusercontent.com/finalpi/wechat2tg/wx2tg-pad/fwtz.png'
-                }
+                })()
+                
+                this.creatingGroups.set(wxId, createPromise)
+                bindGroup = await createPromise
             }
-            bindGroup = await this.groupOperate.createGroup(bindGroup)
         }
         if (!bindGroup) {
             return

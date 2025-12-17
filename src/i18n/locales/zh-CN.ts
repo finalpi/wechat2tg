@@ -14,6 +14,7 @@ const zhCN = {
   'settings.language': 'Language',
   'settings.language_changed': '语言已切换为中文',
   'settings.receive_public_account': '接收公众号消息',
+  'settings.only_receive_official_notify': '公众号仅接收通知消息',
   'settings.emoji_picture': '微信emoji以图片链接显示',
   'settings.self_message': '转发自己在微信发送的消息',
   'settings.sync_wechat': '启动时同步群组信息',

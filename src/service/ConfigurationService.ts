@@ -44,6 +44,9 @@ export class ConfigurationService {
         // 公众号消息
         this.setBooleanOptions(settingMap, 'receivePublicAccount', config.receivePublicAccount, this.i18n.t('settings.receive_public_account'))
 
+        // 公众号仅接收通知消息
+        this.setBooleanOptions(settingMap, 'onlyReceiveOfficialNotify', config.onlyReceiveOfficialNotify, this.i18n.t('settings.only_receive_official_notify'))
+
         // 原始 emoji 是否以图片链接方式显示
         this.setBooleanOptions(settingMap, 'emojiPicture', config.emojiPicture, this.i18n.t('settings.emoji_picture'))
 
