@@ -14,6 +14,7 @@ const enUS = {
   'settings.language': 'Language',
   'settings.language_changed': 'Language changed to English',
   'settings.receive_public_account': 'Receive public account messages',
+  'settings.only_receive_official_notify': 'Only receive notification messages from official accounts',
   'settings.emoji_picture': 'Display WeChat emoji as image links',
   'settings.self_message': 'Forward messages sent by yourself in WeChat',
   'settings.sync_wechat': 'Sync group info on startup',

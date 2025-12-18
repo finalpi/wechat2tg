@@ -1,5 +1,6 @@
 import BaseMessage from '../base/BaseMessage'
 import {LogUtils} from './LogUtil'
+import {config} from '../config'
 
 interface BufferedMessage {
     id: string
@@ -12,10 +13,13 @@ interface BufferedMessage {
 export class MessageBufferService {
     private static instance: MessageBufferService
     private messageBuffer: Map<string, BufferedMessage> = new Map()
-    private readonly MAX_RETRY_COUNT = 3
-    private readonly RETRY_DELAY = 5000 // 5秒
+    // 从配置读取，0 表示无限重试
+    private readonly MAX_RETRY_COUNT = config.SEND_TO_TG_MAX_RETRIES
+    // 重试延迟基数（毫秒）
+    private readonly RETRY_DELAY = config.SEND_TO_TG_RETRY_DELAY
     private readonly BUFFER_CLEANUP_INTERVAL = 60000 // 1分钟
-    private readonly MESSAGE_EXPIRE_TIME = 300000 // 5分钟
+    // 消息过期时间
+    private readonly MESSAGE_EXPIRE_TIME = config.MESSAGE_BUFFER_EXPIRE_TIME
     private logger = LogUtils.config().getLogger('MessageBuffer')
 
     // 添加定时器引用管理
@@ -89,8 +93,9 @@ export class MessageBufferService {
         const bufferedMessage = this.messageBuffer.get(messageId)
         if (!bufferedMessage) return
 
-        // 如果是超时错误，消息可能已经发送成功，标记为已发送并记录警告
-        if (isTimeoutError) {
+        // 修改：超时错误也应该重试，但使用更长的重试延迟
+        // 只有在无限重试模式下才会继续重试超时错误
+        if (isTimeoutError && this.MAX_RETRY_COUNT !== 0) {
             this.logger.warn(`消息可能已发送（超时），跳过重试并标记为已发送: ${messageId}`)
             bufferedMessage.status = 'sent'
             // 延迟删除
@@ -102,14 +107,22 @@ export class MessageBufferService {
             return
         }
 
+        if (isTimeoutError) {
+            this.logger.warn(`消息发送超时，但在无限重试模式下将继续重试: ${messageId}`)
+        }
+
         bufferedMessage.retryCount++
         bufferedMessage.status = 'failed'
 
-        if (bufferedMessage.retryCount <= this.MAX_RETRY_COUNT) {
-            this.logger.warn(`消息发送失败，准备重试 (${bufferedMessage.retryCount}/${this.MAX_RETRY_COUNT}): ${messageId}`)
+        // MAX_RETRY_COUNT === 0 表示无限重试
+        const shouldRetry = this.MAX_RETRY_COUNT === 0 || bufferedMessage.retryCount <= this.MAX_RETRY_COUNT
+        const maxRetryDisplay = this.MAX_RETRY_COUNT === 0 ? '∞' : this.MAX_RETRY_COUNT
 
-            // 指数退避重试
-            const retryDelay = this.RETRY_DELAY * Math.pow(2, bufferedMessage.retryCount - 1)
+        if (shouldRetry) {
+            this.logger.warn(`消息发送失败，准备重试 (${bufferedMessage.retryCount}/${maxRetryDisplay}): ${messageId}`)
+
+            // 指数退避重试，最大延迟 60 秒
+            const retryDelay = Math.min(this.RETRY_DELAY * Math.pow(2, bufferedMessage.retryCount - 1), 60000)
 
             const retryTimeout = setTimeout(async () => {
                 try {
@@ -176,8 +189,9 @@ export class MessageBufferService {
      * 重新发送所有失败的消息
      */
     async retryFailedMessages(sendCallback: (message: BaseMessage) => Promise<boolean>): Promise<void> {
+        // MAX_RETRY_COUNT === 0 表示无限重试
         const failedMessages = Array.from(this.messageBuffer.values()).filter(
-            msg => msg.status === 'failed' && msg.retryCount < this.MAX_RETRY_COUNT
+            msg => msg.status === 'failed' && (this.MAX_RETRY_COUNT === 0 || msg.retryCount < this.MAX_RETRY_COUNT)
         )
 
         this.logger.info(`开始重发 ${failedMessages.length} 条失败消息`)
@@ -210,6 +224,12 @@ export class MessageBufferService {
 
         for (const [messageId, bufferedMessage] of this.messageBuffer.entries()) {
             if (now - bufferedMessage.timestamp > this.MESSAGE_EXPIRE_TIME) {
+                // 在无限重试模式下，不清理还在重试的消息（pending 或 failed 状态）
+                if (this.MAX_RETRY_COUNT === 0 && (bufferedMessage.status === 'pending' || bufferedMessage.status === 'failed')) {
+                    this.logger.warn(`消息已过期但在无限重试模式下保留: ${messageId}，状态: ${bufferedMessage.status}，重试次数: ${bufferedMessage.retryCount}`)
+                    continue
+                }
+
                 // 清理相关的定时器
                 const retryTimeout = this.retryTimeouts.get(messageId)
                 if (retryTimeout) {

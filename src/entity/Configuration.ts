@@ -58,6 +58,12 @@ export class Configuration {
     })
     autoTranscript: boolean
 
+    // 公众号消息仅接收通知消息
+    @Column({
+        default: false
+    })
+    onlyReceiveOfficialNotify: boolean
+
     // 界面语言设置
     @Column({
         default: 'zh-CN'

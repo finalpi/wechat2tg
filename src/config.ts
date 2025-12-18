@@ -35,6 +35,19 @@ export const config = {
     WX_PROXY_HOST: process.env.WX_PROXY_HOST?.toString() || '',
     WX_PROXY_USERNAME: process.env.WX_PROXY_USERNAME?.toString() || '',
     WX_PROXY_PASSWORD: process.env.WX_PROXY_PASSWORD?.toString() || '',
+
+    // 消息发送重试配置
+    // 发送到微信的消息重试次数，0 表示无限重试
+    SEND_TO_WX_MAX_RETRIES: parseInt(process.env.SEND_TO_WX_MAX_RETRIES || '3'),
+    // 发送到微信的消息超时时间（毫秒）
+    SEND_TO_WX_TIMEOUT: parseInt(process.env.SEND_TO_WX_TIMEOUT || '30000'),
+
+    // 发送到 Telegram 的消息重试次数，0 表示无限重试
+    SEND_TO_TG_MAX_RETRIES: parseInt(process.env.SEND_TO_TG_MAX_RETRIES || '3'),
+    // 发送到 Telegram 的消息重试延迟基数（毫秒），实际延迟 = 基数 * 2^(重试次数-1)
+    SEND_TO_TG_RETRY_DELAY: parseInt(process.env.SEND_TO_TG_RETRY_DELAY || '5000'),
+    // 消息缓冲区过期时间（毫秒），超过此时间的消息将被清理
+    MESSAGE_BUFFER_EXPIRE_TIME: parseInt(process.env.MESSAGE_BUFFER_EXPIRE_TIME || '300000'),
 }
 
 export const useProxy = config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== ''
