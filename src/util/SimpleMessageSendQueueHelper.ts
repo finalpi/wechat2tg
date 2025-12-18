@@ -15,7 +15,6 @@ export class SimpleMessageSendQueueHelper {
         this.sendFunction = sendFunction
         this.interval = interval
         this.startSend()
-        console.log(`[SimpleMessageSendQueueHelper] 初始化完成，最大重试次数: ${this.messageMaxRetries === 0 ? '无限' : this.messageMaxRetries}`)
     }
 
     public addMessageWithMsgId(msgId: number, ...message: any): void {

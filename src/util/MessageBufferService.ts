@@ -32,7 +32,6 @@ export class MessageBufferService {
         this.cleanupInterval = setInterval(() => {
             this.cleanupExpiredMessages()
         }, this.BUFFER_CLEANUP_INTERVAL)
-        this.logger.info(`MessageBufferService 初始化完成，最大重试次数: ${this.MAX_RETRY_COUNT === 0 ? '无限' : this.MAX_RETRY_COUNT}，重试延迟基数: ${this.RETRY_DELAY}ms，消息过期时间: ${this.MESSAGE_EXPIRE_TIME}ms`)
     }
 
     static getInstance(): MessageBufferService {
