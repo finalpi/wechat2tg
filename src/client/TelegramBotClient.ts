@@ -1599,6 +1599,7 @@ ${this.i18n.t('help.instructions')}`))
                 newMsg = await this.messageSender.sendText(targetChatId, sendTextFormat, option)
             } catch (e) {
                 console.log(`[MessageBuffer] 文本消息发送失败: ${message.id} - ${e.message}`)
+                console.log(`[MessageBuffer] 错误详情: chatId=${targetChatId}, wxMsgId=${message.id}, error_code=${e.response?.error_code}, error=${e.code || e.name}`)
                 await this.dealException(e, message)
                 success = false
             }
@@ -1608,6 +1609,9 @@ ${this.i18n.t('help.instructions')}`))
         if (newMsg && success) {
             messageEntity.tgBotMsgId = parseInt(newMsg.message_id + '')
             await this.messageService.createOrUpdate(messageEntity)
+            console.log(`[MessageBuffer] 文本消息发送成功: wxMsgId=${message.id}, tgBotMsgId=${messageEntity.tgBotMsgId}`)
+        } else if (!success) {
+            console.log(`[MessageBuffer] 消息保存到数据库但 tgBotMsgId=0: wxMsgId=${message.id}, chatId=${targetChatId}`)
         }
 
         return success

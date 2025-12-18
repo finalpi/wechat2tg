@@ -94,8 +94,9 @@ export class MessageBufferService {
         const bufferedMessage = this.messageBuffer.get(messageId)
         if (!bufferedMessage) return
 
-        // 如果是超时错误，消息可能已经发送成功，标记为已发送并记录警告
-        if (isTimeoutError) {
+        // 修改：超时错误也应该重试，但使用更长的重试延迟
+        // 只有在无限重试模式下才会继续重试超时错误
+        if (isTimeoutError && this.MAX_RETRY_COUNT !== 0) {
             this.logger.warn(`消息可能已发送（超时），跳过重试并标记为已发送: ${messageId}`)
             bufferedMessage.status = 'sent'
             // 延迟删除
@@ -105,6 +106,10 @@ export class MessageBufferService {
             }, 10000)
             this.deleteTimeouts.set(messageId, deleteTimeout)
             return
+        }
+
+        if (isTimeoutError) {
+            this.logger.warn(`消息发送超时，但在无限重试模式下将继续重试: ${messageId}`)
         }
 
         bufferedMessage.retryCount++
@@ -220,6 +225,12 @@ export class MessageBufferService {
 
         for (const [messageId, bufferedMessage] of this.messageBuffer.entries()) {
             if (now - bufferedMessage.timestamp > this.MESSAGE_EXPIRE_TIME) {
+                // 在无限重试模式下，不清理还在重试的消息（pending 或 failed 状态）
+                if (this.MAX_RETRY_COUNT === 0 && (bufferedMessage.status === 'pending' || bufferedMessage.status === 'failed')) {
+                    this.logger.warn(`消息已过期但在无限重试模式下保留: ${messageId}，状态: ${bufferedMessage.status}，重试次数: ${bufferedMessage.retryCount}`)
+                    continue
+                }
+
                 // 清理相关的定时器
                 const retryTimeout = this.retryTimeouts.get(messageId)
                 if (retryTimeout) {
