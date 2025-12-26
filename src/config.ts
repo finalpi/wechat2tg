@@ -48,6 +48,12 @@ export const config = {
     SEND_TO_TG_RETRY_DELAY: parseInt(process.env.SEND_TO_TG_RETRY_DELAY || '5000'),
     // 消息缓冲区过期时间（毫秒），超过此时间的消息将被清理
     MESSAGE_BUFFER_EXPIRE_TIME: parseInt(process.env.MESSAGE_BUFFER_EXPIRE_TIME || '300000'),
+
+    // 自动删除旧消息配置
+    // 是否启用自动删除数据库中的旧消息
+    AUTO_DELETE_OLD_MESSAGES: process.env.AUTO_DELETE_OLD_MESSAGES === 'true' ? true : false,
+    // 消息保留天数，超过此天数的消息将被自动删除
+    MESSAGE_RETENTION_DAYS: parseInt(process.env.MESSAGE_RETENTION_DAYS || '7'),
 }
 
 export const useProxy = config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== ''

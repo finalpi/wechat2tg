@@ -31,4 +31,12 @@ export class MessageService {
     async getByFhMsgId(fhMsgId: string) {
         return await this.repository.getByFhMsgId(fhMsgId)
     }
+
+    // 删除指定天数之前的旧消息
+    async deleteOldMessages(days: number): Promise<number> {
+        const now = Date.now()
+        const retentionTime = days * 24 * 60 * 60 * 1000 // 将天数转换为毫秒
+        const beforeTimestamp = now - retentionTime
+        return await this.repository.deleteOldMessages(beforeTimestamp)
+    }
 }

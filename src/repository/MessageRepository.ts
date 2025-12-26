@@ -37,4 +37,15 @@ export class MessageRepository {
             fhMsgId: getByFhMsgId
         })
     }
+
+    // 删除指定时间之前的旧消息
+    async deleteOldMessages(beforeTimestamp: number) {
+        const result = await this.repository
+            .createQueryBuilder()
+            .delete()
+            .where('createTime < :timestamp', { timestamp: beforeTimestamp })
+            .andWhere('createTime IS NOT NULL')
+            .execute()
+        return result.affected || 0
+    }
 }
