@@ -312,6 +312,14 @@ export class TelegramBotClient extends AbstractClient {
     private isProcessingQueue = false
     // i18n实例
     private i18n = I18n.getInstance()
+    // Telegram Bot 连接状态管理
+    private isConnected = false
+    private isReconnecting = false
+    private reconnectAttempts = 0
+    private readonly MAX_RECONNECT_ATTEMPTS = 10
+    private readonly RECONNECT_BASE_DELAY = 5000 // 5秒基础延迟
+    private healthCheckInterval: NodeJS.Timeout | null = null
+    private readonly HEALTH_CHECK_INTERVAL = 60000 // 60秒检查一次
 
     static getInstance(): TelegramBotClient {
         if (!TelegramBotClient.instance) {
@@ -324,7 +332,7 @@ export class TelegramBotClient extends AbstractClient {
         super()
         // 重新初始化 logger，使用更具体的类别名
         this.logger = LogUtils.config().getLogger('TelegramBot')
-        
+
         if (config.PROTOCOL === 'socks5' && config.HOST !== '' && config.PORT !== '') {
             const info = {
                 hostname: config.HOST,
@@ -1411,29 +1419,217 @@ ${this.i18n.t('help.instructions')}`))
 
     private async botLaunch(bot: Telegraf, retryCount = 5) {
         if (retryCount >= 0) {
-            bot.launch(() => {
-                // 保存 botID
-                this.configurationService.getConfig().then(config => {
-                    if (!config.botId || config.botId == 0) {
-                        const botId = this.client.botInfo.id
-                        config.botId = botId
-                        this.configurationService.saveConfig(config)
-                    }
-                    this.hasLogin = true
-                    if (config.chatId > 0) {
-                        this.loginUserClient()
-                        // 登录 botMTP 客户端
-                        this.loginMTPClient()
-                    }
+            try {
+                await bot.launch(() => {
+                    // 保存 botID
+                    this.configurationService.getConfig().then(config => {
+                        if (!config.botId || config.botId == 0) {
+                            const botId = this.client.botInfo.id
+                            config.botId = botId
+                            this.configurationService.saveConfig(config)
+                        }
+                        this.hasLogin = true
+                        if (config.chatId > 0) {
+                            this.loginUserClient()
+                            // 登录 botMTP 客户端
+                            this.loginMTPClient()
+                        }
+                    })
                 })
-            }).then(() => {
-                // 启动后做的事情
-            }).catch(error => {
-                this.botLaunch(bot, retryCount - 1)
-            })
+
+                // 启动成功
+                this.isConnected = true
+                this.reconnectAttempts = 0
+                this.logger.info('Telegram Bot 启动成功，开始监听消息')
+
+                // 启动健康检查
+                this.startHealthCheck()
+
+                // 设置错误处理
+                this.setupErrorHandlers(bot)
+
+            } catch (error) {
+                this.logger.error(`Telegram Bot 启动失败 (剩余重试次数: ${retryCount}):`, error)
+                this.isConnected = false
+
+                if (retryCount > 0) {
+                    const delay = this.RECONNECT_BASE_DELAY * (6 - retryCount)
+                    this.logger.info(`${delay}ms 后重试启动...`)
+                    await new Promise(resolve => setTimeout(resolve, delay))
+                    await this.botLaunch(bot, retryCount - 1)
+                } else {
+                    this.logger.error('Telegram Bot 启动失败，已达最大重试次数')
+                    throw error
+                }
+            }
         }
-        process.once('SIGINT', () => bot.stop('SIGINT'))
-        process.once('SIGTERM', () => bot.stop('SIGTERM'))
+
+        // 优雅退出处理
+        process.once('SIGINT', () => {
+            this.logger.info('收到 SIGINT 信号，正在关闭...')
+            this.cleanup()
+            bot.stop('SIGINT')
+        })
+        process.once('SIGTERM', () => {
+            this.logger.info('收到 SIGTERM 信号，正在关闭...')
+            this.cleanup()
+            bot.stop('SIGTERM')
+        })
+    }
+
+    /**
+     * 设置错误处理器，监听各种错误事件
+     */
+    private setupErrorHandlers(bot: Telegraf) {
+        // 监听轮询错误
+        bot.catch((err, ctx) => {
+            this.logger.error('Telegram Bot 处理更新时发生错误:', err)
+            if (ctx) {
+                this.logger.error('错误上下文:', {
+                    updateType: ctx.updateType,
+                    chatId: ctx.chat?.id,
+                    messageId: ctx.message?.['message_id']
+                })
+            }
+        })
+
+        // 监听未捕获的错误
+        const errorHandler = (error: Error) => {
+            // 检查是否是网络相关错误
+            const isNetworkError =
+                error.message?.includes('ENOTFOUND') ||
+                error.message?.includes('ECONNREFUSED') ||
+                error.message?.includes('ETIMEDOUT') ||
+                error.message?.includes('ECONNRESET') ||
+                error.message?.includes('socket hang up') ||
+                error.message?.includes('Network error') ||
+                error.message?.includes('Client network socket disconnected')
+
+            if (isNetworkError) {
+                this.logger.error('检测到 Telegram Bot 网络错误:', error.message)
+                this.handleConnectionLost()
+            } else {
+                this.logger.error('Telegram Bot 发生未知错误:', error)
+            }
+        }
+
+        // 为 bot 的 telegram 客户端添加错误监听
+        if (bot.telegram) {
+            const originalCallApi = bot.telegram.callApi.bind(bot.telegram)
+            bot.telegram.callApi = async function(...args) {
+                try {
+                    return await originalCallApi(...args)
+                } catch (error) {
+                    errorHandler(error)
+                    throw error
+                }
+            }
+        }
+    }
+
+    /**
+     * 启动健康检查
+     */
+    private startHealthCheck() {
+        // 清除旧的检查
+        if (this.healthCheckInterval) {
+            clearInterval(this.healthCheckInterval)
+        }
+
+        this.healthCheckInterval = setInterval(async () => {
+            try {
+                // 调用 getMe 检查连接
+                await this.client.telegram.getMe()
+
+                // 如果之前断开过连接，现在恢复了
+                if (!this.isConnected) {
+                    this.logger.info('✅ Telegram Bot 连接已恢复，可以正常收发消息')
+                    this.isConnected = true
+                    this.reconnectAttempts = 0
+                }
+            } catch (error) {
+                this.logger.warn('健康检查失败:', error.message)
+
+                if (this.isConnected) {
+                    this.logger.error('检测到 Telegram Bot 连接断开')
+                    this.handleConnectionLost()
+                }
+            }
+        }, this.HEALTH_CHECK_INTERVAL)
+
+        this.logger.info(`已启动健康检查，每 ${this.HEALTH_CHECK_INTERVAL / 1000} 秒检查一次`)
+    }
+
+    /**
+     * 处理连接丢失
+     */
+    private handleConnectionLost() {
+        if (this.isReconnecting) {
+            return // 已在重连中
+        }
+
+        this.isConnected = false
+        this.isReconnecting = true
+
+        this.logger.warn('Telegram Bot 连接丢失，准备重连...')
+
+        // 尝试重连
+        this.reconnect()
+    }
+
+    /**
+     * 重连逻辑
+     */
+    private async reconnect() {
+        if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
+            this.logger.error(`❌ Telegram Bot 重连失败，已达最大重试次数 (${this.MAX_RECONNECT_ATTEMPTS})，请检查网络或重启服务`)
+            this.isReconnecting = false
+            return
+        }
+
+        this.reconnectAttempts++
+
+        // 指数退避延迟
+        const delay = Math.min(
+            this.RECONNECT_BASE_DELAY * Math.pow(2, this.reconnectAttempts - 1),
+            300000 // 最大 5 分钟
+        )
+
+        this.logger.info(`第 ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} 次重连尝试，${delay}ms 后执行...`)
+
+        await new Promise(resolve => setTimeout(resolve, delay))
+
+        try {
+            // 尝试调用 API 检查连接
+            await this.client.telegram.getMe()
+
+            // 连接成功
+            this.logger.info('✅ Telegram Bot 重连成功')
+            this.isConnected = true
+            this.isReconnecting = false
+            this.reconnectAttempts = 0
+        } catch (error) {
+            this.logger.error(`重连失败 (${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS}):`, error.message)
+
+            // 继续尝试重连
+            await this.reconnect()
+        }
+    }
+
+    /**
+     * 清理资源
+     */
+    private cleanup() {
+        this.logger.info('正在清理 TelegramBotClient 资源...')
+
+        // 停止健康检查
+        if (this.healthCheckInterval) {
+            clearInterval(this.healthCheckInterval)
+            this.healthCheckInterval = null
+        }
+
+        this.isConnected = false
+        this.isReconnecting = false
     }
 
     private async dealWithCommand(ctx: Context, text: string) {
