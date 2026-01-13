@@ -553,6 +553,7 @@ export class WeChatClient extends AbstractClient {
                 } else {
                     // 找不到上下文
                     msgJson = WxMessage.getXmlToJson(msg._xml)
+                    this.logger.info(`引用消息: ${JSON.stringify(msgJson)}`)
                     if (msgJson.msg.appmsg.refermsg) {
                         const referType = Number(msgJson.msg.appmsg.refermsg.type)
                         let quoteContent = ''
