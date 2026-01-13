@@ -348,7 +348,7 @@ export class WeChatClient extends AbstractClient {
 
     async onMessage(msg: WxMessage) {
         // 打印收到的微信消息（debug 级别）
-        this.logger.debug(`收到微信消息: type=${msg.type()}, msgId=${msg.newMsgId}, toId=${msg.toId}, text=${msg.text()?.substring(0, 100)}, xml=${msg._xml}`)
+        this.logger.info(`收到微信消息: type=${msg.type()}, msgId=${msg.newMsgId}, toId=${msg.toId}, text=${msg.text()?.substring(0, 100)}, xml=${msg._xml}`)
         
         // TODO: 只处理新消息，丢弃历史消息（未来可以增加选项更好的保存聊天记录）
         if (msg.date() < this.startTime) {
