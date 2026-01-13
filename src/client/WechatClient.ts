@@ -24,6 +24,7 @@ import {getChatHistory, getMiniprogram} from '../util/handleMsg'
 import {WeVideo} from 'wx2tg-puppet'
 import {FileBox} from 'file-box'
 import I18n from '../i18n'
+import {LogUtils} from '../util/LogUtil'
 
 export class WeChatClient extends AbstractClient {
     get wxInfo() {
@@ -54,6 +55,8 @@ export class WeChatClient extends AbstractClient {
 
     private constructor() {
         super()
+        // 重新初始化 logger，使用固定的类别名（避免被 NODE_ENV 影响）
+        this.logger = LogUtils.config().getLogger('WechatBot')
         this.groupOperate = new TelegramGroupOperateService(BindGroupService.getInstance(), UserMTProtoClient.getInstance().client)
         this.bindGroupService = BindGroupService.getInstance()
         this.messageService = MessageService.getInstance()
@@ -347,9 +350,8 @@ export class WeChatClient extends AbstractClient {
     }
 
     async onMessage(msg: WxMessage) {
-        // 打印收到的微信消息（debug 级别）
+        // 打印收到的微信消息
         this.logger.info(`收到微信消息: type=${msg.type()}, msgId=${msg.newMsgId}, toId=${msg.toId}, text=${msg.text()?.substring(0, 100)}, xml=${msg._xml}`)
-        console.log(msg._xml)
         
         // TODO: 只处理新消息，丢弃历史消息（未来可以增加选项更好的保存聊天记录）
         if (msg.date() < this.startTime) {
@@ -544,62 +546,79 @@ export class WeChatClient extends AbstractClient {
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.Quote:
-                referMsg = await this.messageService.getByWxMsgId(msg.refer.svrid)
-                // 因为是html模式 原始的文本中的<>需要转义
-                messageParam.content = messageParam.content.replaceAll(/</g, '&lt;')
-                    .replaceAll(/>/g, '&gt;')
-                // emoji 转换
-                messageParam.content = emojiConverter.convert(messageParam.content, configuration)
-                if (referMsg) {
-                    messageParam.param = {
-                        reply_id: referMsg.tgBotMsgId
+                try {
+                    // 安全获取引用消息 svrid
+                    const referSvrid = msg.refer?.svrid
+                    if (referSvrid) {
+                        referMsg = await this.messageService.getByWxMsgId(referSvrid)
                     }
-                } else {
-                    // 找不到上下文
-                    msgJson = WxMessage.getXmlToJson(msg._xml)
-                    if (msgJson.msg.appmsg.refermsg) {
-                        const referType = Number(msgJson.msg.appmsg.refermsg.type)
-                        let quoteContent = ''
-
-                        // 除了 type=49，其他类型都打印日志
-                        if (referType !== 49) {
-                            this.logger.info(`引用消息类型: refermsg.type=${referType}, content=${JSON.stringify(msgJson.msg.appmsg.refermsg.content).substring(0, 200)}`)
+                    
+                    // 因为是html模式 原始的文本中的<>需要转义
+                    messageParam.content = messageParam.content.replaceAll(/</g, '&lt;')
+                        .replaceAll(/>/g, '&gt;')
+                    // emoji 转换
+                    messageParam.content = emojiConverter.convert(messageParam.content, configuration)
+                    
+                    if (referMsg) {
+                        messageParam.param = {
+                            reply_id: referMsg.tgBotMsgId
                         }
+                    } else {
+                        // 找不到上下文，从 XML 解析引用信息
+                        this.logger.info(`引用消息未在数据库找到，尝试从 XML 解析: msgId=${msg.newMsgId}, referSvrid=${referSvrid}`)
+                        msgJson = WxMessage.getXmlToJson(msg._xml)
+                        if (msgJson?.msg?.appmsg?.refermsg) {
+                            const referType = Number(msgJson.msg.appmsg.refermsg.type)
+                            let quoteContent = ''
 
-                        // 根据引用消息类型进行不同处理
-                        switch (referType) {
-                            case 1: // 文本消息
-                                quoteContent = (msgJson.msg.appmsg.refermsg.content || '')
-                                    .replaceAll(/</g, '&lt;')
-                                    .replaceAll(/>/g, '&gt;')
-                                break
-                            case 3: // 图片消息
-                                quoteContent = '[图片]'
-                                break
-                            case 34: // 语音消息
-                                quoteContent = '[语音]'
-                                break
-                            case 43: // 视频消息
-                                quoteContent = '[视频]'
-                                break
-                            case 47: // 表情消息
-                                quoteContent = '[表情]'
-                                break
-                            case 49: // 应用消息（链接、嵌套引用等）- 保持原有处理方式
-                                const newJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.refermsg.content)
-                                quoteContent = newJson.msg.appmsg.title
-                                break
-                            default:
-                                // 其他未知类型
-                                quoteContent = '[消息]'
-                        }
+                            // 除了 type=49，其他类型都打印日志
+                            if (referType !== 49) {
+                                this.logger.info(`引用消息类型: refermsg.type=${referType}, content=${JSON.stringify(msgJson.msg.appmsg.refermsg.content).substring(0, 200)}`)
+                            }
 
-                        if (quoteContent) {
-                            messageParam.content = `<blockquote>${quoteContent}</blockquote>${messageParam.content}`
+                            // 根据引用消息类型进行不同处理
+                            switch (referType) {
+                                case 1: // 文本消息
+                                    quoteContent = (msgJson.msg.appmsg.refermsg.content || '')
+                                        .replaceAll(/</g, '&lt;')
+                                        .replaceAll(/>/g, '&gt;')
+                                    break
+                                case 3: // 图片消息
+                                    quoteContent = '[图片]'
+                                    break
+                                case 34: // 语音消息
+                                    quoteContent = '[语音]'
+                                    break
+                                case 43: // 视频消息
+                                    quoteContent = '[视频]'
+                                    break
+                                case 47: // 表情消息
+                                    quoteContent = '[表情]'
+                                    break
+                                case 49: // 应用消息（链接、嵌套引用等）- 保持原有处理方式
+                                    const newJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.refermsg.content)
+                                    quoteContent = newJson.msg.appmsg.title
+                                    break
+                                default:
+                                    // 其他未知类型
+                                    quoteContent = '[消息]'
+                            }
+
+                            if (quoteContent) {
+                                messageParam.content = `<blockquote>${quoteContent}</blockquote>${messageParam.content}`
+                            }
+                        } else {
+                            this.logger.warn(`引用消息 XML 解析失败，refermsg 不存在: msgId=${msg.newMsgId}`)
                         }
                     }
+                    WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                } catch (e) {
+                    this.logger.error(`引用消息处理失败: msgId=${msg.newMsgId}, error=${e.message}`, e)
+                    // 降级处理：发送不带引用的普通消息
+                    messageParam.content = messageParam.content.replaceAll(/</g, '&lt;').replaceAll(/>/g, '&gt;')
+                    messageParam.content = emojiConverter.convert(messageParam.content, configuration)
+                    WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 }
-                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.Contact:
                 // 名片消息处理
