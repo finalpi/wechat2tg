@@ -31,4 +31,13 @@ export class MessageService {
     async getByFhMsgId(fhMsgId: string) {
         return await this.repository.getByFhMsgId(fhMsgId)
     }
+
+    // 删除指定天数之前的旧消息
+    async deleteOldMessages(days: number): Promise<number> {
+        // 注意：微信的 createTime 是秒级时间戳，不是毫秒级
+        const nowInSeconds = Math.floor(Date.now() / 1000)
+        const retentionTimeInSeconds = days * 24 * 60 * 60 // 天数转换为秒
+        const beforeTimestamp = nowInSeconds - retentionTimeInSeconds
+        return await this.repository.deleteOldMessages(beforeTimestamp)
+    }
 }

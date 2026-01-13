@@ -34,6 +34,7 @@ import {MessageBufferService} from '../util/MessageBufferService'
 import {FileBox} from 'file-box'
 import I18n from '../i18n'
 import http from 'http'
+import {LogUtils} from '../util/LogUtil'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -98,7 +99,7 @@ export class TelegramBotClient extends AbstractClient {
         // 检查消息是否已经在处理中（避免重复发送）
         const existingMessageId = `${message.chatId}_${message.id}`
         if (this.processingMessages.has(existingMessageId)) {
-            console.log(`[MessageBuffer] 消息已在处理中，跳过重复发送: ${message.id}`)
+            this.logger.warn(`消息已在处理中，跳过重复发送: ${message.id}`)
             return true
         }
 
@@ -162,7 +163,7 @@ export class TelegramBotClient extends AbstractClient {
             }
             return true
         } catch (error) {
-            console.error('发送消息失败:', error)
+            this.logger.error('发送消息失败:', error)
             // 不要在这里调用markMessageAsFailed，避免重复添加
             return false
         } finally {
@@ -186,7 +187,8 @@ export class TelegramBotClient extends AbstractClient {
         messageEntity.sender = message.sender
         messageEntity.toWxid = message.toWxid
         messageEntity.msgId = message.msgId
-        messageEntity.createTime = message.createTime
+        // 如果没有 createTime，使用当前时间戳（秒级）作为默认值
+        messageEntity.createTime = message.createTime || Math.floor(Date.now() / 1000)
         return messageEntity
     }
 
@@ -196,10 +198,10 @@ export class TelegramBotClient extends AbstractClient {
             if (message.file.sendType === 'voice' && config.TENCENT_SECRET_ID && config.TENCENT_SECRET_KEY && configuration.autoTranscript) {
                 try {
                     const audioTranscript = await SpeechService.getInstance().getTranscript(message.file.file)
-                    console.log('语音转文字转换成功文本内容：', audioTranscript)
+                    this.logger.info('语音转文字转换成功文本内容：', audioTranscript)
                     message.sender = `${message.sender}\n${audioTranscript}`
                 } catch (e) {
-                    console.error(e)
+                    this.logger.error('语音转文字失败:', e)
                 }
             }
 
@@ -311,6 +313,14 @@ export class TelegramBotClient extends AbstractClient {
     private isProcessingQueue = false
     // i18n实例
     private i18n = I18n.getInstance()
+    // Telegram Bot 连接状态管理
+    private isConnected = false
+    private isReconnecting = false
+    private reconnectAttempts = 0
+    private readonly MAX_RECONNECT_ATTEMPTS = 10
+    private readonly RECONNECT_BASE_DELAY = 5000 // 5秒基础延迟
+    private healthCheckInterval: NodeJS.Timeout | null = null
+    private readonly HEALTH_CHECK_INTERVAL = 60000 // 60秒检查一次
 
     static getInstance(): TelegramBotClient {
         if (!TelegramBotClient.instance) {
@@ -321,6 +331,9 @@ export class TelegramBotClient extends AbstractClient {
 
     private constructor() {
         super()
+        // 重新初始化 logger，使用更具体的类别名
+        this.logger = LogUtils.config().getLogger('TelegramBot')
+
         if (config.PROTOCOL === 'socks5' && config.HOST !== '' && config.PORT !== '') {
             const info = {
                 hostname: config.HOST,
@@ -368,12 +381,12 @@ export class TelegramBotClient extends AbstractClient {
 
     private async sendTextMsg(message: BaseMessage): Promise<boolean> {
         // 为了保持向后兼容性，保留此方法，但建议使用 sendTextMsgSynchronously
-        console.log(`[MessageBuffer] 使用legacy sendTextMsg方法: ${message.id}`)
+        this.logger.debug(`使用legacy sendTextMsg方法: ${message.id}`)
         return await this.sendTextMsgSynchronously(message)
     }
 
     private async dealException(e, message: BaseMessage) {
-        console.error(e)
+        this.logger.error('消息发送异常:', e)
 
         // 检查是否是Telegram API响应错误
         if (e.response && e.response.error_code) {
@@ -386,18 +399,18 @@ export class TelegramBotClient extends AbstractClient {
             // Telegram Too Many Requests
             else if (e.response.error_code === 429) {
                 const retryAfter = e.response.parameters?.retry_after || 20
-                console.log(`[MessageBuffer] 429错误，${retryAfter}秒后通过缓冲区重试: ${message.id}`)
+                this.logger.warn(`429错误，${retryAfter}秒后通过缓冲区重试: ${message.id}`)
                 this.sendMessage(message)
             }
         }
         // 处理网络错误 (如 FetchError, ECONNRESET 等)
         else if (e.code === 'ECONNRESET' || e.type === 'system' || e.name === 'FetchError') {
-            console.log(`[MessageBuffer] 网络错误，消息将通过缓冲区重试: ${message.id} - ${e.message}`)
+            this.logger.warn(`网络错误，消息将通过缓冲区重试: ${message.id} - ${e.message}`)
             // 网络错误让缓冲区处理重试
         }
         // 其他未知错误
         else {
-            console.log(`[MessageBuffer] 未知错误，消息将通过缓冲区重试: ${message.id} - ${e.message || e}`)
+            this.logger.warn(`未知错误，消息将通过缓冲区重试: ${message.id} - ${e.message || e}`)
         }
     }
 
@@ -1322,8 +1335,8 @@ ${this.i18n.t('help.instructions')}`))
             })
         }
         const authParams: UserAuthParams = {
-            onError(err: Error): Promise<boolean> | void {
-                console.error(err)
+            onError: (err: Error): Promise<boolean> | void => {
+                this.logger.error('认证错误:', err)
             },
             phoneNumber: async () =>
                 new Promise((resolve) => {
@@ -1407,29 +1420,217 @@ ${this.i18n.t('help.instructions')}`))
 
     private async botLaunch(bot: Telegraf, retryCount = 5) {
         if (retryCount >= 0) {
-            bot.launch(() => {
-                // 保存 botID
-                this.configurationService.getConfig().then(config => {
-                    if (!config.botId || config.botId == 0) {
-                        const botId = this.client.botInfo.id
-                        config.botId = botId
-                        this.configurationService.saveConfig(config)
-                    }
-                    this.hasLogin = true
-                    if (config.chatId > 0) {
-                        this.loginUserClient()
-                        // 登录 botMTP 客户端
-                        this.loginMTPClient()
-                    }
+            try {
+                await bot.launch(() => {
+                    // 保存 botID
+                    this.configurationService.getConfig().then(config => {
+                        if (!config.botId || config.botId == 0) {
+                            const botId = this.client.botInfo.id
+                            config.botId = botId
+                            this.configurationService.saveConfig(config)
+                        }
+                        this.hasLogin = true
+                        if (config.chatId > 0) {
+                            this.loginUserClient()
+                            // 登录 botMTP 客户端
+                            this.loginMTPClient()
+                        }
+                    })
                 })
-            }).then(() => {
-                // 启动后做的事情
-            }).catch(error => {
-                this.botLaunch(bot, retryCount - 1)
-            })
+
+                // 启动成功
+                this.isConnected = true
+                this.reconnectAttempts = 0
+                this.logger.info('Telegram Bot 启动成功，开始监听消息')
+
+                // 启动健康检查
+                this.startHealthCheck()
+
+                // 设置错误处理
+                this.setupErrorHandlers(bot)
+
+            } catch (error) {
+                this.logger.error(`Telegram Bot 启动失败 (剩余重试次数: ${retryCount}):`, error)
+                this.isConnected = false
+
+                if (retryCount > 0) {
+                    const delay = this.RECONNECT_BASE_DELAY * (6 - retryCount)
+                    this.logger.info(`${delay}ms 后重试启动...`)
+                    await new Promise(resolve => setTimeout(resolve, delay))
+                    await this.botLaunch(bot, retryCount - 1)
+                } else {
+                    this.logger.error('Telegram Bot 启动失败，已达最大重试次数')
+                    throw error
+                }
+            }
         }
-        process.once('SIGINT', () => bot.stop('SIGINT'))
-        process.once('SIGTERM', () => bot.stop('SIGTERM'))
+
+        // 优雅退出处理
+        process.once('SIGINT', () => {
+            this.logger.info('收到 SIGINT 信号，正在关闭...')
+            this.cleanup()
+            bot.stop('SIGINT')
+        })
+        process.once('SIGTERM', () => {
+            this.logger.info('收到 SIGTERM 信号，正在关闭...')
+            this.cleanup()
+            bot.stop('SIGTERM')
+        })
+    }
+
+    /**
+     * 设置错误处理器，监听各种错误事件
+     */
+    private setupErrorHandlers(bot: Telegraf) {
+        // 监听轮询错误
+        bot.catch((err, ctx) => {
+            this.logger.error('Telegram Bot 处理更新时发生错误:', err)
+            if (ctx) {
+                this.logger.error('错误上下文:', {
+                    updateType: ctx.updateType,
+                    chatId: ctx.chat?.id,
+                    messageId: ctx.message?.['message_id']
+                })
+            }
+        })
+
+        // 监听未捕获的错误
+        const errorHandler = (error: Error) => {
+            // 检查是否是网络相关错误
+            const isNetworkError =
+                error.message?.includes('ENOTFOUND') ||
+                error.message?.includes('ECONNREFUSED') ||
+                error.message?.includes('ETIMEDOUT') ||
+                error.message?.includes('ECONNRESET') ||
+                error.message?.includes('socket hang up') ||
+                error.message?.includes('Network error') ||
+                error.message?.includes('Client network socket disconnected')
+
+            if (isNetworkError) {
+                this.logger.error('检测到 Telegram Bot 网络错误:', error.message)
+                this.handleConnectionLost()
+            } else {
+                this.logger.error('Telegram Bot 发生未知错误:', error)
+            }
+        }
+
+        // 为 bot 的 telegram 客户端添加错误监听
+        if (bot.telegram) {
+            const originalCallApi = bot.telegram.callApi.bind(bot.telegram)
+            bot.telegram.callApi = async function(...args) {
+                try {
+                    return await originalCallApi(...args)
+                } catch (error) {
+                    errorHandler(error)
+                    throw error
+                }
+            }
+        }
+    }
+
+    /**
+     * 启动健康检查
+     */
+    private startHealthCheck() {
+        // 清除旧的检查
+        if (this.healthCheckInterval) {
+            clearInterval(this.healthCheckInterval)
+        }
+
+        this.healthCheckInterval = setInterval(async () => {
+            try {
+                // 调用 getMe 检查连接
+                await this.client.telegram.getMe()
+
+                // 如果之前断开过连接，现在恢复了
+                if (!this.isConnected) {
+                    this.logger.info('✅ Telegram Bot 连接已恢复，可以正常收发消息')
+                    this.isConnected = true
+                    this.reconnectAttempts = 0
+                }
+            } catch (error) {
+                this.logger.warn('健康检查失败:', error.message)
+
+                if (this.isConnected) {
+                    this.logger.error('检测到 Telegram Bot 连接断开')
+                    this.handleConnectionLost()
+                }
+            }
+        }, this.HEALTH_CHECK_INTERVAL)
+
+        this.logger.info(`已启动健康检查，每 ${this.HEALTH_CHECK_INTERVAL / 1000} 秒检查一次`)
+    }
+
+    /**
+     * 处理连接丢失
+     */
+    private handleConnectionLost() {
+        if (this.isReconnecting) {
+            return // 已在重连中
+        }
+
+        this.isConnected = false
+        this.isReconnecting = true
+
+        this.logger.warn('Telegram Bot 连接丢失，准备重连...')
+
+        // 尝试重连
+        this.reconnect()
+    }
+
+    /**
+     * 重连逻辑
+     */
+    private async reconnect() {
+        if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
+            this.logger.error(`❌ Telegram Bot 重连失败，已达最大重试次数 (${this.MAX_RECONNECT_ATTEMPTS})，请检查网络或重启服务`)
+            this.isReconnecting = false
+            return
+        }
+
+        this.reconnectAttempts++
+
+        // 指数退避延迟
+        const delay = Math.min(
+            this.RECONNECT_BASE_DELAY * Math.pow(2, this.reconnectAttempts - 1),
+            300000 // 最大 5 分钟
+        )
+
+        this.logger.info(`第 ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} 次重连尝试，${delay}ms 后执行...`)
+
+        await new Promise(resolve => setTimeout(resolve, delay))
+
+        try {
+            // 尝试调用 API 检查连接
+            await this.client.telegram.getMe()
+
+            // 连接成功
+            this.logger.info('✅ Telegram Bot 重连成功')
+            this.isConnected = true
+            this.isReconnecting = false
+            this.reconnectAttempts = 0
+        } catch (error) {
+            this.logger.error(`重连失败 (${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS}):`, error.message)
+
+            // 继续尝试重连
+            await this.reconnect()
+        }
+    }
+
+    /**
+     * 清理资源
+     */
+    private cleanup() {
+        this.logger.info('正在清理 TelegramBotClient 资源...')
+
+        // 停止健康检查
+        if (this.healthCheckInterval) {
+            clearInterval(this.healthCheckInterval)
+            this.healthCheckInterval = null
+        }
+
+        this.isConnected = false
+        this.isReconnecting = false
     }
 
     private async dealWithCommand(ctx: Context, text: string) {
@@ -1476,14 +1677,16 @@ ${this.i18n.t('help.instructions')}`))
                 if (success) {
                     this.messageBufferService.markMessageAsSent(messageId)
                 } else {
+                    this.logger.warn(`消息发送返回失败，准备重试: wxMsgId=${message.id}, chatId=${message.chatId}`)
                     this.messageBufferService.markMessageAsFailed(messageId, async (msg) => {
                         // 重试的消息不进入队列，直接发送（保持顺序）
-                        console.log(`[MessageOrder] 消息重试，不进入队列: ${msg.id}`)
+                        this.logger.info(`消息重试，不进入队列: ${msg.id}`)
                         return await this.sendTextMsgSynchronously(msg)
                     })
                 }
             } catch (error) {
-                console.error(`[MessageOrder] 消息处理出错: ${message.id}`, error)
+                this.logger.error(`消息处理抛出异常: wxMsgId=${message.id}, chatId=${message.chatId}`)
+                this.logger.error(`异常详情: ${error.message}`, error.stack)
                 // 检查是否是超时错误
                 const isTimeoutError = this.isTimeoutError(error)
                 this.messageBufferService.markMessageAsFailed(messageId, async (msg) => {
@@ -1511,28 +1714,38 @@ ${this.i18n.t('help.instructions')}`))
 
     // 新增：同步发送文本消息，确保严格顺序
     private async sendTextMsgSynchronously(message: BaseMessage): Promise<boolean> {
-        // 在实际发送时才进行数据库操作，确保顺序
-        const messageEntity = this.createMessageEntity(message)
-        await this.messageService.createOrUpdate(messageEntity)
-
+        // 先验证 chatId 和格式化内容，确认可以发送后再保存数据库
         // 优先使用 message.chatId（已经在 WechatClient.onMessage 中设置好了）
         // 只有在 chatId 无效时才通过 wxId 查询数据库
         let targetChatId = message.chatId
         if (!targetChatId) {
             const bindGroup = await this.bindGroupService.getByWxId(message.wxId)
             if (!bindGroup) {
-                console.log(`[MessageBuffer] 文本消息发送失败: 未找到绑定群组 - wxId=${message.wxId}, msgId=${message.id}`)
+                this.logger.error(`文本消息发送失败: 未找到绑定群组 - wxId=${message.wxId}, msgId=${message.id}`)
                 return false
             }
             targetChatId = bindGroup.chatId
         }
 
         if (!targetChatId) {
-            console.log(`[MessageBuffer] 文本消息发送失败: chatId 无效 - wxId=${message.wxId}, msgId=${message.id}`)
+            this.logger.error(`文本消息发送失败: chatId 无效 - wxId=${message.wxId}, msgId=${message.id}`)
             return false
         }
 
-        const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content)
+        // 在这里进行格式化，如果格式化失败会抛出异常，在保存数据库之前被捕获
+        let sendTextFormat: string
+        try {
+            sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content)
+        } catch (error) {
+            this.logger.error(`文本消息格式化失败: ${message.id}`, error)
+            return false
+        }
+
+        // 所有验证通过后，才保存到数据库
+        const messageEntity = this.createMessageEntity(message)
+        await this.messageService.createOrUpdate(messageEntity)
+        this.logger.info(`开始发送文本消息: wxMsgId=${message.id}, chatId=${targetChatId}`)
+
         const option: Option = {
             parse_mode: 'HTML'
         }
@@ -1573,22 +1786,31 @@ ${this.i18n.t('help.instructions')}`))
             }
 
             // 按顺序发送每个分片，等待每个完成后再发送下一个
+            this.logger.info(`长文本消息将分 ${result.length} 片发送: ${message.id}`)
             for (let i = 0; i < result.length; i++) {
                 let sendMsg = result[i]
                 if (result.length > 1) {
                     sendMsg = `<b>part${i + 1}:</b>` + sendMsg
                 }
-                const sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, sendMsg)
+                let partSendTextFormat: string
+                try {
+                    partSendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, sendMsg)
+                } catch (error) {
+                    this.logger.error(`文本消息分片格式化失败 (分片${i + 1}): ${message.id}`, error)
+                    success = false
+                    break
+                }
                 try {
                     if (i == 0) {
-                        newMsg = await this.messageSender.sendText(targetChatId, sendTextFormat, option)
+                        newMsg = await this.messageSender.sendText(targetChatId, partSendTextFormat, option)
                     } else {
-                        await this.messageSender.sendText(targetChatId, sendTextFormat, option)
+                        await this.messageSender.sendText(targetChatId, partSendTextFormat, option)
                     }
                     // 等待分片发送完成
                     await new Promise(resolve => setTimeout(resolve, 50))
                 } catch (e) {
-                    console.log(`[MessageBuffer] 文本消息发送失败 (分片${i + 1}): ${message.id} - ${e.message}`)
+                    this.logger.error(`文本消息发送失败 (分片${i + 1}/${result.length}): ${message.id} - ${e.message}`)
+                    this.logger.error(`错误详情: chatId=${targetChatId}, wxMsgId=${message.id}, error_code=${e.response?.error_code}, error=${e.code || e.name}`)
                     await this.dealException(e, message)
                     success = false
                     break // 如果某个分片失败，停止发送后续分片
@@ -1598,8 +1820,8 @@ ${this.i18n.t('help.instructions')}`))
             try {
                 newMsg = await this.messageSender.sendText(targetChatId, sendTextFormat, option)
             } catch (e) {
-                console.log(`[MessageBuffer] 文本消息发送失败: ${message.id} - ${e.message}`)
-                console.log(`[MessageBuffer] 错误详情: chatId=${targetChatId}, wxMsgId=${message.id}, error_code=${e.response?.error_code}, error=${e.code || e.name}`)
+                this.logger.error(`文本消息发送失败: ${message.id} - ${e.message}`)
+                this.logger.error(`错误详情: chatId=${targetChatId}, wxMsgId=${message.id}, error_code=${e.response?.error_code}, error=${e.code || e.name}`)
                 await this.dealException(e, message)
                 success = false
             }
@@ -1609,9 +1831,9 @@ ${this.i18n.t('help.instructions')}`))
         if (newMsg && success) {
             messageEntity.tgBotMsgId = parseInt(newMsg.message_id + '')
             await this.messageService.createOrUpdate(messageEntity)
-            console.log(`[MessageBuffer] 文本消息发送成功: wxMsgId=${message.id}, tgBotMsgId=${messageEntity.tgBotMsgId}`)
+            this.logger.info(`文本消息发送成功: wxMsgId=${message.id}, tgBotMsgId=${messageEntity.tgBotMsgId}`)
         } else if (!success) {
-            console.log(`[MessageBuffer] 消息保存到数据库但 tgBotMsgId=0: wxMsgId=${message.id}, chatId=${targetChatId}`)
+            this.logger.warn(`消息保存到数据库但 tgBotMsgId=0: wxMsgId=${message.id}, chatId=${targetChatId}`)
         }
 
         return success
