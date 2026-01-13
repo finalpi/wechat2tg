@@ -54,6 +54,9 @@ export const config = {
     AUTO_DELETE_OLD_MESSAGES: process.env.AUTO_DELETE_OLD_MESSAGES === 'true' ? true : false,
     // 消息保留天数，超过此天数的消息将被自动删除
     MESSAGE_RETENTION_DAYS: parseInt(process.env.MESSAGE_RETENTION_DAYS || '7'),
+
+    // 日志级别配置：trace, debug, info, warn, error, fatal
+    LOG_LEVEL: process.env.LOG_LEVEL?.toLowerCase() || 'info',
 }
 
 export const useProxy = config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== ''

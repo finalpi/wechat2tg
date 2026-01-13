@@ -12,9 +12,8 @@ export abstract class AbstractClient implements IClient {
     hasLogin = false
 
     protected constructor() {
-        const env = process.env.NODE_ENV || 'default'
-        const category = env === 'production' ? 'production' : env === 'development' ? 'development' : 'default'
-        this.logger = LogUtils.config().getLogger(category)
+        // 日志级别统一从 LOG_LEVEL 环境变量读取
+        this.logger = LogUtils.config().getLogger()
     }
 
     abstract login(param?: any): Promise<boolean>;

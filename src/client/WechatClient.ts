@@ -155,9 +155,9 @@ export class WeChatClient extends AbstractClient {
         }
         this.client.start().then(async () => {
             getGeWeChatDataSource().initialize().then(() => {
-                console.log('DataSource initialized')
+                this.logger.info('DataSource initialized')
             }).catch((e) => {
-                console.error('DataSource initialize failed', e)
+                this.logger.error('DataSource initialize failed', e)
             })
             this.startTime = new Date().getTime() / 1000
         })
@@ -350,9 +350,8 @@ export class WeChatClient extends AbstractClient {
     }
 
     async onMessage(msg: WxMessage) {
-        // 打印收到的微信消息
-        this.logger.info(`收到微信消息: type=${msg.type()}, msgId=${msg.newMsgId}, toId=${msg.toId}, text=${msg.text()?.substring(0, 100)}, xml=${msg._xml}`)
-        
+        this.logger.debug(`收到微信消息: type=${msg.type()}, msgId=${msg.newMsgId}, toId=${msg.toId}, text=${msg.text()?.substring(0, 100)}, xml=${msg._xml}`)
+
         // TODO: 只处理新消息，丢弃历史消息（未来可以增加选项更好的保存聊天记录）
         if (msg.date() < this.startTime) {
             return
@@ -579,7 +578,7 @@ export class WeChatClient extends AbstractClient {
                             // 根据引用消息类型进行不同处理
                             switch (referType) {
                                 case 1: // 文本消息
-                                    quoteContent = (msgJson.msg.appmsg.refermsg.content || '')
+                                    quoteContent = String(msgJson.msg.appmsg.refermsg.content || '')
                                         .replaceAll(/</g, '&lt;')
                                         .replaceAll(/>/g, '&gt;')
                                     break
@@ -693,7 +692,7 @@ export class WeChatClient extends AbstractClient {
                     break
                 }
                 if (msg.type()) {
-                    console.log('unknow', msg)
+                    this.logger.warn(`未知消息类型: type=${msg.type()}, msgId=${msg.newMsgId}`)
                     messageParam.content = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]`
                     WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 }
