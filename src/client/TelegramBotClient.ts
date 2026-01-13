@@ -187,7 +187,8 @@ export class TelegramBotClient extends AbstractClient {
         messageEntity.sender = message.sender
         messageEntity.toWxid = message.toWxid
         messageEntity.msgId = message.msgId
-        messageEntity.createTime = message.createTime
+        // 如果没有 createTime，使用当前时间戳（秒级）作为默认值
+        messageEntity.createTime = message.createTime || Math.floor(Date.now() / 1000)
         return messageEntity
     }
 
