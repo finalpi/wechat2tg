@@ -21,6 +21,7 @@
     "fluent-ffmpeg": "^2.1.2",
     "https-proxy-agent": "^6.2.1",
     "log4js": "^6.9.1",
+    "mqtt": "^5.15.0",
     "qrcode": "^1.5.1",
     "reflect-metadata": "^0.2.2",
     "sharp": "^0.33.4",

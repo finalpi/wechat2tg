@@ -24,6 +24,7 @@ export abstract class MessageSender {
 
     sendAction(chatId: number, action: ChatAction) {
         TelegramBotClient.getSpyClient('botClient').client.telegram.sendChatAction(chatId, action)
+            .catch(() => { /* sendChatAction 仅用于状态提示，失败不影响业务 */ })
     }
 }
 

@@ -57,6 +57,22 @@ export const config = {
 
     // 日志级别配置：trace, debug, info, warn, error, fatal
     LOG_LEVEL: process.env.LOG_LEVEL?.toLowerCase() || 'info',
+
+    // MQTT 通知配置
+    // 是否启用 MQTT 通知
+    MQTT_ENABLED: process.env.MQTT_ENABLED === 'true',
+    // MQTT Broker 地址，例如 mqtt://192.168.1.100:1883
+    MQTT_BROKER_URL: process.env.MQTT_BROKER_URL?.toString() || '',
+    // MQTT 用户名（可选）
+    MQTT_USERNAME: process.env.MQTT_USERNAME?.toString() || '',
+    // MQTT 密码（可选）
+    MQTT_PASSWORD: process.env.MQTT_PASSWORD?.toString() || '',
+    // MQTT 通知主题
+    MQTT_TOPIC: process.env.MQTT_TOPIC?.toString() || 'wechat2tg/notify',
+    // MQTT Client ID
+    MQTT_CLIENT_ID: process.env.MQTT_CLIENT_ID?.toString() || 'wechat2tg',
+    // 消息发送失败多少次后触发 MQTT 通知
+    MQTT_NOTIFY_FAIL_COUNT: parseInt(process.env.MQTT_NOTIFY_FAIL_COUNT || '3'),
 }
 
 export const useProxy = config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== ''
