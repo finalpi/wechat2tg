@@ -1,11 +1,12 @@
-FROM rust:1.80 AS builder-gifski
+FROM rust:1.85 AS builder-gifski
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libpng-dev \
     libimagequant-dev \
     && rm -rf /var/lib/apt/lists/*
-RUN git clone https://github.com/ImageOptim/gifski.git /gifski
+RUN git clone --depth 1 https://github.com/ImageOptim/gifski.git /gifski
 WORKDIR /gifski
+RUN git fetch --tags && git checkout 1.34.0
 RUN cargo build --release
 RUN cp target/release/gifski /usr/local/cargo/bin/gifski
 
