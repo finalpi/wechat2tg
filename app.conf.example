@@ -1,6 +1,7 @@
 appname = wxapi
 httpaddr = "0.0.0.0"
 httpport = 8058
+proxyport = 8888
 runmode = dev
 viewspath = "template"
 autorender = false
