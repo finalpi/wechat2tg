@@ -1,6 +1,7 @@
 import BaseMessage from '../base/BaseMessage'
 import {LogUtils} from './LogUtil'
 import {config} from '../config'
+import {MqttNotifyService} from '../service/MqttNotifyService'
 
 interface BufferedMessage {
     id: string
@@ -26,6 +27,8 @@ export class MessageBufferService {
     private cleanupInterval: NodeJS.Timeout | null = null
     private retryTimeouts: Map<string, NodeJS.Timeout> = new Map()
     private deleteTimeouts: Map<string, NodeJS.Timeout> = new Map()
+    // 已发送过 MQTT 通知的消息 ID 集合（避免重复通知）
+    private notifiedMessages: Set<string> = new Set()
 
     private constructor() {
         // 定期清理过期消息
@@ -121,8 +124,21 @@ export class MessageBufferService {
         if (shouldRetry) {
             this.logger.warn(`消息发送失败，准备重试 (${bufferedMessage.retryCount}/${maxRetryDisplay}): ${messageId}`)
 
-            // 指数退避重试，最大延迟 60 秒
-            const retryDelay = Math.min(this.RETRY_DELAY * Math.pow(2, bufferedMessage.retryCount - 1), 60000)
+            // 失败次数达到阈值时发送 MQTT 通知（每条消息只通知一次）
+            if (bufferedMessage.retryCount >= config.MQTT_NOTIFY_FAIL_COUNT && !this.notifiedMessages.has(messageId)) {
+                this.notifiedMessages.add(messageId)
+                const contentPreview = bufferedMessage.message.content
+                    ? String(bufferedMessage.message.content).substring(0, 200)
+                    : '(无文本内容)'
+                MqttNotifyService.getInstance().notify(
+                    '消息发送失败',
+                    `消息发送失败已重试 ${bufferedMessage.retryCount} 次: ${contentPreview}`,
+                    'error'
+                )
+            }
+
+            // 指数退避重试，最大延迟 5 分钟（避免频繁重试加重 Flood Wait）
+            const retryDelay = Math.min(this.RETRY_DELAY * Math.pow(2, bufferedMessage.retryCount - 1), 300000)
 
             const retryTimeout = setTimeout(async () => {
                 try {
@@ -153,6 +169,19 @@ export class MessageBufferService {
             bufferedMessage.status = 'failed'
             // 可以选择将失败消息保存到数据库或文件
             this.saveFailedMessage(bufferedMessage)
+
+            // 永久失败时发送 MQTT 通知
+            if (!this.notifiedMessages.has(messageId)) {
+                this.notifiedMessages.add(messageId)
+            }
+            const contentPreview = bufferedMessage.message.content
+                ? String(bufferedMessage.message.content).substring(0, 200)
+                : '(无文本内容)'
+            MqttNotifyService.getInstance().notify(
+                '消息永久发送失败',
+                `消息已达最大重试次数 ${bufferedMessage.retryCount}，放弃发送: ${contentPreview}`,
+                'error'
+            )
         }
     }
 
@@ -221,13 +250,21 @@ export class MessageBufferService {
     private cleanupExpiredMessages(): void {
         const now = Date.now()
         let cleanupCount = 0
+        // 无限重试模式下的最大保留时间：过期时间的 6 倍（默认 30 分钟）
+        const MAX_RETAIN_TIME = this.MESSAGE_EXPIRE_TIME * 6
 
         for (const [messageId, bufferedMessage] of this.messageBuffer.entries()) {
             if (now - bufferedMessage.timestamp > this.MESSAGE_EXPIRE_TIME) {
                 // 在无限重试模式下，不清理还在重试的消息（pending 或 failed 状态）
                 if (this.MAX_RETRY_COUNT === 0 && (bufferedMessage.status === 'pending' || bufferedMessage.status === 'failed')) {
-                    this.logger.warn(`消息已过期但在无限重试模式下保留: ${messageId}，状态: ${bufferedMessage.status}，重试次数: ${bufferedMessage.retryCount}`)
-                    continue
+                    // 超过最大保留时间则强制清理，防止内存泄漏和无意义的请求堆积
+                    if (now - bufferedMessage.timestamp > MAX_RETAIN_TIME) {
+                        this.logger.error(`消息在无限重试模式下已超过最大保留时间，强制清理: ${messageId}，重试次数: ${bufferedMessage.retryCount}`)
+                        this.saveFailedMessage(bufferedMessage)
+                    } else {
+                        this.logger.warn(`消息已过期但在无限重试模式下保留: ${messageId}，状态: ${bufferedMessage.status}，重试次数: ${bufferedMessage.retryCount}`)
+                        continue
+                    }
                 }
 
                 // 清理相关的定时器
@@ -244,6 +281,7 @@ export class MessageBufferService {
                 }
 
                 this.messageBuffer.delete(messageId)
+                this.notifiedMessages.delete(messageId)
                 cleanupCount++
             }
         }
@@ -284,6 +322,7 @@ export class MessageBufferService {
 
         // 清理消息缓冲区
         this.messageBuffer.clear()
+        this.notifiedMessages.clear()
 
         this.logger.info(`已清空缓冲区，删除了 ${count} 条消息和所有相关定时器`)
     }

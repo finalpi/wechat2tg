@@ -15,7 +15,8 @@ services:
       - wx2tg-server
 
   wx2tg-server:
-    image: finalpi/wx2tg-server:v3-latest # 拉取镜像
+    # image: finalpi/wx2tg-server:v3-latest # v3 稳定版
+    image: finalpi/wx2tg-server:v5-latest
     container_name: wx2tg-server
     ports:
       - "8058:8058"
