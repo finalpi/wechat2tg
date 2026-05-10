@@ -1,23 +1,54 @@
 import { MessageTypeUtils } from './MessageTypeUtils'
 
+export interface NestedChatHistory {
+  id: string
+  title: string
+  content: string
+  attachments: ChatHistoryAttachment[]
+}
+
+export interface ChatHistoryAttachment {
+  id: string
+  type: 'image' | 'file'
+  title: string
+  fileName: string
+  sourceName: string
+  payload: any
+}
+
+export interface ChatHistoryResult {
+  content: string
+  nestedRecords: NestedChatHistory[]
+  attachments: ChatHistoryAttachment[]
+}
+
 // 处理聊天记录
 export async function getChatHistory(
   recordJson: any,
   msg: { type: () => any; text: () => string },
-  typeName: { [key: string]: string }
-): Promise<string> {
+  typeName: { [key: string]: string },
+  xmlToJson?: (xml: string) => any
+): Promise<ChatHistoryResult> {
     try {
       // 获取标题
       // const title = recordJson.msg.appmsg.title;
       const title = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]`;
       // 获取条数
       const itemCount = recordJson.recordinfo.datalist.count;
+      const dataItems = normalizeDataItems(recordJson.recordinfo.datalist.dataitem);
+      if (dataItems.length === 0) {
+        return {
+          content: `<blockquote expandable>${title}\n件数: ${itemCount}\n</blockquote>`,
+          nestedRecords: [],
+          attachments: []
+        }
+      }
       // 获取第一项的日期
-      const firstItemDate = recordJson.recordinfo.datalist.dataitem[0].sourcetime.split(' ')[0].replace(/-/g, '/');
+      const firstItemDate = dataItems[0].sourcetime.split(' ')[0].replace(/-/g, '/');
       // 获取最后一项的日期
-      const datalistLength = recordJson.recordinfo.datalist.dataitem.length;
+      const datalistLength = dataItems.length;
       const lastIndex = datalistLength - 1;
-      const lastItemDate = recordJson.recordinfo.datalist.dataitem[lastIndex].sourcetime.split(' ')[0].replace(/-/g, '/');
+      const lastItemDate = dataItems[lastIndex].sourcetime.split(' ')[0].replace(/-/g, '/');
       let titleDate = firstItemDate;
       let multiDays = false;
       if (firstItemDate !== lastItemDate) {
@@ -26,8 +57,9 @@ export async function getChatHistory(
       }
       // 构建聊天记录
       let chatHistory = `${title}\n${titleDate}\n件数: ${itemCount}\n`;
+      const nestedRecords: NestedChatHistory[] = []
+      const attachments: ChatHistoryAttachment[] = []
   
-      const dataItems = recordJson.recordinfo.datalist.dataitem;
       // 创建数据类型映射
       let chatContent;
       const dataTypeMap = {
@@ -37,7 +69,7 @@ export async function getChatHistory(
         5: typeName.Link,
         19: typeName.MiniApp
       };
-      for (const item of dataItems) {
+      for (const [index, item] of dataItems.entries()) {
         // 获取数据类型
         const dataType = Number(item.datatype);  
         const dataTypeName = MessageTypeUtils.getTypeName(dataTypeMap[dataType as keyof typeof dataTypeMap] + '')
@@ -46,6 +78,29 @@ export async function getChatHistory(
           chatContent = item.datadesc;
         } else if (dataType === 5) {
           chatContent = `<a href="${item.link}">${item.datatitle}</a>`
+        } else if (isNestedChatHistory(item)) {
+          const nestedRecordJson = normalizeRecordJson(item.recordxml, xmlToJson)
+          const nestedTitle = item.datatitle || `[${MessageTypeUtils.getTypeName(msg.type() + '')}]`
+          const nestedChatHistory = await buildChatHistoryText(nestedRecordJson, msg, typeName, xmlToJson)
+          nestedRecords.push({
+            id: `${index + 1}`,
+            title: nestedTitle,
+            content: nestedChatHistory.content,
+            attachments: nestedChatHistory.attachments
+          })
+          chatContent = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]\n${nestedTitle}`
+        } else if (dataType === 2) {
+          const attachment = buildImageAttachment(item, index)
+          if (attachment) {
+            attachments.push(attachment)
+          }
+          chatContent = `[${dataTypeName}]`
+        } else if (dataType === 8) {
+          const attachment = buildFileAttachment(item, index)
+          if (attachment) {
+            attachments.push(attachment)
+          }
+          chatContent = `[文件]\n${item.datatitle || ''}`.trim()
         } else if (dataType === 19) {
           chatContent = `[${dataTypeName}]\n${item.datatitle}`;
         } else {
@@ -84,13 +139,141 @@ export async function getChatHistory(
       // 标题合并
       const htmlText = `<blockquote expandable>${chatHistory}</blockquote>`;
   
-      return htmlText;
+      return {
+        content: htmlText,
+        nestedRecords,
+        attachments
+      };
       
     } catch (error) {
       console.error('チャット履歴処理エラー:', error);
-      return `[${MessageTypeUtils.getTypeName(msg.type() + '')}]`;
+      return {
+        content: `[${MessageTypeUtils.getTypeName(msg.type() + '')}]`,
+        nestedRecords: [],
+        attachments: []
+      };
     }
   }
+
+function isNestedChatHistory(item: any): boolean {
+  return Number(item.datatype) === 17 && Boolean(item.recordxml)
+}
+
+function normalizeDataItems(dataitem: any): any[] {
+  if (!dataitem) {
+    return []
+  }
+
+  return Array.isArray(dataitem) ? dataitem : [dataitem]
+}
+
+function normalizeRecordJson(recordXmlOrJson: any, xmlToJson?: (xml: string) => any): any {
+  if (typeof recordXmlOrJson === 'string') {
+    if (!xmlToJson) {
+      throw new Error('xmlToJson parser is required for nested chat history')
+    }
+
+    return xmlToJson(recordXmlOrJson)
+  }
+
+  if (recordXmlOrJson?.recordinfo) {
+    return recordXmlOrJson
+  }
+
+  return {recordinfo: recordXmlOrJson}
+}
+
+function buildImageAttachment(item: any, index: number): ChatHistoryAttachment | undefined {
+  const fileNo = item.cdndataurl
+  const rawFileAesKey = item.cdndatakey
+  const fileAesKey = decodeCdnKey(rawFileAesKey)
+  const dataLen = Number(item.datasize || item.fullsize || 0)
+  if (!fileNo || !rawFileAesKey) {
+    return undefined
+  }
+
+  const dataFormat = item.datafmt || 'jpg'
+  return {
+    id: `${index + 1}`,
+    type: 'image',
+    title: '图片',
+    fileName: `${item.dataid || `image-${index + 1}`}.${dataFormat}`,
+    sourceName: item.sourcename || '',
+    payload: {
+      fileAesKey,
+      rawFileAesKey,
+      fileNo,
+      attachId: buildCdnAttachId(fileNo, fileAesKey),
+      dataLen,
+      msgId: item.srcMsgCreateTime || item.fromnewmsgid || '',
+      newMsgId: item.fromnewmsgid || '',
+      toWxid: item.dataitemsource?.hashusername || '',
+      userName: item.dataitemsource?.hashusername || item.sourcename || ''
+    }
+  }
+}
+
+function buildFileAttachment(item: any, index: number): ChatHistoryAttachment | undefined {
+  const cdnDataUrl = item.cdndataurl
+  const rawCdnDataKey = item.cdndatakey
+  const cdnDataKey = decodeCdnKey(rawCdnDataKey)
+  const attachId = buildCdnAttachId(cdnDataUrl, cdnDataKey)
+  const dataLen = Number(item.datasize || 0)
+  if (!attachId || !dataLen) {
+    return undefined
+  }
+
+  return {
+    id: `${index + 1}`,
+    type: 'file',
+    title: item.datatitle || '文件',
+    fileName: item.datatitle || `file-${index + 1}`,
+    sourceName: item.sourcename || '',
+    payload: {
+      appId: item.appid || '',
+      attachId,
+      cdnDataUrl,
+      cdnDataKey,
+      rawCdnDataKey,
+      dataLen,
+      userName: item.dataitemsource?.hashusername || item.sourcename || ''
+    }
+  }
+}
+
+function decodeCdnKey(key: string): string {
+  if (!key || !/^[\da-f]+$/i.test(key) || key.length % 2 !== 0) {
+    return key || ''
+  }
+
+  try {
+    const decoded = Buffer.from(key, 'hex').toString('utf8')
+    return /^[\x20-\x7E]+$/.test(decoded) ? decoded : key
+  } catch {
+    return key
+  }
+}
+
+function buildCdnAttachId(cdnDataUrl: string, cdnDataKey: string): string {
+  if (!cdnDataUrl) {
+    return ''
+  }
+
+  if (cdnDataUrl.startsWith('@cdn_')) {
+    return cdnDataUrl
+  }
+
+  return cdnDataKey ? `@cdn_${cdnDataUrl}_${cdnDataKey}_1` : cdnDataUrl
+}
+
+async function buildChatHistoryText(
+  recordJson: any,
+  msg: { type: () => any; text: () => string },
+  typeName: { [key: string]: string },
+  xmlToJson?: (xml: string) => any
+): Promise<ChatHistoryResult> {
+  return await getChatHistory(recordJson, msg, typeName, xmlToJson)
+}
   
 // 处理小程序
 export async function getMiniprogram(

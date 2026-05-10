@@ -66,6 +66,14 @@ export class TelegramBotApiMessageSender extends MessageSender {
                 if (option.parse_mode) {
                     sendParam.parse_mode = option.parse_mode
                 }
+                if (option.inline_keyboard) {
+                    sendParam.reply_markup = {
+                        inline_keyboard: [option.inline_keyboard.map(button => ({
+                            text: button.text,
+                            callback_data: button.callback_data || button.query
+                        }))]
+                    }
+                }
             }
 
             // 创建超时定时器

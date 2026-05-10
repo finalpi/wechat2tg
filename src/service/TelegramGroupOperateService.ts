@@ -50,38 +50,16 @@ export class TelegramGroupOperateService {
                 if (!buff) {
                     return
                 }
-                sharp(buff).toFormat('png').resize(200).toBuffer(async (err, buff) => {
-                    const toUpload = new CustomFile('avatar.png', buff.length, '', buff)
-                    const file = await this.client?.uploadFile({
-                        file: toUpload,
-                        workers: 3,
-                    })
-                    // 超级群
-                    if (entity.className === 'Channel' && entity.megagroup) {
-                        await this.client?.invoke(new Api.channels.EditPhoto(
-                            {
-                                channel: entity,
-                                photo: new Api.InputChatUploadedPhoto(
-                                    {
-                                        file: file,
-                                    }
-                                )
-                            }
-                        ))
+                try {
+                    const avatarBuff = await sharp(buff).toFormat('png').resize(200).toBuffer()
+                    await this.updateGroupAvatar(entity, avatarBuff)
+                } catch (e) {
+                    if (this.isFloodWaitError(e)) {
+                        console.warn(`[TelegramGroupOperateService] 头像更新触发 Telegram 限流，跳过本次更新，等待 ${e.seconds || 'unknown'} 秒`)
                     } else {
-                        // 普通群
-                        await this.client?.invoke(new Api.messages.EditChatPhoto(
-                            {
-                                chatId: entity.id,
-                                photo: new Api.InputChatUploadedPhoto(
-                                    {
-                                        file: file,
-                                    }
-                                )
-                            }
-                        ))
+                        console.error('[TelegramGroupOperateService] 更新群头像失败:', e)
                     }
-                })
+                }
             }
             // 更新群组名
             let name
@@ -128,6 +106,33 @@ export class TelegramGroupOperateService {
         } catch (e) {
             console.log(e)
         }
+    }
+
+    private async updateGroupAvatar(entity: any, buff: Buffer) {
+        const toUpload = new CustomFile('avatar.png', buff.length, '', buff)
+        const file = await this.client?.uploadFile({
+            file: toUpload,
+            workers: 3,
+        })
+        if (entity.className === 'Channel' && entity.megagroup) {
+            await this.client?.invoke(new Api.channels.EditPhoto({
+                channel: entity,
+                photo: new Api.InputChatUploadedPhoto({
+                    file: file,
+                })
+            }))
+        } else {
+            await this.client?.invoke(new Api.messages.EditChatPhoto({
+                chatId: entity.id,
+                photo: new Api.InputChatUploadedPhoto({
+                    file: file,
+                })
+            }))
+        }
+    }
+
+    private isFloodWaitError(e: any): boolean {
+        return e?.code === 420 || e?.errorMessage === 'FLOOD' || e?.message?.includes('FloodWait')
     }
 
     // 创建并绑定群组

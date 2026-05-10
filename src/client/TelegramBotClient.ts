@@ -30,11 +30,16 @@ import {WxRoomRepository} from '../repository/WxRoomRepository'
 import {WeChatClient} from './WechatClient'
 import {SpeechService} from '../service/SpeechService'
 import {WxBot} from 'wx2tg-puppet'
+import {Message as WxMessage} from 'wx2tg-puppet'
+import {toolsApi} from 'wx2tg-puppet/dist/api/ToolsApi'
+import {configService as wxConfigService} from 'wx2tg-puppet/dist/services/config.service'
+import {FileChunkHelper} from 'wx2tg-puppet/dist/utils/FileChunkHelper'
 import {MessageBufferService} from '../util/MessageBufferService'
 import {FileBox} from 'file-box'
 import I18n from '../i18n'
 import http from 'http'
 import {LogUtils} from '../util/LogUtil'
+import {ChatHistoryAttachment, getChatHistory} from '../util/handleMsg'
 
 export class TelegramBotClient extends AbstractClient {
     async login(): Promise<boolean> {
@@ -652,6 +657,73 @@ export class TelegramBotClient extends AbstractClient {
             }
             ctx.deleteMessage()
             ctx.answerCbQuery()
+        })
+
+        bot.action(/^chr:/, async ctx => {
+            try {
+                const [, tgBotMsgId, nestedId] = ctx.match.input.split(':')
+                const storedMessage = await this.messageService.getByBotMsgId(ctx.chat.id, Number(tgBotMsgId))
+                if (!storedMessage?.source_text) {
+                    await ctx.answerCbQuery('聊天记录已过期')
+                    return
+                }
+
+                const msgJson = WxMessage.getXmlToJson(storedMessage.source_text)
+                const recordJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.recorditem)
+                const chatHistory = await getChatHistory(recordJson, {type: () => storedMessage.source_type, text: () => storedMessage.source_text}, WxMessage.Type, WxMessage.getXmlToJson)
+                const nestedRecord = chatHistory.nestedRecords.find(record => record.id === nestedId)
+                if (!nestedRecord) {
+                    await ctx.answerCbQuery('没有找到内层聊天记录')
+                    return
+                }
+
+                const replyOptions: any = {
+                    parse_mode: 'HTML',
+                    reply_parameters: {
+                        message_id: Number(tgBotMsgId)
+                    }
+                }
+                const downloadableAttachments = this.getDownloadableChatHistoryAttachments(nestedRecord.attachments)
+                if (downloadableAttachments.length > 0) {
+                    replyOptions.reply_markup = {
+                        inline_keyboard: this.buildChatHistoryAttachmentKeyboard(tgBotMsgId, nestedId, downloadableAttachments)
+                    }
+                }
+
+                await ctx.reply(nestedRecord.content, replyOptions)
+                await ctx.answerCbQuery('已展开')
+            } catch (e) {
+                this.logger.error('展开嵌套聊天记录失败:', e)
+                await ctx.answerCbQuery('展开失败')
+            }
+        })
+
+        bot.action(/^chrf:/, async ctx => {
+            try {
+                const [, tgBotMsgId, nestedId, attachmentId] = ctx.match.input.split(':')
+                await ctx.answerCbQuery('开始下载')
+                const storedMessage = await this.messageService.getByBotMsgId(ctx.chat.id, Number(tgBotMsgId))
+                if (!storedMessage?.source_text) {
+                    await ctx.reply('原始聊天记录已过期，无法下载附件')
+                    return
+                }
+
+                const attachment = await this.findChatHistoryAttachment(storedMessage, nestedId, attachmentId)
+                if (!attachment) {
+                    await ctx.reply('没有找到这个附件')
+                    return
+                }
+                if (attachment.type === 'image') {
+                    await ctx.reply('聊天记录图片暂不支持下载')
+                    return
+                }
+
+                const fileBuffer = await this.downloadChatHistoryAttachment(attachment, storedMessage)
+                await this.sendChatHistoryAttachment(ctx.chat.id, fileBuffer, attachment, Number(tgBotMsgId))
+            } catch (e) {
+                this.logger.error('下载聊天记录附件失败:', e)
+                await ctx.reply('附件下载失败')
+            }
         })
     }
 
@@ -1831,11 +1903,300 @@ ${this.i18n.t('help.instructions')}`))
         if (newMsg && success) {
             messageEntity.tgBotMsgId = parseInt(newMsg.message_id + '')
             await this.messageService.createOrUpdate(messageEntity)
+            if (message.param?.nestedChatHistories?.length) {
+                try {
+                    await this.attachNestedChatHistoryButtons(targetChatId, messageEntity.tgBotMsgId, message.param.nestedChatHistories)
+                } catch (e) {
+                    this.logger.warn(`嵌套聊天记录按钮添加失败: wxMsgId=${message.id}, tgBotMsgId=${messageEntity.tgBotMsgId}`)
+                }
+            }
             this.logger.info(`文本消息发送成功: wxMsgId=${message.id}, tgBotMsgId=${messageEntity.tgBotMsgId}`)
         } else if (!success) {
             this.logger.warn(`消息保存到数据库但 tgBotMsgId=0: wxMsgId=${message.id}, chatId=${targetChatId}`)
         }
 
         return success
+    }
+
+    private async attachNestedChatHistoryButtons(chatId: number, tgBotMsgId: number, nestedChatHistories: {id: string, title: string}[]) {
+        const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
+        const inlineKeyboard = nestedChatHistories.map((record, index) => [{
+            text: nestedChatHistories.length === 1 ? '展开聊天记录' : `展开聊天记录 ${index + 1}`,
+            callback_data: `chr:${tgBotMsgId}:${record.id}`
+        }])
+        await client.telegram.editMessageReplyMarkup(chatId, tgBotMsgId, undefined, {
+            inline_keyboard: inlineKeyboard
+        })
+    }
+
+    private buildChatHistoryAttachmentKeyboard(tgBotMsgId: string | number, nestedId: string, attachments: ChatHistoryAttachment[]) {
+        return attachments.map((attachment, index) => [{
+            text: attachments.length === 1 ? this.getAttachmentButtonText(attachment) : `${this.getAttachmentButtonText(attachment)} ${index + 1}`,
+            callback_data: `chrf:${tgBotMsgId}:${nestedId}:${attachment.id}`
+        }])
+    }
+
+    private getDownloadableChatHistoryAttachments(attachments: ChatHistoryAttachment[]) {
+        return attachments.filter(attachment => attachment.type !== 'image')
+    }
+
+    private getAttachmentButtonText(attachment: ChatHistoryAttachment) {
+        return attachment.type === 'image' ? '下载图片' : '下载文件'
+    }
+
+    private async findChatHistoryAttachment(storedMessage: Message, nestedId: string, attachmentId: string): Promise<ChatHistoryAttachment | undefined> {
+        const msgJson = WxMessage.getXmlToJson(storedMessage.source_text)
+        const recordJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.recorditem)
+        const chatHistory = await getChatHistory(recordJson, {type: () => storedMessage.source_type, text: () => storedMessage.source_text}, WxMessage.Type, WxMessage.getXmlToJson)
+        const nestedRecord = chatHistory.nestedRecords.find(record => record.id === nestedId)
+        return nestedRecord?.attachments.find(attachment => attachment.id === attachmentId)
+    }
+
+    private async downloadChatHistoryAttachment(attachment: ChatHistoryAttachment, storedMessage: Message): Promise<Buffer> {
+        const wxConfig = await wxConfigService.get()
+        const wxid = wxConfig?.wxid || ''
+        if (attachment.type === 'image') {
+            this.logger.info(`下载聊天记录图片附件: fileNo=${String(attachment.payload.fileNo).slice(0, 60)}, aesKey=${attachment.payload.fileAesKey}, rawKey=${attachment.payload.rawFileAesKey}`)
+            const response = await toolsApi.CdnDownloadImage({
+                FileAesKey: attachment.payload.fileAesKey,
+                FileNo: attachment.payload.fileNo,
+                Wxid: wxid
+            })
+            this.logger.info(`下载聊天记录图片附件: message=${response.data?.Message}, success=${response.data?.Success}, dataKeys=${Object.keys(response.data?.Data || {}).join(',')}`)
+            if (response.data?.Message === '成功' || response.data?.Success === true) {
+                try {
+                    return this.extractImageDownloadBuffer(response.data)
+                } catch (e) {
+                    this.logger.warn('聊天记录图片 CDN 返回成功但解析失败，尝试分片下载')
+                }
+            }
+
+            return await this.downloadImageAttachmentChunks(attachment, wxid, storedMessage)
+        }
+
+        return await this.downloadFileAttachmentChunks(attachment, wxid)
+    }
+
+    private extractImageDownloadBuffer(responseData: any): Buffer {
+        const bufferSource = this.findDownloadBufferSource(responseData, ['Image', 'image'])
+        return this.decodeDownloadBuffer(bufferSource)
+    }
+
+    private async downloadFileAttachmentChunks(attachment: ChatHistoryAttachment, wxid: string): Promise<Buffer> {
+        const totalSize = Number(attachment.payload.dataLen || 0)
+        if (totalSize <= 0) {
+            throw new Error(`Invalid attachment size for ${attachment.type}`)
+        }
+
+        const firstChunk = FileChunkHelper.getChunk(totalSize, 0)
+        if (!firstChunk) {
+            throw new Error('Invalid first file chunk')
+        }
+
+        this.logger.info(`下载聊天记录文件附件: size=${totalSize}, userName=${attachment.payload.userName}, attachId=${String(attachment.payload.attachId).slice(0, 80)}`)
+        const firstResp = await this.retryDownload(() => toolsApi.DownloadFile({
+            AppID: attachment.payload.appId,
+            AttachId: attachment.payload.attachId,
+            DataLen: totalSize,
+            Section: firstChunk,
+            UserName: attachment.payload.userName,
+            Wxid: wxid
+        }))
+
+        const firstChunkData = this.extractChunkDownloadBuffer(firstResp.data)
+        const downloadedLength = firstChunkData.length || firstChunkData.buffer.length
+        const chunks = FileChunkHelper.calculateChunks(totalSize, downloadedLength)
+        let completeBuffer = firstChunkData.buffer
+
+        for (let i = 1; i < chunks.length; i++) {
+            const chunk = chunks[i]
+            const response = await this.retryDownload(() => toolsApi.DownloadFile({
+                AppID: attachment.payload.appId,
+                AttachId: attachment.payload.attachId,
+                DataLen: totalSize,
+                Section: chunk,
+                UserName: attachment.payload.userName,
+                Wxid: wxid,
+            }))
+            const chunkData = this.extractChunkDownloadBuffer(response.data)
+            completeBuffer = Buffer.concat([completeBuffer, chunkData.buffer])
+        }
+
+        return completeBuffer
+    }
+
+    private async downloadImageAttachmentChunks(attachment: ChatHistoryAttachment, wxid: string, storedMessage: Message): Promise<Buffer> {
+        const totalSize = Number(attachment.payload.dataLen || 0)
+        const msgId = storedMessage.msgId
+        const toWxidCandidates = [
+            storedMessage.toWxid,
+            storedMessage.wxSenderId,
+            attachment.payload.toWxid,
+            attachment.payload.userName
+        ].filter(Boolean)
+        const toWxidList = Array.from(new Set(toWxidCandidates))
+        if (totalSize <= 0 || !msgId || toWxidList.length === 0) {
+            throw new Error(`Invalid image download params: size=${totalSize}, msgId=${msgId}, toWxid=${toWxidList.join('|')}`)
+        }
+
+        const firstChunk = FileChunkHelper.getChunk(totalSize, 0)
+        if (!firstChunk) {
+            throw new Error('Invalid first image chunk')
+        }
+
+        let firstResp: any
+        let selectedToWxid = ''
+        let lastError: any
+        for (const toWxid of toWxidList) {
+            try {
+                this.logger.info(`下载聊天记录图片分片: size=${totalSize}, msgId=${msgId}, toWxid=${toWxid}`)
+                firstResp = await this.retryDownload(() => toolsApi.DownloadImg({
+                    CompressType: 0,
+                    DataLen: totalSize,
+                    MsgId: Number(msgId),
+                    Section: firstChunk,
+                    ToWxid: toWxid,
+                    Wxid: wxid
+                }))
+                selectedToWxid = toWxid
+                break
+            } catch (error) {
+                lastError = error
+            }
+        }
+
+        if (!firstResp) {
+            throw lastError || new Error('Image download failed')
+        }
+
+        const firstChunkData = this.extractChunkDownloadBuffer(firstResp.data)
+        const downloadedLength = firstChunkData.length || firstChunkData.buffer.length
+        const chunks = FileChunkHelper.calculateChunks(totalSize, downloadedLength)
+        let completeBuffer = firstChunkData.buffer
+
+        for (let i = 1; i < chunks.length; i++) {
+            const chunk = chunks[i]
+            const response = await this.retryDownload(() => toolsApi.DownloadImg({
+                CompressType: 0,
+                DataLen: totalSize,
+                MsgId: Number(msgId),
+                Section: chunk,
+                ToWxid: selectedToWxid,
+                Wxid: wxid
+            }))
+            const chunkData = this.extractChunkDownloadBuffer(response.data)
+            completeBuffer = Buffer.concat([completeBuffer, chunkData.buffer])
+        }
+
+        return completeBuffer
+    }
+
+    private extractChunkDownloadBuffer(responseData: any): {buffer: Buffer, length: number} {
+        const data = responseData?.Data ?? responseData?.data ?? responseData
+        const bufferNode = data?.data ?? data
+        const bufferSource = bufferNode?.buffer ?? bufferNode?.Buffer ?? data?.buffer ?? data?.Buffer
+        const length = Number(bufferNode?.iLen ?? bufferNode?.ILen ?? data?.iLen ?? data?.ILen ?? 0)
+        return {
+            buffer: this.decodeDownloadBuffer(bufferSource),
+            length
+        }
+    }
+
+    private async retryDownload(downloadFn: () => any): Promise<any> {
+        let lastError: any
+        for (let i = 0; i < 3; i++) {
+            try {
+                const response = await downloadFn()
+                if (response?.data?.Data?.BaseResponse?.ret === 0) {
+                    return response
+                }
+                lastError = new Error(`Download failed with ret code: ${response?.data?.Data?.BaseResponse?.ret}, message=${this.getDownloadErrorMessage(response?.data)}`)
+            } catch (error) {
+                lastError = error
+            }
+            if (i < 2) {
+                await new Promise(resolve => setTimeout(resolve, 1000))
+            }
+        }
+        throw new Error(`Download failed after 3 attempts. Last error: ${lastError?.message}`)
+    }
+
+    private getDownloadErrorMessage(responseData: any): string {
+        return responseData?.Data?.BaseResponse?.errMsg?.string ||
+            responseData?.Data?.BaseResponse?.errMsg ||
+            responseData?.Message ||
+            responseData?.message ||
+            ''
+    }
+
+    private decodeDownloadBuffer(bufferSource: any): Buffer {
+        if (Buffer.isBuffer(bufferSource)) {
+            return bufferSource
+        }
+
+        if (Array.isArray(bufferSource)) {
+            return Buffer.from(bufferSource)
+        }
+
+        if (typeof bufferSource === 'string') {
+            const base64 = bufferSource.replace(/^data:[^;]+;base64,/, '')
+            return Buffer.from(base64, 'base64')
+        }
+
+        throw new Error('Unsupported download response format')
+    }
+
+    private findDownloadBufferSource(value: any, preferredKeys: string[] = []): any {
+        if (!value) {
+            return undefined
+        }
+
+        if (Buffer.isBuffer(value) || Array.isArray(value) || typeof value === 'string') {
+            return value
+        }
+
+        if (typeof value !== 'object') {
+            return undefined
+        }
+
+        const fallbackKeys = ['Image', 'image', 'Buffer', 'buffer', 'FileData', 'fileData', 'Base64', 'base64']
+        for (const key of [...preferredKeys, ...fallbackKeys]) {
+            if (value[key]) {
+                const candidate = this.findDownloadBufferSource(value[key])
+                if (candidate) {
+                    return candidate
+                }
+            }
+        }
+
+        for (const key of Object.keys(value)) {
+            const candidate = this.findDownloadBufferSource(value[key])
+            if (candidate) {
+                return candidate
+            }
+        }
+
+        return undefined
+    }
+
+    private async sendChatHistoryAttachment(chatId: number, fileBuffer: Buffer, attachment: ChatHistoryAttachment, replyToMessageId: number) {
+        const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
+        const replyOptions = {
+            caption: attachment.title,
+            reply_parameters: {
+                message_id: replyToMessageId
+            }
+        }
+        if (attachment.type === 'image') {
+            try {
+                await client.telegram.sendPhoto(chatId, {source: fileBuffer, filename: attachment.fileName}, replyOptions)
+            } catch (e) {
+                this.logger.warn('图片作为 photo 发送失败，改为 document 发送')
+                await client.telegram.sendDocument(chatId, {source: fileBuffer, filename: attachment.fileName}, replyOptions)
+            }
+            return
+        }
+
+        await client.telegram.sendDocument(chatId, {source: fileBuffer, filename: attachment.fileName}, replyOptions)
     }
 }
