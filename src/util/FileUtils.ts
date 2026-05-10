@@ -5,11 +5,20 @@ import {HttpsProxyAgent} from 'https-proxy-agent'
 import {BotMTProtoClient} from '../client/BotMTProtoClient'
 import fs from 'node:fs'
 import {join} from 'path'
+import {LogUtils} from './LogUtil'
+
+export interface LargeFileDownloadProgress {
+    downloaded: number
+    total: number
+    percent: number
+}
 
 export class FileUtils {
     private constructor() { //
     }
     private static instance = undefined
+    private readonly LARGE_FILE_PROGRESS_LOG_INTERVAL = 5000
+    private readonly LARGE_FILE_NO_PROGRESS_TIMEOUT = 60000
 
     static getInstance(): FileUtils {
         if (!FileUtils.instance) {
@@ -64,12 +73,65 @@ export class FileUtils {
         }
     }
 
-    public async downloadLargeFile(messageId: number, chatId: string | number) {
+    public async downloadLargeFile(messageId: number, chatId: string | number, progressCallback?: (progress: LargeFileDownloadProgress) => void | Promise<void>) {
+        const logger = LogUtils.config().getLogger('FileUtils')
+        const startTime = Date.now()
+        let lastProgressTime = Date.now()
+        let lastLogTime = 0
+        let lastLoggedPercent = -1
+        let lastDownloaded = 0
+        logger.info(`开始下载 Telegram 大文件: messageId=${messageId}, chatId=${chatId}`)
         const chat = await BotMTProtoClient.getSpyClient('botMTPClient').client.getInputEntity(chatId)
         const messages = await BotMTProtoClient.getSpyClient('botMTPClient').client?.getMessages(chat, {ids: messageId})
         if (messages) {
-            return messages[0].downloadMedia()
+            const downloadPromise = messages[0].downloadMedia({
+                progressCallback: (downloaded: any, fullSize: any) => {
+                    const downloadedBytes = Number(downloaded?.toJSNumber?.() ?? downloaded ?? 0)
+                    const totalBytes = Number(fullSize?.toJSNumber?.() ?? fullSize ?? 0)
+                    lastDownloaded = downloadedBytes
+                    lastProgressTime = Date.now()
+
+                    const percent = totalBytes > 0 ? Math.floor(downloadedBytes / totalBytes * 100) : 0
+                    void progressCallback?.({
+                        downloaded: downloadedBytes,
+                        total: totalBytes,
+                        percent
+                    })
+                    const shouldLog = Date.now() - lastLogTime >= this.LARGE_FILE_PROGRESS_LOG_INTERVAL ||
+                        percent >= lastLoggedPercent + 5 ||
+                        downloadedBytes >= totalBytes
+                    if (shouldLog) {
+                        lastLogTime = Date.now()
+                        lastLoggedPercent = percent
+                        logger.info(`Telegram 大文件下载进度: messageId=${messageId}, downloaded=${this.formatBytes(downloadedBytes)}, total=${totalBytes ? this.formatBytes(totalBytes) : 'unknown'}, progress=${totalBytes ? `${percent}%` : 'unknown'}`)
+                    }
+                }
+            })
+            const timeoutPromise = new Promise<never>((_, reject) => {
+                const interval = setInterval(() => {
+                    if (Date.now() - lastProgressTime > this.LARGE_FILE_NO_PROGRESS_TIMEOUT) {
+                        clearInterval(interval)
+                        reject(new Error(`Telegram large file download no progress for ${this.LARGE_FILE_NO_PROGRESS_TIMEOUT}ms, downloaded=${this.formatBytes(lastDownloaded)}`))
+                    }
+                }, 5000)
+                downloadPromise.finally(() => clearInterval(interval)).catch(() => undefined)
+            })
+            const buffer = await Promise.race([downloadPromise, timeoutPromise])
+            const size = Buffer.isBuffer(buffer) ? buffer.length : Buffer.byteLength(buffer || '')
+            logger.info(`Telegram 大文件下载完成: messageId=${messageId}, size=${this.formatBytes(size)}, cost=${Date.now() - startTime}ms`)
+            return buffer
         }
+        logger.warn(`Telegram 大文件下载失败: 未找到消息 messageId=${messageId}, chatId=${chatId}`)
+    }
+
+    private formatBytes(bytes: number): string {
+        if (!bytes) {
+            return '0B'
+        }
+
+        const units = ['B', 'KB', 'MB', 'GB']
+        const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+        return `${(bytes / Math.pow(1024, index)).toFixed(2)}${units[index]}`
     }
 
     static async downloadBufferWithProxy(fileUrl: string): Promise<Buffer> {

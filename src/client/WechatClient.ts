@@ -220,9 +220,11 @@ export class WeChatClient extends AbstractClient {
                 if (bindGroup) {
                     let msgResult
                     let file
+                    this.logger.info(`开始发送文件到微信: tgMsgId=${message.id}, chatId=${message.chatId}, wxId=${bindGroup.wxId}, fileName=${message.file.fileName}, size=${this.formatBytes(message.file.file.length)}`)
                     if (message.file.fileName.endsWith('.mp4')) {
                         message.file.fileName = new Date().getTime() + 'video.mp4'
                         const url = FileUtils.saveFile(message.file.file, message.file.fileName)
+                        this.logger.info(`开始处理视频文件: tgMsgId=${message.id}, fileName=${message.file.fileName}, size=${this.formatBytes(message.file.file.length)}`)
                         // 提取视频封面
                         const ffmpegUtil = await new ConverterHelper()
                         const videoPath = `save-files/_temp/${message.file.fileName}`
@@ -249,13 +251,17 @@ export class WeChatClient extends AbstractClient {
                     } else {
                         file = FileBox.fromBuffer(message.file.file, message.file.fileName)
                     }
+                    this.logger.info(`文件已转换为微信发送对象: tgMsgId=${message.id}, fileName=${message.file.fileName}`)
                     if (bindGroup.type === 0) {
                         const contact = await this.client.Contact.find({id: bindGroup.wxId})
+                        this.logger.info(`开始发送文件到微信好友: tgMsgId=${message.id}, wxId=${bindGroup.wxId}, fileName=${message.file.fileName}`)
                         msgResult = await contact.say(file)
                     } else {
                         const room = await this.client.Room.find({id: bindGroup.wxId})
+                        this.logger.info(`开始发送文件到微信群: tgMsgId=${message.id}, wxId=${bindGroup.wxId}, fileName=${message.file.fileName}`)
                         msgResult = await room.say(file)
                     }
+                    this.logger.info(`文件发送到微信完成: tgMsgId=${message.id}, wxMsgId=${msgResult?.newMsgId}, msgId=${msgResult?.msgId}, fileName=${message.file.fileName}`)
                     // 将 msgId 更新到数据库
                     const messageEntity = await this.messageService.getByBotMsgId(bindGroup.chatId, parseInt(message.id))
                     if (msgResult && messageEntity) {
@@ -275,8 +281,55 @@ export class WeChatClient extends AbstractClient {
                     message_id: parseInt(message.id)
                 }
             })
+            return false
         }
         return true
+    }
+
+    private formatBytes(bytes: number): string {
+        if (!bytes) {
+            return '0B'
+        }
+
+        const units = ['B', 'KB', 'MB', 'GB']
+        const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+        return `${(bytes / Math.pow(1024, index)).toFixed(2)}${units[index]}`
+    }
+
+    private logWechatFileMeta(msg: any): void {
+        try {
+            const {appmsg, attach, expireAt} = this.getWechatFileMeta(msg)
+            this.logger.info(
+                `微信文件信息: title=${appmsg.title || ''}, size=${this.formatBytes(Number(attach.totallen || 0))}, ` +
+                `attachId=${String(attach.attachid || '').slice(0, 80)}, cdnattachurl=${String(attach.cdnattachurl || '').slice(0, 60)}, ` +
+                `aeskey=${attach.aeskey || ''}, from=${msg.fromId}, expireAt=${expireAt || ''}`
+            )
+        } catch (e) {
+            this.logger.warn(`解析微信文件信息失败: wxMsgId=${msg.newMsgId}, error=${e.message}`)
+        }
+    }
+
+    private buildWechatMediaDownloadFallbackText(msg: any, error: any): string {
+        try {
+            if (msg.type() === WxMessage.Type.File) {
+                const {appmsg, attach} = this.getWechatFileMeta(msg)
+                const title = appmsg.title || '未知文件'
+                const size = this.formatBytes(Number(attach.totallen || 0))
+                return `[文件]\n${title}\n大小: ${size}\n下载失败: ${error.message || error}`
+            }
+        } catch (e) {
+            this.logger.warn(`生成微信媒体下载失败占位文本失败: wxMsgId=${msg.newMsgId}, error=${e.message}`)
+        }
+
+        return `[${MessageTypeUtils.getTypeName(msg.type() + '')}]\n下载失败: ${error.message || error}`
+    }
+
+    private getWechatFileMeta(msg: any): {appmsg: any, attach: any, expireAt: any} {
+        const msgJson = WxMessage.getXmlToJson(msg._xml)
+        const appmsg = msgJson?.msg?.appmsg || {}
+        const attach = appmsg?.appattach || {}
+        const expireAt = msgJson?.msg?.extcommoninfo?.media_expire_at
+        return {appmsg, attach, expireAt}
     }
 
     handlerMessage(event: Event, message: BaseMessage): Promise<unknown> {
@@ -643,7 +696,27 @@ export class WeChatClient extends AbstractClient {
             case WxMessage.Type.Emoji:
             case WxMessage.Type.File:
             case WxMessage.Type.Voice:
-                filebox = await msg.toFileBox()
+                try {
+                    this.logger.info(`开始下载微信媒体文件: wxMsgId=${msg.newMsgId}, msgId=${msg._msgId}, type=${msg.type()}, from=${msg.fromId}, to=${msg.toId}`)
+                    if (msg.type() === WxMessage.Type.File) {
+                        this.logWechatFileMeta(msg)
+                    }
+                    filebox = await msg.toFileBox()
+                    this.logger.info(`微信媒体文件下载完成: wxMsgId=${msg.newMsgId}, msgId=${msg._msgId}, fileName=${filebox?.name || ''}`)
+                } catch (e) {
+                    this.logger.error(`微信媒体文件下载失败: wxMsgId=${msg.newMsgId}, msgId=${msg._msgId}, type=${msg.type()}, error=${e.message}`, e)
+                    messageParam.type = 0
+                    messageParam.content = this.buildWechatMediaDownloadFallbackText(msg, e)
+                    messageParam.param = {
+                        ...messageParam.param,
+                        inline_keyboard: [{
+                            text: '重试下载',
+                            callback_data: `wmr:${messageParam.id}`
+                        }]
+                    }
+                    WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                    return
+                }
                 if (!filebox) {
                     return
                 }

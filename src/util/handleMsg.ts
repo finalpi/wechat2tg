@@ -4,6 +4,7 @@ export interface NestedChatHistory {
   id: string
   title: string
   content: string
+  nestedRecords: NestedChatHistory[]
   attachments: ChatHistoryAttachment[]
 }
 
@@ -27,7 +28,8 @@ export async function getChatHistory(
   recordJson: any,
   msg: { type: () => any; text: () => string },
   typeName: { [key: string]: string },
-  xmlToJson?: (xml: string) => any
+  xmlToJson?: (xml: string) => any,
+  idPrefix = ''
 ): Promise<ChatHistoryResult> {
     try {
       // 获取标题
@@ -81,11 +83,13 @@ export async function getChatHistory(
         } else if (isNestedChatHistory(item)) {
           const nestedRecordJson = normalizeRecordJson(item.recordxml, xmlToJson)
           const nestedTitle = item.datatitle || `[${MessageTypeUtils.getTypeName(msg.type() + '')}]`
-          const nestedChatHistory = await buildChatHistoryText(nestedRecordJson, msg, typeName, xmlToJson)
+          const nestedId = buildNestedId(idPrefix, index + 1)
+          const nestedChatHistory = await buildChatHistoryText(nestedRecordJson, msg, typeName, xmlToJson, nestedId)
           nestedRecords.push({
-            id: `${index + 1}`,
+            id: nestedId,
             title: nestedTitle,
             content: nestedChatHistory.content,
+            nestedRecords: nestedChatHistory.nestedRecords,
             attachments: nestedChatHistory.attachments
           })
           chatContent = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]\n${nestedTitle}`
@@ -192,7 +196,7 @@ function buildImageAttachment(item: any, index: number): ChatHistoryAttachment |
     return undefined
   }
 
-  const dataFormat = item.datafmt || 'jpg'
+  const dataFormat = normalizeImageFormat(item.datafmt)
   return {
     id: `${index + 1}`,
     type: 'image',
@@ -205,6 +209,8 @@ function buildImageAttachment(item: any, index: number): ChatHistoryAttachment |
       fileNo,
       attachId: buildCdnAttachId(fileNo, fileAesKey),
       dataLen,
+      fullMd5: item.fullmd5 || '',
+      thumbFullMd5: item.thumbfullmd5 || '',
       msgId: item.srcMsgCreateTime || item.fromnewmsgid || '',
       newMsgId: item.fromnewmsgid || '',
       toWxid: item.dataitemsource?.hashusername || '',
@@ -254,6 +260,15 @@ function decodeCdnKey(key: string): string {
   }
 }
 
+function normalizeImageFormat(format: string): string {
+  const normalized = String(format || '').toLowerCase()
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(normalized)) {
+    return normalized
+  }
+
+  return 'jpg'
+}
+
 function buildCdnAttachId(cdnDataUrl: string, cdnDataKey: string): string {
   if (!cdnDataUrl) {
     return ''
@@ -270,9 +285,14 @@ async function buildChatHistoryText(
   recordJson: any,
   msg: { type: () => any; text: () => string },
   typeName: { [key: string]: string },
-  xmlToJson?: (xml: string) => any
+  xmlToJson?: (xml: string) => any,
+  idPrefix = ''
 ): Promise<ChatHistoryResult> {
-  return await getChatHistory(recordJson, msg, typeName, xmlToJson)
+  return await getChatHistory(recordJson, msg, typeName, xmlToJson, idPrefix)
+}
+
+function buildNestedId(parentId: string, index: number): string {
+  return parentId ? `${parentId}.${index}` : `${index}`
 }
   
 // 处理小程序
