@@ -1903,11 +1903,16 @@ ${this.i18n.t('help.instructions')}`))
         if (newMsg && success) {
             messageEntity.tgBotMsgId = parseInt(newMsg.message_id + '')
             await this.messageService.createOrUpdate(messageEntity)
-            if (message.param?.nestedChatHistories?.length) {
+            if (message.param?.nestedChatHistories?.length || message.param?.chatHistoryAttachments?.length) {
                 try {
-                    await this.attachNestedChatHistoryButtons(targetChatId, messageEntity.tgBotMsgId, message.param.nestedChatHistories)
+                    await this.attachChatHistoryButtons(
+                        targetChatId,
+                        messageEntity.tgBotMsgId,
+                        message.param.nestedChatHistories || [],
+                        message.param.chatHistoryAttachments || []
+                    )
                 } catch (e) {
-                    this.logger.warn(`嵌套聊天记录按钮添加失败: wxMsgId=${message.id}, tgBotMsgId=${messageEntity.tgBotMsgId}`)
+                    this.logger.warn(`聊天记录按钮添加失败: wxMsgId=${message.id}, tgBotMsgId=${messageEntity.tgBotMsgId}`)
                 }
             }
             this.logger.info(`文本消息发送成功: wxMsgId=${message.id}, tgBotMsgId=${messageEntity.tgBotMsgId}`)
@@ -1918,12 +1923,14 @@ ${this.i18n.t('help.instructions')}`))
         return success
     }
 
-    private async attachNestedChatHistoryButtons(chatId: number, tgBotMsgId: number, nestedChatHistories: {id: string, title: string}[]) {
+    private async attachChatHistoryButtons(chatId: number, tgBotMsgId: number, nestedChatHistories: {id: string, title: string}[], attachments: ChatHistoryAttachment[] = []) {
         const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
         const inlineKeyboard = nestedChatHistories.map((record, index) => [{
             text: nestedChatHistories.length === 1 ? '展开聊天记录' : `展开聊天记录 ${index + 1}`,
             callback_data: `chr:${tgBotMsgId}:${record.id}`
         }])
+        const downloadableAttachments = this.getDownloadableChatHistoryAttachments(attachments)
+        inlineKeyboard.push(...this.buildChatHistoryAttachmentKeyboard(tgBotMsgId, 'root', downloadableAttachments))
         await client.telegram.editMessageReplyMarkup(chatId, tgBotMsgId, undefined, {
             inline_keyboard: inlineKeyboard
         })
@@ -1948,6 +1955,9 @@ ${this.i18n.t('help.instructions')}`))
         const msgJson = WxMessage.getXmlToJson(storedMessage.source_text)
         const recordJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.recorditem)
         const chatHistory = await getChatHistory(recordJson, {type: () => storedMessage.source_type, text: () => storedMessage.source_text}, WxMessage.Type, WxMessage.getXmlToJson)
+        if (nestedId === 'root') {
+            return chatHistory.attachments.find(attachment => attachment.id === attachmentId)
+        }
         const nestedRecord = chatHistory.nestedRecords.find(record => record.id === nestedId)
         return nestedRecord?.attachments.find(attachment => attachment.id === attachmentId)
     }

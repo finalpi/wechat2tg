@@ -679,10 +679,11 @@ export class WeChatClient extends AbstractClient {
                 const recordJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.recorditem)
                 const chatHistory = await getChatHistory(recordJson, msg, WxMessage.Type, WxMessage.getXmlToJson)
                 messageParam.content = chatHistory.content
-                if (chatHistory.nestedRecords.length > 0) {
+                if (chatHistory.nestedRecords.length > 0 || chatHistory.attachments.length > 0) {
                     messageParam.param = {
                         ...messageParam.param,
-                        nestedChatHistories: chatHistory.nestedRecords
+                        nestedChatHistories: chatHistory.nestedRecords,
+                        chatHistoryAttachments: chatHistory.attachments
                     }
                 }
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
