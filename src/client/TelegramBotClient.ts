@@ -41,6 +41,7 @@ import http from 'http'
 import {LogUtils} from '../util/LogUtil'
 import {ChatHistoryAttachment, getChatHistory, NestedChatHistory} from '../util/handleMsg'
 import {MessageTypeUtils} from '../util/MessageTypeUtils'
+import {normalizeEscapedTelegramCommandText} from '../util/TelegramTextUtils'
 
 interface LargeFileProgressEditor {
     update(text: string, force?: boolean): Promise<void>
@@ -749,13 +750,15 @@ export class TelegramBotClient extends AbstractClient {
     onMessage(bot: Telegraf) {
         bot.on(message('text'), async ctx => {
             // 识别文本类型
-            const text = ctx.message.text
+            const rawText = ctx.message.text
+            const text = normalizeEscapedTelegramCommandText(rawText)
+            const isEscapedCommandText = rawText.startsWith('\\/')
             // 处理完毕
             const messageId = ctx.message.message_id
             const chatId = ctx.chat.id
             const exist = await this.bindGroupService.getByChatId(chatId)
             // 处理等待用户输入的指令
-            if (await this.dealWithCommand(ctx, text)) {
+            if (await this.dealWithCommand(ctx, rawText)) {
                 return
             }
             if (!exist) {
@@ -764,7 +767,7 @@ export class TelegramBotClient extends AbstractClient {
             }
             const replyMessageId = ctx.update.message['reply_to_message']?.message_id
             // 其他 bot 的命令会进来，不处理
-            if (typeof text === 'string' && text.startsWith('/')) {
+            if (!isEscapedCommandText && typeof text === 'string' && text.startsWith('/')) {
                 return
             }
             const message: BaseMessage = {
@@ -1074,13 +1077,14 @@ export class TelegramBotClient extends AbstractClient {
         }
         // 带有文本的消息单独发送文本
         if (ctx.text) {
+            const text = normalizeEscapedTelegramCommandText(ctx.text)
             const textMessage: BaseMessage = {
                 id: messageId + '',
                 senderId: '',
                 wxId: '',
                 sender: '{me}',
                 chatId: chatId,
-                content: ctx.text,
+                content: text,
                 type: 0
             }
             TelegramBotClient.getSpyClient('wxClient').sendMessage(textMessage)

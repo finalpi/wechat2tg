@@ -19,6 +19,7 @@ import fs from 'node:fs'
 import {ConverterHelper} from '../util/FfmpegUtils'
 import crypto from 'crypto'
 import path from 'node:path'
+import {normalizeEscapedTelegramCommandText} from '../util/TelegramTextUtils'
 
 export class UserMTProtoClient extends AbstractClient {
     private readonly DEFAULT_FILTER_ID = 115
@@ -86,7 +87,9 @@ export class UserMTProtoClient extends AbstractClient {
                     && !msg.fromId.userId.eq(botId) && chatIds.includes(msgChatId)) {
                     const doSend = () => {
                         if (msg.message) {
-                            if (msg.message.startsWith('/')) {
+                            const isEscapedCommandText = msg.message.startsWith('\\/')
+                            const text = normalizeEscapedTelegramCommandText(msg.message)
+                            if (!isEscapedCommandText && text.startsWith('/')) {
                                 return
                             }
                             const textMessage: BaseMessage = {
@@ -95,7 +98,7 @@ export class UserMTProtoClient extends AbstractClient {
                                 wxId: '',
                                 sender: '{me}',
                                 chatId: msgChatId,
-                                content: msg.message,
+                                content: text,
                                 type: 0
                             }
                             UserMTProtoClient.getSpyClient('wxClient').sendMessage(textMessage)
