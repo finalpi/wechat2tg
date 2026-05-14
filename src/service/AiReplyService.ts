@@ -66,6 +66,17 @@ export class AiReplyService {
         return content.trim()
     }
 
+    formatSuggestionsForTelegram(suggestion: string): string {
+        return suggestion
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean)
+            .map(line => this.extractSuggestionText(line))
+            .filter(Boolean)
+            .map(line => `\`${this.escapeMarkdownCode(line)}\``)
+            .join('\n')
+    }
+
     private formatContext(messages: Message[], contextLimit: number, selfWxId: string): string {
         return messages
             .slice()
@@ -151,5 +162,16 @@ export class AiReplyService {
             .trim()
             .replace(/[:：]+$/g, '')
             .trim()
+    }
+
+    private extractSuggestionText(line: string): string {
+        return line
+            .replace(/^\s*(?:[-*]|\d+[.)、])\s*/, '')
+            .replace(/^["“](.*)["”]$/, '$1')
+            .trim()
+    }
+
+    private escapeMarkdownCode(text: string): string {
+        return text.replace(/[`\\]/g, match => `\\${match}`)
     }
 }

@@ -44,7 +44,6 @@ export class MessageRepository {
                 chatId: chatId
             },
             order: {
-                createTime: 'DESC',
                 id: 'DESC'
             },
             take: limit

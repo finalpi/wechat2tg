@@ -1481,8 +1481,9 @@ ${this.i18n.t('help.instructions')}`))
             const wxClient = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
             const selfWxId = wxClient?.wxInfo?.wxid || ''
             const suggestion = await AiReplyService.getInstance().generateReplySuggestion(recentMessages, args, contextLimit, this.i18n.getLanguage(), selfWxId)
-            await ctx.telegram.editMessageText(ctx.chat.id, waitingMessage.message_id, undefined, suggestion).catch(async () => {
-                await ctx.reply(suggestion)
+            const formattedSuggestion = AiReplyService.getInstance().formatSuggestionsForTelegram(suggestion)
+            await ctx.telegram.editMessageText(ctx.chat.id, waitingMessage.message_id, undefined, formattedSuggestion, {parse_mode: 'MarkdownV2'}).catch(async () => {
+                await ctx.reply(formattedSuggestion, {parse_mode: 'MarkdownV2'})
             })
         } catch (error) {
             const errorMessage = this.i18n.t('ai.error.generate_failed', {
