@@ -144,7 +144,7 @@ Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot
 
 - `/settings`: Program settings
 
-- `/ai`: Generate AI reply suggestions from the current WeChat chat context (for example, `/ai make it more polite`)
+- `/ai`: Generate AI reply suggestions from the current WeChat chat context (for example, `/ai make it more polite`; use `/ai context 30` to save the default context message count, or `/ai -n 30 make it more polite` to override it for one request)
 
 - `/unbind`: Unbind WeChat group or WeChat user (only supported in group usage)
 
@@ -176,7 +176,7 @@ Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot
 |`AI_API_KEY`| No | OpenAI-compatible API key for `/ai` reply suggestions               |
 |`AI_API_URL`| No | OpenAI-compatible chat completions URL, e.g. `https://api.openai.com/v1/chat/completions` |
 |`AI_MODEL`| No | AI model name, default: `gpt-4o-mini`                               |
-|`AI_CONTEXT_LIMIT`| No | Number of recent WeChat conversation messages used as AI context, default: `20` |
+|`AI_CONTEXT_LIMIT`| No | Fallback default number of recent WeChat conversation messages used as AI context, default: `20`; runtime default can be saved with `/ai context <count>` and overridden per request with `/ai -n <count>` |
 
 ## Settings Command `/settings`
 

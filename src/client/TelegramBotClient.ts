@@ -1444,11 +1444,14 @@ ${this.i18n.t('help.instructions')}`))
         const text = ctx.text || ''
         const args = text.replace(/^\/ai(@\w+)?\s*/i, '').trim()
         const [action] = args.split(/\s+/).filter(Boolean)
+        const aiOptions = this.parseAiCommandOptions(args)
 
         if (!args || action === 'help') {
             await ctx.reply([
                 '/ai status',
                 this.i18n.t('ai.help.generate'),
+                this.i18n.t('ai.help.context'),
+                this.i18n.t('ai.help.context_config'),
                 '',
                 this.i18n.t('ai.help.config')
             ].join('\n'))
@@ -1456,11 +1459,18 @@ ${this.i18n.t('help.instructions')}`))
         }
 
         if (action === 'status') {
+            const appConfig = await this.configurationService.getConfig()
             await ctx.reply([
                 `AI Key: ${config.AI_API_KEY ? this.i18n.t('ai.status.configured') : this.i18n.t('ai.status.not_configured')}`,
                 `AI URL: ${config.AI_API_URL || this.i18n.t('ai.status.not_configured')}`,
-                `AI Model: ${config.AI_MODEL || 'gpt-4o-mini'}`
+                `AI Model: ${config.AI_MODEL || 'gpt-4o-mini'}`,
+                `AI Context: ${appConfig.aiContextLimit || config.AI_CONTEXT_LIMIT || 20}`
             ].join('\n'))
+            return
+        }
+
+        if (action === 'context') {
+            await this.handleAiContextConfigCommand(ctx, args)
             return
         }
 
@@ -1476,11 +1486,13 @@ ${this.i18n.t('help.instructions')}`))
 
         const waitingMessage = await ctx.reply(this.i18n.t('ai.generating'))
         try {
-            const contextLimit = config.AI_CONTEXT_LIMIT > 0 ? config.AI_CONTEXT_LIMIT : 20
+            const appConfig = await this.configurationService.getConfig()
+            const defaultContextLimit = appConfig.aiContextLimit || (config.AI_CONTEXT_LIMIT > 0 ? config.AI_CONTEXT_LIMIT : 20)
+            const contextLimit = aiOptions.contextLimit || defaultContextLimit
             const recentMessages = await this.messageService.listRecentByChatId(ctx.chat.id, contextLimit * 3)
             const wxClient = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
             const selfWxId = wxClient?.wxInfo?.wxid || ''
-            const suggestion = await AiReplyService.getInstance().generateReplySuggestion(recentMessages, args, contextLimit, this.i18n.getLanguage(), selfWxId)
+            const suggestion = await AiReplyService.getInstance().generateReplySuggestion(recentMessages, aiOptions.instruction, contextLimit, this.i18n.getLanguage(), selfWxId)
             const formattedSuggestion = AiReplyService.getInstance().formatSuggestionsForTelegram(suggestion)
             await ctx.telegram.editMessageText(ctx.chat.id, waitingMessage.message_id, undefined, formattedSuggestion, {parse_mode: 'MarkdownV2'}).catch(async () => {
                 await ctx.reply(formattedSuggestion, {parse_mode: 'MarkdownV2'})
@@ -1492,6 +1504,55 @@ ${this.i18n.t('help.instructions')}`))
             await ctx.telegram.editMessageText(ctx.chat.id, waitingMessage.message_id, undefined, errorMessage).catch(async () => {
                 await ctx.reply(errorMessage)
             })
+        }
+    }
+
+    private async handleAiContextConfigCommand(ctx: Context, args: string) {
+        const tokens = args.split(/\s+/).filter(Boolean)
+        const parsed = parseInt(tokens[1] || '', 10)
+        if (Number.isNaN(parsed) || parsed <= 0) {
+            await ctx.reply(this.i18n.t('ai.error.invalid_context_limit'))
+            return
+        }
+
+        const appConfig = await this.configurationService.getConfig()
+        appConfig.aiContextLimit = parsed
+        await this.configurationService.saveConfig(appConfig)
+        await ctx.reply(this.i18n.t('ai.context_saved', {
+            count: String(parsed)
+        }))
+    }
+
+    private parseAiCommandOptions(args: string): {contextLimit?: number, instruction: string} {
+        const tokens = args.split(/\s+/).filter(Boolean)
+        const instructionTokens: string[] = []
+        let contextLimit: number | undefined
+
+        for (let i = 0; i < tokens.length; i++) {
+            const token = tokens[i]
+            if (token === '-n' || token === '--context') {
+                const parsed = parseInt(tokens[i + 1] || '', 10)
+                if (!Number.isNaN(parsed) && parsed > 0) {
+                    contextLimit = parsed
+                    i++
+                    continue
+                }
+            }
+
+            if (token.startsWith('--context=')) {
+                const parsed = parseInt(token.replace('--context=', ''), 10)
+                if (!Number.isNaN(parsed) && parsed > 0) {
+                    contextLimit = parsed
+                    continue
+                }
+            }
+
+            instructionTokens.push(token)
+        }
+
+        return {
+            contextLimit,
+            instruction: instructionTokens.join(' ')
         }
     }
 

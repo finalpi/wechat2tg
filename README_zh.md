@@ -147,7 +147,7 @@ docker-compose up -d
 
 - `/settings`：程序设置
 
-- `/ai`：根据当前微信聊天上下文生成 AI 回复建议（例如：`/ai 帮我礼貌一点回复`）
+- `/ai`：根据当前微信聊天上下文生成 AI 回复建议（例如：`/ai 帮我礼貌一点回复`；使用 `/ai context 30` 可保存默认上下文消息条数，使用 `/ai -n 30 帮我礼貌一点回复` 可为本次请求临时覆盖）
 
 - `/unbind`：解绑微信群或微信用户（仅支持在群组使用）
 
@@ -179,7 +179,7 @@ docker-compose up -d
 |`AI_API_KEY`| 否    | `/ai` 回复建议使用的 OpenAI-compatible API Key                         |
 |`AI_API_URL`| 否    | OpenAI-compatible chat completions 请求地址，例如 `https://api.openai.com/v1/chat/completions` |
 |`AI_MODEL`| 否    | AI 模型名称，默认：`gpt-4o-mini`                                      |
-|`AI_CONTEXT_LIMIT`| 否    | AI 上下文使用的最近微信对话消息条数，默认：`20`                              |
+|`AI_CONTEXT_LIMIT`| 否    | AI 上下文使用的兜底默认消息条数，默认：`20`；运行时默认值可通过 `/ai context <条数>` 保存到 sqlite，也可通过 `/ai -n <条数>` 为单次请求覆盖 |
 
  ---
 

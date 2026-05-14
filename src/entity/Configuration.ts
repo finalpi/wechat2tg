@@ -69,4 +69,10 @@ export class Configuration {
         default: 'zh-CN'
     })
     language: Language
+
+    // AI 默认上下文消息条数
+    @Column({
+        default: 20
+    })
+    aiContextLimit: number
 }
