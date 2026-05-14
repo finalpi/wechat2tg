@@ -1478,7 +1478,9 @@ ${this.i18n.t('help.instructions')}`))
         try {
             const contextLimit = config.AI_CONTEXT_LIMIT > 0 ? config.AI_CONTEXT_LIMIT : 20
             const recentMessages = await this.messageService.listRecentByChatId(ctx.chat.id, contextLimit * 3)
-            const suggestion = await AiReplyService.getInstance().generateReplySuggestion(recentMessages, args, contextLimit, this.i18n.getLanguage())
+            const wxClient = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
+            const selfWxId = wxClient?.wxInfo?.wxid || ''
+            const suggestion = await AiReplyService.getInstance().generateReplySuggestion(recentMessages, args, contextLimit, this.i18n.getLanguage(), selfWxId)
             await ctx.telegram.editMessageText(ctx.chat.id, waitingMessage.message_id, undefined, suggestion).catch(async () => {
                 await ctx.reply(suggestion)
             })
