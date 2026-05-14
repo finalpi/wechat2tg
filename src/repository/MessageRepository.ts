@@ -38,6 +38,19 @@ export class MessageRepository {
         })
     }
 
+    async listRecentByChatId(chatId: number, limit = 20) {
+        return await this.repository.find({
+            where: {
+                chatId: chatId
+            },
+            order: {
+                createTime: 'DESC',
+                id: 'DESC'
+            },
+            take: limit
+        })
+    }
+
     // 删除指定时间之前的旧消息
     async deleteOldMessages(beforeTimestamp: number) {
         const result = await this.repository

@@ -42,6 +42,7 @@ import {LogUtils} from '../util/LogUtil'
 import {ChatHistoryAttachment, getChatHistory, NestedChatHistory} from '../util/handleMsg'
 import {MessageTypeUtils} from '../util/MessageTypeUtils'
 import {normalizeEscapedTelegramCommandText} from '../util/TelegramTextUtils'
+import {AiReplyService} from '../service/AiReplyService'
 
 interface LargeFileProgressEditor {
     update(text: string, force?: boolean): Promise<void>
@@ -1186,6 +1187,10 @@ ${this.i18n.t('help.instructions')}`))
             })
         })
 
+        bot.command('ai', async ctx => {
+            await this.handleAiCommand(ctx)
+        })
+
         bot.command('update', async (ctx) => {
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 await this.updateGroupByChatId(ctx.chat.id)
@@ -1432,6 +1437,58 @@ ${this.i18n.t('help.instructions')}`))
 
         return {
             inline_keyboard: inline_keyboard,
+        }
+    }
+
+    private async handleAiCommand(ctx: Context) {
+        const text = ctx.text || ''
+        const args = text.replace(/^\/ai(@\w+)?\s*/i, '').trim()
+        const [action] = args.split(/\s+/).filter(Boolean)
+
+        if (!args || action === 'help') {
+            await ctx.reply([
+                '/ai status',
+                this.i18n.t('ai.help.generate'),
+                '',
+                this.i18n.t('ai.help.config')
+            ].join('\n'))
+            return
+        }
+
+        if (action === 'status') {
+            await ctx.reply([
+                `AI Key: ${config.AI_API_KEY ? this.i18n.t('ai.status.configured') : this.i18n.t('ai.status.not_configured')}`,
+                `AI URL: ${config.AI_API_URL || this.i18n.t('ai.status.not_configured')}`,
+                `AI Model: ${config.AI_MODEL || 'gpt-4o-mini'}`
+            ].join('\n'))
+            return
+        }
+
+        if (!ctx.chat?.id) {
+            await ctx.reply(this.i18n.t('ai.error.no_chat'))
+            return
+        }
+
+        if (!config.AI_API_KEY || !config.AI_API_URL) {
+            await ctx.reply(this.i18n.t('ai.error.not_configured'))
+            return
+        }
+
+        const waitingMessage = await ctx.reply(this.i18n.t('ai.generating'))
+        try {
+            const contextLimit = config.AI_CONTEXT_LIMIT > 0 ? config.AI_CONTEXT_LIMIT : 20
+            const recentMessages = await this.messageService.listRecentByChatId(ctx.chat.id, contextLimit * 3)
+            const suggestion = await AiReplyService.getInstance().generateReplySuggestion(recentMessages, args, contextLimit, this.i18n.getLanguage())
+            await ctx.telegram.editMessageText(ctx.chat.id, waitingMessage.message_id, undefined, suggestion).catch(async () => {
+                await ctx.reply(suggestion)
+            })
+        } catch (error) {
+            const errorMessage = this.i18n.t('ai.error.generate_failed', {
+                error: error.message || String(error)
+            })
+            await ctx.telegram.editMessageText(ctx.chat.id, waitingMessage.message_id, undefined, errorMessage).catch(async () => {
+                await ctx.reply(errorMessage)
+            })
         }
     }
 

@@ -14,6 +14,7 @@
 1. 微信单聊消息、微信群消息、公众号消息的接收，以及企业微信消息的接收
 2. 通过 Telegram 向指定的微信用户、微信群、公众号发送消息
 3. 灵活的群组消息屏蔽功能
+4. 基于当前微信聊天上下文生成 AI 回复建议
 
 ## 支持的消息类型
 
@@ -146,6 +147,8 @@ docker-compose up -d
 
 - `/settings`：程序设置
 
+- `/ai`：根据当前微信聊天上下文生成 AI 回复建议（例如：`/ai 帮我礼貌一点回复`）
+
 - `/unbind`：解绑微信群或微信用户（仅支持在群组使用）
 
 - `/quit`：退出并解散群组
@@ -173,6 +176,10 @@ docker-compose up -d
 |`CREATE_ROOM_NAME`| 否    | 自动创建微信群的群组时， 群组名称的格式                                           |
 |`CREATE_CONTACT_NAME`| 否    | 自动创建微信联系人的群组时， 群组名称的格式                                         |
 |`MESSAGE_DISPLAY`| 否    | 文字消息的显示格式                                                      |
+|`AI_API_KEY`| 否    | `/ai` 回复建议使用的 OpenAI-compatible API Key                         |
+|`AI_API_URL`| 否    | OpenAI-compatible chat completions 请求地址，例如 `https://api.openai.com/v1/chat/completions` |
+|`AI_MODEL`| 否    | AI 模型名称，默认：`gpt-4o-mini`                                      |
+|`AI_CONTEXT_LIMIT`| 否    | AI 上下文使用的最近微信对话消息条数，默认：`20`                              |
 
  ---
 

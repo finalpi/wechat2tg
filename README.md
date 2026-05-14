@@ -14,6 +14,7 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 1. Receive messages from WeChat personal chats, group chats, official accounts, and enterprise WeChat
 2. Send messages via Telegram to specific WeChat users, groups, and official accounts
 3. Flexible group message blocking functionality
+4. AI reply suggestions based on the current WeChat chat context
 
 ## Supported Message Types
 
@@ -143,6 +144,8 @@ Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot
 
 - `/settings`: Program settings
 
+- `/ai`: Generate AI reply suggestions from the current WeChat chat context (for example, `/ai make it more polite`)
+
 - `/unbind`: Unbind WeChat group or WeChat user (only supported in group usage)
 
 - `/quit`: Exit and disband group
@@ -170,6 +173,10 @@ Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot
 |`CREATE_ROOM_NAME`| No | Format of group name when automatically creating WeChat groups      |
 |`CREATE_CONTACT_NAME`| No | Format of group name when automatically creating WeChat contacts    |
 |`MESSAGE_DISPLAY`| No | Display format of text messages                                     |
+|`AI_API_KEY`| No | OpenAI-compatible API key for `/ai` reply suggestions               |
+|`AI_API_URL`| No | OpenAI-compatible chat completions URL, e.g. `https://api.openai.com/v1/chat/completions` |
+|`AI_MODEL`| No | AI model name, default: `gpt-4o-mini`                               |
+|`AI_CONTEXT_LIMIT`| No | Number of recent WeChat conversation messages used as AI context, default: `20` |
 
 ## Settings Command `/settings`
 
