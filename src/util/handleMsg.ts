@@ -242,6 +242,7 @@ function buildFileAttachment(item: any, index: number): ChatHistoryAttachment | 
       cdnDataKey,
       rawCdnDataKey,
       dataLen,
+      fullMd5: item.fullmd5 || '',
       userName: item.dataitemsource?.hashusername || item.sourcename || ''
     }
   }

@@ -26,6 +26,8 @@ import {FileBox} from 'file-box'
 import I18n from '../i18n'
 import {LogUtils} from '../util/LogUtil'
 
+const TELEGRAM_BOT_API_UPLOAD_LIMIT = 50 * 1024 * 1024
+
 export class WeChatClient extends AbstractClient {
     get wxInfo() {
         return this._wxInfo
@@ -322,6 +324,21 @@ export class WeChatClient extends AbstractClient {
         }
 
         return `[${MessageTypeUtils.getTypeName(msg.type() + '')}]\n下载失败: ${error.message || error}`
+    }
+
+    private async sendTelegramFileNotice(chatId: number, identity: string, fileName: string): Promise<number | undefined> {
+        try {
+            const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
+            const body = `[文件上传中]\n${fileName.replaceAll(/</g, '&lt;').replaceAll(/>/g, '&gt;')}`
+            const text = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, identity, body)
+            const sent = await tgBotClient.telegram.sendMessage(chatId, text, {
+                parse_mode: 'HTML'
+            })
+            return sent.message_id
+        } catch (e) {
+            this.logger.warn(`发送微信文件预告消息失败: chatId=${chatId}, fileName=${fileName}, error=${e.message || e}`)
+            return undefined
+        }
     }
 
     private getWechatFileMeta(msg: any): {appmsg: any, attach: any, expireAt: any} {
@@ -700,6 +717,18 @@ export class WeChatClient extends AbstractClient {
                     this.logger.info(`开始下载微信媒体文件: wxMsgId=${msg.newMsgId}, msgId=${msg._msgId}, type=${msg.type()}, from=${msg.fromId}, to=${msg.toId}`)
                     if (msg.type() === WxMessage.Type.File) {
                         this.logWechatFileMeta(msg)
+                        const {appmsg, attach} = this.getWechatFileMeta(msg)
+                        const fileName = appmsg.title || '未知文件'
+                        const fileSize = Number(attach.totallen || 0)
+                        if (fileSize > TELEGRAM_BOT_API_UPLOAD_LIMIT) {
+                            const noticeMessageId = await this.sendTelegramFileNotice(messageParam.chatId, identity, fileName)
+                            if (noticeMessageId) {
+                                messageParam.param = {
+                                    ...messageParam.param,
+                                    telegramUploadNoticeMessageId: noticeMessageId
+                                }
+                            }
+                        }
                     }
                     filebox = await msg.toFileBox()
                     this.logger.info(`微信媒体文件下载完成: wxMsgId=${msg.newMsgId}, msgId=${msg._msgId}, fileName=${filebox?.name || ''}`)
