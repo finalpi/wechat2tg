@@ -298,6 +298,9 @@ export class TelegramBotClient extends AbstractClient {
                 })
             )
             await this.deleteTelegramMessage(message.chatId, progressNoticeMessageId)
+            setTimeout(() => {
+                void this.deleteTelegramMessage(message.chatId, progressNoticeMessageId)
+            }, 1500)
             return {message_id: result.id}
         } catch (e) {
             await this.resetBotMTPClientConnection(botMTPClient).catch(resetError => {
@@ -314,6 +317,9 @@ export class TelegramBotClient extends AbstractClient {
             if (uploadedMessageId) {
                 this.logger.info(`Telegram 大文件上传超时后确认已成功: fileName=${fileName}, tgMsgId=${uploadedMessageId}`)
                 await this.deleteTelegramMessage(message.chatId, progressNoticeMessageId)
+                setTimeout(() => {
+                    void this.deleteTelegramMessage(message.chatId, progressNoticeMessageId)
+                }, 1500)
                 return {message_id: uploadedMessageId}
             }
 
