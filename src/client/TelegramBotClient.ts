@@ -1856,10 +1856,19 @@ ${this.i18n.t('help.instructions')}`))
         }
     }
 
-    private async botLaunch(bot: Telegraf, retryCount = 5) {
-        if (retryCount >= 0) {
+    private async botLaunch(bot: Telegraf) {
+        let retryCount = 0
+
+        // bot.launch 会在 long polling 运行期间一直等待；运行中的短暂网络错误
+        // 由 Telegraf 自身持续重试。这里负责覆盖首次启动时网络尚未恢复，
+        // 以及 polling 意外退出的场景，不能因为有限次数重试耗尽而永久假活。
+        while (true) {
             try {
                 await bot.launch(() => {
+                    this.isConnected = true
+                    retryCount = 0
+                    this.logger.info('Telegram API 连接成功，正在启动消息监听')
+
                     // 保存 botID
                     this.configurationService.getConfig().then(config => {
                         if (!config.botId || config.botId == 0) {
@@ -1875,45 +1884,21 @@ ${this.i18n.t('help.instructions')}`))
                         }
                     })
                 })
-
-                // 启动成功
-                this.isConnected = true
-                this.reconnectAttempts = 0
-                this.logger.info('Telegram Bot 启动成功，开始监听消息')
-
-                // 启动健康检查
-                this.startHealthCheck()
-
-                // 设置错误处理
-                this.setupErrorHandlers(bot)
-
+                this.logger.warn('Telegram Bot polling 已停止，准备重新启动')
             } catch (error) {
-                this.logger.error(`Telegram Bot 启动失败 (剩余重试次数: ${retryCount}):`, error)
-                this.isConnected = false
-
-                if (retryCount > 0) {
-                    const delay = this.RECONNECT_BASE_DELAY * (6 - retryCount)
-                    this.logger.info(`${delay}ms 后重试启动...`)
-                    await new Promise(resolve => setTimeout(resolve, delay))
-                    await this.botLaunch(bot, retryCount - 1)
-                } else {
-                    this.logger.error('Telegram Bot 启动失败，已达最大重试次数')
-                    throw error
-                }
+                this.logger.error(`Telegram Bot 启动或监听失败 (第 ${retryCount + 1} 次):`, error)
             }
-        }
 
-        // 优雅退出处理
-        process.once('SIGINT', () => {
-            this.logger.info('收到 SIGINT 信号，正在关闭...')
-            this.cleanup()
-            bot.stop('SIGINT')
-        })
-        process.once('SIGTERM', () => {
-            this.logger.info('收到 SIGTERM 信号，正在关闭...')
-            this.cleanup()
-            bot.stop('SIGTERM')
-        })
+            this.isConnected = false
+            retryCount++
+
+            const delay = Math.min(
+                this.RECONNECT_BASE_DELAY * Math.pow(2, retryCount - 1),
+                300000 // 最大 5 分钟，之后持续重试
+            )
+            this.logger.info(`${delay}ms 后重新启动 Telegram Bot（不会放弃重试）...`)
+            await new Promise(resolve => setTimeout(resolve, delay))
+        }
     }
 
     /**
