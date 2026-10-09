@@ -30,14 +30,14 @@ export abstract class MessageSender {
 
 export interface Option {
     reply_id?: number,
-    // todo 暂未实现
     inline_keyboard?: InlineKeyboard[],
     parse_mode?: 'Markdown' | 'MarkdownV2' | 'HTML'
 }
 
 interface InlineKeyboard {
     text: string,
-    query: string,
+    query?: string,
+    callback_data?: string,
 }
 
 export interface SendResult {

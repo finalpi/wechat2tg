@@ -4,6 +4,7 @@ import * as messageMethods from 'telegram/client/messages'
 import * as uploadMethods from 'telegram/client/uploads'
 import {CustomFile} from 'telegram/client/uploads'
 import fs from 'node:fs'
+import {Api} from 'telegram'
 
 export class TelegramApiMessageSender extends MessageSender {
     private sender: GramClient
@@ -28,6 +29,14 @@ export class TelegramApiMessageSender extends MessageSender {
             if (option) {
                 if (option.parse_mode) {
                     sendParam.parseMode = option.parse_mode.toLowerCase()
+                }
+                if (option.inline_keyboard) {
+                    sendParam.buttons = [
+                        option.inline_keyboard.map(button => new Api.KeyboardButtonCallback({
+                            text: button.text,
+                            data: Buffer.from(button.callback_data || button.query || '')
+                        }))
+                    ]
                 }
             }
             if (file.buff && file.fileType === 'photo' && file.buff.length > 5 * 1024 * 1024) {

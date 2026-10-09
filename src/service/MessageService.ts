@@ -32,6 +32,10 @@ export class MessageService {
         return await this.repository.getByFhMsgId(fhMsgId)
     }
 
+    async listRecentByChatId(chatId: number, limit = 20) {
+        return await this.repository.listRecentByChatId(chatId, limit)
+    }
+
     // 删除指定天数之前的旧消息
     async deleteOldMessages(days: number): Promise<number> {
         // 注意：微信的 createTime 是秒级时间戳，不是毫秒级

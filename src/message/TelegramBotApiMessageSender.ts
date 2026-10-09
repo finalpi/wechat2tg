@@ -1,5 +1,6 @@
 import {MessageSender, Option, SendResult} from './MessageSender'
 import {Telegraf, TelegramError} from 'telegraf'
+import AbortController from 'abort-controller'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import * as tt from 'telegraf/src/telegram-types'
@@ -66,6 +67,14 @@ export class TelegramBotApiMessageSender extends MessageSender {
                 if (option.parse_mode) {
                     sendParam.parse_mode = option.parse_mode
                 }
+                if (option.inline_keyboard) {
+                    sendParam.reply_markup = {
+                        inline_keyboard: [option.inline_keyboard.map(button => ({
+                            text: button.text,
+                            callback_data: button.callback_data || button.query
+                        }))]
+                    }
+                }
             }
 
             // 创建超时定时器
@@ -102,8 +111,7 @@ export class TelegramBotApiMessageSender extends MessageSender {
             }
         }
 
-        // 记录原始文件类型，用于判断是否需要超时控制
-        const isPhoto = file.fileType === 'photo'
+        const originalFileType = file.fileType
 
         if (file.fileType === 'photo' && file.buff.length > 5 * 1024 * 1024) {
             // 大于5mb采用document方式发送
@@ -111,26 +119,39 @@ export class TelegramBotApiMessageSender extends MessageSender {
         }
 
         return new Promise<SendResult>((resolve, reject) => {
+            const abortController = new AbortController()
             let timeoutId: NodeJS.Timeout | undefined
+            let settled = false
 
-            // 只对图片类型添加 30 秒超时控制
-            if (isPhoto) {
+            if (originalFileType === 'photo') {
                 timeoutId = setTimeout(() => {
+                    settled = true
+                    abortController.abort()
                     reject(new Error('Photo upload timeout after 30000ms'))
                 }, 30000)
             }
 
-            this.sender.telegram['send' + file.fileType.charAt(0).toUpperCase() + file.fileType.slice(1)](
-                chatId, {source: file.buff, filename: file.filename}, {
-                    caption: file.caption,
-                    ...sendParam
-                }).then((msg: { message_id: number }) => {
+            const mediaParamName = this.getTelegramMediaParamName(file.fileType)
+            this.sender.telegram.callApi(`send${file.fileType.charAt(0).toUpperCase()}${file.fileType.slice(1)}` as any, {
+                chat_id: chatId,
+                [mediaParamName]: {source: file.buff, filename: file.filename},
+                caption: file.caption,
+                ...sendParam
+            }, {signal: abortController.signal}).then((msg: { message_id: number }) => {
+                settled = true
                 if (timeoutId) clearTimeout(timeoutId)
                 resolve({message_id: msg.message_id})
             }).catch((e: TelegramError) => {
+                if (settled) {
+                    return
+                }
                 if (timeoutId) clearTimeout(timeoutId)
                 reject(e)
             })
         })
+    }
+
+    private getTelegramMediaParamName(fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'): string {
+        return fileType
     }
 }

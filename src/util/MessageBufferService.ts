@@ -11,6 +11,14 @@ interface BufferedMessage {
     status: 'pending' | 'sent' | 'failed'
 }
 
+export interface MessageRetryResult {
+    success: boolean
+    retryAfterMs?: number
+}
+
+type RetryCallbackResult = boolean | MessageRetryResult
+type RetryCallback = (message: BaseMessage) => Promise<RetryCallbackResult>
+
 export class MessageBufferService {
     private static instance: MessageBufferService
     private messageBuffer: Map<string, BufferedMessage> = new Map()
@@ -92,7 +100,7 @@ export class MessageBufferService {
      * @param sendCallback 发送回调函数
      * @param isTimeoutError 是否是超时错误（超时时消息可能已成功发送）
      */
-    markMessageAsFailed(messageId: string, sendCallback: (message: BaseMessage) => Promise<boolean>, isTimeoutError = false): void {
+    markMessageAsFailed(messageId: string, sendCallback: RetryCallback, isTimeoutError = false, retryAfterMs?: number): void {
         const bufferedMessage = this.messageBuffer.get(messageId)
         if (!bufferedMessage) return
 
@@ -138,16 +146,20 @@ export class MessageBufferService {
             }
 
             // 指数退避重试，最大延迟 5 分钟（避免频繁重试加重 Flood Wait）
-            const retryDelay = Math.min(this.RETRY_DELAY * Math.pow(2, bufferedMessage.retryCount - 1), 300000)
+            const exponentialDelay = Math.min(this.RETRY_DELAY * Math.pow(2, bufferedMessage.retryCount - 1), 300000)
+            const retryDelay = retryAfterMs || exponentialDelay
 
-            const retryTimeout = setTimeout(async () => {
+            let retryTimeout: NodeJS.Timeout
+            retryTimeout = setTimeout(async () => {
                 try {
                     bufferedMessage.status = 'pending'
-                    const success = await sendCallback(bufferedMessage.message)
+                    const result = await sendCallback(bufferedMessage.message)
+                    const success = typeof result === 'boolean' ? result : result.success
+                    const nextRetryAfterMs = typeof result === 'boolean' ? undefined : result.retryAfterMs
                     if (success) {
                         this.markMessageAsSent(messageId)
                     } else {
-                        this.markMessageAsFailed(messageId, sendCallback)
+                        this.markMessageAsFailed(messageId, sendCallback, false, nextRetryAfterMs)
                     }
                 } catch (error) {
                     this.logger.error(`重试发送消息失败: ${messageId}`, error)
@@ -156,9 +168,11 @@ export class MessageBufferService {
                                      error.code === 'ECONNRESET' ||
                                      error.code === 'ESOCKETTIMEDOUT' ||
                                      (error.message && error.message.includes('timeout'))
-                    this.markMessageAsFailed(messageId, sendCallback, isTimeout)
+                    this.markMessageAsFailed(messageId, sendCallback, isTimeout, error?.retryAfterMs)
                 } finally {
-                    this.retryTimeouts.delete(messageId)
+                    if (this.retryTimeouts.get(messageId) === retryTimeout) {
+                        this.retryTimeouts.delete(messageId)
+                    }
                 }
             }, retryDelay)
 
@@ -217,7 +231,7 @@ export class MessageBufferService {
     /**
      * 重新发送所有失败的消息
      */
-    async retryFailedMessages(sendCallback: (message: BaseMessage) => Promise<boolean>): Promise<void> {
+    async retryFailedMessages(sendCallback: RetryCallback): Promise<void> {
         // MAX_RETRY_COUNT === 0 表示无限重试
         const failedMessages = Array.from(this.messageBuffer.values()).filter(
             msg => msg.status === 'failed' && (this.MAX_RETRY_COUNT === 0 || msg.retryCount < this.MAX_RETRY_COUNT)
@@ -228,17 +242,19 @@ export class MessageBufferService {
         for (const bufferedMessage of failedMessages) {
             try {
                 bufferedMessage.status = 'pending'
-                const success = await sendCallback(bufferedMessage.message)
+                const result = await sendCallback(bufferedMessage.message)
+                const success = typeof result === 'boolean' ? result : result.success
+                const retryAfterMs = typeof result === 'boolean' ? undefined : result.retryAfterMs
                 if (success) {
                     this.markMessageAsSent(bufferedMessage.id)
                 } else {
-                    this.markMessageAsFailed(bufferedMessage.id, sendCallback)
+                    this.markMessageAsFailed(bufferedMessage.id, sendCallback, false, retryAfterMs)
                 }
                 // 添加延迟避免发送过快
                 await new Promise(resolve => setTimeout(resolve, 1000))
             } catch (error) {
                 this.logger.error(`重发消息失败: ${bufferedMessage.id}`, error)
-                this.markMessageAsFailed(bufferedMessage.id, sendCallback)
+                this.markMessageAsFailed(bufferedMessage.id, sendCallback, false, error?.retryAfterMs)
             }
         }
     }

@@ -73,6 +73,12 @@ export const config = {
     MQTT_CLIENT_ID: process.env.MQTT_CLIENT_ID?.toString() || 'wechat2tg',
     // 消息发送失败多少次后触发 MQTT 通知
     MQTT_NOTIFY_FAIL_COUNT: parseInt(process.env.MQTT_NOTIFY_FAIL_COUNT || '3'),
+
+    // OpenAI-compatible AI 回复建议配置
+    AI_API_KEY: process.env.AI_API_KEY?.toString() || '',
+    AI_API_URL: process.env.AI_API_URL?.toString() || '',
+    AI_MODEL: process.env.AI_MODEL?.toString() || 'gpt-4o-mini',
+    AI_CONTEXT_LIMIT: parseInt(process.env.AI_CONTEXT_LIMIT || '20'),
 }
 
 export const useProxy = config.PROTOCOL !== '' && config.HOST !== '' && config.PORT !== ''
