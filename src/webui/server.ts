@@ -68,7 +68,7 @@ export function createWebUIServer(options: Options) {
             return mcp(req,res)
         }
         if (!route?.startsWith('/api/')) {
-            const assets = {'/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/chat-content.js': ['chat-content.js','text/javascript'], '/mcp-settings.js':['mcp-settings.js','text/javascript'], '/ai-settings.js':['ai-settings.js','text/javascript'], '/template-preview.js': ['template-preview.js', 'text/javascript'], '/style.css': ['style.css', 'text/css']}
+            const assets = {'/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/mention-compose.js':['mention-compose.js','text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/chat-content.js': ['chat-content.js','text/javascript'], '/mcp-settings.js':['mcp-settings.js','text/javascript'], '/ai-settings.js':['ai-settings.js','text/javascript'], '/template-preview.js': ['template-preview.js', 'text/javascript'], '/style.css': ['style.css', 'text/css']}
             if (!assets[route] || !['GET', 'HEAD'].includes(req.method)) return respond(res, 404, {error: 'notFound'})
             try {
                 const [name, mime] = assets[route]
@@ -159,6 +159,14 @@ export function createWebUIServer(options: Options) {
                 const stream=fs.createReadStream(file.path,{start,end});stream.on('error',()=>res.destroy());res.on('close',()=>stream.destroy());stream.pipe(res);return
             }
             const syncRoute=route?.match(/^\/api\/messages\/(\d+)\/sync$/)
+            const revokeRoute=route?.match(/^\/api\/messages\/(\d+)\/revoke$/)
+            if(revokeRoute){
+                if(req.method!=='POST'||!options.messages)return respond(res,405,{error:'messagesUnavailable'})
+                let raw='',size=0;for await(const chunk of req){size+=chunk.length;if(size>2048)return respond(res,413,{error:'tooLarge'});raw+=chunk.toString()}
+                let body;try{body=JSON.parse(raw)}catch{return respond(res,400,{error:'invalidJson'})}
+                if(!body||typeof body!=='object'||body.confirm!==true||typeof body.requestId!=='string'||!/^[a-zA-Z0-9-]{16,80}$/.test(body.requestId)||(body.confirmUncertain!==undefined&&typeof body.confirmUncertain!=='boolean'))return respond(res,400,{error:'invalidRequest'})
+                return respond(res,200,await options.messages.revoke(Number(revokeRoute[1]),body.requestId,body.confirmUncertain===true))
+            }
             if(syncRoute) {
                 if(req.method!=='POST'||!options.messages?.sync)return respond(res,405,{error:'messagesUnavailable'})
                 let bytes=0,raw=''
@@ -204,7 +212,13 @@ export function createWebUIServer(options: Options) {
                 let body
                 try {body = JSON.parse(Buffer.concat(chunks).toString('utf8'))} catch {return respond(res, 400, {error: 'invalidJson'})}
                 if (!body || typeof body.wxId !== 'string' || !body.wxId || body.wxId.length > 256 || typeof body.body !== 'string' || (!body.body.trim()&&!body.attachmentId) || body.body.length > 4000 || (body.attachmentId!==undefined&&!/^[a-f0-9-]{36}$/.test(body.attachmentId)) || typeof body.requestId !== 'string' || !/^[a-zA-Z0-9-]{16,80}$/.test(body.requestId)) return respond(res, 400, {error: 'invalidRequest'})
-                return respond(res, 202, await options.messages.send(body.wxId, body.body, body.requestId,body.attachmentId))
+                return respond(res, 202, await options.messages.send(body.wxId, body.body, body.requestId,body.attachmentId,body.mentions,body.replyToId))
+            }
+            if(route==='/api/groups/members'){
+                if(req.method!=='GET'||!options.messages)return respond(res,405,{error:'messagesUnavailable'})
+                const url=new URL(req.url,'http://localhost'),wxId=url.searchParams.get('wxId')||'',q=url.searchParams.get('q')||'',offset=url.searchParams.get('offset')||'0',refresh=url.searchParams.get('refresh')||'false'
+                if(!wxId.endsWith('@chatroom')||wxId.length>256||q.length>100||!/^\d{1,5}$/.test(offset)||Number(offset)>10000||!['true','false'].includes(refresh))return respond(res,400,{error:'invalidRequest'})
+                return respond(res,200,await options.messages.groupMembers(wxId,q,Number(offset),refresh==='true'))
             }
             if (req.method !== 'PATCH' || route !== '/api/config') return respond(res, 404, {error: 'notFound'})
             if (!req.headers['content-type']?.startsWith('application/json')) return respond(res, 415, {error: 'jsonRequired'})

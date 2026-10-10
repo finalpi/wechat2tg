@@ -784,7 +784,8 @@ export class WeChatClient extends AbstractClient {
                 msgJson = WxMessage.getXmlToJson(msg._xml)
                 messageParam.content = msgJson.sysmsg.revokemsg.replacemsg
                 messageParam.type = 6
-                messageParam.revokeMsgId = msgJson.sysmsg.revokemsg.newmsgid
+                messageParam.revokeMsgId = msg._xml.match(/<newmsgid>\s*(?:<!\[CDATA\[)?(\d+)(?:\]\]>)?\s*<\/newmsgid>/)?.[1]||String(msgJson.sysmsg.revokemsg.newmsgid)
+                if(process.env.WEBUI_ENABLED!=='false')await WebMessageStore.getInstance().observeRevoke(messageParam.wxId,String(messageParam.revokeMsgId))
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.ChatHistroy:

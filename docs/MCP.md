@@ -50,10 +50,12 @@ The bridge requires Node.js 18+ and installed repository dependencies. Non-loopb
 |---|---|---|
 | `wechat_status` | none | 微信 / Telegram 在线状态 |
 | `wechat_search_contacts` | query, kind, offset | 搜索联系人 / 群聊 |
+| `wechat_get_group_members` | wxId, query, offset, refresh | 搜索群成员、查询原生艾特所需成员 ID |
 | `wechat_list_conversations` | offset | 最近消息排序的已有会话 |
 | `wechat_read_messages` | wxId, before, query | 搜索并分页读取已保存记录 |
 | `wechat_get_new_messages` | cursor, wxId, limit | 增量读取新收到的消息 |
-| `wechat_send_text` | wxId, text, requestId | 发送文本 |
+| `wechat_send_text` | wxId, text, requestId, mentions?, replyToId? | 发送文本，可原生艾特或引用回复 |
+| `wechat_revoke_message` | messageId, requestId, confirm, confirmUncertain? | 撤回时限内的本人消息 |
 | `wechat_send_media` | wxId, attachmentId, requestId | 发送媒体或文件 |
 | `wechat_download_attachment` | messageId, path?, itemId? | 下载普通 / 合并聊天记录附件 |
 | `wechat_get_send_status` | requestId | 微信与 Telegram 发送状态 |
@@ -68,6 +70,39 @@ Downloads never overwrite existing files. Nested transcript references come from
 Direct HTTP clients upload raw bytes to `/mcp/media`, then send the returned `id`. Downloads require authenticated GET requests.
 
 ## 游标、状态与授权 / Cursor, delivery and authorization
+
+### 引用与撤回 / Quoted replies and recall
+
+引用先读取会话记录，再将原消息的本地 `id` 作为 `wechat_send_text.replyToId`。服务端验证同一会话和原生消息编号，发送微信原生文字引用，并同步 Telegram 引用关系或原消息摘要。目前引用不能同时带原生艾特，附件需另发。
+
+Read the conversation first, then pass the original local message `id` as `replyToId`. The server validates conversation ownership and a confirmed native message ID. Quoted text replies mirror to Telegram; native mentions and attachments cannot be combined with the quote.
+
+撤回调用 `wechat_revoke_message`，传本地 `messageId`、唯一 UUID `requestId` 和 `confirm: true`。普通消息限 2 分钟，文件限 3 小时，按实际微信消息类型判断；MP3 文件为 3 小时，转成微信语音为 2 分钟。依据[微信派说明（澎湃转载，2026-05-22）](https://www.thepaper.cn/newsDetail_forward_33209118)。历史接口返回 `canRevoke`、`revokeDeadline` 和不可撤回原因，实际操作时服务端再次校验。仅能撤回本人消息且必须有完整原生回执，不能只根据文字或 Telegram 消息编号撤回。
+
+Recall requires an eligible own message, complete native receipts and `confirm: true`. Ordinary messages have a 2-minute window; files have a 3-hour window. History exposes eligibility and deadlines, and the server rechecks at execution time.
+
+结果为 `unknown` 时不自动重试；确认风险后用新请求编号并传 `confirmUncertain: true`。微信确认撤回后，服务端保留对应 Telegram 消息正文和附件，仅附加已撤回标记；Telegram 更新失败可以在 WebUI 单独重试，不会重复向微信发撤回请求。WebUI 回执和微信回调按原微信消息编号共用持久化去重记录，避免重复撤回通知。只读 Token 禁止撤回。
+
+An uncertain recall is never retried automatically. Explicitly confirmed retries require a new request ID and `confirmUncertain: true`. Successful WeChat recalls mark the matching Telegram message as revoked; Telegram updates can be retried independently. Read-only tokens cannot recall messages.
+
+### 群聊艾特 / Group mentions
+
+先用 `wechat_get_group_members` 搜索目标群的成员，按返回的 `wxId` 选择。群内重名成员保留不同的 ID；不要只根据显示名称发送。发送示例：
+
+```json
+{
+  "wxId": "example@chatroom",
+  "text": "请查看这条消息",
+  "requestId": "11111111-2222-4333-8444-555555555555",
+  "mentions": {"memberIds": ["wxid_member_one", "wxid_member_two"]}
+}
+```
+
+`mentions.memberIds` 最多 20 个，发送前重新验证成员。`mentions.all=true` 表示 @所有人，与单个成员选择互斥；群权限由微信校验，明确拒绝时状态为 `failed`，`details.error` 为 `wechatSendRejected`。群成员列表失败时不会降级为普通 `@名字` 文本。艾特只支持群聊文本；媒体需要另发一条带艾特的文字。发送内容自动添加群昵称或昵称前缀，通过协议 `At` 字段通知成员，并同步展示到 Telegram。
+
+正文已经包含艾特时，可设置 `mentions.inline=true`，保留原有正文位置，不再重复添加艾特前缀。WebUI 使用此模式：在聊天框输入 `@` 和搜索词，方向键切换、Enter 选中；选中后插入正文并关闭窗口、恢复输入焦点。编辑或删除已选择的艾特文字会同步移除其微信 ID 绑定。
+
+Use the group member lookup first, then pass returned IDs in `mentions.memberIds` (maximum 20). `mentions.all=true` mentions everyone and cannot be combined with individual IDs. WeChat enforces group permissions. Mentions require group text; media is sent separately. Native mention metadata is sent through the protocol, and the rendered text also mirrors to Telegram. Reusing a request ID with different mention targets is rejected.
 
 - 首次省略 cursor 获取当前游标；以后保存返回 cursor，传入下一次调用。传 `0` 可以回放仍保留的实时入站记录。不会把历史导入当作新消息，也不会改变 Telegram 未送达标记。不同 wxId 筛选应分别保存游标。
 - `hasMore=true` 时继续拉取；每页最多 100 条。记录删除后游标仍单调增长。游标属于当前数据库；恢复旧备份时出现 `cursorAhead` 应重新初始化。

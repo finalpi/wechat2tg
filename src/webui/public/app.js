@@ -47,7 +47,22 @@ try{language=localStorage.getItem('webui-language')||'zh'}catch{}
 if(!copy[language])language='zh'
 Object.assign(copy.zh,{mcp:'MCP 接入',mcpCaption:'连接你的 AI 客户端',mcpInvalidSettings:'MCP 设置格式不正确。',mcpInvalidEndpoint:'请输入以 /mcp 结尾的有效访问地址。',mcpHTTPSRequired:'远程访问请使用 HTTPS，或配置本地 SSH 隧道。',mcpInvalidToken:'Token 需为 16–256 位字母、数字或 . _ ~ -，不能包含空格。',mcpTokensMustDiffer:'读写和只读 Token 不能相同。',mcpConflict:'设置已被其他页面更新，请切换页面重新加载。'})
 Object.assign(copy.en,{mcp:'MCP access',mcpCaption:'Connect your AI client',mcpInvalidSettings:'Invalid MCP settings.',mcpInvalidEndpoint:'Enter a valid endpoint ending in /mcp.',mcpHTTPSRequired:'Use HTTPS for remote access, or a local SSH tunnel.',mcpInvalidToken:'Token must contain 16–256 letters, digits, or . _ ~ -, without spaces.',mcpTokensMustDiffer:'Read and write tokens must differ.',mcpConflict:'Settings changed in another page. Reopen this page to reload.'})
-let token='',data=null,selected='connection',draft={},errors={},busy=false,toastTimer
+Object.assign(copy.zh,{closeImagePreview:'关闭图片预览',revokeExpired:'已超过微信撤回时限：普通消息 2 分钟，文件 3 小时。',revokeMessage:'撤回',messageRevoked:'消息已撤回',confirmRevoke:'确定撤回这条微信消息并在 Telegram 标记已撤回？撤回时限由微信校验。',confirmRevokeUnknown:'上次撤回结果不确定。请先确认微信状态；继续可能重复请求撤回，并在 Telegram 标记已撤回。确定继续？',revokeUnavailable:'缺少原始微信编号或消息尚未提交，无法撤回。',revokeOwnOnly:'只能撤回当前微信账号自己发送的消息。',revokeUnknown:'撤回结果不确定，请先检查微信，不要自动重试。',revokeInProgress:'撤回正在处理中。',revokeStatus_revoking:'正在撤回',revokeStatus_revoked:'已撤回',revokeStatus_failed:'微信拒绝撤回，请检查撤回时限和权限。',revokeStatus_unknown:'撤回结果不确定，请检查微信。',syncRevokeTelegram:'同步撤回到 Telegram',quoteMessage:'引用',quoteReplyTo:'回复',quoteUnavailable:'这条消息缺少可引用的微信编号。',quoteWrongConversation:'只能引用当前会话的消息。',quoteTextOnly:'引用回复仅支持文字。',quoteMentionsUnsupported:'当前微信协议接口不支持引用与艾特同时发送，请分别使用。',mentionKeyboardHelp:'↑↓ 切换 · Enter 选择 · Esc 关闭；选中后自动回到聊天框。',mentionMembers:'@ 群成员',mentionEveryone:'所有人',mentionSearch:'搜索群昵称、备注或微信 ID…',mentionLoading:'正在读取群成员…',mentionEmpty:'未找到群成员。',mentionLimit:'最多选择 20 位成员。',mentionAllHelp:'艾特仅用于文字；@所有人需要微信允许的群主或管理员权限。',invalidMentions:'艾特参数不正确。',mentionAllExclusive:'@所有人不能与单个成员同时选择。',mentionsGroupOnly:'艾特只支持微信群聊。',mentionsTextOnly:'艾特仅支持文字消息。',groupMembersUnavailable:'无法读取群成员，请确认微信在线并稍后重试。',mentionMemberMissing:'选中的成员已不在群中，请重新选择。',mentionTextTooLong:'加上艾特内容后超过 4000 字符，请缩短消息。',wechatSendRejected:'微信拒绝了发送请求，请检查群权限。'})
+Object.assign(copy.en,{closeImagePreview:'Close image preview',revokeExpired:'WeChat recall window expired: ordinary messages 2 minutes, files 3 hours.',revokeMessage:'Revoke',messageRevoked:'Message revoked',confirmRevoke:'Revoke this WeChat message and mark its Telegram counterpart as revoked? WeChat enforces its recall time limit.',confirmRevokeUnknown:'The last recall outcome is uncertain. Check WeChat first. Continuing may repeat the request and mark the Telegram counterpart as revoked. Continue?',revokeUnavailable:'Original WeChat receipt missing or message not submitted.',revokeOwnOnly:'Only messages sent by the current WeChat account can be revoked.',revokeUnknown:'Recall outcome is uncertain. Check WeChat before retrying.',revokeInProgress:'Recall is in progress.',revokeStatus_revoking:'Revoking',revokeStatus_revoked:'Revoked',revokeStatus_failed:'WeChat rejected the recall. Check time limits and permissions.',revokeStatus_unknown:'Recall outcome uncertain. Check WeChat.',syncRevokeTelegram:'Sync recall to Telegram',quoteMessage:'Reply',quoteReplyTo:'Replying to',quoteUnavailable:'This message has no valid WeChat reference ID.',quoteWrongConversation:'Only messages in this conversation can be quoted.',quoteTextOnly:'Quoted replies support text only.',quoteMentionsUnsupported:'The current WeChat protocol cannot combine quoted replies with mentions. Use them separately.',mentionKeyboardHelp:'↑↓ Navigate · Enter Select · Esc Close. Selection returns to the composer.',mentionMembers:'@ Group members',mentionEveryone:'Everyone',mentionSearch:'Search group name, remark, or WeChat ID…',mentionLoading:'Loading group members…',mentionEmpty:'No matching members.',mentionLimit:'Select at most 20 members.',mentionAllHelp:'Mentions apply to text only. @Everyone requires owner/admin permissions granted by WeChat.',invalidMentions:'Invalid mention parameters.',mentionAllExclusive:'@Everyone cannot be combined with individual mentions.',mentionsGroupOnly:'Mentions require a WeChat group.',mentionsTextOnly:'Mentions apply to text messages only.',groupMembersUnavailable:'Unable to read group members. Check WeChat connectivity and try again.',mentionMemberMissing:'A selected member is no longer in the group. Select again.',mentionTextTooLong:'Text including mentions exceeds 4000 characters.',wechatSendRejected:'WeChat rejected the send request. Check group permissions.'})
+let token='',data=null,selected='messages',draft={},errors={},busy=false,toastTimer
+const authStorageKey='webui-access-token'
+function forgetAuth(){try{localStorage.removeItem(authStorageKey)}catch{};try{sessionStorage.removeItem(authStorageKey)}catch{}}
+function saveAuth(remember){
+    try{sessionStorage.setItem(authStorageKey,token)}catch{}
+    try{if(remember)localStorage.setItem(authStorageKey,token);else localStorage.removeItem(authStorageKey)}catch{}
+}
+function restoreAuth(){
+    try{const remembered=localStorage.getItem(authStorageKey);if(remembered){$('remember-token').checked=true;return remembered}}catch{}
+    try{return sessionStorage.getItem(authStorageKey)||''}catch{return ''}
+}
+function showAuth(){token='';forgetAuth();document.querySelector('.app-shell').inert=true;$('auth-overlay').classList.remove('hidden');$('access-token').focus()}
+Object.assign(copy.zh,{rememberToken:'记住访问令牌（此浏览器）',authPrivacy:'当前标签页保留登录；勾选记住后，重新打开也可自动登录。退出登录会清除保存的令牌。'})
+Object.assign(copy.en,{rememberToken:'Remember access token in this browser',authPrivacy:'This tab keeps your login. Remembering the token also signs you in after reopening. Signing out clears the saved token.'})
 let previewScenario='contact',previewWithoutAlias=false
 let messageCenter
 const t=(key,params={})=>Object.entries(params).reduce((text,[name,value])=>text.replaceAll(`{${name}}`,value),copy[language][key]||copy.en[key]||key)
@@ -69,14 +84,14 @@ async function api(method='GET',body,route='/api/config'){
     let response
     try{response=await fetch(route,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined})}catch{throw new Error(t('networkError'))}
     const result=await response.json()
-    if(!response.ok){if(response.status===401&&data){token='';document.querySelector('.app-shell').inert=true;$('auth-overlay').classList.remove('hidden');$('access-token').focus()}throw new Error(t(result.error||'serverError'))}
+    if(!response.ok){if(response.status===401)showAuth();throw new Error(t(result.error||'serverError'))}
     return result
 }
 function toast(message,error=false){clearTimeout(toastTimer);$('toast').textContent=message;$('toast').classList.toggle('error',error);$('toast').classList.remove('hidden');toastTimer=setTimeout(()=>$('toast').classList.add('hidden'),error?8000:4500)}
 async function mediaTransfer(route,file){
     let response
     try{response=await fetch(route,{method:file?'POST':'GET',headers:{Authorization:`Bearer ${token}`,...(file?{'Content-Type':'application/octet-stream'}:{})},body:file})}catch{throw new Error(t('networkError'))}
-    if(!response.ok){const result=await response.json();throw new Error(t(result.error||'serverError'))}
+    if(!response.ok){if(response.status===401)showAuth();const result=await response.json();throw new Error(t(result.error||'serverError'))}
     return file?response.json():response.blob()
 }
 function updateSummary(){
@@ -208,7 +223,7 @@ function render(){
     const parent=$('fields');parent.replaceChildren()
     if(selected==='mcp'){
         $('empty-state').classList.add('hidden')
-        $('field-count').textContent='MCP · 9 tools'
+        $('field-count').textContent='MCP · 11 tools'
         MCPSettingsUI.render(parent,{node,request:(method,route,body)=>api(method,body,route),english:language==='en'})
         updateSummary();return
     }
@@ -256,11 +271,12 @@ async function save(){
 }
 document.querySelectorAll('[data-icon]').forEach(el=>el.append(icon(el.dataset.icon)))
 $('language').addEventListener('click',switchLanguage);$('auth-language').addEventListener('click',switchLanguage)
-$('auth-form').addEventListener('submit',async event=>{
-    event.preventDefault();token=$('access-token').value.trim();$('auth-error').textContent='';$('auth-submit').disabled=true
-    try{data=await api();draft={};errors={};$('access-token').value='';$('auth-overlay').classList.add('hidden');document.querySelector('.app-shell').inert=false;render();$('search').focus()}catch(error){token='';$('auth-error').textContent=error.message}finally{$('auth-submit').disabled=false}
-})
-$('logout').addEventListener('click',()=>{if((Object.keys(draft).length||messageCenter?.hasDraft())&&!window.confirm(t('confirmDiscard')))return;token='';draft={};data=null;messageCenter?.clear();$('fields').replaceChildren();$('navigation').replaceChildren();document.querySelector('.app-shell').inert=true;$('auth-overlay').classList.remove('hidden');$('access-token').focus()})
+async function signIn(candidate){
+    token=candidate.trim();$('auth-error').textContent='';$('auth-submit').disabled=true
+    try{data=await api();saveAuth($('remember-token').checked);draft={};errors={};selected='messages';$('access-token').value='';$('auth-overlay').classList.add('hidden');document.querySelector('.app-shell').inert=false;render();document.querySelector('#message-center-panel input[type="search"]')?.focus()}catch(error){token='';$('auth-error').textContent=error.message}finally{$('auth-submit').disabled=false}
+}
+$('auth-form').addEventListener('submit',async event=>{event.preventDefault();await signIn($('access-token').value)})
+$('logout').addEventListener('click',()=>{if((Object.keys(draft).length||messageCenter?.hasDraft())&&!window.confirm(t('confirmDiscard')))return;forgetAuth();token='';draft={};data=null;messageCenter?.clear();$('fields').replaceChildren();$('navigation').replaceChildren();document.querySelector('.app-shell').inert=true;$('auth-overlay').classList.remove('hidden');$('access-token').focus()})
 $('search').addEventListener('input',render)
 $('reload').addEventListener('click',async()=>{
     if(!data||busy)return
@@ -272,4 +288,4 @@ $('save').addEventListener('click',save)
 $('discard').addEventListener('click',()=>{if(window.confirm(t('confirmDiscard'))){draft={};errors={};render()}})
 window.addEventListener('beforeunload',event=>{if(Object.keys(draft).length||messageCenter?.hasDraft()){event.preventDefault();event.returnValue=''}})
 document.addEventListener('keydown',event=>{if(event.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)&&data){event.preventDefault();$('search').focus()}if((event.ctrlKey||event.metaKey)&&event.key==='s'&&data){event.preventDefault();save()}})
-translate();$('access-token').focus()
+translate();const restoredToken=restoreAuth();if(restoredToken)void signIn(restoredToken);else $('access-token').focus()

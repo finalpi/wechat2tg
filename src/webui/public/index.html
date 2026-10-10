@@ -7,6 +7,7 @@
     <title>wechat2tg · Console</title>
     <link rel="stylesheet" href="/style.css">
     <script src="/template-preview.js" defer></script>
+    <script src="/mention-compose.js" defer></script>
     <script src="/messages.js" defer></script>
     <script src="/chat-content.js" defer></script>
     <script src="/ai-settings.js" defer></script>
@@ -35,7 +36,7 @@
             <div class="savebar"><div class="savebar-message"><span id="savebar-icon" data-icon="check"></span><div><strong id="pending-title"></strong><small id="pending-description"></small></div></div><div class="savebar-actions"><button id="discard" class="button secondary" type="button" data-i18n="discard">放弃更改</button><button id="save" class="button primary" type="button"><span data-icon="check"></span><span id="save-label" data-i18n="save">保存配置</span></button></div></div>
         </div>
     </div>
-    <div id="auth-overlay" class="auth-overlay"><section class="auth-card"><div class="auth-toolbar"><span class="brand-mark" data-icon="bridge"></span><button id="auth-language" class="language-button" type="button">English</button></div><div class="eyebrow">WELCOME TO YOUR BRIDGE</div><h1 data-i18n="authTitle">欢迎回来。</h1><p data-i18n="authDescription">输入访问令牌，进入你的消息控制台。</p><form id="auth-form"><label for="access-token" data-i18n="accessToken">访问令牌</label><input id="access-token" type="password" autocomplete="current-password" required><p class="auth-hint" data-i18n="authHint">令牌位于 storage/webui-token，或由 WEBUI_TOKEN 环境变量指定。</p><p id="auth-error" class="error-text" role="alert"></p><button id="auth-submit" class="button primary" type="submit"><span data-i18n="signIn">进入控制台</span><span data-icon="arrow"></span></button></form><small data-i18n="authPrivacy">访问令牌仅保留在当前页面内存中。</small></section></div>
+    <div id="auth-overlay" class="auth-overlay"><section class="auth-card"><div class="auth-toolbar"><span class="brand-mark" data-icon="bridge"></span><button id="auth-language" class="language-button" type="button">English</button></div><div class="eyebrow">WELCOME TO YOUR BRIDGE</div><h1 data-i18n="authTitle">欢迎回来。</h1><p data-i18n="authDescription">输入访问令牌，进入你的消息控制台。</p><form id="auth-form"><label for="access-token" data-i18n="accessToken">访问令牌</label><input id="access-token" type="password" autocomplete="current-password" required><p class="auth-hint" data-i18n="authHint">令牌位于 storage/webui-token，或由 WEBUI_TOKEN 环境变量指定。</p><label class="auth-remember"><input id="remember-token" type="checkbox"><span data-i18n="rememberToken">记住访问令牌（此浏览器）</span></label><p id="auth-error" class="error-text" role="alert"></p><button id="auth-submit" class="button primary" type="submit"><span data-i18n="signIn">进入控制台</span><span data-icon="arrow"></span></button></form><small data-i18n="authPrivacy">访问令牌仅保留在当前页面内存中。</small></section></div>
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 </body>
 </html>

@@ -1,3 +1,4 @@
+import {annotateTelegramRecall} from '../webui/telegram-recall'
 import {Context, Markup, session, Telegraf} from 'telegraf'
 import {config, useProxy} from '../config'
 import {SocksProxyAgent} from 'socks-proxy-agent'
@@ -569,18 +570,8 @@ export class TelegramBotClient extends AbstractClient {
         try {
             const revokeMsg = await this.messageService.getByWxMsgId(message.revokeMsgId)
             const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
-            let param = undefined
-            if (revokeMsg) {
-                param = {
-                    reply_parameters: {
-                        message_id: revokeMsg.tgBotMsgId
-                    }
-                }
-            }
-            const msgRes = await this.sendTelegramRequest(message.chatId, () => client.telegram.sendMessage(message.chatId, message.content, param))
-
-            messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
-            await this.messageService.createOrUpdate(messageEntity)
+            const body=revokeMsg?.type===1?revokeMsg.sender||'':revokeMsg?FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY,revokeMsg.sender||'',revokeMsg.content||''):''
+            await annotateTelegramRecall(WebMessageStore.getInstance(),client.telegram,message.wxId,String(message.revokeMsgId),message.chatId,revokeMsg,body,message.content||'消息已撤回',action=>this.sendTelegramRequest(message.chatId,action))
             return true
         } catch (e) {
             await this.dealException(e, message)

@@ -17,7 +17,7 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 4. AI reply suggestions based on the current WeChat chat context
 5. Chinese / English WebUI with live message-template previews and model discovery/testing
 6. WebUI contact search, multi-type messaging, attachment downloads, and Telegram delivery tracking
-7. Nine MCP tools with WebUI token management and client configuration export
+7. Eleven MCP tools with WebUI token management and client configuration export
 
 ## WebUI and message center
 
@@ -28,15 +28,19 @@ The Chinese / English WebUI starts with the application. Docker Compose exposes 
 - Configure Telegram / WeChat connections, forwarding preferences, message templates, proxies, AI / speech recognition, retries, retention, and logging.
 - Switch UI language independently of the Telegram bot language. Global settings search, validation, unsaved-change tracking, conflict detection, responsive layouts, and restart feedback are included.
 - Telegram and WeChat proxies are presented separately. Message templates have live contact, group, and official-account previews, including missing-alias examples. Previews use sample data and never send messages.
-- Sign in with `WEBUI_TOKEN` (at least 16 characters), or the generated `storage/webui-token`. The browser keeps the login token in page memory; refreshing requires signing in again.
+- Sign in with `WEBUI_TOKEN` (at least 16 characters), or the generated `storage/webui-token`. Sign-in opens Messages by default. Refreshing the current tab preserves login; optional Remember access token also restores login after reopening the browser. Signing out or a rejected token clears saved credentials.
 - Configuration secret fields remain blank: leave blank to retain the saved value, enter a new value to replace it, or explicitly clear an optional secret. MCP tokens have separate, explicit reveal/export controls.
 
 ### Conversations and attachments
 
 - Search contacts and groups by nickname, remark, or WeChat ID. The All / Recent view sorts by latest message activity and shows real avatars with initial-letter fallback.
+- In a group, type `@` or select **@ Group members** to search and select up to 20 members, or mention everyone. Native mentions apply to text; WeChat enforces owner/admin permissions for @Everyone. Mentioned text mirrors to Telegram.
+- Use arrow keys and Enter to select a member; the mention is inserted at the cursor and the picker closes automatically. Editing a selected mention removes its member ID binding.
+- Quote a saved message using **Reply**, then send a native WeChat text reply. Quotes mirror to Telegram. Quoted replies cannot currently include native mentions or attachments.
+- Recall your own confirmed messages within WeChat's limits: ordinary messages within 2 minutes; documents, MP3 files and archives within 3 hours. The limit follows the actual WeChat message type (voice messages remain 2 minutes). Expired messages or messages missing native receipts cannot be recalled. Successful recalls also preserve the corresponding Telegram content and attachments and append a recall annotation; failed Telegram updates can be retried separately. See [WeChat's explanation, republished by The Paper](https://www.thepaper.cn/newsDetail_forward_33209118).
 - Read and search saved history, load older messages, and see incoming updates every 5 seconds. First opening a conversation imports up to 500 existing database records; it does not retrieve all historical messages from WeChat.
 - Send text, images, GIF, MP4 video, audio, voice, and files. Attachments are limited to 50 MiB. Paste clipboard images with Ctrl / ⌘ + V; preview first, then explicitly send with the button or Ctrl / ⌘ + Enter. Attachment and text are sent as separate messages.
-- Preview or download received media. Links, locations, and contact cards have rich cards. Group messages separate sender, avatar, and content; merged chat histories expand into cards with downloadable embedded files and images, including nested attachments.
+- Preview or download received media. Click images to open a large preview; press Esc or click the backdrop to close. Links, locations, and contact cards have rich cards. Group messages separate sender, avatar, and content; merged chat histories expand into cards with downloadable embedded files and images, including nested attachments.
 - Messages sent from WebUI or MCP also appear in WebUI and synchronize to Telegram. Request IDs prevent duplicate sends. `submitted` means WeChat returned a message ID, not that the recipient read it. Uncertain send results are never retried automatically.
 - Red conversation counters mean tracked Telegram deliveries that are pending, in flight, or definitely failed. Successful synchronization clears them. Unverified historical receipts and uncertain delivery results are displayed separately and do not count as unread. Opening a conversation does not clear unsent Telegram deliveries.
 - Retry to Telegram only without resending to WeChat. Parallel retries are blocked; an uncertain Telegram outcome requires explicit confirmation before another attempt.
@@ -60,10 +64,12 @@ Manage MCP directly in the WebUI **MCP access** page:
 |---|---|
 | `wechat_status` | WeChat / Telegram connection status |
 | `wechat_search_contacts` | Search contacts and groups |
+| `wechat_get_group_members` | Search group members and obtain IDs for native mentions |
 | `wechat_list_conversations` | List saved conversations by recent activity |
 | `wechat_read_messages` | Search and paginate conversation history |
 | `wechat_get_new_messages` | Read new incoming messages using a persistent cursor |
 | `wechat_send_text` | Send authorized text with an idempotent request ID |
+| `wechat_revoke_message` | Recall an eligible own message with explicit confirmation |
 | `wechat_send_media` | Send an uploaded attachment, or a local file through the bridge |
 | `wechat_download_attachment` | Download ordinary or merged-history attachments |
 | `wechat_get_send_status` | Check WeChat submission and Telegram synchronization |
