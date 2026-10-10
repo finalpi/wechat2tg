@@ -1,8 +1,11 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import dotenv from 'dotenv'
+import {loadPersistentEnvironment} from './webui/store'
 
 dotenv.config()
+// WebUI 保存的配置优先于环境变量，并随 storage 挂载持久化。
+loadPersistentEnvironment()
 
 export const config = {
     BOT_TOKEN: process.env.BOT_TOKEN?.toString() || '', // tg bot father 申请的 bot token

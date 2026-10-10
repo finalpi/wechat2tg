@@ -6,13 +6,18 @@
   "esModuleInterop": true,
   "scripts": {
     "dev": "ts-node src/app.ts",
-    "build": "tsc",
-    "start": "NODE_ENV=production node dist/app.js"
+    "build": "tsc && node scripts/copy-webui.cjs",
+    "webui": "node dist/webui/standalone.js",
+    "test:webui": "npm run build && node --test tests/webui.test.cjs",
+    "start": "NODE_ENV=production node dist/app.js",
+    "test:mcp": "npm run build && node --test tests/mcp.test.cjs",
+    "mcp": "node scripts/wechat-mcp.cjs"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "axios": "^1.9.0",
     "crypto": "^1.0.1",
     "dotenv": "^16.0.3",
@@ -31,7 +36,8 @@
     "telegram": "2.21.2",
     "tencentcloud-sdk-nodejs": "^4.0.977",
     "typeorm": "^0.3.24",
-    "wx2tg-puppet": "3.0.8"
+    "wx2tg-puppet": "3.0.8",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.5",

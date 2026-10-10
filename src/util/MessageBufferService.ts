@@ -20,6 +20,9 @@ type RetryCallbackResult = boolean | MessageRetryResult
 type RetryCallback = (message: BaseMessage) => Promise<RetryCallbackResult>
 
 export class MessageBufferService {
+    public hasScheduledMessage(wxMsgId:string) {
+        return Array.from(this.messageBuffer.values()).some(item=>item.message.id===wxMsgId&&(item.status==='pending'||this.retryTimeouts.has(item.id)))
+    }
     private static instance: MessageBufferService
     private messageBuffer: Map<string, BufferedMessage> = new Map()
     // 从配置读取，0 表示无限重试

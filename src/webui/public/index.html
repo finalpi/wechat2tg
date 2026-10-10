@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>wechat2tg · Console</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/template-preview.js" defer></script>
+    <script src="/messages.js" defer></script>
+    <script src="/chat-content.js" defer></script>
+    <script src="/ai-settings.js" defer></script>
+    <script src="/mcp-settings.js" defer></script>
+    <script src="/app.js" defer></script>
+</head>
+<body>
+    <div class="app-shell" inert>
+        <aside class="sidebar">
+            <a class="brand" href="/" aria-label="wechat2tg"><span class="brand-mark" data-icon="bridge"></span><span>wechat<span class="brand-muted">2</span>tg<small>YOUR MESSAGE BRIDGE</small></span></a>
+            <div class="workspace"><span class="workspace-icon" data-icon="grid"></span><div><strong data-i18n="workspace">个人工作空间</strong><small data-i18n="workspaceSub">连接，让沟通更简单</small></div><span class="workspace-dot"></span></div>
+            <p class="nav-title" data-i18n="configuration">配置管理</p>
+            <nav id="navigation" aria-label="Configuration"></nav>
+            <div class="sidebar-bottom"><div class="mini-bridge"><span data-icon="message"></span><i></i><span data-icon="send"></span></div><strong data-i18n="bridgeTitle">两端连接，一处掌控。</strong><p data-i18n="bridgeDescription">为你的日常沟通，搭一座轻巧的桥。</p><span class="version">wechat2tg / v3</span></div>
+        </aside>
+        <div class="main-shell">
+            <header class="topbar"><div class="breadcrumb"><span data-i18n="workspace">个人工作空间</span><span class="slash">/</span><strong id="breadcrumb-title"></strong></div><div class="topbar-actions"><button id="reload" class="icon-button" type="button" data-title="reload"><span data-icon="refresh"></span></button><button id="language" class="language-button" type="button"><span data-icon="globe"></span><span id="language-label">English</span></button><span class="top-divider"></span><button id="logout" class="icon-button" type="button" aria-label="退出" data-title="logout"><span data-icon="logout"></span></button><span class="avatar">W</span></div></header>
+            <main>
+                <div class="page-heading"><div><div class="eyebrow"><span></span> BRIDGE CONTROL CENTER</div><h1 data-i18n="heading">让消息，顺畅抵达。</h1><p data-i18n="intro">在一个安静的空间里，配置你的微信与 Telegram。</p></div><div id="connection-state" class="state-pill"></div></div>
+                <section class="hero"><div class="hero-copy"><span class="hero-kicker" data-i18n="heroKicker">小小的桥，大大的连接</span><h2 data-i18n="heroTitle">你的消息，始终在一起。</h2><p data-i18n="heroDescription">连接账号、选择转发偏好，让沟通自然发生。</p><a href="#configuration-panel" class="hero-link"><span data-i18n="heroAction">开始配置</span><span data-icon="arrow"></span></a></div><div class="bridge-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="app-tile wechat-tile" data-icon="message"></div><div class="bridge-path"><i></i><i></i><i></i><span data-icon="arrow"></span></div><div class="app-tile telegram-tile" data-icon="send"></div><span class="art-caption">WeChat <span>↔</span> Telegram</span><span class="art-star star-one">✳</span><span class="art-star star-two">+</span></div></section>
+                <section class="overview" aria-label="Overview"><div class="overview-card"><span class="overview-icon" data-icon="link"></span><div><span data-i18n="credentials">连接凭证</span><strong id="credential-status">—</strong></div><span class="card-tag">TELEGRAM</span></div><div class="overview-card"><span class="overview-icon blue" data-icon="send"></span><div><span data-i18n="forwardPreferences">转发偏好</span><strong id="forward-status">—</strong></div><span class="card-tag" id="runtime-tag"></span></div><div class="overview-card"><span class="overview-icon amber" data-icon="check"></span><div><span data-i18n="configurationState">配置状态</span><strong id="save-status">—</strong></div><span class="card-tag" id="change-count"></span></div></section>
+                <div id="restart-banner" class="notice hidden" role="status"><span data-icon="info"></span><div><strong data-i18n="restartTitle">配置已保存，等待重启生效</strong><p data-i18n="restartDescription">连接、代理、模板和服务配置会在下次启动时加载，请通过原有方式重启应用。</p></div></div>
+                <div class="content-grid" id="configuration-panel"><section class="settings-panel"><div class="panel-heading"><div><div class="section-caption">CONFIGURATION</div><h2 id="section-title"></h2><p id="section-description"></p></div><span class="section-symbol" id="section-icon"></span></div><div class="panel-toolbar"><label class="search"><span data-icon="search"></span><input id="search" type="search" autocomplete="off"><kbd>/</kbd></label><span id="field-count" class="field-count"></span></div><form id="settings-form" novalidate><div id="fields"></div></form><div id="empty-state" class="empty-state hidden"><span data-icon="search"></span><h3 data-i18n="noResults">没有找到匹配的配置</h3><p data-i18n="noResultsHelp">试试搜索配置名称或环境变量名。</p></div></section><aside class="context-panel"><section class="help-card"><span class="help-icon" data-icon="spark"></span><h3 data-i18n="guideTitle">刚刚好，才是最好。</h3><p data-i18n="guideDescription">从基本连接开始，再按需要开启更多功能。每个配置项都有说明，随时可以调整。</p><div class="help-divider"></div><div class="help-step"><span>01</span><div><strong data-i18n="step1">连接两端</strong><p data-i18n="step1Description">填写 Telegram 凭证和微信服务地址。</p></div></div><div class="help-step"><span>02</span><div><strong data-i18n="step2">选择你的偏好</strong><p data-i18n="step2Description">调整消息转发、模板与扩展服务。</p></div></div><div class="help-step"><span>03</span><div><strong data-i18n="step3">保存，然后出发</strong><p data-i18n="step3Description">转发开关即时保存，环境配置重启后生效。</p></div></div></section><section class="security-card"><span data-icon="shield"></span><div><strong data-i18n="privacyTitle">密钥，妥善保管。</strong><p data-i18n="privacyDescription">已保存的密钥不会返回浏览器。留空保持不变，填写新值即可替换。</p></div></section><section id="template-help" class="template-card hidden"><h3 data-i18n="placeholderTitle">可用占位符</h3><dl><dt>#[alias]</dt><dd data-i18n="alias">联系人备注</dd><dt>#[name]</dt><dd data-i18n="name">联系人昵称</dd><dt>#[topic]</dt><dd data-i18n="topic">群聊名称</dd><dt>#[alias_first]</dt><dd data-i18n="aliasFirst">备注优先，否则昵称</dd><dt>#[identity]</dt><dd data-i18n="identity">消息身份前缀</dd><dt>#[body]</dt><dd data-i18n="body">消息正文</dd><dt>#[br]</dt><dd data-i18n="lineBreak">换行</dd></dl></section></aside></div>
+                <footer class="page-footer"><span>wechat2tg</span><span data-i18n="footer">让连接更简单，让沟通更自在。</span><span class="footer-dot"></span><span>Made for your flow.</span></footer>
+            </main>
+            <div class="savebar"><div class="savebar-message"><span id="savebar-icon" data-icon="check"></span><div><strong id="pending-title"></strong><small id="pending-description"></small></div></div><div class="savebar-actions"><button id="discard" class="button secondary" type="button" data-i18n="discard">放弃更改</button><button id="save" class="button primary" type="button"><span data-icon="check"></span><span id="save-label" data-i18n="save">保存配置</span></button></div></div>
+        </div>
+    </div>
+    <div id="auth-overlay" class="auth-overlay"><section class="auth-card"><div class="auth-toolbar"><span class="brand-mark" data-icon="bridge"></span><button id="auth-language" class="language-button" type="button">English</button></div><div class="eyebrow">WELCOME TO YOUR BRIDGE</div><h1 data-i18n="authTitle">欢迎回来。</h1><p data-i18n="authDescription">输入访问令牌，进入你的消息控制台。</p><form id="auth-form"><label for="access-token" data-i18n="accessToken">访问令牌</label><input id="access-token" type="password" autocomplete="current-password" required><p class="auth-hint" data-i18n="authHint">令牌位于 storage/webui-token，或由 WEBUI_TOKEN 环境变量指定。</p><p id="auth-error" class="error-text" role="alert"></p><button id="auth-submit" class="button primary" type="submit"><span data-i18n="signIn">进入控制台</span><span data-icon="arrow"></span></button></form><small data-i18n="authPrivacy">访问令牌仅保留在当前页面内存中。</small></section></div>
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+</body>
+</html>

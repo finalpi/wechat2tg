@@ -25,6 +25,7 @@ import {WeVideo} from 'wx2tg-puppet'
 import {FileBox} from 'file-box'
 import I18n from '../i18n'
 import {LogUtils} from '../util/LogUtil'
+import {WebMessageStore} from '../webui/message-store'
 import {getWechatCallStatus, formatWechatCallStatus} from '../util/WechatCallStatus'
 
 const TELEGRAM_BOT_API_UPLOAD_LIMIT = 50 * 1024 * 1024
@@ -411,8 +412,10 @@ export class WeChatClient extends AbstractClient {
         })
 
         this.client.on('message', (msg) => {
-            // 此处放回的msg为Message类型 可以使用Message类的方法
-            this.onMessage(msg)
+            void(async()=>{
+                if(process.env.WEBUI_ENABLED!=='false')await WebMessageStore.getInstance().observe(msg).catch(()=>this.logger.warn('WebUI message capture failed'))
+                await this.onMessage(msg)
+            })().catch(()=>this.logger.error('Wechat message handling failed'))
         })
 
         this.client.on('login', (msg) => {
@@ -421,10 +424,12 @@ export class WeChatClient extends AbstractClient {
     }
 
     async onMessage(msg: WxMessage) {
+        if(process.env.WEBUI_ENABLED!=='false'&&await WebMessageStore.getInstance().isManagedEcho(msg))return
         this.logger.debug(`收到微信消息: type=${msg.type()}, msgId=${msg.newMsgId}, toId=${msg.toId}, text=${msg.text()?.substring(0, 100)}, xml=${msg._xml}`)
 
         // TODO: 只处理新消息，丢弃历史消息（未来可以增加选项更好的保存聊天记录）
         if (msg.date() < this.startTime) {
+            if(process.env.WEBUI_ENABLED!=='false')await WebMessageStore.getInstance().setTelegramStatus(String(msg.newMsgId),'excluded')
             return
         }
         // 过滤重复消息
@@ -441,6 +446,7 @@ export class WeChatClient extends AbstractClient {
         if (msg.self()) {
             // 过滤自己发送的消息
             if (!configuration.selfMessage) {
+                if(process.env.WEBUI_ENABLED!=='false')await WebMessageStore.getInstance().setTelegramStatus(String(msg.newMsgId),'excluded')
                 return
             }
             contact = await msg.to()
@@ -455,15 +461,18 @@ export class WeChatClient extends AbstractClient {
             wxId = contact._wxid
         }
         if (wxId === 'filehelper') {
+            if(process.env.WEBUI_ENABLED!=='false')await WebMessageStore.getInstance().setTelegramStatus(String(msg.newMsgId),'excluded')
             return
         }
         if (wxId && wxId.startsWith('gh_') && !configuration.receivePublicAccount) {
+            if(process.env.WEBUI_ENABLED!=='false')await WebMessageStore.getInstance().setTelegramStatus(String(msg.newMsgId),'excluded')
             return
         }
         // 公众号仅接收通知消息模式
         if (wxId && wxId.startsWith('gh_') && configuration.onlyReceiveOfficialNotify) {
             const sourceText = msg.text()
             if (sourceText && !sourceText.includes('<notify_msg')) {
+                if(process.env.WEBUI_ENABLED!=='false')await WebMessageStore.getInstance().setTelegramStatus(String(msg.newMsgId),'excluded')
                 return
             }
         }
@@ -540,6 +549,7 @@ export class WeChatClient extends AbstractClient {
         }
         // 屏蔽消息
         if (!bindGroup.isReceive) {
+            if(process.env.WEBUI_ENABLED!=='false')await WebMessageStore.getInstance().setTelegramStatus(String(msg.newMsgId),'excluded')
             return
         }
         // 身份

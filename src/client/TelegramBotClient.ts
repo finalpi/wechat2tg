@@ -44,6 +44,8 @@ import {MessageTypeUtils} from '../util/MessageTypeUtils'
 import {normalizeEscapedTelegramCommandText} from '../util/TelegramTextUtils'
 import {AiReplyService} from '../service/AiReplyService'
 import {CustomFile} from 'telegram/client/uploads'
+import {WebMessageStore} from '../webui/message-store'
+import {telegramDeliveryUncertain} from '../webui/delivery'
 import {Api} from 'telegram'
 
 interface LargeFileProgressEditor {
@@ -64,10 +66,12 @@ type FileSendResult = {
 }
 
 type TelegramSendResult = MessageRetryResult & {
+    deliveryUncertain?:boolean
     skipRetry?: boolean
 }
 
 interface QueuedTelegramMessage {
+    webui?: boolean
     message: BaseMessage
     messageId: string
     isRetry: boolean
@@ -170,6 +174,12 @@ export class TelegramBotClient extends AbstractClient {
         this.telegramMessageQueue.push(item)
         void this.processTelegramMessageQueue()
     }
+    public mirrorWebUI(message:BaseMessage):Promise<TelegramSendResult> {
+        return new Promise(resolve=>this.enqueueTelegramMessage({message,messageId:`webui:${message.id}`,isRetry:true,webui:true,resolve}))
+    }
+    public isWebUISyncActive(wxMsgId:string) {
+        return this.activeWebUISync.has(wxMsgId)||this.telegramMessageQueue.some(item=>item.message.id===wxMsgId)||this.messageBufferService.hasScheduledMessage(wxMsgId)
+    }
 
     private enqueueTelegramRetry(message: BaseMessage, messageId: string): Promise<TelegramSendResult> {
         return new Promise(resolve => {
@@ -191,6 +201,9 @@ export class TelegramBotClient extends AbstractClient {
                 }
 
                 this.currentRetryAfterMs = undefined
+                this.currentDeliveryUncertain=false
+                this.activeWebUISync.add(item.message.id)
+                if(process.env.WEBUI_ENABLED!=='false')await WebMessageStore.getInstance().setTelegramStatus(item.message.id,'syncing').catch(()=>{})
                 let result: TelegramSendResult
                 try {
                     result = await this.sendBufferedMessage(item.message)
@@ -200,10 +213,12 @@ export class TelegramBotClient extends AbstractClient {
                 }
 
                 const retryAfterMs = Math.max(result.retryAfterMs || 0, this.currentRetryAfterMs || 0) || undefined
-                result = {...result, retryAfterMs}
+                this.activeWebUISync.delete(item.message.id)
+                if(process.env.WEBUI_ENABLED!=='false')await WebMessageStore.getInstance().setTelegramStatus(item.message.id,result.success?'synced':this.currentDeliveryUncertain||result.skipRetry||result.deliveryUncertain?'unknown':'failed').catch(()=>{})
+                result = {...result,retryAfterMs,deliveryUncertain:this.currentDeliveryUncertain||result.skipRetry||result.deliveryUncertain}
 
                 if (item.isRetry) {
-                    item.resolve?.(result.skipRetry ? {...result, success: true} : result)
+                    item.resolve?.(item.webui?result:result.skipRetry ? {...result, success: true} : result)
                     continue
                 }
 
@@ -256,6 +271,7 @@ export class TelegramBotClient extends AbstractClient {
             return await request()
         } catch (error) {
             this.recordTelegramRetryAfter(error)
+            if(telegramDeliveryUncertain(error))this.currentDeliveryUncertain=true
             throw error
         }
     }
@@ -597,11 +613,13 @@ export class TelegramBotClient extends AbstractClient {
     private processingMessages = new Set<string>()
     // 所有转发消息和重试共用同一发送队列
     private telegramMessageQueue: QueuedTelegramMessage[] = []
+    private activeWebUISync = new Set<string>()
     private isProcessingQueue = false
     private telegramQueueBlockedUntil = 0
     private telegramNextGlobalSendAt = 0
     private telegramNextSendAtByChat = new Map<string, number>()
     private currentRetryAfterMs: number | undefined
+    private currentDeliveryUncertain=false
     // i18n实例
     private i18n = I18n.getInstance()
     // Telegram Bot 连接状态管理
@@ -2308,6 +2326,7 @@ ${this.i18n.t('help.instructions')}`))
             }
         }
 
+        if(newMsg&&!success)this.currentDeliveryUncertain=true
         // 更新chatId
         if (newMsg && success) {
             messageEntity.tgBotMsgId = parseInt(newMsg.message_id + '')
@@ -2439,12 +2458,12 @@ ${this.i18n.t('help.instructions')}`))
         return undefined
     }
 
-    private async downloadChatHistoryAttachment(attachment: ChatHistoryAttachment, storedMessage: Message): Promise<Buffer> {
+    public async downloadChatHistoryAttachment(attachment: ChatHistoryAttachment, storedMessage: Message): Promise<Buffer> {
         const wxConfig = await wxConfigService.get()
         const wxid = wxConfig?.wxid || ''
         if (attachment.type === 'image') {
             const recordItemAesKey = attachment.payload.rawFileAesKey || attachment.payload.fileAesKey
-            this.logger.info(`下载聊天记录图片附件(recorditem): cdnDataUrl=${String(attachment.payload.fileNo).slice(0, 60)}, aesKey=${attachment.payload.fileAesKey}, rawKey=${attachment.payload.rawFileAesKey}, usedKey=${recordItemAesKey}, dataSize=${attachment.payload.dataLen}`)
+            this.logger.info(`下载聊天记录图片附件(recorditem): dataSize=${attachment.payload.dataLen}`)
             const response = await toolsApi.CdnDownloadRecordItem({
                 CdnDataKey: recordItemAesKey,
                 CdnDataUrl: attachment.payload.fileNo,
@@ -2489,7 +2508,7 @@ ${this.i18n.t('help.instructions')}`))
 
     private async downloadRecordItemFileAttachment(attachment: ChatHistoryAttachment, wxid: string): Promise<Buffer> {
         const recordItemKey = attachment.payload.rawCdnDataKey || attachment.payload.cdnDataKey
-        this.logger.info(`下载聊天记录文件附件(recorditem): cdnDataUrl=${String(attachment.payload.cdnDataUrl).slice(0, 60)}, aesKey=${attachment.payload.cdnDataKey}, rawKey=${attachment.payload.rawCdnDataKey}, usedKey=${recordItemKey}, dataSize=${attachment.payload.dataLen}`)
+        this.logger.info(`下载聊天记录文件附件(recorditem): dataSize=${attachment.payload.dataLen}`)
         const response = await toolsApi.CdnDownloadRecordItem({
             CdnDataKey: recordItemKey,
             CdnDataUrl: attachment.payload.cdnDataUrl,

@@ -15,6 +15,75 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 2. Send messages via Telegram to specific WeChat users, groups, and official accounts
 3. Flexible group message blocking functionality
 4. AI reply suggestions based on the current WeChat chat context
+5. Chinese / English WebUI with live message-template previews and model discovery/testing
+6. WebUI contact search, multi-type messaging, attachment downloads, and Telegram delivery tracking
+7. Nine MCP tools with WebUI token management and client configuration export
+
+## WebUI and message center
+
+The Chinese / English WebUI starts with the application. Docker Compose exposes **TCP 17863 on all host interfaces by default**: open `http://<server-address>:17863/`. Local development listens on loopback by default: `http://127.0.0.1:17863/`. WebUI and MCP share the same port; the MCP path is `/mcp`.
+
+### Configuration console
+
+- Configure Telegram / WeChat connections, forwarding preferences, message templates, proxies, AI / speech recognition, retries, retention, and logging.
+- Switch UI language independently of the Telegram bot language. Global settings search, validation, unsaved-change tracking, conflict detection, responsive layouts, and restart feedback are included.
+- Telegram and WeChat proxies are presented separately. Message templates have live contact, group, and official-account previews, including missing-alias examples. Previews use sample data and never send messages.
+- Sign in with `WEBUI_TOKEN` (at least 16 characters), or the generated `storage/webui-token`. The browser keeps the login token in page memory; refreshing requires signing in again.
+- Configuration secret fields remain blank: leave blank to retain the saved value, enter a new value to replace it, or explicitly clear an optional secret. MCP tokens have separate, explicit reveal/export controls.
+
+### Conversations and attachments
+
+- Search contacts and groups by nickname, remark, or WeChat ID. The All / Recent view sorts by latest message activity and shows real avatars with initial-letter fallback.
+- Read and search saved history, load older messages, and see incoming updates every 5 seconds. First opening a conversation imports up to 500 existing database records; it does not retrieve all historical messages from WeChat.
+- Send text, images, GIF, MP4 video, audio, voice, and files. Attachments are limited to 50 MiB. Paste clipboard images with Ctrl / ⌘ + V; preview first, then explicitly send with the button or Ctrl / ⌘ + Enter. Attachment and text are sent as separate messages.
+- Preview or download received media. Links, locations, and contact cards have rich cards. Group messages separate sender, avatar, and content; merged chat histories expand into cards with downloadable embedded files and images, including nested attachments.
+- Messages sent from WebUI or MCP also appear in WebUI and synchronize to Telegram. Request IDs prevent duplicate sends. `submitted` means WeChat returned a message ID, not that the recipient read it. Uncertain send results are never retried automatically.
+- Red conversation counters mean tracked Telegram deliveries that are pending, in flight, or definitely failed. Successful synchronization clears them. Unverified historical receipts and uncertain delivery results are displayed separately and do not count as unread. Opening a conversation does not clear unsent Telegram deliveries.
+- Retry to Telegram only without resending to WeChat. Parallel retries are blocked; an uncertain Telegram outcome requires explicit confirmation before another attempt.
+
+### AI and speech
+
+Enter an OpenAI-compatible API URL and key, read the provider's model list, select a model, and test the connection before saving. A blank key uses the saved key; switching provider origin requires explicitly entering a key. Checks use the current unsaved inputs and a generic test prompt, never conversation history. `/ai` generates contextual reply suggestions; it does not automatically send them.
+
+Configure Tencent Cloud ASR credentials and enable automatic voice transcription through WebUI or `/settings`.
+
+### MCP access and installation
+
+Manage MCP directly in the WebUI **MCP access** page:
+
+- Enable or disable MCP immediately; set the client endpoint and local bridge script path. The endpoint is for client configuration, not the server listener.
+- Reveal, download, generate, or manually replace independent read-only and read/send tokens. Rotation takes effect on the next request; update connected clients afterward.
+- Copy or download Streamable HTTP or stdio client configurations. Preview uses `<TOKEN>`; explicit export includes the selected credential. Export defaults to read-only permissions.
+- The stdio bridge supports local file uploads and downloads; paths in repository examples are placeholders. Keep actual installation paths and credentials in private client configuration outside this repository.
+
+| Tool | Purpose |
+|---|---|
+| `wechat_status` | WeChat / Telegram connection status |
+| `wechat_search_contacts` | Search contacts and groups |
+| `wechat_list_conversations` | List saved conversations by recent activity |
+| `wechat_read_messages` | Search and paginate conversation history |
+| `wechat_get_new_messages` | Read new incoming messages using a persistent cursor |
+| `wechat_send_text` | Send authorized text with an idempotent request ID |
+| `wechat_send_media` | Send an uploaded attachment, or a local file through the bridge |
+| `wechat_download_attachment` | Download ordinary or merged-history attachments |
+| `wechat_get_send_status` | Check WeChat submission and Telegram synchronization |
+
+MCP uses the existing WeChat login and send queue. Reading messages does not wake an idle AI or enable automatic replies. Cursor-based reception is separate from Telegram unread counters. See [MCP setup, parameters, and client examples](docs/MCP.md).
+
+### Persistence and configuration precedence
+
+| Storage file / directory | Purpose | When changes apply |
+|---|---|---|
+| `storage/webui-config.json` | WebUI environment overrides | Restart the application |
+| `storage/db/wechat2Tg.db` | Bot bindings and runtime preferences | Preferences apply immediately; startup synchronization runs on next startup |
+| `storage/db/webui-messages.db` | Message center history and delivery tracking | Immediately |
+| `storage/webui-media` / `storage/webui-avatars` | Attachments and avatar cache | Immediately |
+| `storage/mcp-settings.json` | MCP enablement, client settings, and tokens | Immediately, including token rotation |
+| `storage/webui-token`, `storage/mcp-token`, `storage/mcp-read-token` | Generated access credentials | Used for their respective interfaces |
+
+Docker mounts `./config` as `/app/storage`; back it up with `save-files`, `conf`, and `redis-data`. WebUI environment overrides take priority over `.env` and container environment variables. To restore an environment default, stop the app, remove that key from `webui-config.json`, and restart. Saved MCP settings take priority over `MCP_ENABLED`, `MCP_TOKEN`, and `MCP_READ_TOKEN`; these variables initialize settings before the first WebUI MCP save. `WEBUI_CONFIG_PATH` relocates the WebUI file and MCP settings/token directory.
+
+Normal startup leaves the WebUI available if Telegram credentials are missing. For setup without clients or a database, use `npm run build` then `npm run webui`; stop the standalone process before starting the normal app. Standalone mode cannot manage bot database preferences or send messages.
 
 ## Supported Message Types
 
@@ -51,39 +120,59 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 
 1. This project is for technical research and learning purposes only, strictly prohibited for illegal use
 2. Welcome to submit issues for any problems encountered during use
-3. Ensure that the IP of wx2tg-server matches the login region, otherwise verification code may be required
+3. Ensure that the IP of wx2tg-server matches the login region, otherwise a verification code may be required
 4. On arm-64 architecture, due to missing dependencies, the wx2tg-server image cannot be used.
 5. After logging in, you may be logged out once after one day; after logging in again, the connection will remain stable.
 
 ## Installation & Deployment
 
-First, copy `.env.example` to `.env` and configure the environment variables.
+Use Docker Engine with Docker Compose v2, or Node.js 18+ for local development. Native SQLite, image-processing, and media-conversion dependencies must match the runtime platform.
 
-Copy `app.conf.example` to `app.conf` in the `conf` directory and set the Redis address to your deployed Redis address.
+### Docker Compose
 
-### docker-compose
+Use the repository's `docker-compose.yml`; no WebUI override file is required. It uses the published image `finalpi/wechat2tg-v3:latest`, with no local build required.
 
-Create a `docker-compose.yml` file:
+```bash
+cp .env.example .env
+mkdir -p conf
+cp app.conf.example conf/app.conf
+docker compose pull
+docker compose up -d
+docker compose exec wx2tg-v3 cat storage/webui-token
+```
+
+In `.env`, fill in `BOT_TOKEN`, `API_ID`, and `API_HASH`, or enter them through WebUI and restart the app after saving. The bundled example uses `BASE_API=http://wx2tg-server:8058/api` and `redislink=wx2tg-redis:6379`. Keep those Compose service names if using the bundled stack.
+
+Open `http://<server-address>:17863/` and sign in with the token. Then use Telegram `/login` to sign in to WeChat. Missing credentials leave the configuration page available. After saving environment settings in WebUI:
+
+```bash
+docker compose restart wx2tg-v3
+```
+
+The default Compose file is:
 
 ```yaml
-version: '3'
-
 services:
   wx2tg-v3:
     image: finalpi/wechat2tg-v3:latest
     container_name: wx2tg-v3
-    # ports:
-       # - "8056:8056" # Only needed for callback mode
+    environment:
+      WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"
+      WEBUI_HOST: "0.0.0.0"
+      WEBUI_PORT: "${WEBUI_PORT:-17863}"
+    ports:
+      - "${WEBUI_BIND_ADDRESS:-0.0.0.0}:${WEBUI_PORT:-17863}:${WEBUI_PORT:-17863}"
+      # - "8056:8056" # callback 模式且需宿主机访问时启用 / Optional callback exposure
     volumes:
       - ./config:/app/storage
-      - ./save-files:/app/save-files # After mounting save-files folder, sticker files do not need to be converted again
+      - ./save-files:/app/save-files # 保存文件夹挂载后贴纸文件不需要重新转换
     env_file: ".env"
     restart: unless-stopped
     depends_on:
       - wx2tg-server
 
   wx2tg-server:
-    # image: finalpi/wx2tg-server:v3-latest # v3 stable version
+    # image: finalpi/wx2tg-server:v3-latest # v3 稳定版
     image: finalpi/wx2tg-server:v5-latest
     container_name: wx2tg-server
     ports:
@@ -110,11 +199,36 @@ services:
     restart: unless-stopped
 ```
 
-#### Run
+| Host port | Service | Default exposure |
+|---|---|---|
+| TCP `17863` | WebUI and MCP (`/mcp`) | All host interfaces |
+| TCP `8058` | WeChat protocol service | As defined in Compose |
+| TCP `16379` | Redis (`6379` inside the container) | As defined in Compose |
+| TCP `8056` | Optional callback mode | Commented out; enable only if needed |
 
-```shell
-docker-compose up -d
+Set `WEBUI_PORT` in `.env` to change both the container listener and published WebUI port. Set `WEBUI_BIND_ADDRESS=127.0.0.1` for local-only access. Compose always uses `WEBUI_HOST=0.0.0.0` inside the container. Port/binding or `.env` changes require recreating the container (`docker compose up -d`); a process restart alone does not change Docker port mappings.
+
+For Internet access, route a configured HTTPS endpoint to the WebUI port and set that public `/mcp` URL in the MCP access page. Allow the chosen TCP port through your firewall and router/forwarding setup as applicable. A self-signed deployment needs its CA trusted by the client; the stdio bridge can use `NODE_EXTRA_CA_CERTS=/absolute/path/to/ca.pem` while retaining TLS validation. Deployment-specific IPs, ports, paths, and certificates belong in private configuration.
+
+### Local development
+
+```bash
+npm install
+npm run build
+npm run dev
 ```
+
+Open `http://127.0.0.1:17863/`. `npm start` runs compiled production code. Use `.env.example` for configuration and keep native dependencies aligned with your OS.
+
+### Verification and logs
+
+```bash
+npm run test:webui
+npm run test:mcp
+docker compose logs --tail=100 wx2tg-v3
+```
+
+Tests use isolated message fixtures; they do not send to real WeChat contacts.
 
 #### Disable Bot Privacy Mode
 
@@ -158,7 +272,7 @@ Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot
 |`API_ID`| Yes | Telegram API ID                                                     |
 |`API_HASH`| Yes | Telegram API HASH                                                   |
 |`DEVICE_TYPE`| Yes | WeChat login protocol: ipad, car, mac, pad, win, ipadX              |
-|`BASE_API`| Yes | wx2tg-server container API request address, full path required      | |
+|`BASE_API`| Yes | wx2tg-server container API request address, full path required      |
 |`PROXY_PROTOCOL`| No | Proxy type optional values (socks5, http, https)                    |
 |`PROXY_HOST`| No | Proxy URL                                                           |
 |`PROXY_PORT`| No | Proxy port number                                                   |
@@ -177,6 +291,25 @@ Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot
 |`AI_API_URL`| No | OpenAI-compatible chat completions URL, e.g. `https://api.openai.com/v1/chat/completions` |
 |`AI_MODEL`| No | AI model name, default: `gpt-4o-mini`                               |
 |`AI_CONTEXT_LIMIT`| No | Fallback default number of recent WeChat conversation messages used as AI context, default: `20`; runtime default can be saved with `/ai context <count>` and overridden per request with `/ai -n <count>` |
+|`MODE`, `CALLBACK_PORT`, `CALLBACK_API`, `FILE_API`| No | Message delivery mode, callback listener/URL, and optional file service |
+|`WX_PROXY_HOST`, `WX_PROXY_USERNAME`, `WX_PROXY_PASSWORD`| No | Independent WeChat SOCKS login proxy |
+|`TENCENT_SECRET_ID`, `TENCENT_SECRET_KEY`| No | Tencent Cloud ASR credentials |
+|`SEND_TO_WX_MAX_RETRIES`, `SEND_TO_WX_TIMEOUT`| No | Existing WeChat forwarding retries (`3`) and timeout (`30000` ms) |
+|`SEND_TO_TG_MAX_RETRIES`, `SEND_TO_TG_RETRY_DELAY`| No | Existing Telegram forwarding retries (`3`) and backoff base (`5000` ms) |
+|`MESSAGE_BUFFER_EXPIRE_TIME`| No | Message buffer lifetime (`300000` ms) |
+|`AUTO_DELETE_OLD_MESSAGES`, `MESSAGE_RETENTION_DAYS`| No | Cleanup existing bot message history; defaults `false` / `7` days |
+|`LOG_LEVEL`, `DEBUG_MODE`| No | Logging level and debug mode; defaults `info` / `false` |
+|`DB_SQLITE_PATH`| No | Bot SQLite path; default `storage/db/wechat2Tg.db` |
+|`WEBUI_ENABLED`| No | Enable WebUI; default `true`. MCP uses the same listener |
+|`WEBUI_HOST`| No | Local listener defaults to `127.0.0.1`; Compose overrides to `0.0.0.0` |
+|`WEBUI_PORT`| No | WebUI and MCP port; default `17863` |
+|`WEBUI_BIND_ADDRESS`| No | Compose host bind address; default `0.0.0.0` |
+|`WEBUI_TOKEN`| No | WebUI access credential, minimum 16 characters; generated if omitted |
+|`WEBUI_CONFIG_PATH`| No | WebUI override file; default `storage/webui-config.json` |
+|`MCP_ENABLED`| No | Initial MCP enablement; default `true`, then overridden by saved MCP settings |
+|`MCP_TOKEN`, `MCP_READ_TOKEN`| No | Initial read/send and read-only credentials; generated if omitted, must differ |
+|`WECHAT_MCP_URL`, `WECHAT_MCP_TOKEN_FILE`, `WECHAT_MCP_TOKEN`| Client | stdio bridge endpoint and token source; URL required, token value takes precedence over token file |
+|`NODE_EXTRA_CA_CERTS`| Client | Optional CA PEM file for a self-signed HTTPS deployment |
 
 ## Settings Command `/settings`
 
@@ -188,7 +321,7 @@ Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot
 
 1. Configure `TENCENT_SECRET_ID` and `TENCENT_SECRET_KEY`, which can be activated in the Tencent [Speech Recognition Console](https://console.cloud.tencent.com/asr). Free usage quota is available.
 
-2. Enable automatic text-to-speech function in `/settings`
+2. Enable automatic voice-to-text transcription in `/settings`
 
 ## Obtaining `API_ID` and `API_HASH`
 
@@ -241,9 +374,3 @@ If not in the same region, you can configure WeChat proxy login in environment v
 ## License
 
 [MIT](LICENSE)
-
-## Thanks
-
-Thanks to Jetbrains for supporting this project
-
-[<img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.png" width="200">](https://www.jetbrains.com)

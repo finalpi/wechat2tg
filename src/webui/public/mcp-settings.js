@@ -1,0 +1,46 @@
+window.MCPSettingsUI={
+    async render(container,{node,request,english}){
+        const copy=english?{
+            title:'Your AI, connected to WeChat',intro:'9 tools for contacts, conversations, messages and attachments. Changes on this page take effect immediately.',settings:'Connection settings',enabled:'Enable MCP',endpoint:'Client endpoint',endpointHelp:'Use the address reachable from your AI client. Remote access requires HTTPS or a local SSH tunnel. This changes installation examples, not the server listener.',script:'Local bridge script path',scriptHelp:'Enter the absolute script path on the client machine. The example uses a generic placeholder.',save:'Save MCP settings',saved:'Saved. Changes are active.',write:'Read & send token',read:'Read-only token',tokenHelp:'Independent from your WebUI login token. Changing a token invalidates it for the next request. Update your connected clients.',show:'Show',hide:'Hide',rotate:'Generate a new token',replace:'Use entered token',downloadToken:'Download token file',tokenPlaceholder:'Configured · enter a replacement token',rotated:'Token updated. Update the client configuration.',installation:'Install in your MCP client',installHelp:'Select permissions and transport, then copy or download the configuration. The configuration contains the selected token; keep it private.',transport:'Transport',permissions:'Permissions',http:'Streamable HTTP',stdio:'Local stdio bridge',copy:'Copy configuration',download:'Download configuration',copied:'Configuration copied.',tools:'Available tools',unavailable:'The message service is unavailable.',working:'Working…',error:'Could not load MCP settings.',disabled:'MCP is disabled.',downloaded:'File downloaded.',fallback:'Clipboard unavailable. Download the configuration instead.',empty:'Use current browser address',
+        }:{
+            title:'让 AI 连接你的微信',intro:'9 个工具，涵盖联系人、会话、消息与附件。本页修改保存后立即生效。',settings:'连接设置',enabled:'启用 MCP',endpoint:'客户端访问地址',endpointHelp:'填写 AI 客户端能访问的地址。远程连接使用 HTTPS 或本地 SSH 隧道。此项用于生成安装配置，不改变服务监听地址。',script:'本地桥接脚本路径',scriptHelp:'填写客户端电脑上的脚本绝对路径，示例默认使用通用占位符。',save:'保存 MCP 设置',saved:'已保存，设置已立即生效。',write:'读写 Token',read:'只读 Token',tokenHelp:'与 WebUI 登录令牌相互独立。更换后旧 Token 在下一次请求时失效，请同步更新已连接的客户端。',show:'显示',hide:'隐藏',rotate:'生成新 Token',replace:'使用填入的 Token',downloadToken:'下载 Token 文件',tokenPlaceholder:'已配置 · 可填入替换 Token',rotated:'Token 已更换，请更新客户端配置。',installation:'安装到 MCP 客户端',installHelp:'选择权限与连接方式，然后复制或下载配置。配置包含所选 Token，请妥善保管。',transport:'连接方式',permissions:'访问权限',http:'Streamable HTTP',stdio:'本地 stdio 桥接',copy:'复制配置',download:'下载配置',copied:'配置已复制。',tools:'可用工具',unavailable:'当前消息服务不可用。',working:'处理中…',error:'无法加载 MCP 设置。',disabled:'MCP 已关闭。',downloaded:'文件已下载。',fallback:'无法访问剪贴板，请下载配置文件。',empty:'使用当前浏览器地址',
+        }
+        const text=key=>copy[key],root=node('div','mcp-settings'),status=node('p','mcp-status');status.setAttribute('role','status');root.append(status);container.append(root)
+        let state,busy=false
+        const download=(name,content)=>{const url=URL.createObjectURL(new Blob([content],{type:name.endsWith('.json')?'application/json;charset=utf-8':'text/plain;charset=utf-8'})),a=node('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+        const button=(label,fn,style='secondary')=>{const b=node('button',`button ${style}`,text(label));b.type='button';b.addEventListener('click',()=>execute(fn));return b}
+        const execute=async fn=>{
+            if(busy)return;busy=true;root.querySelectorAll('button').forEach(b=>b.disabled=true);status.textContent=text('working');status.classList.remove('error-text')
+            try{await fn()}catch(e){status.textContent=e.message||text('error');status.classList.add('error-text')}finally{busy=false;root.querySelectorAll('button').forEach(b=>b.disabled=false)}
+        }
+        try{state=await request('GET','/api/mcp/settings')}catch(e){status.textContent=e.message;status.classList.add('error-text');return}
+        if(!root.isConnected)return
+        const header=node('section','mcp-hero');header.append(node('span','ai-tools-tag','MCP · 9 TOOLS'),node('h2','',text('title')),node('p','',text('intro')));root.prepend(header)
+        const field=(label,value,help,type='text')=>{const wrap=node('label','mcp-field'),input=node('input');input.type=type;input.value=value;input.autocomplete='off';input.setAttribute('aria-label',text(label));wrap.append(node('span','',text(label)),input);if(help)wrap.append(node('small','',text(help)));return {wrap,input}}
+        const card=node('section','mcp-card');card.append(node('h3','',text('settings')))
+        const enabled=node('input');enabled.type='checkbox';enabled.checked=state.enabled;const toggle=node('label','mcp-toggle');toggle.append(enabled,node('span','',text('enabled')));card.append(toggle)
+        const endpoint=field('endpoint',state.endpoint||location.origin+'/mcp','endpointHelp'),script=field('script',state.scriptPath,'scriptHelp');card.append(endpoint.wrap,script.wrap)
+        card.append(button('save',async()=>{state=await request('PATCH','/api/mcp/settings',{revision:state.revision,enabled:enabled.checked,endpoint:endpoint.input.value.trim(),scriptPath:script.input.value.trim()});refresh();status.textContent=text('saved')},'primary'));root.append(card)
+        const tokenGrid=node('div','mcp-token-grid');root.append(tokenGrid)
+        for(const role of ['read','write']){
+            const tokenCard=node('section','mcp-card'),token=field(role,'',null,'password');token.input.placeholder=text('tokenPlaceholder');token.input.spellcheck=false
+            tokenCard.append(node('h3','',text(role)),node('p','',text('tokenHelp')),token.wrap)
+            const actions=node('div','mcp-actions')
+            const reveal=async()=>{const result=await request('POST','/api/mcp/token',{revision:state.revision,role,action:'reveal'});state=result;return result.token}
+            const show=button('show',async()=>{if(token.input.type==='text'){token.input.value='';token.input.type='password';show.textContent=text('show')}else{token.input.value=await reveal();token.input.type='text';show.textContent=text('hide');status.textContent=''}})
+            const replace=async action=>{state=await request('POST','/api/mcp/token',{revision:state.revision,role,action,...(action==='replace'?{token:token.input.value.trim()}:{})});token.input.value=state.token;token.input.type='password';show.textContent=text('show');status.textContent=text('rotated')}
+            actions.append(show,button('rotate',()=>replace('rotate')),button('replace',()=>replace('replace')),button('downloadToken',async()=>{download(role==='write'?'mcp-token':'mcp-read-token',(await reveal())+'\n');status.textContent=text('downloaded')}));tokenCard.append(actions);tokenGrid.append(tokenCard)
+        }
+        const install=node('section','mcp-card');install.append(node('h3','',text('installation')),node('p','',text('installHelp')))
+        const select=(label,options)=>{const wrap=node('label','mcp-field'),input=node('select');input.setAttribute('aria-label',text(label));for(const [value,key] of options){const option=node('option','',text(key));option.value=value;input.append(option)}wrap.append(node('span','',text(label)),input);return {wrap,input}}
+        const permission=select('permissions',[['read','read'],['write','write']]),transport=select('transport',[['http','http'],['stdio','stdio']]);install.append(permission.wrap,transport.wrap)
+        const preview=node('pre','mcp-config-preview');preview.setAttribute('aria-label',text('installation'))
+        const config=token=>({mcpServers:{wechat:transport.input.value==='http'?{type:'http',url:state.endpoint||location.origin+'/mcp',headers:{Authorization:'Bearer '+token}}:{command:'node',args:[state.scriptPath],env:{WECHAT_MCP_URL:state.endpoint||location.origin+'/mcp',WECHAT_MCP_TOKEN:token}}}})
+        const refresh=()=>{preview.textContent=JSON.stringify(config('<TOKEN>'),null,2)}
+        permission.input.addEventListener('change',refresh);transport.input.addEventListener('change',refresh);refresh()
+        const exportConfig=async()=>{if(!state.enabled)throw new Error(text('disabled'));const result=await request('POST','/api/mcp/token',{revision:state.revision,role:permission.input.value,action:'reveal'});state=result;refresh();return JSON.stringify(config(result.token),null,2)+'\n'}
+        const installActions=node('div','mcp-actions');installActions.append(button('copy',async()=>{const value=await exportConfig();if(!navigator.clipboard?.writeText)throw new Error(text('fallback'));await navigator.clipboard.writeText(value);status.textContent=text('copied')},'primary'),button('download',async()=>{download('wechat-mcp.json',await exportConfig());status.textContent=text('downloaded')}));install.append(preview,installActions);root.append(install)
+        const tools=node('section','mcp-card');tools.append(node('h3','',text('tools')));const list=node('div','mcp-tools');for(const name of ['status','search_contacts','list_conversations','read_messages','get_new_messages','send_text','send_media','download_attachment','get_send_status'])list.append(node('code','',`wechat_${name}`));tools.append(list);root.append(tools)
+        if(!state.available)status.textContent=text('unavailable')
+    },
+}
