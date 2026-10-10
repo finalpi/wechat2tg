@@ -25,6 +25,7 @@ import {WeVideo} from 'wx2tg-puppet'
 import {FileBox} from 'file-box'
 import I18n from '../i18n'
 import {LogUtils} from '../util/LogUtil'
+import {getWechatCallStatus, formatWechatCallStatus} from '../util/WechatCallStatus'
 
 const TELEGRAM_BOT_API_UPLOAD_LIMIT = 50 * 1024 * 1024
 
@@ -797,6 +798,13 @@ export class WeChatClient extends AbstractClient {
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             default:
+                const callStatus = getWechatCallStatus(msg._xml || msg.text())
+                if (callStatus) {
+                    messageParam.source_type = WxMessage.Type.Voip
+                    messageParam.content = formatWechatCallStatus(callStatus)
+                    WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                    break
+                }
                 if (MessageTypeUtils.SKIP_TYPE_LIST.includes(msg.type() + '')) {
                     break
                 }

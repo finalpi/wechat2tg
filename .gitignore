@@ -8,3 +8,6 @@ dist
 storage/**
 logs
 .github
+
+# Local tests
+tests/
