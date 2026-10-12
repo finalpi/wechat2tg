@@ -65,7 +65,13 @@ window.MessageCenterUI = {
                 })
                 const avatar=avatarFor(contact.wxId,contact.name,contact.hasAvatar,`contact-avatar${isGroup(contact)?' group-avatar':''}`),body=node('div','conversation-copy')
                 body.append(node('strong','',contact.name),node('small','',ChatContent.summary(contact.lastBody)|| (contact.lastActivity?t('mediaType_'+(contact.lastType||'unknown')):`${t(isGroup(contact)?'groupChat':'contactChat')} · ${contact.nickname||contact.wxId}`)));b.append(avatar,body)
-                const activity=node('div','conversation-activity');if(contact.lastActivity)activity.append(node('small','',new Date(contact.lastActivity*1000).toLocaleDateString(document.documentElement.lang,{month:'numeric',day:'numeric'})))
+                const activity=node('div','conversation-activity')
+                if(contact.lastActivity){
+                    const date=new Date(contact.lastActivity*1000),time=node('time','conversation-time')
+                    time.dateTime=date.toISOString();time.title=date.toLocaleString(document.documentElement.lang);time.setAttribute('aria-label',time.title)
+                    time.append(node('span','',date.toLocaleDateString(document.documentElement.lang,{month:'numeric',day:'numeric'})),node('span','',date.toLocaleTimeString(document.documentElement.lang,{hour:'2-digit',minute:'2-digit',hour12:false})))
+                    activity.append(time)
+                }
                 if(contact.unsyncedCount){const badge=node('span','unsynced-badge',String(contact.unsyncedCount));badge.title=t('unsyncedLabel');badge.setAttribute('aria-label',`${contact.unsyncedCount} ${t('unsyncedLabel')}`);activity.append(badge)}
                 b.append(activity);refs.contacts.append(b)
             }

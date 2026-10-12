@@ -68,6 +68,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         revokeSync.set(id,operation);void operation.finally(()=>revokeSync.delete(id)).catch(()=>{})
     }
     const imported = new Set<string>()
+    const importing=new Map<string,Promise<void>>(),backfills=new Map<string,Promise<void>>(),transcriptCache=new Map<number,any>()
     let sendQueue = Promise.resolve()
     let pending = 0
     let accepting = Promise.resolve()
@@ -106,9 +107,10 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         if(!url)url=(await AppDataSource.getRepository(BindGroup).findOneBy({wxId}))?.avatarLink||''
         return loadAvatar(url)
     }
-    const reconcile=async()=>{
-        await store.run("UPDATE inbox SET telegramStatus='unverified' WHERE telegramTracked=0 AND telegramStatus IN ('none','pending','syncing','unknown','failed')")
-        const pending=await store.all("SELECT DISTINCT remoteId FROM inbox WHERE telegramStatus IN ('unverified','pending','syncing','unknown','failed') AND remoteId IS NOT NULL")
+    const reconcile=async(wxId?:string)=>{
+        const scope=wxId?' AND wxId=?':'',params=wxId?[wxId]:[]
+        await store.run("UPDATE inbox SET telegramStatus='unverified' WHERE telegramTracked=0 AND telegramStatus IN ('none','pending','syncing','unknown','failed')"+scope,params)
+        const pending=await store.all("SELECT DISTINCT remoteId FROM inbox WHERE telegramStatus IN ('unverified','pending','syncing','unknown','failed') AND remoteId IS NOT NULL"+scope,params)
         for(let start=0;start<pending.length;start+=400){
             const ids=pending.slice(start,start+400).map(p=>p.remoteId)
             const rows=await AppDataSource.getRepository(Message).createQueryBuilder('m').select(['m.wxMsgId','m.tgBotMsgId']).where('m.wxMsgId IN (:...ids) AND m.tgBotMsgId > 0',{ids}).getMany()
@@ -327,7 +329,8 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         history: async (wxId, before, query) => {
             await repairOwnership()
             await recipient(wxId)
-            if (!imported.has(wxId)) {
+            if (!imported.has(wxId)&&!importing.has(wxId)) {
+                const initial=(async()=>{
                 const binding = await AppDataSource.getRepository(BindGroup).findOneBy({wxId})
                 const qb = AppDataSource.getRepository(Message).createQueryBuilder('m')
                 const selfId = (client() as any)?.wxInfo?.wxid
@@ -335,23 +338,26 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
                 else if(selfId)qb.where('((m.wxSenderId=:selfId AND m.toWxid=:wxId) OR (m.wxSenderId=:wxId AND m.toWxid=:selfId)) AND m.chatId NOT IN (SELECT chatId FROM bind_group WHERE type=1)',{selfId,wxId})
                 else qb.where('1=0')
                 const old=await qb.orderBy('m.id','DESC').take(500).getMany()
-                for (const m of old.reverse()) {
-                    if(m.type===6)continue // Recall control events are not new chat messages.
-                    const outgoing = Boolean(selfId && m.wxSenderId === selfId)
+                const converted: any[]=old.reverse().filter(m=>m.type!==6).map(m=>{
+                    const outgoing=Boolean(selfId&&m.wxSenderId===selfId)
                     const kindMap={image:'image',voice:'voice',video:'video',emoji:'emoji',file:'file',location:'location',contact:'contact',link:'link',quote:'quote',chat_histroy:'chat_histroy'}
                     const type=kindMap[m.source_type]||({3:'image',34:'voice',43:'video',47:'emoji',49:'file',48:'location',42:'contact'}[Number(m.source_type)])||(m.type===0?'text':'file')
                     const typeCodes={image:3,voice:34,video:43,emoji:47,file:49,link:49,quote:49,location:48,contact:42,text:1}
-                    const row=await store.insert({wxId,remoteId:m.wxMsgId&&m.wxMsgId!=='0'?m.wxMsgId:`legacy:${m.id}`,senderId:m.wxSenderId||'',senderName:m.sender||'',body:String(m.content||(m.type===0&&type==='text'?m.source_text:'')||'').slice(0,8000),direction:outgoing?'outgoing':'incoming',type,status:outgoing?'submitted':'received',timestamp:m.createTime||0,telegramStatus:m.tgBotMsgId>0?'synced':'pending',source:m.source_text?JSON.stringify({MsgId:Number(m.msgId||0),FromUserName:wxId.endsWith('@chatroom')?wxId:m.wxSenderId,ToUserName:m.toWxid,NewMsgId:m.wxMsgId,CreateTime:m.createTime,MsgType:Number(m.source_type)||typeCodes[type],Content:m.source_text,xml:m.source_text}):null})
-                    if(row&&!row.telegramTracked&&['none','pending'].includes(row.telegramStatus))await store.run('UPDATE inbox SET telegramStatus=? WHERE id=?',[m.tgBotMsgId>0?'synced':'unverified',row.id])
-                    if(row&&!row.requestId)await store.run("UPDATE inbox SET bodyFormat='telegram_html' WHERE id=?",[row.id])
-                    if(row&&!row.requestId&&(!row.source||/^\d+$/.test(row.type||''))){
-                        const source=m.source_text?JSON.stringify({MsgId:Number(m.msgId||0),FromUserName:wxId.endsWith('@chatroom')?wxId:m.wxSenderId,ToUserName:m.toWxid,NewMsgId:m.wxMsgId,CreateTime:m.createTime,MsgType:Number(m.source_type)||typeCodes[type],Content:m.source_text,xml:m.source_text}):null
-                        await store.run('UPDATE inbox SET type=?,source=COALESCE(source,?) WHERE id=?',[type,source,row.id])
-                    }
-                }
+                    return {wxId,remoteId:m.wxMsgId&&m.wxMsgId!=='0'?m.wxMsgId:`legacy:${m.id}`,senderId:m.wxSenderId||'',senderName:m.sender||'',body:String(m.content||(m.type===0&&type==='text'?m.source_text:'')||'').slice(0,8000),direction:outgoing?'outgoing':'incoming',type,status:outgoing?'submitted':'received',timestamp:m.createTime||0,telegramStatus:m.tgBotMsgId>0?'synced':'unverified',bodyFormat:'telegram_html',source:m.source_text?JSON.stringify({MsgId:String(m.msgId||0),FromUserName:wxId.endsWith('@chatroom')?wxId:m.wxSenderId,ToUserName:m.toWxid,NewMsgId:m.wxMsgId,CreateTime:m.createTime,MsgType:Number(m.source_type)||typeCodes[type],Content:m.source_text,xml:m.source_text}):null}
+                })
+                await store.importHistory(converted.slice(-60))
                 imported.add(wxId)
+                if(converted.length>60){
+                    const pending=new Promise<void>((resolve,reject)=>setImmediate(()=>store.importHistory(converted.slice(0,-60)).then(resolve,reject))).catch(()=>{imported.delete(wxId)}).finally(()=>backfills.delete(wxId))
+                    backfills.set(wxId,pending)
+                }
+                })()
+                importing.set(wxId,initial)
+                void initial.finally(()=>importing.delete(wxId)).catch(()=>{})
             }
-            await reconcile()
+            if(importing.has(wxId))await importing.get(wxId)
+            if((before||query)&&backfills.has(wxId))await backfills.get(wxId)
+            await reconcile(wxId)
             const result=await store.history(wxId,before,query)
             const senderIds=[...new Set(result.messages.map(m=>m.senderId).filter(Boolean))]
             const directory=new Map()
@@ -359,15 +365,16 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
                 const rows=await getGeWeChatDataSource().getRepository(WxContact).createQueryBuilder('c').select(['c.userName','c.nickName','c.remark','c.smallHeadImgUrl','c.bigHeadImgUrl']).where('c.userName IN (:...ids)',{ids:senderIds}).getMany()
                 for(const c of rows)directory.set(c.userName,c)
             }
+            const ids=result.messages.map(m=>m.id)
+            const sources=new Map((ids.length?await store.all(`SELECT * FROM inbox WHERE id IN (${ids.map(()=>'?').join(',')})`,ids):[]).map(row=>[row.id,row]))
             for(const item of result.messages){
-                const row=await store.byId(item.id)
+                const row=sources.get(item.id)
                 const policy=revokePolicy(row);item.revokeDeadline=policy.deadline;item.revokeWindowSeconds=policy.windowSeconds
                 try{revokePayload(row,(client() as any)?.wxInfo?.wxid||'');item.canRevoke=!['revoking','revoked'].includes(row.revokeStatus)}catch(e){item.canRevoke=false;item.revokeUnavailableReason=e?.code||'revokeUnavailable'}
                 if(row.source&&(item.type==='chat_histroy'||/\[聊天记录\]/.test(item.body||''))){
-                    try{item.transcriptAttachments=publicTranscriptAttachments(await parseTranscript(row.source))}catch{item.transcriptAttachments=[]}
+                    try{if(!transcriptCache.has(item.id)){transcriptCache.set(item.id,publicTranscriptAttachments(await parseTranscript(row.source)));if(transcriptCache.size>100)transcriptCache.delete(transcriptCache.keys().next().value)}item.transcriptAttachments=transcriptCache.get(item.id)}catch{item.transcriptAttachments=[]}
                 }
                 if(item.type==='chat_histroy'&&!item.body){
-                    const row=await store.byId(item.id)
                     try{
                         const source=JSON.parse(row.source),xml=WxMessage.getXmlToJson(source.xml||source.Content)
                         const parsed=WxMessage.getXmlToJson(xml.msg.appmsg.recorditem)
@@ -376,7 +383,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
                         await store.run("UPDATE inbox SET body=?,bodyFormat='telegram_html' WHERE id=?",[item.body,item.id])
                     }catch{}
                 }
-                if((!item.details||item.type==='quote'&&!item.details.replyTo)&&item.type!=='text')item.details=await detailsFor(await store.byId(item.id))
+                if((!item.details||item.type==='quote'&&!item.details.replyTo)&&item.type!=='text')item.details=await detailsFor(row)
                 const sender=directory.get(item.senderId)
                 item.senderDisplayName=sender?.remark||sender?.nickName||String(item.senderName||item.senderId||'').replace(/<[^>]*>/g,'').replace(/^👤\s*/,'').trim()
                 item.senderHasAvatar=Boolean(sender?.smallHeadImgUrl||sender?.bigHeadImgUrl)

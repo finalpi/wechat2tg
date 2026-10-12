@@ -83,6 +83,19 @@ export class WebMessageStore {
         return (await this.all('SELECT * FROM inbox WHERE requestId = ? OR (wxId = ? AND remoteId = ?) ORDER BY id DESC LIMIT 1', [message.requestId ?? null, message.wxId, message.remoteId ?? null]))[0]
     }
     async byRequest(requestId: string) {return (await this.all('SELECT * FROM inbox WHERE requestId = ?', [requestId]))[0]}
+    async importHistory(messages:InboxMessage[]){
+        const keys=['wxId','remoteId','senderId','senderName','body','direction','type','status','timestamp','telegramStatus','source','bodyFormat','hidden']
+        for(let start=0;start<messages.length;start+=40){
+            const batch=messages.slice(start,start+40)
+            const values=batch.flatMap(m=>keys.map(key=>key==='hidden'?Number(isNoiseMessage(m.type,m.body,m.source||'')):m[key]??null))
+            await this.run(`INSERT INTO inbox (${keys.join(',')}) VALUES ${batch.map(()=>`(${keys.map(()=>'?').join(',')})`).join(',')} ON CONFLICT(wxId,remoteId) DO UPDATE SET
+                telegramStatus=CASE WHEN inbox.telegramTracked=0 AND inbox.telegramStatus IN ('none','pending') THEN excluded.telegramStatus ELSE inbox.telegramStatus END,
+                bodyFormat=CASE WHEN inbox.requestId IS NULL THEN excluded.bodyFormat ELSE inbox.bodyFormat END,
+                type=CASE WHEN inbox.requestId IS NULL AND (inbox.source IS NULL OR inbox.type GLOB '[0-9]*') THEN excluded.type ELSE inbox.type END,
+                source=CASE WHEN inbox.requestId IS NULL THEN COALESCE(inbox.source,excluded.source) ELSE inbox.source END,
+                hidden=MAX(inbox.hidden,excluded.hidden)`,values)
+        }
+    }
     async history(wxId: string, before = 0, query = '') {
         const rows = await this.all('SELECT * FROM inbox WHERE hidden=0 AND wxId = ? AND (? = 0 OR timestamp < (SELECT timestamp FROM inbox WHERE id = ?) OR (timestamp = (SELECT timestamp FROM inbox WHERE id = ?) AND id < ?)) AND body LIKE ? ORDER BY timestamp DESC, id DESC LIMIT 51', [wxId, before, before, before, before, `%${query}%`])
         const hasMore = rows.length > 50
