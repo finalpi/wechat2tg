@@ -3,6 +3,7 @@ window.MessageCenterUI = {
     create({request,transfer,t,node,icon,isActive,notify}) {
         let root, refs={},contacts=[],active=null,items=[],status={available:false,wechatOnline:false},query='',kind='all',messageQuery='',offset=0,moreContacts=false,moreMessages=false,before=0,loadingContacts=false,sending=false,contactSequence=0,historySequence=0
         const drafts=new Map()
+        const pendingHistory=new Set()
         const blobs=new Map()
         const mediaCards=new Map()
         const avatars=new Map()
@@ -26,10 +27,22 @@ window.MessageCenterUI = {
         const currentDraft=()=>active?drafts.get(active.wxId)||{text:'',requestId:''}:{text:'',requestId:''}
         const requestId=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),v=>v.toString(16).padStart(2,'0')).join('')
         const button=(label,cls,action)=>{const b=node('button',cls,label);b.type='button';b.addEventListener('click',action);return b}
+        let viewer={zoom:1,rotation:0,x:0,y:0},viewerResize,viewerDrag=null
+        const fitImage=()=>{
+            if(!refs.imageDialog?.open||!refs.largeImage.naturalWidth)return
+            const w=refs.largeImage.naturalWidth,h=refs.largeImage.naturalHeight,sw=refs.imageStage.clientWidth,sh=refs.imageStage.clientHeight
+            const turned=Math.abs(viewer.rotation%180)===90,fit=Math.min(sw/(turned?h:w),sh/(turned?w:h))
+            refs.largeImage.style.width=`${w*fit}px`;refs.largeImage.style.height=`${h*fit}px`
+            refs.largeImage.style.transform=`translate(calc(-50% + ${viewer.x}px),calc(-50% + ${viewer.y}px)) rotate(${viewer.rotation}deg) scale(${viewer.zoom})`
+            refs.imageZoom.textContent=`${Math.round(viewer.zoom*100)}%`;refs.imageStage.classList.toggle('zoomed',viewer.zoom>1)
+            refs.zoomOut.disabled=viewer.zoom<=.25;refs.zoomIn.disabled=viewer.zoom>=4
+        }
+        const changeZoom=amount=>{viewer.zoom=Math.min(4,Math.max(.25,viewer.zoom*amount));if(viewer.zoom<=1)viewer.x=viewer.y=0;fitImage()}
+        const rotateImage=angle=>{viewer.rotation=(viewer.rotation+angle)%360;viewer.x=viewer.y=0;fitImage()}
         const openImage=image=>{
             if(!image?.src||!refs.imageDialog)return
-            refs.largeImage.src=image.src;refs.largeImage.alt=image.alt||t('viewMedia')
-            refs.imageDialog.showModal();refs.imageClose.focus()
+            viewer={zoom:1,rotation:0,x:0,y:0};refs.largeImage.src=image.src;refs.largeImage.alt=image.alt||t('viewMedia')
+            refs.imageDialog.showModal();fitImage();refs.imageClose.focus()
         }
         const updateControls=()=>{
             if(!root)return
@@ -237,7 +250,10 @@ window.MessageCenterUI = {
         }
         const loadHistory=async(older=false,poll=false)=>{
             if(!active)return
-            const wxId=active.wxId,sequence=++historySequence,previousMore=moreMessages
+            const wxId=active.wxId,key=`${wxId}:${older?before:0}:${messageQuery}`
+            if(pendingHistory.has(key))return
+            pendingHistory.add(key)
+            const sequence=++historySequence,previousMore=moreMessages
             try{
                 const result=await request('GET',`/api/messages?wxId=${encodeURIComponent(wxId)}&before=${older?before:0}&q=${encodeURIComponent(messageQuery)}`)
                 if(result.serverTime)serverClockOffset=result.serverTime*1000-Date.now()
@@ -245,7 +261,7 @@ window.MessageCenterUI = {
                 const merged=[...new Map([...items,...result.messages].map(m=>[m.id,m])).values()].sort((a,b)=>a.timestamp-b.timestamp||a.id-b.id)
                 // Retain loaded history while replacing the status of queued messages.
                 items=merged;before=items[0]?.id||0;moreMessages=older?result.hasMore:items.length>50?previousMore:result.hasMore;drawMessages()
-            }catch(error){if(!poll)notify(error.message,true)}
+            }catch(error){if(!poll)notify(error.message,true)}finally{pendingHistory.delete(key)}
         }
         const submit=async()=>{
             if(!active||sending||uploading||!status.wechatOnline||(!currentDraft().text.trim()&&!currentDraft().attachment))return
@@ -297,16 +313,28 @@ window.MessageCenterUI = {
             refs.composer.addEventListener('paste',event=>{const file=ChatContent.clipboardImage(event.clipboardData);if(file&&active){event.preventDefault();upload(file,'auto')}})
             refs.composer.addEventListener('click',()=>{if(!refs.mentionPanel.classList.contains('hidden')){const range=MentionCompose.queryAt(refs.composer.value,refs.composer.selectionStart);if(range)mentionRange=range;else closeMentions()}})
             refs.composer.title=t('pasteHint');refs.directoryNote.insertAdjacentElement('afterend',node('p','delivery-legend',t('deliveryLegend')))
+            viewerResize?.disconnect()
             refs.imageDialog=node('dialog','image-lightbox');refs.imageDialog.setAttribute('aria-label',t('viewMedia'))
-            refs.largeImage=node('img','lightbox-image');refs.imageClose=button('×','lightbox-close',()=>refs.imageDialog.close());refs.imageClose.setAttribute('aria-label',t('closeImagePreview'));refs.imageDialog.append(refs.imageClose,refs.largeImage);root.append(refs.imageDialog)
+            const imageToolbar=node('div','lightbox-toolbar'),imageTools=node('div','lightbox-tools')
+            const control=(label,symbol,action)=>{const b=button(symbol,'lightbox-control',action);b.title=label;b.setAttribute('aria-label',label);return b}
+            refs.zoomOut=control(t('imageZoomOut'),'−',()=>changeZoom(1/1.25));refs.zoomIn=control(t('imageZoomIn'),'+',()=>changeZoom(1.25));refs.imageZoom=node('span','lightbox-zoom','100%')
+            imageTools.append(refs.zoomOut,refs.imageZoom,refs.zoomIn,control(t('imageRotateLeft'),'↶',()=>rotateImage(-90)),control(t('imageRotateRight'),'↷',()=>rotateImage(90)),control(t('imageFit'),'⤢',()=>{viewer={zoom:1,rotation:0,x:0,y:0};fitImage()}))
+            refs.imageClose=control(t('closeImagePreview'),'×',()=>refs.imageDialog.close());refs.imageClose.classList.add('lightbox-close');imageToolbar.append(imageTools,refs.imageClose)
+            refs.imageStage=node('div','lightbox-stage');refs.largeImage=node('img','lightbox-image');refs.largeImage.draggable=false;refs.largeImage.addEventListener('load',fitImage);refs.imageStage.append(refs.largeImage);refs.imageDialog.append(imageToolbar,refs.imageStage);root.append(refs.imageDialog)
+            viewerResize=new ResizeObserver(fitImage);viewerResize.observe(refs.imageStage)
+            refs.imageStage.addEventListener('wheel',e=>{e.preventDefault();changeZoom(e.deltaY<0?1.1:1/1.1)},{passive:false})
+            refs.imageStage.addEventListener('pointerdown',e=>{if(viewer.zoom<=1)return;viewerDrag={id:e.pointerId,x:e.clientX,y:e.clientY,originX:viewer.x,originY:viewer.y};refs.imageStage.setPointerCapture(e.pointerId)})
+            refs.imageStage.addEventListener('pointermove',e=>{if(!viewerDrag||viewerDrag.id!==e.pointerId)return;viewer.x=viewerDrag.originX+e.clientX-viewerDrag.x;viewer.y=viewerDrag.originY+e.clientY-viewerDrag.y;fitImage()})
+            const endDrag=()=>{viewerDrag=null};refs.imageStage.addEventListener('pointerup',endDrag);refs.imageStage.addEventListener('pointercancel',endDrag);refs.imageDialog.addEventListener('close',endDrag)
             refs.imageDialog.addEventListener('click',e=>{if(e.target===refs.imageDialog)refs.imageDialog.close()})
+            refs.imageDialog.addEventListener('keydown',e=>{if(e.key==='+'||e.key==='='){e.preventDefault();changeZoom(1.25)}else if(e.key==='-'){e.preventDefault();changeZoom(1/1.25)}})
             root.addEventListener('click',e=>{const image=e.target.closest('.chat-media-image,.draft-image');if(image)openImage(image)})
             updateHeader();updateControls();drawContacts();drawMessages();refreshStatus();loadContacts();if(active)loadHistory()
         }
         setInterval(()=>{if(isActive()&&!document.hidden){refreshStatus();loadHistory(false,true);if(!loadingContacts&&offset<=60)loadContacts(false,true)}},5000)
         setInterval(()=>{if(isActive()&&!document.hidden)updateRevokeButtons()},1000)
         const hasDraft=()=>uploading||[...drafts.values()].some(draft=>draft.text.trim()||draft.attachment||draft.replyTo||draft.mentionAll||draft.mentionedMembers?.length)
-        const clear=()=>{for(const blob of blobs.values())URL.revokeObjectURL(blob.url);for(const d of drafts.values())if(d.previewURL)URL.revokeObjectURL(d.previewURL);for(const promise of avatars.values())promise.then(url=>{if(url)URL.revokeObjectURL(url)});avatars.clear();blobs.clear();mediaCards.clear();lastDrawSignature='';drafts.clear();contacts=[];items=[];active=null;status={available:false,wechatOnline:false};root?.replaceChildren();root=null}
+        const clear=()=>{viewerResize?.disconnect();for(const blob of blobs.values())URL.revokeObjectURL(blob.url);for(const d of drafts.values())if(d.previewURL)URL.revokeObjectURL(d.previewURL);for(const promise of avatars.values())promise.then(url=>{if(url)URL.revokeObjectURL(url)});avatars.clear();blobs.clear();mediaCards.clear();lastDrawSignature='';drafts.clear();contacts=[];items=[];active=null;status={available:false,wechatOnline:false};root?.replaceChildren();root=null}
         return {show,hasDraft,clear}
     },
 }
