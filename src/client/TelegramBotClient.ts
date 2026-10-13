@@ -570,8 +570,7 @@ export class TelegramBotClient extends AbstractClient {
         try {
             const revokeMsg = await this.messageService.getByWxMsgId(message.revokeMsgId)
             const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
-            const body=revokeMsg?.type===1?revokeMsg.sender||'':revokeMsg?FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY,revokeMsg.sender||'',revokeMsg.content||''):''
-            await annotateTelegramRecall(WebMessageStore.getInstance(),client.telegram,message.wxId,String(message.revokeMsgId),message.chatId,revokeMsg,body,message.content||'消息已撤回',action=>this.sendTelegramRequest(message.chatId,action))
+            await annotateTelegramRecall(WebMessageStore.getInstance(),client.telegram,message.wxId,String(message.revokeMsgId),message.chatId,revokeMsg,'',message.content||'消息已撤回',action=>this.sendTelegramRequest(message.chatId,action))
             return true
         } catch (e) {
             await this.dealException(e, message)

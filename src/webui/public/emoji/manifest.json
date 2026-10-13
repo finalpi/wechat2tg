@@ -1,0 +1,1537 @@
+{
+  "repository": "https://github.com/finalpi/wechat-emoji",
+  "commit": "f4a96e4a1ee173afc8d1ddfc55d604777bb37890",
+  "upstreamRepository": "https://github.com/Nimbly8836/wechat_rails",
+  "upstreamCommit": "9eaac826504a3d4d67ead8c05b737a69ca64a3e9",
+  "files": [
+    {
+      "source": "666.webp",
+      "file": "emoji-2bb8a16e009a0aaa.webp",
+      "sha256": "2bb8a16e009a0aaa19f62aa9875e7cfceea075e6a8d34497460ed73ad741bac7",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "Emm.webp",
+      "file": "emoji-6d0b8776acf99482.webp",
+      "sha256": "6d0b8776acf99482b58037330e5c2773f9b35f32471abf0fa5f4d3ff55e642fc",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "OK.webp",
+      "file": "emoji-604338ffbc667a32.webp",
+      "sha256": "604338ffbc667a323fb89eb785f021858ed1d2e6bf1f1df2cd57a2f23e7822fd",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "亲亲.webp",
+      "file": "emoji-5c754820fd31a8e9.webp",
+      "sha256": "5c754820fd31a8e9b1d4bf22018a48f9c14928bf8d071fa68c7c94600c958587",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "便便.webp",
+      "file": "emoji-ae718a960918810c.webp",
+      "sha256": "ae718a960918810c8d3bf3c7c710937150e72983e57e375ea0a1649a8f493558",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "偷笑.webp",
+      "file": "emoji-064ab27d563cd54d.webp",
+      "sha256": "064ab27d563cd54d7f8d53c1a7c638ffe0aabeba348fc71b1d0312ab653be8ba",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "傲慢.webp",
+      "file": "emoji-c1fc1c3116326228.webp",
+      "sha256": "c1fc1c3116326228ad544fc3c5bab0a016b8a657c817d3969893f27c83ac7eb9",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "再见.webp",
+      "file": "emoji-638cd67fc9b20e23.webp",
+      "sha256": "638cd67fc9b20e232b62d8637b53dec5c3d314bff18d35e904f1f588fe4a6b33",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "凋谢.webp",
+      "file": "emoji-711730f9f3c15dd2.webp",
+      "sha256": "711730f9f3c15dd2d4c1f5a5f8ebd3cffa4376af238f6ba3cb1074f3bd6332aa",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "加油.webp",
+      "file": "emoji-148b2cd0b1047355.webp",
+      "sha256": "148b2cd0b1047355b7414d698c2d1d733dae9edf09ce232848c6c3750c28d4e4",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "加油加油.webp",
+      "file": "emoji-976aac6102182f4a.webp",
+      "sha256": "976aac6102182f4a3a70f78f1dd25efc50e2f81826f5e937d577d1eb8a81e505",
+      "width": 64,
+      "height": 64
+    },
+    {
+      "source": "勾引.webp",
+      "file": "emoji-90d1a819fec6b847.webp",
+      "sha256": "90d1a819fec6b847dbd33c2b0c6d16053cc9581c32f933b80b4f1d519e061fa6",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "发呆.webp",
+      "file": "emoji-b9f03721c881f485.webp",
+      "sha256": "b9f03721c881f48548b6c48ecd99f5e26e7325c2a0bd6e0c08e8491d70baa649",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "发怒.webp",
+      "file": "emoji-427dee6f6baa0be7.webp",
+      "sha256": "427dee6f6baa0be7d7e50b8353c3329a2baea25ddd4b2672b7d54ed1092ddb3c",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "发抖.webp",
+      "file": "emoji-d432c5b9560b34e7.webp",
+      "sha256": "d432c5b9560b34e7322b562ea80da0da73b0a9ebf7d8ff62d1dde8e7f1177dbb",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "可怜.webp",
+      "file": "emoji-65bbf7de81378d07.webp",
+      "sha256": "65bbf7de81378d07194b61ef6fd6e93ac4a85b48b04685b80260c1b1aa6cf2b4",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "右哼哼.webp",
+      "file": "emoji-c876f90bf541c36c.webp",
+      "sha256": "c876f90bf541c36c8d0d1936fc3efe581cefe54928b5b1bb5334c07160c14cc5",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "叹气.webp",
+      "file": "emoji-cc37984c456be175.webp",
+      "sha256": "cc37984c456be175c0308a064b77cc83a15a3199c34790b0f144ea9a8d23058a",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "吃瓜.webp",
+      "file": "emoji-1ce0ea4bbef64410.webp",
+      "sha256": "1ce0ea4bbef6441026d61b5c354aa5acc3f8df7e98a435fcfab8db1471e9338c",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "合十.webp",
+      "file": "emoji-bdddfb0fc749d444.webp",
+      "sha256": "bdddfb0fc749d44476ccc09a0dabaa3cb06ceda9148a8fae47a7b0fcb39caf00",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "吐.webp",
+      "file": "emoji-a7b35211d3353549.webp",
+      "sha256": "a7b35211d3353549bff94a3200d396e03ed94f373c203d342aa63be85b8fdbeb",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "呲牙.webp",
+      "file": "emoji-735fe93a6de6fc51.webp",
+      "sha256": "735fe93a6de6fc512fb046a15be59ae9ab17022075ee3921fb0b3498e8ac9ab9",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "咒骂.webp",
+      "file": "emoji-fd9068eddd11f208.webp",
+      "sha256": "fd9068eddd11f20867b6ba703cfefc523cb1c23670ffe956e84ae2915e5b526f",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "咖啡.webp",
+      "file": "emoji-f9753fde0249fc67.webp",
+      "sha256": "f9753fde0249fc673e1568a1b5066bfaf4ad8f4dba091ab8e9a9be0e06d9bae0",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "哇.webp",
+      "file": "emoji-8b8da16690148ec6.webp",
+      "sha256": "8b8da16690148ec6bd0a1070d749838e6a1d8961e4079e319a215a0220392607",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "啤酒.webp",
+      "file": "emoji-3c4e74d064471876.webp",
+      "sha256": "3c4e74d064471876cb9dc3123fdfd08ed23aed88f6877754dc67e26ee4cf0080",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "嘘.webp",
+      "file": "emoji-7c2c31274c2572a9.webp",
+      "sha256": "7c2c31274c2572a9084c2f60ca273a5707f72647653ebd7af6eef1efcf27ede4",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "嘴唇.webp",
+      "file": "emoji-c4fe91bf1ed77014.webp",
+      "sha256": "c4fe91bf1ed7701443bd07675a467a3b412779b89dc5ad438078af19d3c120cc",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "嘿哈.webp",
+      "file": "emoji-38be2f2982080b1e.webp",
+      "sha256": "38be2f2982080b1eca9a012d16c012ecb8ccd956152aa706b544686e6ca7222b",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "囧.webp",
+      "file": "emoji-ea068eab79490a41.webp",
+      "sha256": "ea068eab79490a414d4ec31f58da530bcbe5aba1eb4bd209cffb205b8e9e572a",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "困.webp",
+      "file": "emoji-f7d73cc9ecd0ed6c.webp",
+      "sha256": "f7d73cc9ecd0ed6c4362a8c303c53c5663a5507ca80840b870e9bb76c2b59e56",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "坏笑.webp",
+      "file": "emoji-21c02fd4539df0ba.webp",
+      "sha256": "21c02fd4539df0bacf288ae62596704607b2d8e9cf207b2a0b8ed52e8cf3498a",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "大哭.webp",
+      "file": "emoji-bbd790b9a529c047.webp",
+      "sha256": "bbd790b9a529c047f5a6c6dd360337895b7054f89ad8eca25c978f3ba8901ff7",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "天啊.webp",
+      "file": "emoji-1b2e783ea19ef6d2.webp",
+      "sha256": "1b2e783ea19ef6d2964bbdb7957a8c945047ff0638844b4f0a173bc551f44b02",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "太阳.webp",
+      "file": "emoji-4288cc70803177a7.webp",
+      "sha256": "4288cc70803177a79f1b1493864ab55ffc19f783e56381dd056c3525c14cf7cb",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "失望.webp",
+      "file": "emoji-a73e1efe09e2a28b.webp",
+      "sha256": "a73e1efe09e2a28b31100f425d5ed997ad3ebf8d5c4d88c9415b219d433cc986",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "奸笑.webp",
+      "file": "emoji-49c4752ce3aaf8b7.webp",
+      "sha256": "49c4752ce3aaf8b7727a39067c9078839c3b70af7292988db8c2ff401787624d",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "好的.webp",
+      "file": "emoji-f2becac4ce8988fa.webp",
+      "sha256": "f2becac4ce8988fadef7654e12695d943e6c69acf63061fb4f31594d0b0338a9",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "委屈.webp",
+      "file": "emoji-3541533a3e7844ca.webp",
+      "sha256": "3541533a3e7844caf0a8430b693285004ba8549d3a6922a79236b6366e19d6e4",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "害羞.webp",
+      "file": "emoji-8bd5c6cc069bd6bc.webp",
+      "sha256": "8bd5c6cc069bd6bce0302c908200eba3f82884d345f6279bdab49c49599d00be",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "尴尬.webp",
+      "file": "emoji-f85eeec87b8ea496.webp",
+      "sha256": "f85eeec87b8ea4968d07d37bb2329f31ba1005b7752f0d0935c5da4fb9d9bb85",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "庆祝.webp",
+      "file": "emoji-945284dc7fad85a6.webp",
+      "sha256": "945284dc7fad85a64bb3bbe36b7654a41368d4c7d3167eb24284a2d8affd6858",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "弱.webp",
+      "file": "emoji-1473373717b95b22.webp",
+      "sha256": "1473373717b95b221f61df64e9aa1c63fb89eddb417120100bfab602812177f5",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "强.webp",
+      "file": "emoji-c387b927674fe6e8.webp",
+      "sha256": "c387b927674fe6e8d081bf4f4f52e48265d3699a6cc5cd7c63bbd2458c63f736",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "得意.webp",
+      "file": "emoji-de0ff41868821584.webp",
+      "sha256": "de0ff418688215840e3db1101eeecefe94daffb3546134ca7f365a24791cce3c",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "微笑.webp",
+      "file": "emoji-db1b56cc14f713fb.webp",
+      "sha256": "db1b56cc14f713fb87f2dc5d798c04a27d4c55d44545080b27d63c4d45c62d1c",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "心碎.webp",
+      "file": "emoji-66287a06dc22cc9e.webp",
+      "sha256": "66287a06dc22cc9eb9b9e77afa71f0a8e8c82231db44d96ab9354af2dea11a5e",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "快哭了.webp",
+      "file": "emoji-5e37793ec988223c.webp",
+      "sha256": "5e37793ec988223c70286cabcebaf26d4e8890d4b3b97464f1c6b0caecace85d",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "恐惧.webp",
+      "file": "emoji-65943f9fef792c9d.webp",
+      "sha256": "65943f9fef792c9dde0409c098468f5da68ad4aaa2b4a48f531a0563b4b242cf",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "悠闲.webp",
+      "file": "emoji-8e2a730d194b912f.webp",
+      "sha256": "8e2a730d194b912f06c16d306f8222a183965a76b9608fad73b0c5b46ab50a98",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "惊恐.webp",
+      "file": "emoji-6e21288a0260012d.webp",
+      "sha256": "6e21288a0260012d6fac054d2524b15717fe928ec2f2ad90994eeb90a15df0c8",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "惊讶.webp",
+      "file": "emoji-a524de1ea77b1b65.webp",
+      "sha256": "a524de1ea77b1b657aa8f3f9dfa7a050b4bd638c08dfb0f953cf16cca6105614",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "愉快.webp",
+      "file": "emoji-dbb2af01ef7e8d3e.webp",
+      "sha256": "dbb2af01ef7e8d3e3aaf8307ef29e334b8f7a8dfacad4712a116151dcceecefc",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "憨笑.webp",
+      "file": "emoji-ce40585f2e0207f5.webp",
+      "sha256": "ce40585f2e0207f5b535f2f6c8c77fe6b9ace043562f87ca3643c6d179dfc774",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "打脸.webp",
+      "file": "emoji-bafec0a4c2a8bf61.webp",
+      "sha256": "bafec0a4c2a8bf6144b5867d7d7c920a98fd283eeb9ff6de6ca2a1095d299759",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "抓狂.webp",
+      "file": "emoji-28e5b7408cb8637e.webp",
+      "sha256": "28e5b7408cb8637e15b0f25096ec314ab5b65132bbed7051eea9d33b12c49a90",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "抠鼻.webp",
+      "file": "emoji-5462c68d992146c1.webp",
+      "sha256": "5462c68d992146c113e8a3464f474a8326aebc81b107fb67a42270992cd00a87",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "抱拳.webp",
+      "file": "emoji-c479390d090c5311.webp",
+      "sha256": "c479390d090c5311a02b0d36c7b67fad0814ae1e776df4f5a1f45793da2a7f8d",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "拥抱.webp",
+      "file": "emoji-0bc070320f316176.webp",
+      "sha256": "0bc070320f31617674b3cc72f30fe3647c202904c19dde37bcbdd9a907594b1f",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "拳头.webp",
+      "file": "emoji-0dede03ce56433d4.webp",
+      "sha256": "0dede03ce56433d446d1177aa4b9ca8429fadbee2a9e85013b15a3ff9730ca54",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "捂脸.webp",
+      "file": "emoji-5c134ceb3e98c7cf.webp",
+      "sha256": "5c134ceb3e98c7cf33fab59e3a1b21f0eb8a1c037d093dfe798454edaa23191c",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "握手.webp",
+      "file": "emoji-79742bec6841abf4.webp",
+      "sha256": "79742bec6841abf401306d26bcf11c6118c85a55eb8e3c9633271e9197930fea",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "撇嘴.webp",
+      "file": "emoji-978022a75bd885b7.webp",
+      "sha256": "978022a75bd885b7fde249a3575551116e55a3466a18d8846d95830af8a5bb0f",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "擦汗.webp",
+      "file": "emoji-9fabab03123c46a6.webp",
+      "sha256": "9fabab03123c46a6d04e8630f36bc4673c8517bd5124b9b9420adf111393835f",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "敲打.webp",
+      "file": "emoji-07da8a3c274cb2b4.webp",
+      "sha256": "07da8a3c274cb2b489c6254554e039d6e0159b73375efa1fb03995bcfdb294a2",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "无语.webp",
+      "file": "emoji-0c0c8a4618b8fadd.webp",
+      "sha256": "0c0c8a4618b8fadd629c26dcf60832ec427e9434041b7c81cf78cf2f8c0c7ea8",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "旺柴.webp",
+      "file": "emoji-f4ae2f58c0c51f33.webp",
+      "sha256": "f4ae2f58c0c51f331d3eeced03d78cf36eec60908a7bb0a9e13dd1e7c08928b5",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "晕.webp",
+      "file": "emoji-2eb8a31ae67b546b.webp",
+      "sha256": "2eb8a31ae67b546ba2ca525b7a7c0c2b7359040a24bc3901459af5d11428b588",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "月亮.webp",
+      "file": "emoji-29b7b689e1595dab.webp",
+      "sha256": "29b7b689e1595dab9f0a22295d2c172708d5b8fce1f982868782bfe7827bc1cc",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "机智.webp",
+      "file": "emoji-b63b956e108f2b21.webp",
+      "sha256": "b63b956e108f2b21ef00b28acbd9fb1e17d4bb7f40e37d5ee37dca758281bfe5",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "汗.webp",
+      "file": "emoji-f3ee937469d170a2.webp",
+      "sha256": "f3ee937469d170a24db23e71a64cec0c63142e8c2899c6058aa2d9bcc7262dc4",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "流泪.webp",
+      "file": "emoji-51764cd0c9335131.webp",
+      "sha256": "51764cd0c93351318967a164b8a89eca5bc376443aac54d48c11cc749824fe6e",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "炸弹.webp",
+      "file": "emoji-e91bc4916ab9f00d.webp",
+      "sha256": "e91bc4916ab9f00de89e74d2877ef199b61002a8a490251a3809955f564ea3df",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "烟花.webp",
+      "file": "emoji-00d76b0c41ed44ad.webp",
+      "sha256": "00d76b0c41ed44adaf3e0878f3e48c0b244da01dbc9c9aae0610f7604e765920",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "爆竹.webp",
+      "file": "emoji-a763c7e0e7da6bae.webp",
+      "sha256": "a763c7e0e7da6baec5324498b9b6c84310c9b1650f51e6fa47da671943696c3d",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "爱心.webp",
+      "file": "emoji-41f2a193e10bd0fc.webp",
+      "sha256": "41f2a193e10bd0fcc07ddedb3af65ff99688d3e0d78de7ab4b87eab1445f2fe3",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "猪头.webp",
+      "file": "emoji-90ee00a58600802d.webp",
+      "sha256": "90ee00a58600802da505de63fc858d5e1837cb5d6bd35fa86527299b47e6026b",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "玫瑰.webp",
+      "file": "emoji-9852091dac58ccf1.webp",
+      "sha256": "9852091dac58ccf169655aba9120d46a909cd874431fe5a76916608ff0b8bb63",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "生病.webp",
+      "file": "emoji-564172e76c79b507.webp",
+      "sha256": "564172e76c79b5078518557696da14dc945472e1a0b5195f755abbf47d538d86",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "疑问.webp",
+      "file": "emoji-d82cf3fcb0fbd816.webp",
+      "sha256": "d82cf3fcb0fbd816b81dd72aaec108bb713a9328ae2e9b3ca6bf726076f106d9",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "發.webp",
+      "file": "emoji-09fa822ad99c3804.webp",
+      "sha256": "09fa822ad99c3804a0d9809913ed781036f29ce719748a252736a5e73587fc59",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "白眼.webp",
+      "file": "emoji-faaaf23e41c382fd.webp",
+      "sha256": "faaaf23e41c382fde56643acba72dc17ee9dd36b53aa78a0a1b2719074e4c298",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "皱眉.webp",
+      "file": "emoji-ac5a7cdafbdd96f7.webp",
+      "sha256": "ac5a7cdafbdd96f76ea2ca0e9f9c667c69edeaa412da039a4e9cca80468b0224",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "睡.webp",
+      "file": "emoji-332760e1a04e598a.webp",
+      "sha256": "332760e1a04e598a046795cb3a18d07d97c1f6ee5611e1c9293c215d9719a5e4",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "破涕为笑.webp",
+      "file": "emoji-cf0cb0f5dee185a5.webp",
+      "sha256": "cf0cb0f5dee185a5997d3cb3651ee3df3eb3eeedc3ece0b5360821521ac72799",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "礼物.webp",
+      "file": "emoji-7a39b1c832b9175f.webp",
+      "sha256": "7a39b1c832b9175fec94cb3bffac4a49bfb1af6150f1053d1e50a77688d07353",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "社会社会.webp",
+      "file": "emoji-5a211dc0c40cdb79.webp",
+      "sha256": "5a211dc0c40cdb790a8bc86531aada34c7c01fae25082118eb0cd23e3d7ae0de",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "福.webp",
+      "file": "emoji-b004a75455472c99.webp",
+      "sha256": "b004a75455472c99e973826c2ea4c4d0a0ce20820c43a206b395e6caf21cf1c6",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "笑脸.webp",
+      "file": "emoji-a5e1f4f3abd68105.webp",
+      "sha256": "a5e1f4f3abd6810526945319ae862d61854715d7ca175b02f282c58723184d57",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "红包.webp",
+      "file": "emoji-237ace1e7c066e6c.webp",
+      "sha256": "237ace1e7c066e6c2e14208b13b52bf2e5e3fa474e609a8ae2545d311d2f389e",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "翻白眼.webp",
+      "file": "emoji-e870f54fe3d1eeb0.webp",
+      "sha256": "e870f54fe3d1eeb048dc4f3064e0b73c6c63389c2740ac5baada1da2a412dd3c",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "耶.webp",
+      "file": "emoji-1d09b6b43d488776.webp",
+      "sha256": "1d09b6b43d488776d515a534cca7df3d769ac89f194aab8944b70dff983e4828",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "胜利.webp",
+      "file": "emoji-9bac8c72eeceec8b.webp",
+      "sha256": "9bac8c72eeceec8b627a3b095826f2a2f2febf26c34e83317cfb25b31aa60c55",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "脸红.webp",
+      "file": "emoji-9c01d7074c17e112.webp",
+      "sha256": "9c01d7074c17e112a8a4ec148e5f9905858f90bbd58213addc3cfab3046f53e1",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "色.webp",
+      "file": "emoji-babf3601b6c9d61e.webp",
+      "sha256": "babf3601b6c9d61efe5be100a903d852eebd1a2dff6db1328fd661e077b98b14",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "苦涩.webp",
+      "file": "emoji-30a17932889a8a7a.webp",
+      "sha256": "30a17932889a8a7a2b1b1fc63eeacb2199bdad6328775710b3e4bc8e836d1d6f",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "菜刀.webp",
+      "file": "emoji-48b392cfa4eb95a8.webp",
+      "sha256": "48b392cfa4eb95a85268d01390d7e1594f02ae7f057e6405f28399e2cab892d1",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "蛋糕.webp",
+      "file": "emoji-08225398c5fa3d06.webp",
+      "sha256": "08225398c5fa3d06d236af916471f69a7d8e7e7f37602e8d8d961983a883d299",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "衰.webp",
+      "file": "emoji-d88e2283c2584c7e.webp",
+      "sha256": "d88e2283c2584c7e3f844e1420958219e3b6a4d37de173c64b2b2b71b559f721",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "裂开.webp",
+      "file": "emoji-cb81108cfbe2969f.webp",
+      "sha256": "cb81108cfbe2969f1722a46a0d19a48f9a3a8362cbc7ce6edbee0f8889085a03",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "让我看看.webp",
+      "file": "emoji-6205d93cece07123.webp",
+      "sha256": "6205d93cece07123b038ad4c0035c16e725d6de16586e449d5e14fac19838276",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "调皮.webp",
+      "file": "emoji-84f743e597592162.webp",
+      "sha256": "84f743e597592162fac78e259ef43c47f822ea86ced915ae77269a9176c9bbc0",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "跳跳.webp",
+      "file": "emoji-28b041d68b99c0f3.webp",
+      "sha256": "28b041d68b99c0f316ef3be5206d03454f1ae21d05df08cc89e8ff4f4c61cdec",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "转圈.webp",
+      "file": "emoji-5788b763f4c36b89.webp",
+      "sha256": "5788b763f4c36b8900f78c3808d523f7af26456a6ae4e487ba19b3c108ca034a",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "鄙视.webp",
+      "file": "emoji-ef2ac22ce7279f30.webp",
+      "sha256": "ef2ac22ce7279f30d104c2090e50f035624971e59a5726b8b7bbbd601f22bcfa",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "闭嘴.webp",
+      "file": "emoji-cbdf2ed1970d9a46.webp",
+      "sha256": "cbdf2ed1970d9a4673fd24087839d41902185a4a5be5b97b301ff12fb629b385",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "阴险.webp",
+      "file": "emoji-c9acd61ae59161fc.webp",
+      "sha256": "c9acd61ae59161fc0177c6f98fafda1a03adc1b675d43a37ec87cf98bf6d784f",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "难过.webp",
+      "file": "emoji-3c32f76f235d4dcd.webp",
+      "sha256": "3c32f76f235d4dcd97a5354f4df6bb0929d515013bfe39c647f2dfe429304996",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "骷髅.webp",
+      "file": "emoji-bb2b3e7b986a2672.webp",
+      "sha256": "bb2b3e7b986a26725de1df8e6841809372a633234734c5e8e2f1c17552350312",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "鼓掌.webp",
+      "file": "emoji-45ea67972b45cb8b.webp",
+      "sha256": "45ea67972b45cb8b70c9c629f432199ba276a1598e7cfe24e7803f529a370a2d",
+      "width": 128,
+      "height": 128
+    }
+  ],
+  "legacyPngCommit": "01f1039f296ec166c29edf195c739a179577bc6c",
+  "legacyFiles": [
+    {
+      "source": "666.png",
+      "file": "emoji-904373c71a900dcb.png",
+      "sha256": "904373c71a900dcb82c0f1bd93afcb28212b0b5df86559d03dc2034dfb42089a",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "Emm.png",
+      "file": "emoji-d2cd78cfb7500bb6.png",
+      "sha256": "d2cd78cfb7500bb6e1016191686f5f39d958cd298f920fcf3a0e9b391535bb80",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "OK.png",
+      "file": "emoji-6841a5631e567e66.png",
+      "sha256": "6841a5631e567e66cb3d5c0fdeff2b4738914368a49782c989933770cf4d518b",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "亲亲.png",
+      "file": "emoji-58438c61590c990f.png",
+      "sha256": "58438c61590c990f29b1d3ffd6c4a8a927fecc12cb5fdd0e787b181171693c66",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "便便.png",
+      "file": "emoji-606603bd6e84a658.png",
+      "sha256": "606603bd6e84a65881a67d2367971922525773f73e1b7b1fa39ec74cd26e1bd0",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "偷笑.png",
+      "file": "emoji-ab38d7314cb69357.png",
+      "sha256": "ab38d7314cb69357f7b7fcb07b96656c3a61b8b085830b10d3824a8ff65bc2e9",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "傲慢.png",
+      "file": "emoji-48fc8bee7d0177fd.png",
+      "sha256": "48fc8bee7d0177fd594b5e6d17939c86f3a2bb867462d9f2bd4b69b52ed1b9c8",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "再见.png",
+      "file": "emoji-738bcb9da3b6ff4a.png",
+      "sha256": "738bcb9da3b6ff4ab832ee3ae36d0ffa63fe5225d16378b489d716faa1a56828",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "凋谢.png",
+      "file": "emoji-4fc31e7adf719b2b.png",
+      "sha256": "4fc31e7adf719b2bb47eaf6449efc6f2989397d6a6cf38063e93669b3aa074de",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "加油.png",
+      "file": "emoji-8ba26746180c0f45.png",
+      "sha256": "8ba26746180c0f4596d7946d4b96edff95e429165bfba4a8c5c47a8f03989fdb",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "加油加油.png",
+      "file": "emoji-2e293d98f073454e.png",
+      "sha256": "2e293d98f073454e64ef38d8c63306d44fa43e4092068fadc5f94c78ed1303f9",
+      "width": 64,
+      "height": 64
+    },
+    {
+      "source": "勾引.png",
+      "file": "emoji-88faa7a107253863.png",
+      "sha256": "88faa7a10725386340ff14b5a33820bd9b969596a4fa532223073d8e3953e187",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "发呆.png",
+      "file": "emoji-c93aefa65f55e984.png",
+      "sha256": "c93aefa65f55e984304b20adc04bb4b28125b015b640680c45fe454afc2addf8",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "发怒.png",
+      "file": "emoji-fdf41669234fa6ca.png",
+      "sha256": "fdf41669234fa6caccc0d4dce2d8f0c96500dea2f214425599a231139356c2b2",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "发抖.png",
+      "file": "emoji-6a282712b5176649.png",
+      "sha256": "6a282712b5176649b74017aea4703c6a1c9302d85442c1efacd45748c3b8a307",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "可怜.png",
+      "file": "emoji-76625cf28940caf8.png",
+      "sha256": "76625cf28940caf89de1e09559d004ee929d310f6956db86d2c076d801ae2ecd",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "右哼哼.png",
+      "file": "emoji-ee12da99869900b4.png",
+      "sha256": "ee12da99869900b4924e2a28899158ac7a3a9675923f9b155f910b45364e9778",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "叹气.png",
+      "file": "emoji-5408b45adbf18211.png",
+      "sha256": "5408b45adbf18211c33d415a356272508151139a8ef6ce825be8e37866e55ea7",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "吃瓜.png",
+      "file": "emoji-c6e1fad53fa2146a.png",
+      "sha256": "c6e1fad53fa2146a83af9f6cd174299c60e19e17734fa22f3139545e75242124",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "合十.png",
+      "file": "emoji-1666ec5c2e3a0230.png",
+      "sha256": "1666ec5c2e3a02307dad58fd2c491d22b1c8647016113c1afb32a7182be8540c",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "吐.png",
+      "file": "emoji-d92b98f7e588f88f.png",
+      "sha256": "d92b98f7e588f88f37a0deea6bcc31dd9f872b786078b2cd577a11138137ea9f",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "呲牙.png",
+      "file": "emoji-9636312b6f2847c0.png",
+      "sha256": "9636312b6f2847c06ef419cade33558f549f317d89f6e336e56d15639e865300",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "咒骂.png",
+      "file": "emoji-5e5e6b99fec7197f.png",
+      "sha256": "5e5e6b99fec7197f16afbf8f83428637a4648b73fd41b3cfb08bf3059e3b10b2",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "咖啡.png",
+      "file": "emoji-f422cefbcf26f44f.png",
+      "sha256": "f422cefbcf26f44f02fda5ee9ea1ca00d290bbbcc0dff429fbab03b3aff4fbcd",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "哇.png",
+      "file": "emoji-23784eab73eccebd.png",
+      "sha256": "23784eab73eccebd0322b19a33eb52b9a7308920f76207efe360b7d72abc7592",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "啤酒.png",
+      "file": "emoji-ad756fa0d8317fc8.png",
+      "sha256": "ad756fa0d8317fc8b7c8e814674edebfb5cd406ead4371d8596d8832f5360d51",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "嘘.png",
+      "file": "emoji-09fbe0eb76582835.png",
+      "sha256": "09fbe0eb765828359283ddbee6581def5630cf706c5f712c0ce8872b1d6676b2",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "嘴唇.png",
+      "file": "emoji-a196a7c5077d253a.png",
+      "sha256": "a196a7c5077d253a1897c929d33b5a27a1264090a705bb7b40ef19155fc39340",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "嘿哈.png",
+      "file": "emoji-c44161c9568129a3.png",
+      "sha256": "c44161c9568129a3ac673076d8b2353da2ea8d62fd2e73f9559c92d27547ff29",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "囧.png",
+      "file": "emoji-bc19e9529cff9662.png",
+      "sha256": "bc19e9529cff96629febad6252285b72fbe7ec126a77f7232238f0bcda0da501",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "困.png",
+      "file": "emoji-c0db22915704670b.png",
+      "sha256": "c0db22915704670bd3dd7a757d7d28ddd8f6fadad32f7822d2a4ec889b3052a1",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "坏笑.png",
+      "file": "emoji-deeddfccdb536740.png",
+      "sha256": "deeddfccdb536740abb9a952831d12b829404394ade94829148a4e0966e0df5e",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "大哭.png",
+      "file": "emoji-90c9911f58756f6b.png",
+      "sha256": "90c9911f58756f6be5eb3cee100450cbc62ad8a549d2c81741844c4bda6ee47b",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "天啊.png",
+      "file": "emoji-3d91e062782bf52b.png",
+      "sha256": "3d91e062782bf52bf34cca021bc01fe1ccde944bb54a3f1a1031c1471df80534",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "太阳.png",
+      "file": "emoji-05efaafd323c5397.png",
+      "sha256": "05efaafd323c539781922bf30413489460af46df74bd1d8f1c5b483558d57417",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "失望.png",
+      "file": "emoji-0e5aa38c5d37f056.png",
+      "sha256": "0e5aa38c5d37f0561a5378941a359dcabd642469e06deb2a0b8340bfa78e0af6",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "奸笑.png",
+      "file": "emoji-477f5bfad2c3b326.png",
+      "sha256": "477f5bfad2c3b3269963ea7a06d7d467a6c2061a95051dda623f73abfdd1014c",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "好的.png",
+      "file": "emoji-27754d16186f2ab7.png",
+      "sha256": "27754d16186f2ab7800138aa6d57951e176829e14a3042e536cbbd301d92d26f",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "委屈.png",
+      "file": "emoji-74481505eaf15083.png",
+      "sha256": "74481505eaf150834d0dcd6ac5f7d6df0b99b3266477051ca6622d11e449e636",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "害羞.png",
+      "file": "emoji-0e0b55bc8cd91a4c.png",
+      "sha256": "0e0b55bc8cd91a4c9f3af3123383ee88c78a1fa4c7b18bb1d8f0701261e3692a",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "尴尬.png",
+      "file": "emoji-03b238681a8cb646.png",
+      "sha256": "03b238681a8cb646294c06ea9aea6631bd8b5ae20a6a408c3d38eea687883dd9",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "庆祝.png",
+      "file": "emoji-d078e6f97ddc6e5f.png",
+      "sha256": "d078e6f97ddc6e5f65950f6b6d8e602b1460289f2fbe3633158c881173e7a1c1",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "弱.png",
+      "file": "emoji-2b2e0c5eb00b8edb.png",
+      "sha256": "2b2e0c5eb00b8edbc84bc19500cf6cfd6084494b204b2b61a716273ad8a10884",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "强.png",
+      "file": "emoji-ef47003d0d3f8cbe.png",
+      "sha256": "ef47003d0d3f8cbe47eded181a98a517b3a40b414d42c0fbb908fc604f0d0b28",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "得意.png",
+      "file": "emoji-d3955100e3a2225b.png",
+      "sha256": "d3955100e3a2225bcf8952ab285dfd7647b472185cc79e24aca5d699121148ae",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "微笑.png",
+      "file": "emoji-978b0631d40aaa2b.png",
+      "sha256": "978b0631d40aaa2b78b6dc3683e5044fe103c93e3eac6792dd8f963190b44cab",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "心碎.png",
+      "file": "emoji-e4bc6ae4e5b0aa7f.png",
+      "sha256": "e4bc6ae4e5b0aa7f89eae9cf2dc29eca86da2b8c6a765f116d47a78bc427423f",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "快哭了.png",
+      "file": "emoji-ecef41cc4f96f472.png",
+      "sha256": "ecef41cc4f96f4720dfb82f4ec55ad5deb3645934beef0258299a2759c96deb0",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "恐惧.png",
+      "file": "emoji-5794b988458928fe.png",
+      "sha256": "5794b988458928feb6cd8c9b8e89713bcc3eac4e94ba9a5000e23563d95bde80",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "悠闲.png",
+      "file": "emoji-c9f3139f5e9a0157.png",
+      "sha256": "c9f3139f5e9a01574b3db7554b6c1a0acf1940758884d47bf478c5bfe2c5cb88",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "惊恐.png",
+      "file": "emoji-9661cf50f0623f8d.png",
+      "sha256": "9661cf50f0623f8d709d2048209490bb9144504aed4544696ab25c17935ea94f",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "惊讶.png",
+      "file": "emoji-caf4ff1e63551eeb.png",
+      "sha256": "caf4ff1e63551eeb2c0944d602f25d37665dd9366d1cb3988f52eba835c3653c",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "愉快.png",
+      "file": "emoji-a21dc37a68bc21e4.png",
+      "sha256": "a21dc37a68bc21e407b4cfb48d7e8a4b0ec2be366d969f5c4ca2ed2851f2fc0f",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "憨笑.png",
+      "file": "emoji-5f0a7749354e3386.png",
+      "sha256": "5f0a7749354e3386569081de93999fe8aceb36706e89dde54a4fbdac08710eb6",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "打脸.png",
+      "file": "emoji-75faa803e3add64a.png",
+      "sha256": "75faa803e3add64a3ad53eeab01cfc4516ab49348bcdeb4a719a6c526ffc6ac7",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "抓狂.png",
+      "file": "emoji-b67a7aed4331c7c5.png",
+      "sha256": "b67a7aed4331c7c56a228c393ba9baf9369f7683a510fd2fbe7860b725138986",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "抠鼻.png",
+      "file": "emoji-7df8f1904ffd0323.png",
+      "sha256": "7df8f1904ffd03239db81f6c68678d5cbe9e161d218b1552049f04695a525175",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "抱拳.png",
+      "file": "emoji-d4279e3494831e23.png",
+      "sha256": "d4279e3494831e23398e3dfcf7e4c9b51304ce063c963518b6f0a9a5c478f218",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "拥抱.png",
+      "file": "emoji-f840278c9ec12dd4.png",
+      "sha256": "f840278c9ec12dd4fdfd465af5f6e9a6eaac1102f047c167d5385a859565a7bb",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "拳头.png",
+      "file": "emoji-2a13515d7a303e0c.png",
+      "sha256": "2a13515d7a303e0ccfdc419bae117df8cadf9b6d826fca1955cdeeda6729c9b3",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "捂脸.png",
+      "file": "emoji-c1d35ccdd7d7c918.png",
+      "sha256": "c1d35ccdd7d7c9186a58fdc60976b322c4ec65afa4c5747808c714a146005395",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "握手.png",
+      "file": "emoji-6da47fd9c41d05fe.png",
+      "sha256": "6da47fd9c41d05feb750e1f8dcc9b1f48183c99d1d3495edb2b0beda9b59f86e",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "撇嘴.png",
+      "file": "emoji-3318426ede1d3a63.png",
+      "sha256": "3318426ede1d3a63c934f1d5bfc9ee543fe36b4498015b444ec3906ff35d88e5",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "擦汗.png",
+      "file": "emoji-e68b461bd040d98a.png",
+      "sha256": "e68b461bd040d98a3e818ea42b67432decb06b87dd525eb6b04fa9c1564f940e",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "敲打.png",
+      "file": "emoji-b955a5b1fba750ae.png",
+      "sha256": "b955a5b1fba750aec2f9372890c4541a575ce09c1352a3f81f869e2173849774",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "无语.png",
+      "file": "emoji-140a67cb4ecae8eb.png",
+      "sha256": "140a67cb4ecae8eb4593b99f2ec5721835451dae065d78384db41cf4f2b5033b",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "旺柴.png",
+      "file": "emoji-87522276cd3a6938.png",
+      "sha256": "87522276cd3a693852a478bae1b8e1033c4700ee2c9bbe35da4937c3bccfbe81",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "晕.png",
+      "file": "emoji-8146cbf263cce36b.png",
+      "sha256": "8146cbf263cce36b7ebcc9feba993c70a253532ba9637ae0c160fb46f30e6b46",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "月亮.png",
+      "file": "emoji-b2432ea57dbe56bf.png",
+      "sha256": "b2432ea57dbe56bfff7d2b5a839fa942d2b47f55d2e8358045df3d9ad8582904",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "机智.png",
+      "file": "emoji-344ca53d6b523428.png",
+      "sha256": "344ca53d6b5234283b271bff00d31efb2ebbd1b0d040a77294d316c8dd8b5129",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "汗.png",
+      "file": "emoji-41f940d4ac818d07.png",
+      "sha256": "41f940d4ac818d073d13675b488f7f2f8b0bf843aa3413ecc9e928e0695eb896",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "流泪.png",
+      "file": "emoji-0cad09971dacf70a.png",
+      "sha256": "0cad09971dacf70a77df6787e915dc396317d611dcdd6eebf5aea01eaa05efc3",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "炸弹.png",
+      "file": "emoji-8ee9eccc56241827.png",
+      "sha256": "8ee9eccc562418274626fa6688ef2731cd5fe011d90355ddbda327198531753b",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "烟花.png",
+      "file": "emoji-16f7eb2fd590de86.png",
+      "sha256": "16f7eb2fd590de86765e02a41fe4d274b3f1810e304293d8b380c0005188c97d",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "爱心.png",
+      "file": "emoji-a69a7becf664e8d1.png",
+      "sha256": "a69a7becf664e8d17e6908597f60e79417df846f1bb4d279b245feebcb16ccec",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "猪头.png",
+      "file": "emoji-0937c5bd23856b71.png",
+      "sha256": "0937c5bd23856b716cbc832ae5b93e8ca6b08b36039c9d4b4a8f5321bc01cc77",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "玫瑰.png",
+      "file": "emoji-7d80a51830d6d8ac.png",
+      "sha256": "7d80a51830d6d8acab16bc254574b0bd6be93e8e191b41458760952fa8bbedf9",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "生病.png",
+      "file": "emoji-ef43f564c567e0fe.png",
+      "sha256": "ef43f564c567e0fe214abf3e8e87cf2b1f8be51471c8da37805ab12c7eccfc77",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "疑问.png",
+      "file": "emoji-93b2a14142ff1925.png",
+      "sha256": "93b2a14142ff1925fa0a9178629dd688531345d134a11d268bd8b4672fda7a16",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "白眼.png",
+      "file": "emoji-8757f1820b51ca83.png",
+      "sha256": "8757f1820b51ca83c04e0a75862d603b3cbedc8c0f1cb44d08ee27436608926f",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "皱眉.png",
+      "file": "emoji-0d4bd13f428e5069.png",
+      "sha256": "0d4bd13f428e50690fb56759b6ce7cf5d44dc2bc6365579d71fdf32972d35541",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "睡.png",
+      "file": "emoji-e0d382978d79bba3.png",
+      "sha256": "e0d382978d79bba3bb2c756f86782c523226cbe0ebcf92c0442324ee2ef25b90",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "破涕为笑.png",
+      "file": "emoji-6cfe6ec8389396e5.png",
+      "sha256": "6cfe6ec8389396e5c524e0826f62e3d2f70196c5e513251aaab92caf7d820ff8",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "礼物.png",
+      "file": "emoji-7ab217dfbfa95119.png",
+      "sha256": "7ab217dfbfa951198a00d7e8efc1517b62beda7517b72b316aae11c3b67f17fd",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "社会社会.png",
+      "file": "emoji-f4e4247f0b121256.png",
+      "sha256": "f4e4247f0b1212566cfe61b2cffc9af92563ad7d406e7857ef90533477b690a7",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "福.png",
+      "file": "emoji-58c94555fa35ca40.png",
+      "sha256": "58c94555fa35ca40824bff0f717204265d81ac58b7367ca1b0bc3d679c02f934",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "笑脸.png",
+      "file": "emoji-baff38f2631501a4.png",
+      "sha256": "baff38f2631501a44b99f7c7c3c21c81071400f2583c9afe0ed6371f637f2057",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "红包.png",
+      "file": "emoji-135c15ce48e4374e.png",
+      "sha256": "135c15ce48e4374e442d2cb9f759c3e6dd545e8cd3e7fff5d94cc20c889c8781",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "翻白眼.png",
+      "file": "emoji-7693fbae003e58d2.png",
+      "sha256": "7693fbae003e58d27224757c57f585d82c62a0f806d8bca530820dda004894b0",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "耶.png",
+      "file": "emoji-330c8d01ce59e12a.png",
+      "sha256": "330c8d01ce59e12a0e50b54fd80b280fd2a634e8c04f7354570839a8b2c11bd0",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "胜利.png",
+      "file": "emoji-699ed63efae73835.png",
+      "sha256": "699ed63efae73835909bf1c0c6654d7e4d662fef7b2abb3acb17d087c714a25e",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "脸红.png",
+      "file": "emoji-8b89e30cb25f8da9.png",
+      "sha256": "8b89e30cb25f8da9a0ed05683bb2d9766727d0c5e97500e3dba99c81c41c143f",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "色.png",
+      "file": "emoji-333dc3757bb0feee.png",
+      "sha256": "333dc3757bb0feee668975acefe713c82820e8027a063cda71df3a97de0155d4",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "苦涩.png",
+      "file": "emoji-3dc7ad7e34300ebd.png",
+      "sha256": "3dc7ad7e34300ebd20d01017ebe8cb64f5606930431ccf5eb29c078cfd8c1caa",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "菜刀.png",
+      "file": "emoji-d6c5b3832082bca8.png",
+      "sha256": "d6c5b3832082bca8f6e8e866aab4167208bd0776c647a0e77756be084eb2b901",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "蛋糕.png",
+      "file": "emoji-6fdd66bca96bda84.png",
+      "sha256": "6fdd66bca96bda84f7fd689e87dd4670fd65a2a896831ff4eac404123b8c72c9",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "衰.png",
+      "file": "emoji-dd89db19bfb99d1a.png",
+      "sha256": "dd89db19bfb99d1a44c3f8b89517390dd402752afcbd149fb85d158f16e3b1bf",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "裂开.png",
+      "file": "emoji-96d9ea51d5bbd04b.png",
+      "sha256": "96d9ea51d5bbd04bca0a1dd14ee4584654ee450e3f1c873c731fa09f4724f7d8",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "让我看看.png",
+      "file": "emoji-cd5ad1bd84857aec.png",
+      "sha256": "cd5ad1bd84857aecb19f8af3d618cf7e9ab9978d0a31a57858e437cbf60049b5",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "source": "调皮.png",
+      "file": "emoji-c2c710bfb363a10c.png",
+      "sha256": "c2c710bfb363a10c5b753d1f7d384245f7c73d3c7a07ea2499ae452846583609",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "跳跳.png",
+      "file": "emoji-76beb51fa47278aa.png",
+      "sha256": "76beb51fa47278aa3332e88fce483dcbd45a3d7d38654482032ac91a20450c8d",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "转圈.png",
+      "file": "emoji-becafd35ddbcd91a.png",
+      "sha256": "becafd35ddbcd91a2e10a43cf3d656e0bd38ab127b9a73bf28ea374ecb1c4402",
+      "width": 80,
+      "height": 80
+    },
+    {
+      "source": "鄙视.png",
+      "file": "emoji-2dda648fff3cbc8e.png",
+      "sha256": "2dda648fff3cbc8ea6ca324909aaa09608dabacdc3493474b784d91625aa0166",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "闭嘴.png",
+      "file": "emoji-49ddaeebd1cb24d8.png",
+      "sha256": "49ddaeebd1cb24d89aae6b49b8045a946852b8717cc17082209a9884456617a9",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "阴险.png",
+      "file": "emoji-14f89d38d4544884.png",
+      "sha256": "14f89d38d45448849eaef0af317753fc292bf2667dd37b9226e4d84cfc0d5ba7",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "难过.png",
+      "file": "emoji-3222c442d3399460.png",
+      "sha256": "3222c442d339946039d728e03adea89b09f023a84bcfbe2a1444ab76f16ae70e",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "骷髅.png",
+      "file": "emoji-8eccbe5b898f8c89.png",
+      "sha256": "8eccbe5b898f8c89d3f2b4d1136cdfec6ce0062f4a6530668f253c57f8f9b026",
+      "width": 97,
+      "height": 97
+    },
+    {
+      "source": "鼓掌.png",
+      "file": "emoji-8416407a606ccf04.png",
+      "sha256": "8416407a606ccf042828a81f00f94007f2c9894ae91841d0b248084d82455d18",
+      "width": 97,
+      "height": 97
+    }
+  ]
+}

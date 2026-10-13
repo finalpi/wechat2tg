@@ -26,6 +26,10 @@ import {FileBox} from 'file-box'
 import I18n from '../i18n'
 import {LogUtils} from '../util/LogUtil'
 import {WebMessageStore} from '../webui/message-store'
+import {isControlMessage} from '../webui/message-visibility'
+import {TelegramOutbox,TelegramOutboxEntry} from '../webui/telegram-outbox'
+import {quoteXML,sendQuote} from '../webui/quotes'
+import {withNativeWechatReceipt} from '../webui/wechat-receipt'
 import {getWechatCallStatus, formatWechatCallStatus} from '../util/WechatCallStatus'
 
 const TELEGRAM_BOT_API_UPLOAD_LIMIT = 50 * 1024 * 1024
@@ -43,6 +47,8 @@ export class WeChatClient extends AbstractClient {
     private messageService: MessageService
     private friendshipList = []
     private _wxInfo
+    private telegramOutbox?:TelegramOutbox
+    private telegramSendContexts?:WeakMap<BaseMessage,{entry:TelegramOutboxEntry|null;journal?:TelegramOutbox;binding:BindGroup;legacy?:Message}>
     // 登陆时间
     private startTime
     // 正在创建的群组 Map，用于防止并发创建重复群组
@@ -87,55 +93,71 @@ export class WeChatClient extends AbstractClient {
         return this.friendshipList.find(item => item.username === wxId)
     }
 
+    private outboundJournal(){
+        if(process.env.WEBUI_ENABLED==='false')return undefined
+        try{return this.telegramOutbox||(this.telegramOutbox=TelegramOutbox.getInstance())}
+        catch{this.logger.warn('WebUI Telegram send journal is unavailable');return undefined}
+    }
+
+    private async recordTelegramJournal<T>(action:()=>Promise<T>,fallback:T):Promise<T>{
+        try{return await action()}
+        catch{this.logger.warn('WebUI Telegram send journal could not be updated');return fallback}
+    }
+
+    private reportWechatSendFailure(message:BaseMessage,error:any){
+        this.logger.error(error)
+        const bot:Telegraf=WeChatClient.getSpyClient('botClient')?.client
+        if(bot?.telegram)void bot.telegram.sendMessage(message.chatId,'消息发送失败！',{reply_parameters:{message_id:parseInt(message.id)}}).catch(()=>{})
+    }
+
+    private markWechatRejection(error:any){
+        if(error&&typeof error==='object'&&(error.code==='wechatSendRejected'||/(?:发送|上传)(?:文本|图片|文件|引用|语音|视频|表情)(?:消息)?失败[:：]/.test(String(error.message||''))||(error.response?.status>=400&&error.response?.status<500)))error.deliveryRejected=true
+        return error
+    }
+
+    private async saveTelegramWechatReceipt(context:{legacy?:Message;binding:BindGroup},message:BaseMessage,receipt:any,sourceType:string,sourceText?:string){
+        if(!receipt?.newMsgId||['undefined','null','0'].includes(String(receipt.newMsgId)))return
+        try{
+            const entity=context.legacy||Object.assign(new Message(),{chatId:message.chatId,tgBotMsgId:parseInt(message.id),wxSenderId:this._wxInfo?.wxid||'',type:message.type,content:message.content})
+            entity.wxMsgId=String(receipt.newMsgId);entity.msgId=String(receipt.msgId||'');entity.createTime=Number(receipt.createTime)||Math.floor(Date.now()/1000);entity.toWxid=receipt.toWxid||context.binding.wxId;entity.source_type=sourceType
+            if(sourceText!==undefined)entity.source_text=sourceText
+            context.legacy=await this.messageService.createOrUpdate(entity)||entity
+        }catch{this.logger.warn('WeChat send succeeded but its legacy receipt could not be saved')}
+    }
+
     private async sendTextMsg(message: BaseMessage) {
-        // 发送文本消息的方法
-        const bindGroup = await this.bindGroupService.getByChatId(message.chatId)
-        if (bindGroup) {
-            let msgResult
-            let quoteMsg: Message
-            try {
-                if (message.param?.replyMessageId) {
-                    quoteMsg = await this.messageService.getByBotMsgId(bindGroup.chatId, message.param?.replyMessageId)
-                }
-                if (bindGroup.type === 0) {
-                    const contact = await this.client.Contact.find({id: bindGroup.wxId})
-                    if (quoteMsg) {
-                        msgResult = await contact.quoteSay(message.content, quoteMsg.wxMsgId, quoteMsg.wxSenderId, quoteMsg.content)
-                    } else {
-                        msgResult = await contact.say(message.content)
-                    }
-                } else {
-                    const room = await this.client.Room.find({id: bindGroup.wxId})
-                    if (quoteMsg) {
-                        msgResult = await room.quoteSay(message.content, quoteMsg.wxMsgId, quoteMsg.wxSenderId, quoteMsg.content)
-                    } else {
-                        if (message.content.startsWith('@all')) {
-                            message.content = message.content.replace('@all', '')
-                            msgResult = await room.say(message.content, '@all')
-                        } else {
-                            msgResult = await room.say(message.content)
-                        }
-                    }
-                }
-            }catch (e) {
-                this.logger.error(e)
-                const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
-                tgBotClient.telegram.sendMessage(message.chatId, '消息发送失败！',{
-                    reply_parameters: {
-                        message_id: parseInt(message.id)
-                    }
-                })
+        const contexts=this.telegramSendContexts||(this.telegramSendContexts=new WeakMap())
+        let context=contexts.get(message),attempted=false,release=()=>{}
+        try{
+            if(!context){
+                const binding=await this.bindGroupService.getByChatId(message.chatId)
+                if(!binding)return
+                const journal=this.outboundJournal(),entry=journal?await this.recordTelegramJournal(()=>journal.begin(message,{wxId:binding.wxId,selfId:this._wxInfo?.wxid||'',selfName:this._wxInfo?.nickName}),null):null
+                if(entry?.duplicate)return
+                context={entry,journal,binding};contexts.set(message,context)
             }
-            // 将 msgId 更新到数据库
-            const messageEntity = await this.messageService.getByBotMsgId(bindGroup.chatId, parseInt(message.id))
-            if (msgResult && messageEntity) {
-                messageEntity.wxMsgId = msgResult.newMsgId
-                messageEntity.msgId = msgResult.msgId
-                messageEntity.createTime = msgResult.createTime
-                messageEntity.toWxid = msgResult.toWxid
-                this.messageService.createOrUpdate(messageEntity)
+            const {binding,journal,entry}=context
+            if(!this.hasReady||!this.hasLogin)throw new Error('wechatOffline')
+            const quoteMsg=message.param?.replyMessageId?await this.messageService.getByBotMsgId(binding.chatId,message.param.replyMessageId):null
+            const destination=binding.type===0?await this.client.Contact.find({id:binding.wxId}):await this.client.Room.find({id:binding.wxId})
+            if(!destination)throw new Error('recipientMissing')
+            let body=String(message.content??''),source=body,wireType=1,appType:number|undefined,reference:Message|null=null
+            if(quoteMsg&&/^[1-9]\d{0,19}$/.test(String(quoteMsg.wxMsgId||''))){
+                reference=quoteMsg;wireType=49;appType=57
+                const types={text:1,image:3,voice:34,video:43,emoji:47,file:49,link:49,quote:49,chat_histroy:49,location:48,contact:42}
+                source=quoteXML(body,{id:quoteMsg.id||0,remoteId:String(quoteMsg.wxMsgId),wxId:binding.wxId,senderId:quoteMsg.wxSenderId||binding.wxId,name:String(quoteMsg.sender||quoteMsg.wxSenderId||'').replace(/<[^>]*>/g,''),type:Number(quoteMsg.source_type)||types[quoteMsg.source_type]||1,preview:String(quoteMsg.content||'').slice(0,500),content:String(quoteMsg.source_text||quoteMsg.content||'')})
+            }else if(binding.type!==0&&body.startsWith('@all')){
+                body='@所有人 '+body.replace('@all','');source=body
             }
-        }
+            if(journal)release=await this.recordTelegramJournal(()=>journal.attempt(entry,{body,quote:reference,wireType,appType,source}),()=>{})
+            attempted=true
+            const result=reference?await sendQuote(binding.wxId,this._wxInfo?.wxid||'',source):binding.type!==0&&String(message.content).startsWith('@all')?await destination.say(String(message.content).replace('@all',''),'@all'):await destination.say(message.content)
+            if(journal)await this.recordTelegramJournal(()=>journal.complete(entry,result,{wireType,appType,source}),undefined)
+            await this.saveTelegramWechatReceipt(context,message,result,reference?'quote':'text',source)
+        }catch(error){
+            if(context?.journal)await this.recordTelegramJournal(()=>context.journal.fail(context.entry,this.markWechatRejection(error),{attempted}),undefined)
+            this.reportWechatSendFailure(message,error)
+        }finally{try{release()}catch{this.logger.warn('Telegram send echo tracking could not be released')}}
     }
 
     async login(): Promise<boolean> {
@@ -202,92 +224,75 @@ export class WeChatClient extends AbstractClient {
     }
 
     async sendMessage(message: BaseMessage): Promise<boolean> {
-        if (!this.hasReady || !this.hasLogin) {
-            return
-        }
+        let context:{entry:TelegramOutboxEntry|null;journal?:TelegramOutbox;binding:BindGroup;legacy?:Message},attempted=false,release=()=>{}
         try {
-            const messageEntity = new Message()
-            messageEntity.chatId = message.chatId
-            messageEntity.tgBotMsgId = parseInt(message.id)
-            messageEntity.wxSenderId = this._wxInfo.wxid
-            messageEntity.type = message.type
-            messageEntity.content = message.content
-            // 设置默认 createTime（秒级时间戳），后续发送成功后会用微信返回的时间覆盖
-            messageEntity.createTime = Math.floor(Date.now() / 1000)
-            await this.messageService.createOrUpdate(messageEntity)
-            if (message.type === 0) {
-                // 文本消息走队列
-                this.sendQueueHelper.addMessageWithMsgId(parseInt(message.id), message)
-            } else {
-                // 文件消息
-                const bindGroup = await this.bindGroupService.getByChatId(message.chatId)
-                if (bindGroup) {
-                    let msgResult
-                    let file
-                    this.logger.info(`开始发送文件到微信: tgMsgId=${message.id}, chatId=${message.chatId}, wxId=${bindGroup.wxId}, fileName=${message.file.fileName}, size=${this.formatBytes(message.file.file.length)}`)
-                    if (message.file.fileName.endsWith('.mp4')) {
-                        message.file.fileName = new Date().getTime() + 'video.mp4'
-                        const url = FileUtils.saveFile(message.file.file, message.file.fileName)
-                        this.logger.info(`开始处理视频文件: tgMsgId=${message.id}, fileName=${message.file.fileName}, size=${this.formatBytes(message.file.file.length)}`)
-                        // 提取视频封面
-                        const ffmpegUtil = await new ConverterHelper()
-                        const videoPath = `save-files/_temp/${message.file.fileName}`
-                        await ffmpegUtil.extractThumbnail(videoPath, `save-files/_temp/${message.file.fileName}.jpg`)
-                        const fbv = FileBox.fromBuffer(message.file.file, message.file.fileName)
-                        const fbt = FileBox.fromFile(`save-files/_temp/${message.file.fileName}.jpg`, message.file.fileName + '.jpg')
-                        file = new WeVideo({
-                            thumbBase64: await fbt.toBase64(), // 视频封面
-                            videoBase64: await fbv.toBase64(), // 视频文件url
-                            videoDuration: message.file.duration || 9, // 视频时长单位秒 似乎随便传个值就行
-                        })
-                    } else if(message.file.fileName.startsWith('语音') && message.file.fileName.endsWith('mp3')){
-                        const fbv = FileBox.fromBuffer(message.file.file, message.file.fileName)
-                        file = new Voice({
-                            voiceBase64: await fbv.toBase64(),
-                            voiceDuration: message.file.duration * 1000 || 9000,
-                            type: 2
-                        })
-                    }else if(message.file.fileName.endsWith('.gif')) {
-                        const fbe = FileBox.fromBuffer(message.file.file, message.file.fileName)
-                        file = new Emoji({
-                            emojiBase64: await fbe.toBase64()
-                        })
-                    } else {
-                        file = FileBox.fromBuffer(message.file.file, message.file.fileName)
-                    }
-                    this.logger.info(`文件已转换为微信发送对象: tgMsgId=${message.id}, fileName=${message.file.fileName}`)
-                    if (bindGroup.type === 0) {
-                        const contact = await this.client.Contact.find({id: bindGroup.wxId})
-                        this.logger.info(`开始发送文件到微信好友: tgMsgId=${message.id}, wxId=${bindGroup.wxId}, fileName=${message.file.fileName}`)
-                        msgResult = await contact.say(file)
-                    } else {
-                        const room = await this.client.Room.find({id: bindGroup.wxId})
-                        this.logger.info(`开始发送文件到微信群: tgMsgId=${message.id}, wxId=${bindGroup.wxId}, fileName=${message.file.fileName}`)
-                        msgResult = await room.say(file)
-                    }
-                    this.logger.info(`文件发送到微信完成: tgMsgId=${message.id}, wxMsgId=${msgResult?.newMsgId}, msgId=${msgResult?.msgId}, fileName=${message.file.fileName}`)
-                    // 将 msgId 更新到数据库
-                    const messageEntity = await this.messageService.getByBotMsgId(bindGroup.chatId, parseInt(message.id))
-                    if (msgResult && messageEntity) {
-                        messageEntity.wxMsgId = msgResult.newMsgId
-                        messageEntity.msgId = msgResult.msgId
-                        messageEntity.createTime = msgResult.createTime
-                        messageEntity.toWxid = msgResult.toWxid
-                        this.messageService.createOrUpdate(messageEntity)
-                    }
-                }
+            const binding=await this.bindGroupService.getByChatId(message.chatId)
+            if(!binding)return false
+            const journal=this.outboundJournal(),entry=journal?await this.recordTelegramJournal(()=>journal.begin(message,{wxId:binding.wxId,selfId:this._wxInfo?.wxid||'',selfName:this._wxInfo?.nickName}),null):null
+            if(entry?.duplicate)return true
+            context={entry,journal,binding}
+            const contexts=this.telegramSendContexts||(this.telegramSendContexts=new WeakMap())
+            contexts.set(message,context)
+            if(!this.hasReady||!this.hasLogin){
+                if(journal)await this.recordTelegramJournal(()=>journal.fail(entry,new Error('wechatOffline'),{attempted:false}),undefined)
+                return false
             }
-        }catch (e) {
-            this.logger.error(e)
-            const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
-            tgBotClient.telegram.sendMessage(message.chatId, '消息发送失败！',{
-                reply_parameters: {
-                    message_id: parseInt(message.id)
-                }
-            })
+            try{
+                const entity=Object.assign(new Message(),{chatId:message.chatId,tgBotMsgId:parseInt(message.id),wxSenderId:this._wxInfo?.wxid||'',type:message.type,content:message.content,createTime:Math.floor(Date.now()/1000)})
+                context.legacy=await this.messageService.createOrUpdate(entity)||entity
+            }catch{this.logger.warn('Telegram send legacy record could not be saved')}
+            if(message.type===0){
+                this.sendQueueHelper.addMessageWithMsgId(parseInt(message.id),message)
+                return true
+            }
+            if(!message.file)throw new Error('attachmentMissing')
+            let file
+            const name=message.file.fileName
+            const wireType=name.endsWith('.mp4')?43:name.startsWith('语音')&&name.endsWith('mp3')?34:name.endsWith('.gif')?47:/\.(jpg|jpeg|png|bmp|webp)$/i.test(name)?3:49
+            const appType=wireType===49?6:undefined
+            if (message.file.fileName.endsWith('.mp4')) {
+                message.file.fileName = new Date().getTime() + 'video.mp4'
+                const url = FileUtils.saveFile(message.file.file, message.file.fileName)
+                this.logger.info(`开始处理视频文件: tgMsgId=${message.id}, fileName=${message.file.fileName}, size=${this.formatBytes(message.file.file.length)}`)
+                // 提取视频封面
+                const ffmpegUtil = await new ConverterHelper()
+                const videoPath = `save-files/_temp/${message.file.fileName}`
+                await ffmpegUtil.extractThumbnail(videoPath, `save-files/_temp/${message.file.fileName}.jpg`)
+                const fbv = FileBox.fromBuffer(message.file.file, message.file.fileName)
+                const fbt = FileBox.fromFile(`save-files/_temp/${message.file.fileName}.jpg`, message.file.fileName + '.jpg')
+                file = new WeVideo({
+                    thumbBase64: await fbt.toBase64(), // 视频封面
+                    videoBase64: await fbv.toBase64(), // 视频文件url
+                    videoDuration: message.file.duration || 9, // 视频时长单位秒 似乎随便传个值就行
+                })
+            } else if(message.file.fileName.startsWith('语音') && message.file.fileName.endsWith('mp3')){
+                const fbv = FileBox.fromBuffer(message.file.file, message.file.fileName)
+                file = new Voice({
+                    voiceBase64: await fbv.toBase64(),
+                    voiceDuration: message.file.duration * 1000 || 9000,
+                    type: 2
+                })
+            }else if(message.file.fileName.endsWith('.gif')) {
+                const fbe = FileBox.fromBuffer(message.file.file, message.file.fileName)
+                file = new Emoji({
+                    emojiBase64: await fbe.toBase64()
+                })
+            } else {
+                file = FileBox.fromBuffer(message.file.file, message.file.fileName)
+            }
+            const destination=binding.type===0?await this.client.Contact.find({id:binding.wxId}):await this.client.Room.find({id:binding.wxId})
+            if(!destination)throw new Error('recipientMissing')
+            if(journal)release=await this.recordTelegramJournal(()=>journal.attempt(entry,{wireType,appType}),()=>{})
+            attempted=true
+            const result=wireType===49?await withNativeWechatReceipt(()=>destination.say(file)):await destination.say(file)
+            if(journal)await this.recordTelegramJournal(()=>journal.complete(entry,result,{wireType,appType}),undefined)
+            await this.saveTelegramWechatReceipt(context,message,result,({3:'image',34:'voice',43:'video',47:'emoji',49:'file'})[wireType])
+            return true
+        }catch(error){
+            if(context?.journal)await this.recordTelegramJournal(()=>context.journal.fail(context.entry,this.markWechatRejection(error),{attempted}),undefined)
+            this.reportWechatSendFailure(message,error)
             return false
-        }
-        return true
+        }finally{try{release()}catch{this.logger.warn('Telegram send echo tracking could not be released')}}
     }
 
     private formatBytes(bytes: number): string {
@@ -424,6 +429,7 @@ export class WeChatClient extends AbstractClient {
     }
 
     async onMessage(msg: WxMessage) {
+        if(isControlMessage(String(msg.type()),String(msg._xml||msg.text()||'')))return
         if(process.env.WEBUI_ENABLED!=='false'&&await WebMessageStore.getInstance().isManagedEcho(msg))return
         this.logger.debug(`收到微信消息: type=${msg.type()}, msgId=${msg.newMsgId}, toId=${msg.toId}, text=${msg.text()?.substring(0, 100)}, xml=${msg._xml}`)
 
@@ -784,8 +790,8 @@ export class WeChatClient extends AbstractClient {
                 msgJson = WxMessage.getXmlToJson(msg._xml)
                 messageParam.content = msgJson.sysmsg.revokemsg.replacemsg
                 messageParam.type = 6
-                messageParam.revokeMsgId = msg._xml.match(/<newmsgid>\s*(?:<!\[CDATA\[)?(\d+)(?:\]\]>)?\s*<\/newmsgid>/)?.[1]||String(msgJson.sysmsg.revokemsg.newmsgid)
-                if(process.env.WEBUI_ENABLED!=='false')await WebMessageStore.getInstance().observeRevoke(messageParam.wxId,String(messageParam.revokeMsgId))
+                messageParam.revokeMsgId = msg._xml.match(/<newmsgid>\s*(?:<!\[CDATA\[)?(\d+)(?:\]\]>)?\s*<\/newmsgid>/)?.[1]||(typeof msgJson.sysmsg.revokemsg.newmsgid==='string'||Number.isSafeInteger(msgJson.sysmsg.revokemsg.newmsgid)?String(msgJson.sysmsg.revokemsg.newmsgid):'')
+                if(process.env.WEBUI_ENABLED!=='false')await WebMessageStore.getInstance().observeRevoke(messageParam.wxId,String(messageParam.revokeMsgId),{timestamp:Number(msg._createTime??msg.date())||Math.floor(Date.now()/1000),senderId:msg.fromId,direction:msg.self()?'outgoing':'incoming'})
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.ChatHistroy:

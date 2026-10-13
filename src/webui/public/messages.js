@@ -4,8 +4,12 @@ window.MessageCenterUI = {
         let root, refs={},contacts=[],active=null,items=[],status={available:false,wechatOnline:false},query='',kind='all',messageQuery='',offset=0,moreContacts=false,moreMessages=false,before=0,loadingContacts=false,sending=false,contactSequence=0,historySequence=0
         const drafts=new Map()
         const pendingHistory=new Set()
+        let historyContext=false,locatingQuote=false,locateSequence=0,historyGeneration=0,highlightedMessage=null,highlightTimer
         const blobs=new Map()
         const mediaCards=new Map()
+        const mediaStates=new Map(),blobLoads=new Map(),mediaQueue=[]
+        let mediaWorkers=0,mediaEpoch=0
+        const expandedTranscripts=new Set()
         const avatars=new Map()
         const avatarQueue=[]
         let avatarWorkers=0
@@ -27,6 +31,16 @@ window.MessageCenterUI = {
         const currentDraft=()=>active?drafts.get(active.wxId)||{text:'',requestId:''}:{text:'',requestId:''}
         const requestId=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),v=>v.toString(16).padStart(2,'0')).join('')
         const button=(label,cls,action)=>{const b=node('button',cls,label);b.type='button';b.addEventListener('click',action);return b}
+        const inlineNode=(tag,cls,text)=>{const element=node(tag,cls);element.append(ChatContent.inline(document,text));return element}
+        const articleURL=value=>{if(typeof value!=='string'||value.length>4096||/[\u0000-\u001f\u007f]/.test(value))return '';try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:''}catch{return ''}}
+        const articleCard=article=>{
+            const card=node('article','official-article-card'),url=articleURL(article.url),title=inlineNode(url?'a':'strong','article-title',article.title||t('mediaType_link'))
+            if(url){title.href=url;title.target='_blank';title.rel='noopener noreferrer'}
+            card.append(title)
+            if(article.description)card.append(inlineNode('blockquote','article-summary',article.description))
+            if(url){const read=node('a','article-read-more',t('readArticle'));read.href=url;read.target='_blank';read.rel='noopener noreferrer';card.append(read)}
+            return card
+        }
         let viewer={zoom:1,rotation:0,x:0,y:0},viewerResize,viewerDrag=null
         const fitImage=()=>{
             if(!refs.imageDialog?.open||!refs.largeImage.naturalWidth)return
@@ -62,7 +76,7 @@ window.MessageCenterUI = {
             if(d.mentionAll)refs.selectedMentions.append(button('@'+t('mentionEveryone')+' ×','mention-chip',()=>applyDraft(MentionCompose.remove(d.text,d.tokens||[],m=>m.all,refs.composer.selectionStart))))
             for(const member of d.mentionedMembers||[])refs.selectedMentions.append(button('@'+member.name+' ×','mention-chip',()=>applyDraft(MentionCompose.remove(d.text,d.tokens||[],m=>m.wxId===member.wxId,refs.composer.selectionStart))))
             refs.replyPreview.replaceChildren()
-            if(d.replyTo){const content=node('div');content.append(node('strong','',t('quoteReplyTo')+' '+d.replyTo.name),node('p','',d.replyTo.preview));refs.replyPreview.append(content,button('×','icon-button',()=>{delete d.replyTo;d.requestId='';drafts.set(active.wxId,d);updateControls();refs.composer.focus()}))}
+            if(d.replyTo){const content=node('div');content.append(inlineNode('strong','',t('quoteReplyTo')+' '+d.replyTo.name),inlineNode('p','',d.replyTo.preview));refs.replyPreview.append(content,button('×','icon-button',()=>{delete d.replyTo;d.requestId='';drafts.set(active.wxId,d);updateControls();refs.composer.focus()}))}
             refs.replyPreview.classList.toggle('hidden',!d.replyTo)
             refs.attachment.replaceChildren()
             if(uploading)refs.attachment.append(node('span','',t('uploadingMedia')))
@@ -73,11 +87,11 @@ window.MessageCenterUI = {
             refs.contacts.replaceChildren()
             for(const contact of contacts){
                 const b=button('',`conversation-item${active?.wxId===contact.wxId?' selected':''}`,()=>{
-                    active=contact;items=[];messageQuery='';before=0;moreMessages=false;refs.historySearch.value='';refs.composer.value=currentDraft().text;drawContacts();drawMessages();updateHeader();updateControls();loadHistory()
+                    resetHistoryContext();active=contact;items=[];messageQuery='';before=0;moreMessages=false;refs.historySearch.value='';refs.composer.value=currentDraft().text;drawContacts();drawMessages();updateHeader();updateControls();loadHistory()
                     closeMentions()
                 })
                 const avatar=avatarFor(contact.wxId,contact.name,contact.hasAvatar,`contact-avatar${isGroup(contact)?' group-avatar':''}`),body=node('div','conversation-copy')
-                body.append(node('strong','',contact.name),node('small','',ChatContent.summary(contact.lastBody)|| (contact.lastActivity?t('mediaType_'+(contact.lastType||'unknown')):`${t(isGroup(contact)?'groupChat':'contactChat')} · ${contact.nickname||contact.wxId}`)));b.append(avatar,body)
+                body.append(node('strong','',contact.name),inlineNode('small','',contact.lastType==='revoke_notice'?t('messageRevoked'):ChatContent.summary(contact.lastBody)|| (contact.lastActivity?t('mediaType_'+(contact.lastType||'unknown')):`${t(isGroup(contact)?'groupChat':'contactChat')} · ${contact.nickname||contact.wxId}`)));b.append(avatar,body)
                 const activity=node('div','conversation-activity')
                 if(contact.lastActivity){
                     const date=new Date(contact.lastActivity*1000),time=node('time','conversation-time')
@@ -156,72 +170,188 @@ window.MessageCenterUI = {
                 highlightMember()
             }catch(e){if(sequence===mentionSequence)refs.memberStatus.textContent=e.message}
         }
+        const resetHistoryContext=()=>{historyContext=false;locatingQuote=false;locateSequence++;historyGeneration++;highlightedMessage=null;clearTimeout(highlightTimer)}
+        const highlightMessage=id=>{
+            const target=refs.history.querySelector(`[data-message-id="${id}"]`)
+            if(!target)return false
+            refs.history.querySelectorAll('.quote-target').forEach(row=>row.classList.remove('quote-target'))
+            highlightedMessage=id;target.classList.add('quote-target');target.tabIndex=-1;target.focus({preventScroll:true})
+            const box=target.getBoundingClientRect(),container=refs.history.getBoundingClientRect()
+            refs.history.scrollTo({top:Math.max(0,refs.history.scrollTop+box.top-container.top-(refs.history.clientHeight-box.height)/2),behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'})
+            clearTimeout(highlightTimer);highlightTimer=setTimeout(()=>{highlightedMessage=null;refs.history?.querySelectorAll('.quote-target').forEach(row=>row.classList.remove('quote-target'))},4500)
+            return true
+        }
+        const returnToLatest=()=>{
+            resetHistoryContext();historySequence++;messageQuery='';refs.historySearch.value='';items=[];before=0;moreMessages=false;drawMessages();void loadHistory()
+        }
+        const locateQuote=async reference=>{
+            if(!active)return
+            const localId=Number.isSafeInteger(Number(reference.id))&&Number(reference.id)>0?Number(reference.id):null
+            const remoteId=/^[1-9][0-9]{0,19}$/.test(String(reference.remoteId||''))?String(reference.remoteId):''
+            if(!localId&&!remoteId){notify(t('quoteOriginalUnavailable'),true);return}
+            const existing=items.find(item=>(!localId||item.id===localId)&&(!remoteId||item.remoteId===remoteId))
+            if(existing&&!messageQuery){locateSequence++;locatingQuote=false;historyGeneration++;historySequence++;if(highlightMessage(existing.id))return}
+            const wxId=active.wxId,sequence=++locateSequence;locatingQuote=true;historyGeneration++;historySequence++
+            const params=new URLSearchParams({wxId});if(localId)params.set('id',String(localId));if(remoteId)params.set('remoteId',remoteId)
+            try{
+                const result=await request('GET',`/api/messages/locate?${params}`)
+                if(active?.wxId!==wxId||sequence!==locateSequence)return
+                if(!result.targetId||!result.messages?.some(m=>m.id===result.targetId))throw new Error(t('quoteOriginalUnavailable'))
+                if(result.serverTime)serverClockOffset=result.serverTime*1000-Date.now()
+                historyContext=true;messageQuery='';refs.historySearch.value='';items=result.messages;before=result.before||items[0]?.id||0;moreMessages=result.hasMore
+                drawMessages();highlightMessage(result.targetId)
+            }catch(error){if(active?.wxId===wxId&&sequence===locateSequence)notify(error.message,true)}finally{if(sequence===locateSequence)locatingQuote=false}
+        }
+        const fetchMediaBlob=(file,epoch)=>{
+            if(blobs.has(file.id))return Promise.resolve(blobs.get(file.id))
+            if(blobLoads.has(file.id))return blobLoads.get(file.id)
+            const promise=transfer(`/api/media/${file.id}`).then(blob=>{
+                if(epoch!==mediaEpoch)throw new Error('cancelled')
+                const cached={url:URL.createObjectURL(blob),mime:blob.type};blobs.set(file.id,cached);return cached
+            })
+            blobLoads.set(file.id,promise)
+            void promise.finally(()=>{if(blobLoads.get(file.id)===promise)blobLoads.delete(file.id)}).catch(()=>{})
+            return promise
+        }
+        const pumpMedia=()=>{
+            while(mediaWorkers<3&&mediaQueue.length){
+                const job=mediaQueue.shift(),{state,epoch}=job
+                if(epoch!==mediaEpoch)continue
+                if(!state.visible()){state.status='idle';state.render();continue}
+                mediaWorkers++;state.status='loading';state.render()
+                void(async()=>{
+                    try{
+                        const file=await request('GET',state.endpoint)
+                        if(epoch!==mediaEpoch)return
+                        const cached=await fetchMediaBlob(file,epoch)
+                        if(epoch!==mediaEpoch)return
+                        state.result={file,...cached};state.status='loaded';state.render()
+                        if(job.download&&state.visible())state.card.querySelector('.download-media')?.click()
+                    }catch(error){if(epoch===mediaEpoch){state.status='error';state.error=error.message;state.render()}}
+                    finally{mediaWorkers--;pumpMedia()}
+                })()
+            }
+        }
+        const queueMedia=(state,retry=false,download=false)=>{
+            if(['queued','loading','loaded'].includes(state.status)||state.status==='error'&&!retry)return
+            state.status='queued';state.error='';mediaQueue.push({state,epoch:mediaEpoch,download});state.render();pumpMedia()
+        }
+        const mediaCard=(key,endpoint,kind,name,wxId,transcript=false)=>{
+            if(mediaCards.has(key))return mediaCards.get(key)
+            let state=mediaStates.get(key)
+            if(!state){state={status:'idle',endpoint,kind,wxId,result:null};mediaStates.set(key,state)}
+            const card=node('div',transcript?'transcript-attachment':'chat-media-card'),image=['image','emoji'].includes(kind)
+            state.card=card
+            state.visible=()=>{
+                if(!root?.contains(card)||active?.wxId!==wxId||!isActive())return false
+                for(let parent=card.parentElement;parent&&parent!==root;parent=parent.parentElement)if(parent.tagName==='DETAILS'&&!parent.open)return false
+                return true
+            }
+            state.render=()=>{
+                // A finished request may fill the cache after switching chats,
+                // but cannot alter the newly selected conversation or toast.
+                if(state.card!==card||active?.wxId!==wxId||!root?.contains(card))return
+                if(card.mediaSignature===`${state.status}:${state.result?.url||''}:${state.error||''}`)return
+                drawCard()
+            }
+            const drawCard=()=>{
+                card.mediaSignature=`${state.status}:${state.result?.url||''}:${state.error||''}`
+                card.classList.toggle('media-loading',['queued','loading'].includes(state.status))
+                card.classList.toggle('media-error',state.status==='error');card.setAttribute('aria-busy',String(['queued','loading'].includes(state.status)))
+                card.replaceChildren()
+                if(state.status==='loaded'){
+                    const {file,url}=state.result
+                    if(image){
+                        const preview=node('img','chat-media-image');preview.src=url;preview.alt=file.name;preview.decoding='async';preview.tabIndex=0;preview.setAttribute('role','button');preview.setAttribute('aria-label',t('enlargeImage'));preview.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openImage(preview)}})
+                        preview.addEventListener('error',()=>{if(state.result?.url!==url)return;const cached=blobs.get(file.id);if(cached?.url===url){URL.revokeObjectURL(url);blobs.delete(file.id)}state.status='error';state.error=t('imagePreviewFailed');state.result=null;state.render()},{once:true})
+                        card.append(preview)
+                    }else if(['video','voice','audio'].includes(kind)){const player=node(kind==='video'?'video':'audio','chat-media-player');player.controls=true;player.preload='metadata';player.src=url;card.append(player)}
+                    else card.append(node('strong','',name||file.name||t('mediaType_'+kind)))
+                    const download=node('a','download-media',`${t('downloadFile')} · ${file.name}`);download.href=url;download.download=file.name;card.append(download)
+                    return
+                }
+                if(!image)card.append(node('strong','',transcript?`${t('mediaType_'+kind)} · ${name}`:t('mediaType_'+kind)),node('span','',transcript?'':name||''))
+                const busy=['queued','loading'].includes(state.status)
+                if(image&&busy){const placeholder=node('div','image-loading-placeholder');placeholder.append(node('span','image-placeholder-icon','▧'),node('span','',t('loadingImage')));placeholder.setAttribute('role','status');card.append(placeholder)}
+                else{
+                    const action=button(t(state.status==='error'?'retryMedia':kind==='file'?'downloadFile':'viewMedia'),'view-media',()=>queueMedia(state,true,transcript&&kind==='file'));action.disabled=busy
+                    if(state.status==='error'){const error=node('span','media-error-text',t(image?'imagePreviewFailed':'mediaLoadFailed'));error.title=state.error||'';card.append(error)}
+                    card.append(action)
+                }
+            }
+            card.activateMedia=()=>{state.render();if(image&&state.visible())queueMedia(state)}
+            drawCard();mediaCards.set(key,card);return card
+        }
+        const activateImages=()=>{if(!refs.history)return;for(const card of refs.history.querySelectorAll('.chat-media-card,.transcript-attachment'))card.activateMedia?.()}
+        const transcriptAttachmentCard=(message,attachment)=>mediaCard(`transcript:${active.wxId}:${message.id}:${attachment.path}:${attachment.id}`,`/api/media/transcript/${message.id}?path=${encodeURIComponent(attachment.path)}&id=${encodeURIComponent(attachment.id)}`,attachment.type,attachment.name,active.wxId,true)
+        const transcriptView=(message,record,depth=0)=>{
+            const key=`${active.wxId}:${message.id}:${record.path}`,details=node('details',`chat-transcript${depth?' nested-transcript':''}`)
+            details.dataset.transcriptPath=record.path;details.open=expandedTranscripts.has(key)
+            const summary=inlineNode('summary','',depth?(record.title||t('nestedTranscriptTitle')):t('transcriptTitle'));details.append(summary)
+            details.addEventListener('toggle',e=>{if(e.target!==details)return;if(details.open){expandedTranscripts.add(key);activateImages()}else expandedTranscripts.delete(key)})
+            if(record.content)details.append(inlineNode('div','chat-text transcript-content',record.content))
+            for(const attachment of record.attachments||[])details.append(transcriptAttachmentCard(message,attachment))
+            if(depth<6)for(const child of record.children||[])details.append(transcriptView(message,child,depth+1))
+            if(record.truncated||depth>=6&&record.children?.length)details.append(node('p','transcript-limit',t('transcriptTruncated')))
+            return details
+        }
         const drawMessages=()=>{
-            const signature=JSON.stringify({active:active?.wxId,moreMessages,items})
+            const signature=JSON.stringify({active:active?.wxId,moreMessages,historyContext,items})
             if(signature===lastDrawSignature)return
             lastDrawSignature=signature
             const scrollBottom=refs.history.scrollHeight-refs.history.scrollTop-refs.history.clientHeight<80
             const previousHeight=refs.history.scrollHeight
             refs.history.replaceChildren()
             if(!active){const empty=node('div','chat-welcome');empty.append(icon('message'),node('h3','',t('chooseConversation')),node('p','',t('chooseConversationHelp')));refs.history.append(empty);return}
+            if(historyContext)refs.history.append(button(t('backToLatestMessages'),'return-latest-messages',returnToLatest))
             if(moreMessages)refs.history.append(button(t('loadOlderMessages'),'load-more',()=>loadHistory(true)))
             if(!items.length)refs.history.append(node('div','inbox-empty',t('noMessages')))
             let day=''
             for(const message of items){
+                const articles=message.type==='link'&&Array.isArray(message.details?.articles)?message.details.articles.filter(article=>article&&typeof article==='object'):[]
+                const structuredLink=message.type==='link'&&Boolean(articles.length||message.details?.title||message.details?.description||articleURL(message.details?.url))
                 const date=message.timestamp?new Date(message.timestamp*1000):null
                 const formattedDay=date?date.toLocaleDateString(document.documentElement.lang):t('unknownDate')
                 if(formattedDay!==day){refs.history.append(node('div','chat-date',formattedDay));day=formattedDay}
                 const row=node('div',`chat-row ${message.direction}${isGroup(active)?' group-message':''}`),bubble=node('div','chat-bubble'),column=node('div','chat-message-column')
-                if(message.details?.replyTo){const ref=message.details.replyTo,quote=node('div','message-quote');quote.append(node('strong','',ref.name||ref.senderId||t('quoteMessage')),node('p','',ref.preview||''));bubble.append(quote)}
+                row.dataset.messageId=message.id;if(highlightedMessage===message.id)row.classList.add('quote-target')
+                if(message.details?.replyTo){const ref=message.details.replyTo,quote=button('','message-quote',()=>locateQuote(ref));quote.title=t('locateQuotedMessage');quote.setAttribute('aria-label',`${t('locateQuotedMessage')} · ${ref.name||ref.senderId||''} · ${ref.preview||''}`);quote.append(inlineNode('strong','',ref.name||ref.senderId||t('quoteMessage')),inlineNode('p','',ref.preview||''),node('span','quote-jump-hint',t('locateQuotedMessage')));bubble.append(quote)}
                 const senderName=message.senderDisplayName||ChatContent.summary(message.senderName||message.senderId)||active.name
                 const avatarId=message.senderId|| (message.direction==='incoming'&&!isGroup(active)?active.wxId:null)
                 row.append(avatarFor(avatarId,senderName,message.senderHasAvatar||avatarId===active.wxId&&active.hasAvatar,'message-avatar'))
                 if(message.direction!=='outgoing'&&isGroup(active))column.append(node('div','chat-sender',senderName))
-                if(message.revokeStatus==='revoked'||message.type==='revoke_notice'){bubble.classList.add('revoked-message');bubble.append(node('span','',t('messageRevoked')))}
+                const recallNotice=message.type==='revoke_notice'
+                if(recallNotice){row.classList.add('revoke-notice-row');bubble.append(node('p','revoke-notice-text',t('messageRevoked')))}
                 if(['image','emoji','video','audio','voice','file'].includes(message.type)){
-                    const saved=mediaCards.get(message.id)
-                    const card=saved||node('div','chat-media-card');if(!saved)card.append(node('strong','',t('mediaType_'+message.type)),node('span','',message.details?.title||''))
-                    const view=button(t(message.type==='file'?'downloadFile':'viewMedia'),'view-media',async()=>{
-                        view.disabled=true
-                        try{
-                            const file=await request('GET',`/api/media/message/${message.id}`)
-                            let cached=blobs.get(file.id)
-                            if(!cached){const blob=await transfer(`/api/media/${file.id}`);cached={url:URL.createObjectURL(blob),mime:blob.type};blobs.set(file.id,cached)}
-                            if(message.type==='image'||message.type==='emoji'){const image=node('img','chat-media-image');image.src=cached.url;image.alt=file.name;card.replaceChildren(image)}
-                            else if(['video','voice','audio'].includes(message.type)){const player=node(message.type==='video'?'video':'audio','chat-media-player');player.controls=true;player.preload='metadata';player.src=cached.url;card.replaceChildren(player)}
-                            const download=node('a','download-media',`${t('downloadFile')} · ${file.name}`);download.href=cached.url;download.download=file.name;card.append(download)
-                        }catch(e){notify(e.message,true)}finally{view.disabled=false}
-                    });if(!saved)card.append(view);mediaCards.set(message.id,card);bubble.append(card)
-                }else if(message.type==='link'&&message.details){const card=node('div','rich-message-card');card.append(node('strong','',message.details.title||t('mediaType_link')),node('p','',message.details.description||''));if(/^https?:\/\//i.test(message.details.url||'')){const link=node('a','preview-link',message.details.url);link.href=message.details.url;link.target='_blank';link.rel='noopener noreferrer';card.append(link)}bubble.append(card)}
+                    if(message.details?.attachmentUnavailable===true&&!message.attachmentId){
+                        const card=node('div','chat-media-card media-error');card.append(node('strong','',message.details?.title||t('mediaType_'+message.type)),node('span','media-error-text',t('telegramAttachmentUnavailable')));bubble.append(card)
+                    }else bubble.append(mediaCard(`message:${active.wxId}:${message.id}`,`/api/media/message/${message.id}`,message.type,message.details?.title||'',active.wxId))
+                }else if(message.type==='link'&&message.details){
+                    if(articles.length){const list=node('div','official-article-list');for(const article of articles)list.append(articleCard(article));bubble.append(list)}
+                    else{const card=node('div','rich-message-card');card.append(inlineNode('strong','',message.details.title||t('mediaType_link')),inlineNode('p','',message.details.description||''));const url=articleURL(message.details.url);if(url){const link=node('a','preview-link',t('readArticle'));link.href=url;link.target='_blank';link.rel='noopener noreferrer';card.append(link)}bubble.append(card)}
+                }
                 else if(['location','contact'].includes(message.type)){const card=node('div','rich-message-card');card.append(node('strong','',t('mediaType_'+message.type)),node('p','',message.details?.title||''),node('small','',message.type==='contact'?(message.details?.wxId||''):[message.details?.latitude,message.details?.longitude].filter(v=>Number.isFinite(v)).join(', ')));bubble.append(card)}
-                if(message.type!=='revoke_notice'&&(message.body||!['image','emoji','video','audio','voice','file','contact','location','link'].includes(message.type))){
+                if(message.transcript){
+                    bubble.append(transcriptView(message,message.transcript))
+                }else if(!structuredLink&&message.type!=='revoke_notice'&&(message.body||!['image','emoji','video','audio','voice','file','contact','location','link'].includes(message.type))){
                     const content=node('div','chat-text');content.append(ChatContent.render(document,message.body||message.details?.title||t('mediaMessage'),message.bodyFormat,TemplatePreview.richText))
                     if(ChatContent.isTranscript(message.body,message.type)){
-                        const details=node('details','chat-transcript'),summary=node('summary','',t('transcriptTitle'));details.append(summary,content)
-                        for(const attachment of message.transcriptAttachments||[]){
-                            const card=node('div','transcript-attachment');card.append(node('strong','',`${t(attachment.type==='image'?'mediaType_image':'mediaType_file')} · ${attachment.name}`))
-                            const action=button(t(attachment.type==='image'?'viewMedia':'downloadFile'),'view-media',async()=>{
-                                action.disabled=true
-                                try{
-                                    const file=await request('GET',`/api/media/transcript/${message.id}?path=${encodeURIComponent(attachment.path)}&id=${encodeURIComponent(attachment.id)}`)
-                                    let cached=blobs.get(file.id)
-                                    if(!cached){const blob=await transfer(`/api/media/${file.id}`);cached={url:URL.createObjectURL(blob),mime:blob.type};blobs.set(file.id,cached)}
-                                    if(attachment.type==='image'){const img=node('img','chat-media-image');img.src=cached.url;img.alt=file.name;card.append(img)}
-                                    const download=node('a','download-media',t('downloadFile')+' · '+file.name);download.href=cached.url;download.download=file.name;card.append(download)
-                                    if(attachment.type==='file')download.click()
-                                }catch(error){notify(error.message,true)}finally{action.disabled=false}
-                            });card.append(action);details.append(card)
-                        }
-                        bubble.append(details)
+                        const details=node('details','chat-transcript');details.append(node('summary','',t('transcriptTitle')),content)
+                        for(const attachment of message.transcriptAttachments||[])details.append(transcriptAttachmentCard(message,attachment))
+                        details.addEventListener('toggle',()=>{if(details.open)activateImages()});bubble.append(details)
                     }else bubble.append(content)
                 }
+                const fromTelegram=message.details?.origin==='telegram'
                 const meta=node('div',`chat-meta${message.status==='unknown'?' uncertain':''}`)
-                meta.textContent=[date?date.toLocaleTimeString(document.documentElement.lang,{hour:'2-digit',minute:'2-digit'}):'',message.direction==='outgoing'?t(`messageStatus_${message.status}`):'',message.telegramStatus&&message.telegramStatus!=='none'?t(`telegramStatus_${message.telegramStatus}`):''].filter(Boolean).join(' · ')
+                meta.textContent=[date?date.toLocaleTimeString(document.documentElement.lang,{hour:'2-digit',minute:'2-digit'}):'',fromTelegram?t('messageFromTelegram'):'',message.direction==='outgoing'?t(`messageStatus_${message.status}`):'',!fromTelegram&&message.telegramStatus&&message.telegramStatus!=='none'?t(`telegramStatus_${message.telegramStatus}`):''].filter(Boolean).join(' · ')
                 if(message.details?.error)meta.textContent+=' · '+t(message.details.error)
-                if(message.revokeStatus&&message.revokeStatus!=='none')meta.textContent+=' · '+t('revokeStatus_'+message.revokeStatus)
-                meta.classList.toggle('sync-alert',['pending','syncing','failed'].includes(message.telegramStatus))
-                if(message.telegramStatus==='synced'){meta.textContent=date?date.toLocaleTimeString(document.documentElement.lang,{hour:'2-digit',minute:'2-digit'}):'';const sent=node('span','receipt-confirmed');sent.append(icon('check'));sent.title=t('telegramStatus_synced');sent.setAttribute('aria-label',t('telegramStatus_synced'));meta.append(sent)}
+                if(message.revokeStatus&&!['none','revoked'].includes(message.revokeStatus))meta.textContent+=' · '+t('revokeStatus_'+message.revokeStatus)
+                meta.classList.toggle('sync-alert',fromTelegram?['failed','unknown'].includes(message.status):['pending','syncing','failed'].includes(message.telegramStatus))
+                if(message.telegramStatus==='synced'&&!fromTelegram){meta.textContent=date?date.toLocaleTimeString(document.documentElement.lang,{hour:'2-digit',minute:'2-digit'}):'';const sent=node('span','receipt-confirmed');sent.append(icon('check'));sent.title=t('telegramStatus_synced');sent.setAttribute('aria-label',t('telegramStatus_synced'));meta.append(sent)}
+                if(recallNotice){meta.textContent=date?date.toLocaleTimeString(document.documentElement.lang,{hour:'2-digit',minute:'2-digit'}):'';meta.className='chat-meta'}
+                else if(message.revokeStatus==='revoked')meta.append(node('span','recalled-badge',t('recalledLabel')))
                 column.append(bubble,meta);row.append(column);refs.history.append(row)
+                if(recallNotice)continue
                 const canQuote=message.type!=='revoke_notice'&&message.revokeStatus!=='revoked'&&/^\d{1,30}$/.test(message.remoteId||'')&&!/^0+$/.test(message.remoteId)&&['received','submitted'].includes(message.status)
                 const reply=button(t('quoteMessage'),'message-reply',()=>{
                     const d=currentDraft();if(d.mentionAll||d.mentionedMembers?.length){notify(t('quoteMentionsUnsupported'),true);return}
@@ -235,7 +365,7 @@ window.MessageCenterUI = {
                     });revoke.dataset.id=message.id;revoke.dataset.deadline=message.revokeDeadline;revoke.dataset.available=String(Boolean(message.canRevoke));revoke.disabled=!message.canRevoke||withdrawing.has(message.id);if(!message.canRevoke)revoke.title=t(message.revokeUnavailableReason||'revokeUnavailable');meta.append(revoke)
                 }
                 if(message.revokeStatus==='revoked'&&message.revokeTelegramStatus==='failed')meta.append(button(t('syncRevokeTelegram'),'retry-telegram',async()=>{try{await request('POST',`/api/messages/${message.id}/sync`,{confirm:true});await loadHistory()}catch(e){notify(e.message,true)}}))
-                if(message.revokeStatus!=='revoked'&&['pending','failed','unknown','unverified'].includes(message.telegramStatus)&&['received','submitted'].includes(message.status)){
+                if(!fromTelegram&&message.revokeStatus!=='revoked'&&['pending','failed','unknown','unverified'].includes(message.telegramStatus)&&['received','submitted'].includes(message.status)){
                     const retry=button(t('retryTelegramOnly'),'retry-telegram',async()=>{
                         const uncertain=['unknown','unverified'].includes(message.telegramStatus)
                         const confirmed=!uncertain||window.confirm(t('confirmTelegramRetry'));if(!confirmed)return
@@ -244,20 +374,20 @@ window.MessageCenterUI = {
                     });bubble.append(retry)
                 }
             }
-            updateRevokeButtons()
+            activateImages();updateRevokeButtons()
             if(scrollBottom)refs.history.scrollTop=refs.history.scrollHeight
             else if(previousHeight&&refs.history.scrollHeight>previousHeight)refs.history.scrollTop+=refs.history.scrollHeight-previousHeight
         }
         const loadHistory=async(older=false,poll=false)=>{
-            if(!active)return
-            const wxId=active.wxId,key=`${wxId}:${older?before:0}:${messageQuery}`
+            if(!active||poll&&(historyContext||locatingQuote))return
+            const generation=historyGeneration,wxId=active.wxId,key=`${wxId}:${generation}:${older?before:0}:${messageQuery}`
             if(pendingHistory.has(key))return
             pendingHistory.add(key)
             const sequence=++historySequence,previousMore=moreMessages
             try{
                 const result=await request('GET',`/api/messages?wxId=${encodeURIComponent(wxId)}&before=${older?before:0}&q=${encodeURIComponent(messageQuery)}`)
                 if(result.serverTime)serverClockOffset=result.serverTime*1000-Date.now()
-                if(active?.wxId!==wxId||sequence!==historySequence)return
+                if(active?.wxId!==wxId||sequence!==historySequence||generation!==historyGeneration)return
                 const merged=[...new Map([...items,...result.messages].map(m=>[m.id,m])).values()].sort((a,b)=>a.timestamp-b.timestamp||a.id-b.id)
                 // Retain loaded history while replacing the status of queued messages.
                 items=merged;before=items[0]?.id||0;moreMessages=older?result.hasMore:items.length>50?previousMore:result.hasMore;drawMessages()
@@ -273,7 +403,7 @@ window.MessageCenterUI = {
                 if(draft.attachment)results.push(await request('POST','/api/messages',{wxId,body:'',requestId:draft.requestId+'-file',attachmentId:draft.attachment.id}))
                 const result=results.at(-1)
                 if(draft.previewURL)URL.revokeObjectURL(draft.previewURL);drafts.set(wxId,{text:'',requestId:''})
-                if(active?.wxId===wxId){refs.composer.value='';items=[...new Map([...items,...results].map(m=>[m.id,m])).values()];drawMessages();await loadHistory()}
+                if(active?.wxId===wxId){refs.composer.value='';if(historyContext)returnToLatest();else{items=[...new Map([...items,...results].map(m=>[m.id,m])).values()];drawMessages();await loadHistory()}}
                 notify(t(result.status==='unknown'?'messageStatus_unknown':result.status==='submitted'?'messageStatus_submitted':'messageQueued'))
                 await loadContacts(false,true)
             }catch(error){notify(error.message,true)}finally{sending=false;updateControls()}
@@ -297,7 +427,7 @@ window.MessageCenterUI = {
             refs.total=node('div','directory-count');refs.contacts=node('div','conversation-list');refs.directoryNote=node('p','directory-note hidden',t('directoryPending'));directory.append(refs.total,refs.contacts,refs.directoryNote)
             const chat=node('section','inbox-chat'),header=node('div','chat-header'),title=node('div')
             refs.chatAvatar=node('div','chat-header-avatar');refs.chatName=node('h2');refs.chatSubtitle=node('p');title.append(refs.chatName,refs.chatSubtitle);header.append(refs.chatAvatar,title,node('span','live-chat-badge',t('liveUpdates')));chat.append(header)
-            const toolbar=node('div','chat-toolbar');refs.historySearch=node('input');refs.historySearch.type='search';refs.historySearch.maxLength=100;refs.historySearch.placeholder=t('searchMessages');refs.historySearch.setAttribute('aria-label',t('searchMessages'));refs.historySearch.value=messageQuery;refs.historySearch.addEventListener('input',()=>{messageQuery=refs.historySearch.value;clearTimeout(historyTimer);historyTimer=setTimeout(()=>{items=[];before=0;loadHistory()},250)});toolbar.append(icon('search'),refs.historySearch);chat.append(toolbar)
+            const toolbar=node('div','chat-toolbar');refs.historySearch=node('input');refs.historySearch.type='search';refs.historySearch.maxLength=100;refs.historySearch.placeholder=t('searchMessages');refs.historySearch.setAttribute('aria-label',t('searchMessages'));refs.historySearch.value=messageQuery;refs.historySearch.addEventListener('input',()=>{resetHistoryContext();messageQuery=refs.historySearch.value;clearTimeout(historyTimer);historyTimer=setTimeout(()=>{items=[];before=0;loadHistory()},250)});toolbar.append(icon('search'),refs.historySearch);chat.append(toolbar)
             refs.history=node('div','chat-history');refs.history.setAttribute('role','log');refs.history.setAttribute('aria-label',t('messageHistory'));chat.append(refs.history)
             const composer=node('form','chat-composer');composer.addEventListener('submit',e=>{e.preventDefault();submit()})
             const tools=node('div','composer-tools'),pick=node('input'),voicePick=node('input');pick.type=voicePick.type='file';pick.className=voicePick.className='hidden';voicePick.accept='audio/*,.webm';pick.addEventListener('change',()=>{upload(pick.files[0],'auto');pick.value=''});voicePick.addEventListener('change',()=>{upload(voicePick.files[0],'voice');voicePick.value=''})
@@ -334,7 +464,7 @@ window.MessageCenterUI = {
         setInterval(()=>{if(isActive()&&!document.hidden){refreshStatus();loadHistory(false,true);if(!loadingContacts&&offset<=60)loadContacts(false,true)}},5000)
         setInterval(()=>{if(isActive()&&!document.hidden)updateRevokeButtons()},1000)
         const hasDraft=()=>uploading||[...drafts.values()].some(draft=>draft.text.trim()||draft.attachment||draft.replyTo||draft.mentionAll||draft.mentionedMembers?.length)
-        const clear=()=>{viewerResize?.disconnect();for(const blob of blobs.values())URL.revokeObjectURL(blob.url);for(const d of drafts.values())if(d.previewURL)URL.revokeObjectURL(d.previewURL);for(const promise of avatars.values())promise.then(url=>{if(url)URL.revokeObjectURL(url)});avatars.clear();blobs.clear();mediaCards.clear();lastDrawSignature='';drafts.clear();contacts=[];items=[];active=null;status={available:false,wechatOnline:false};root?.replaceChildren();root=null}
+        const clear=()=>{mediaEpoch++;mediaQueue.length=0;mediaStates.clear();blobLoads.clear();resetHistoryContext();historySequence++;viewerResize?.disconnect();for(const blob of blobs.values())URL.revokeObjectURL(blob.url);for(const d of drafts.values())if(d.previewURL)URL.revokeObjectURL(d.previewURL);for(const promise of avatars.values())promise.then(url=>{if(url)URL.revokeObjectURL(url)});avatars.clear();blobs.clear();mediaCards.clear();expandedTranscripts.clear();lastDrawSignature='';drafts.clear();contacts=[];items=[];active=null;status={available:false,wechatOnline:false};root?.replaceChildren();root=null}
         return {show,hasDraft,clear}
     },
 }

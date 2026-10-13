@@ -68,7 +68,17 @@ export function createWebUIServer(options: Options) {
             return mcp(req,res)
         }
         if (!route?.startsWith('/api/')) {
-            const assets = {'/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/mention-compose.js':['mention-compose.js','text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/chat-content.js': ['chat-content.js','text/javascript'], '/mcp-settings.js':['mcp-settings.js','text/javascript'], '/ai-settings.js':['ai-settings.js','text/javascript'], '/template-preview.js': ['template-preview.js', 'text/javascript'], '/style.css': ['style.css', 'text/css']}
+            const emoji=route?.match(/^\/assets\/wechat-emoji\/(emoji-[a-f0-9]{16}\.(png|webp))$/)
+            if(emoji){
+                if(!['GET','HEAD'].includes(req.method))return respond(res,404,{error:'notFound'})
+                try{
+                    const content=fs.readFileSync(path.join(assetDirectory,'emoji',emoji[1]))
+                    res.writeHead(200,{'Content-Type':emoji[2]==='webp'?'image/webp':'image/png','Content-Length':content.length,'Cache-Control':'public, max-age=31536000, immutable'})
+                    res.end(req.method==='HEAD'?undefined:content)
+                }catch(error){respond(res,error?.code==='ENOENT'?404:500,{error:error?.code==='ENOENT'?'notFound':'assetsUnavailable'})}
+                return
+            }
+            const assets = {'/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/mention-compose.js':['mention-compose.js','text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/wechat-emoji.js':['wechat-emoji.js','text/javascript'], '/chat-content.js': ['chat-content.js','text/javascript'], '/mcp-settings.js':['mcp-settings.js','text/javascript'], '/ai-settings.js':['ai-settings.js','text/javascript'], '/template-preview.js': ['template-preview.js', 'text/javascript'], '/style.css': ['style.css', 'text/css']}
             if (!assets[route] || !['GET', 'HEAD'].includes(req.method)) return respond(res, 404, {error: 'notFound'})
             try {
                 const [name, mime] = assets[route]
@@ -178,6 +188,13 @@ export function createWebUIServer(options: Options) {
             }
             if (route === '/api/messages/status') {
                 return respond(res, 200, options.messages ? await options.messages.status() : {available: false, wechatOnline: false, directoryAvailable: false})
+            }
+            if(route==='/api/messages/locate'){
+                if(req.method!=='GET')return respond(res,405,{error:'invalidRequest'})
+                if(!options.messages?.locate)return respond(res,503,{error:'messagesUnavailable'})
+                const url=new URL(req.url,'http://localhost'),wxId=url.searchParams.get('wxId')||'',id=url.searchParams.get('id'),remoteId=url.searchParams.get('remoteId')
+                if(!wxId||wxId.length>256||(!id&&!remoteId)||(id!==null&&(!/^[1-9]\d*$/.test(id)||!Number.isSafeInteger(Number(id))))||(remoteId!==null&&(!/^[1-9]\d{0,19}$/.test(remoteId)||BigInt(remoteId)>18446744073709551615n)))return respond(res,400,{error:'invalidRequest'})
+                return respond(res,200,await options.messages.locate(wxId,id===null?undefined:Number(id),remoteId===null?undefined:remoteId))
             }
             if (route === '/api/contacts' || route === '/api/messages') {
                 if (!options.messages) return respond(res, 503, {error: 'messagesUnavailable'})

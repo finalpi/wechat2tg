@@ -81,9 +81,9 @@ Read the conversation first, then pass the original local message `id` as `reply
 
 Recall requires an eligible own message, complete native receipts and `confirm: true`. Ordinary messages have a 2-minute window; files have a 3-hour window. History exposes eligibility and deadlines, and the server rechecks at execution time.
 
-结果为 `unknown` 时不自动重试；确认风险后用新请求编号并传 `confirmUncertain: true`。微信确认撤回后，服务端保留对应 Telegram 消息正文和附件，仅附加已撤回标记；Telegram 更新失败可以在 WebUI 单独重试，不会重复向微信发撤回请求。WebUI 回执和微信回调按原微信消息编号共用持久化去重记录，避免重复撤回通知。只读 Token 禁止撤回。
+结果为 `unknown` 时不自动重试；确认风险后用新请求编号并传 `confirmUncertain: true`。微信确认撤回后，服务端保留对应 Telegram 消息正文和附件，发送一条引用原消息的撤回提示；Telegram 通知发送失败可以在 WebUI 单独重试，不会重复向微信发撤回请求。WebUI 回执和微信回调按原微信消息编号共用持久化去重记录，避免重复撤回通知。只读 Token 禁止撤回。
 
-An uncertain recall is never retried automatically. Explicitly confirmed retries require a new request ID and `confirmUncertain: true`. Successful WeChat recalls mark the matching Telegram message as revoked; Telegram updates can be retried independently. Read-only tokens cannot recall messages.
+An uncertain recall is never retried automatically. Explicitly confirmed retries require a new request ID and `confirmUncertain: true`. Successful WeChat recalls send a separate reply notice referencing the original Telegram message, preserving its content and attachments. Telegram notices can be retried independently. Read-only tokens cannot recall messages.
 
 ### 群聊艾特 / Group mentions
 

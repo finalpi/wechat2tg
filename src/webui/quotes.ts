@@ -1,5 +1,6 @@
 import {msgApi} from 'wx2tg-puppet/dist/api/MsgApi'
 import {ResponseMsg} from 'wx2tg-puppet/dist/core/Message'
+import {cleanMediaBody} from './message-body'
 const error=(code:string,status=400)=>Object.assign(new Error(code),{code,status})
 const escape=(s:any)=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;')
 export function quoteReference(row:any,wxId:string,selfId:string){
@@ -13,7 +14,7 @@ export function quoteReference(row:any,wxId:string,selfId:string){
     let content=String(source.Content||source.xml||row.body||'')
     if(content.startsWith(senderId+':\n'))content=content.slice(senderId.length+2)
     const details=row.details?JSON.parse(row.details):{}
-    let preview=String(row.body||details.title||'['+(row.type||'message')+']')
+    let preview=String(cleanMediaBody(row.type,row.body||'',row.source)||details.title||'['+(row.type||'message')+']')
     if(row.bodyFormat==='telegram_html')preview=preview.replace(/<[^>]*>/g,'')
     preview=preview.slice(0,500)
     const name=String(row.senderName||senderId).replace(/<[^>]*>/g,'').replace(/^👤\s*/,'').trim()
