@@ -2384,7 +2384,7 @@ ${this.i18n.t('help.instructions')}`))
     }
 
     private getAttachmentButtonText(attachment: ChatHistoryAttachment) {
-        return attachment.type === 'image' ? '下载图片' : '下载文件'
+        return attachment.type === 'image' ? '下载图片' : attachment.type === 'video' ? '下载视频' : '下载文件'
     }
 
     private async replyNestedChatHistory(ctx: Context, storedMessage: Message | undefined, replyToMessageId: number, nestedId: string) {
@@ -2451,6 +2451,29 @@ ${this.i18n.t('help.instructions')}`))
     public async downloadChatHistoryAttachment(attachment: ChatHistoryAttachment, storedMessage: Message): Promise<Buffer> {
         const wxConfig = await wxConfigService.get()
         const wxid = wxConfig?.wxid || ''
+        if (attachment.type === 'video') {
+            // Forwarded records have CDN credentials, not the ordinary video's
+            // 32-bit MsgId. Download the full video with the server's type-4 path.
+            const response = await toolsApi.CdnDownloadRecordItem({
+                Wxid: wxid,
+                CdnDataKey: attachment.payload.rawCdnDataKey,
+                CdnDataUrl: attachment.payload.cdnDataUrl,
+                DataId: attachment.payload.dataId || attachment.id,
+                DataSize: attachment.payload.dataLen || 0,
+                DataType: 4,
+                IsThumb: 0,
+                FullMd5: attachment.payload.fullMd5 || '',
+                Diagnostic: false
+            })
+            if (response.data?.Success !== true || Number(response.data?.Code) !== 0) {
+                throw new Error('聊天记录视频下载失败')
+            }
+            const buffer = this.extractImageDownloadBuffer(response.data)
+            if (buffer.length < 12 || buffer.subarray(4, 8).toString() !== 'ftyp') {
+                throw new Error('聊天记录视频返回格式不是 MP4')
+            }
+            return buffer
+        }
         if (attachment.type === 'image') {
             const recordItemAesKey = attachment.payload.rawFileAesKey || attachment.payload.fileAesKey
             this.logger.info(`下载聊天记录图片附件(recorditem): dataSize=${attachment.payload.dataLen}`)
@@ -2723,8 +2746,8 @@ ${this.i18n.t('help.instructions')}`))
     private async sendChatHistoryAttachment(chatId: number, fileBuffer: Buffer, attachment: ChatHistoryAttachment, replyToMessageId: number) {
         await this.sendWechatRetryFile(chatId, fileBuffer, {
             fileName: attachment.fileName,
-            fileType: attachment.type === 'image' ? 'photo' : 'document',
-            caption: attachment.type === 'image' ? undefined : attachment.title,
+            fileType: attachment.type === 'image' ? 'photo' : attachment.type === 'video' ? 'video' : 'document',
+            caption: attachment.type === 'image' ? undefined : attachment.title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
             replyToMessageId,
             useDedicatedUploadNotice: true
         })
