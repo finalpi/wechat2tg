@@ -6,6 +6,18 @@ export interface NestedChatHistory {
   content: string
   nestedRecords: NestedChatHistory[]
   attachments: ChatHistoryAttachment[]
+  entries?: ChatHistoryEntry[]
+}
+
+export interface ChatHistoryEntry {
+  id: string
+  sender: string
+  time: string
+  type: string
+  text: string
+  attachmentId?: string
+  nestedId?: string
+  url?: string
 }
 
 export interface ChatHistoryAttachment {
@@ -21,6 +33,7 @@ export interface ChatHistoryResult {
   content: string
   nestedRecords: NestedChatHistory[]
   attachments: ChatHistoryAttachment[]
+  entries?: ChatHistoryEntry[]
 }
 
 // 处理聊天记录

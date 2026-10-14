@@ -1,5 +1,5 @@
 import {Message as WxMessage} from 'wx2tg-puppet'
-import {getChatHistory,ChatHistoryResult,ChatHistoryAttachment,NestedChatHistory} from '../util/handleMsg'
+import {getChatHistory,ChatHistoryResult,ChatHistoryAttachment,NestedChatHistory,ChatHistoryEntry} from '../util/handleMsg'
 
 const MAX_SOURCE_BYTES=1024*1024,MAX_XML_BYTES=512*1024,MAX_DEPTH=6,MAX_ITEMS=300
 interface ParsedTranscript extends ChatHistoryResult {title:string;truncatedPaths:string[]}
@@ -44,6 +44,22 @@ export async function parseTranscript(source:string):Promise<ParsedTranscript> {
     }
     const records=bound(app?.recorditem,0,'root')
     const result=await getChatHistory(records,{type:()=>WxMessage.Type.ChatHistroy,text:()=>msg.Content},WxMessage.Type,parseXML)
+    // Keep the original item order independently of Telegram's flattened text.
+    // Only semantic display fields and stable references cross the WebUI API.
+    const annotate=(source:any,target:ChatHistoryResult|NestedChatHistory,path:string)=>{
+        const raw=source?.recordinfo?.datalist?.dataitem,items=Array.isArray(raw)?raw:raw?[raw]:[]
+        target.entries=items.map((item,index)=>{
+            const id=String(index+1),code=Number(item.datatype)
+            const type=({1:'text',2:'image',3:'voice',4:'video',5:'link',8:'file',17:'record',19:'mini_app'})[code]||'unknown'
+            const entry:ChatHistoryEntry={id,sender:String(item.sourcename??'').slice(0,200),time:String(item.sourcetime??'').slice(0,60),type,text:String(code===1?item.datadesc??'':code===5||code===19?item.datatitle??'':'')}
+            if(target.attachments.some(a=>a.id===id))entry.attachmentId=id
+            const nestedId=path==='root'?id:`${path}.${id}`,child=target.nestedRecords.find(r=>r.id===nestedId)
+            if(child){entry.nestedId=nestedId;annotate(item.recordxml,child,nestedId)}
+            if(code===5){try{const url=new URL(String(item.link||''));if(['http:','https:'].includes(url.protocol)&&!url.username&&!url.password)entry.url=url.href}catch{}}
+            return entry
+        })
+    }
+    annotate(records,result,'root')
     return {...result,title:String(app?.title||''),truncatedPaths:[...truncatedPaths]}
 }
 
@@ -60,11 +76,16 @@ export function publicTranscriptAttachments(result:ChatHistoryResult) {
     return transcriptAttachments(result).map(({path,attachment})=>publicAttachment(path,attachment))
 }
 export function publicTranscript(result:ChatHistoryResult&{title?:string;truncatedPaths?:string[]}){
-    const truncated=new Set(result.truncatedPaths||[]),budget={remaining:100000}
+    const truncated=new Set(result.truncatedPaths||[]),budget={remaining:100000},entryBudget={remaining:100000}
     const plain=(html:string)=>String(html||'').replace(/<\/?blockquote(?:\s+expandable)?\s*>/gi,'').replace(/<a\b[^>]*>([\s\S]*?)<\/a>/gi,'$1').replace(/&(lt|gt|amp|quot|apos);/g,(_,entity)=>({lt:'<',gt:'>',amp:'&',quot:'"',apos:"'"}[entity]))
     const visit=(record:ChatHistoryResult,title:string,path:string):any=>{
         const text=plain(record.content),content=text.slice(0,Math.max(0,budget.remaining));budget.remaining-=content.length
-        return {path,title:String(title||'').slice(0,200),content,truncated:truncated.has(path)||content.length<text.length,attachments:record.attachments.map(a=>publicAttachment(path,a)),children:(record.nestedRecords||[]).map(child=>visit(child,child.title,child.id))}
+        let entryTruncated=false
+        const entries=record.entries?.map(entry=>{
+            const text=entry.text.slice(0,Math.max(0,entryBudget.remaining));entryBudget.remaining-=text.length;entryTruncated ||= text.length<entry.text.length
+            return {id:entry.id,sender:entry.sender,time:entry.time,type:entry.type,text,...(entry.attachmentId?{attachmentId:entry.attachmentId}:{}),...(entry.nestedId?{nestedId:entry.nestedId}:{}),...(entry.url?{url:entry.url}:{})}
+        })
+        return {path,title:String(title||'').slice(0,200),content,...(entries?{entries}:{}),truncated:truncated.has(path)||content.length<text.length||entryTruncated,attachments:record.attachments.map(a=>publicAttachment(path,a)),children:(record.nestedRecords||[]).map(child=>visit(child,child.title,child.id))}
     }
     return visit(result,result.title||'','root')
 }

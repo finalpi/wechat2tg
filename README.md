@@ -33,6 +33,8 @@ The Chinese / English WebUI starts with the application. Docker Compose exposes 
 
 ### Conversations and attachments
 
+- Messages opens directly into a full-height conversation workspace. Shared histories show each sender, time, body and attachment in the original order, with nested records expanded in place. Long records reveal 20 entries at a time while preserving expansion and scroll state.
+
 - Search contacts and groups by nickname, remark, or WeChat ID. The All / Recent view sorts by latest message activity and shows real avatars with initial-letter fallback.
 - In a group, type `@` or select **@ Group members** to search and select up to 20 members, or mention everyone. Native mentions apply to text; WeChat enforces owner/admin permissions for @Everyone. Mentioned text mirrors to Telegram.
 - Use arrow keys and Enter to select a member; the mention is inserted at the cursor and the picker closes automatically. Editing a selected mention removes its member ID binding.

@@ -79,6 +79,7 @@ export function createWebUIServer(options: Options) {
                 return
             }
             const assets = {'/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/mention-compose.js':['mention-compose.js','text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/wechat-emoji.js':['wechat-emoji.js','text/javascript'], '/chat-content.js': ['chat-content.js','text/javascript'], '/mcp-settings.js':['mcp-settings.js','text/javascript'], '/ai-settings.js':['ai-settings.js','text/javascript'], '/template-preview.js': ['template-preview.js', 'text/javascript'], '/style.css': ['style.css', 'text/css']}
+            assets['/message-center.css']=['message-center.css','text/css']
             if (!assets[route] || !['GET', 'HEAD'].includes(req.method)) return respond(res, 404, {error: 'notFound'})
             try {
                 const [name, mime] = assets[route]

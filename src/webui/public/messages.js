@@ -10,6 +10,7 @@ window.MessageCenterUI = {
         const mediaStates=new Map(),blobLoads=new Map(),mediaQueue=[]
         let mediaWorkers=0,mediaEpoch=0
         const expandedTranscripts=new Set()
+        const transcriptCounts=new Map()
         const avatars=new Map()
         const avatarQueue=[]
         let avatarWorkers=0
@@ -284,14 +285,48 @@ window.MessageCenterUI = {
         }
         const activateImages=()=>{if(!refs.history)return;for(const card of refs.history.querySelectorAll('.chat-media-card,.transcript-attachment'))card.activateMedia?.()}
         const transcriptAttachmentCard=(message,attachment)=>mediaCard(`transcript:${active.wxId}:${message.id}:${attachment.path}:${attachment.id}`,`/api/media/transcript/${message.id}?path=${encodeURIComponent(attachment.path)}&id=${encodeURIComponent(attachment.id)}`,attachment.type,attachment.name,active.wxId,true)
+        const recordDay=time=>String(time||'').match(/^\d{4}[-/]\d{2}[-/]\d{2}/)?.[0]||''
+        const recordDate=day=>{
+            if(!day)return ''
+            const date=new Date(day.replaceAll('/','-')+'T00:00:00')
+            return Number.isNaN(date.getTime())?day:date.toLocaleDateString(document.documentElement.lang,{month:'short',day:'numeric',...(date.getFullYear()!==new Date().getFullYear()?{year:'numeric'}:{})})
+        }
         const transcriptView=(message,record,depth=0)=>{
             const key=`${active.wxId}:${message.id}:${record.path}`,details=node('details',`chat-transcript${depth?' nested-transcript':''}`)
             details.dataset.transcriptPath=record.path;details.open=expandedTranscripts.has(key)
-            const summary=inlineNode('summary','',depth?(record.title||t('nestedTranscriptTitle')):t('transcriptTitle'));details.append(summary)
+            const entries=Array.isArray(record.entries)?record.entries:null,summary=node('summary','transcript-summary'),mark=node('span','transcript-mark'),heading=node('span','transcript-heading'),arrow=node('span','transcript-chevron')
+            mark.append(icon('message'));arrow.append(icon('arrow'));heading.append(inlineNode('strong','transcript-title',record.title||t('transcriptHeading')))
+            const dates=entries?[...new Set(entries.map(e=>recordDay(e.time)).filter(Boolean))].sort():[]
+            const meta=entries?[t('transcriptCount',{count:entries.length}),dates.length?recordDate(dates[0])+(dates.length>1?' – '+recordDate(dates.at(-1)):''):''].filter(Boolean).join(' · '):''
+            if(meta)heading.append(node('small','transcript-meta',meta))
+            const preview=entries?entries.slice(0,2).map(e=>`${e.sender?e.sender+': ':''}${e.text||record.children?.find(c=>c.path===e.nestedId)?.title||record.attachments?.find(a=>a.id===e.attachmentId)?.name||t('mediaType_'+e.type)}`).join('\n'):ChatContent.summary(record.content||'')
+            if(preview)heading.append(inlineNode('span','transcript-preview',preview.slice(0,180)))
+            const action=node('span','transcript-toggle-label',t(details.open?'transcriptCollapse':'transcriptExpand'));heading.append(action);summary.append(mark,heading,arrow);details.append(summary)
             details.addEventListener('toggle',e=>{if(e.target!==details)return;if(details.open){expandedTranscripts.add(key);activateImages()}else expandedTranscripts.delete(key)})
-            if(record.content)details.append(inlineNode('div','chat-text transcript-content',record.content))
-            for(const attachment of record.attachments||[])details.append(transcriptAttachmentCard(message,attachment))
-            if(depth<6)for(const child of record.children||[])details.append(transcriptView(message,child,depth+1))
+            details.addEventListener('toggle',e=>{if(e.target===details)action.textContent=t(details.open?'transcriptCollapse':'transcriptExpand')})
+            if(entries){
+                const list=node('ol','transcript-messages'),count=transcriptCounts.get(key)||20;let day=''
+                for(const entry of entries.slice(0,count)){
+                    const currentDay=recordDay(entry.time)
+                    if(currentDay&&currentDay!==day){const divider=node('li','transcript-day',recordDate(currentDay));divider.setAttribute('role','presentation');list.append(divider);day=currentDay}
+                    const row=node('li','transcript-entry'),avatar=node('span','transcript-avatar',Array.from(entry.sender||'?')[0]),body=node('div','transcript-entry-body'),meta=node('div','transcript-entry-meta')
+                    row.dataset.recordEntryId=entry.id;avatar.setAttribute('aria-hidden','true');meta.append(inlineNode('strong','',entry.sender||t('transcriptUnknownSender')))
+                    if(entry.time){const time=node('time','',String(entry.time).match(/[T ](\d{2}:\d{2})/)?.[1]||String(entry.time));time.title=entry.time;meta.append(time)}
+                    body.append(meta)
+                    const attachment=record.attachments?.find(a=>a.id===entry.attachmentId),child=record.children?.find(c=>c.path===entry.nestedId)
+                    if(child&&depth<6)body.append(transcriptView(message,child,depth+1))
+                    else if(attachment)body.append(transcriptAttachmentCard(message,attachment))
+                    else if(entry.type!=='text'&&!entry.text)body.append(node('span','transcript-message-kind',t(entry.type==='record'?'transcriptHeading':'mediaType_'+entry.type)))
+                    if(entry.text){const text=inlineNode('div','chat-text transcript-entry-text',entry.text);const url=articleURL(entry.url);if(url){const link=node('a','transcript-entry-link');link.href=url;link.target='_blank';link.rel='noopener noreferrer';link.append(text);body.append(link)}else body.append(text)}
+                    row.append(avatar,body);list.append(row)
+                }
+                details.append(list)
+                if(entries.length>count){const more=button(t('transcriptMore',{count:Math.min(20,entries.length-count)}),'load-record-more',()=>{const scroll=refs.history.scrollTop;transcriptCounts.set(key,count+20);expandedTranscripts.add(key);const next=transcriptView(message,record,depth);details.replaceWith(next);refs.history.scrollTop=scroll;activateImages()});details.append(more)}
+            }else{
+                if(record.content)details.append(inlineNode('div','chat-text transcript-content',record.content))
+                for(const attachment of record.attachments||[])details.append(transcriptAttachmentCard(message,attachment))
+                if(depth<6)for(const child of record.children||[])details.append(transcriptView(message,child,depth+1))
+            }
             if(record.truncated||depth>=6&&record.children?.length)details.append(node('p','transcript-limit',t('transcriptTruncated')))
             return details
         }
@@ -464,7 +499,7 @@ window.MessageCenterUI = {
         setInterval(()=>{if(isActive()&&!document.hidden){refreshStatus();loadHistory(false,true);if(!loadingContacts&&offset<=60)loadContacts(false,true)}},5000)
         setInterval(()=>{if(isActive()&&!document.hidden)updateRevokeButtons()},1000)
         const hasDraft=()=>uploading||[...drafts.values()].some(draft=>draft.text.trim()||draft.attachment||draft.replyTo||draft.mentionAll||draft.mentionedMembers?.length)
-        const clear=()=>{mediaEpoch++;mediaQueue.length=0;mediaStates.clear();blobLoads.clear();resetHistoryContext();historySequence++;viewerResize?.disconnect();for(const blob of blobs.values())URL.revokeObjectURL(blob.url);for(const d of drafts.values())if(d.previewURL)URL.revokeObjectURL(d.previewURL);for(const promise of avatars.values())promise.then(url=>{if(url)URL.revokeObjectURL(url)});avatars.clear();blobs.clear();mediaCards.clear();expandedTranscripts.clear();lastDrawSignature='';drafts.clear();contacts=[];items=[];active=null;status={available:false,wechatOnline:false};root?.replaceChildren();root=null}
+        const clear=()=>{mediaEpoch++;mediaQueue.length=0;mediaStates.clear();blobLoads.clear();resetHistoryContext();historySequence++;viewerResize?.disconnect();for(const blob of blobs.values())URL.revokeObjectURL(blob.url);for(const d of drafts.values())if(d.previewURL)URL.revokeObjectURL(d.previewURL);for(const promise of avatars.values())promise.then(url=>{if(url)URL.revokeObjectURL(url)});avatars.clear();blobs.clear();mediaCards.clear();expandedTranscripts.clear();transcriptCounts.clear();lastDrawSignature='';drafts.clear();contacts=[];items=[];active=null;status={available:false,wechatOnline:false};root?.replaceChildren();root=null}
         return {show,hasDraft,clear}
     },
 }
