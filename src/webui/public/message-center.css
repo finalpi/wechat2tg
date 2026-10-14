@@ -1,10 +1,11 @@
 /* A full-height conversation workspace, scoped to the Messages page. */
 .main-shell.messaging{height:100vh;height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .messaging .topbar{flex-shrink:0}
-.messaging main{flex:1;min-height:0;padding:14px 18px 18px;display:flex;flex-direction:column}
+.messaging main{flex:1;width:100%;max-width:none;min-width:0;min-height:0;margin:0;padding:14px 18px 18px;display:flex;flex-direction:column}
 .messaging .page-heading{display:none}
-.messaging .message-center{flex:1;height:100%;min-height:0;max-height:none;border-radius:14px}
+.messaging .message-center{flex:1;width:100%;min-width:0;height:100%;min-height:0;max-height:none;border-radius:14px}
 .messaging .inbox-chat,.messaging .conversation-list,.messaging .chat-history{min-height:0}
+.messaging .conversation-list,.messaging .chat-history{scrollbar-gutter:stable}
 .messaging .chat-header{padding:15px 22px}
 .messaging .chat-composer{flex-shrink:0}
 
