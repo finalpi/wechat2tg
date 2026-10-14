@@ -2747,7 +2747,7 @@ ${this.i18n.t('help.instructions')}`))
         await this.sendWechatRetryFile(chatId, fileBuffer, {
             fileName: attachment.fileName,
             fileType: attachment.type === 'image' ? 'photo' : attachment.type === 'video' ? 'video' : 'document',
-            caption: attachment.type === 'image' ? undefined : attachment.title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+            caption: attachment.type === 'image' ? undefined : String(attachment.title ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
             replyToMessageId,
             useDedicatedUploadNotice: true
         })
