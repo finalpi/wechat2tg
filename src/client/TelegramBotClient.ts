@@ -2522,63 +2522,43 @@ ${this.i18n.t('help.instructions')}`))
     private async downloadRecordItemFileAttachment(attachment: ChatHistoryAttachment, wxid: string): Promise<Buffer> {
         const recordItemKey = attachment.payload.rawCdnDataKey || attachment.payload.cdnDataKey
         this.logger.info(`下载聊天记录文件附件(recorditem): dataSize=${attachment.payload.dataLen}`)
-        const response = await toolsApi.CdnDownloadRecordItem({
-            CdnDataKey: recordItemKey,
-            CdnDataUrl: attachment.payload.cdnDataUrl,
-            DataId: attachment.id,
-            DataSize: attachment.payload.dataLen || 0,
-            FullMd5: attachment.payload.fullMd5 || '',
-            IsThumb: 0,
-            Wxid: wxid
-        })
-        this.logger.info(`下载聊天记录文件附件(recorditem): message=${response.data?.Message}, success=${response.data?.Success}, dataKeys=${Object.keys(response.data?.Data || {}).join(',')}`)
-        if (response.data?.Message === '成功' || response.data?.Success === true) {
-            return this.extractImageDownloadBuffer(response.data)
+        try {
+            const response = await toolsApi.CdnDownloadRecordItem({
+                CdnDataKey: recordItemKey,
+                CdnDataUrl: attachment.payload.cdnDataUrl,
+                DataId: attachment.id,
+                DataSize: attachment.payload.dataLen || 0,
+                DataType: 8,
+                FullMd5: attachment.payload.fullMd5 || '',
+                IsThumb: 0,
+                Wxid: wxid
+            })
+            if (response.data?.Success === true && Number(response.data?.Code) === 0) {
+                const buffer = this.extractImageDownloadBuffer(response.data)
+                const expected = Number(attachment.payload.dataLen || 0)
+                if (expected > 0 && buffer.length !== expected) throw new Error('聊天记录文件长度不一致')
+                return buffer
+            }
+        } catch {
+            // Do not log Axios request details: they contain CDN credentials.
         }
+        this.logger.warn('聊天记录文件 CDN 下载未完成，尝试文件分片下载')
         return await this.downloadFileAttachmentChunks(attachment, wxid)
     }
 
     private async downloadFileAttachmentChunks(attachment: ChatHistoryAttachment, wxid: string): Promise<Buffer> {
         const totalSize = Number(attachment.payload.dataLen || 0)
-        if (totalSize <= 0) {
-            throw new Error(`Invalid attachment size for ${attachment.type}`)
+        if (!Number.isSafeInteger(totalSize) || totalSize <= 0 || totalSize > 0xffffffff || !attachment.payload.attachId) {
+            throw new Error('Invalid file attachment size or identifier')
         }
-
-        const firstChunk = FileChunkHelper.getChunk(totalSize, 0)
-        if (!firstChunk) {
-            throw new Error('Invalid first file chunk')
-        }
-
-        this.logger.info(`下载聊天记录文件附件: size=${totalSize}, userName=${attachment.payload.userName}, attachId=${String(attachment.payload.attachId).slice(0, 80)}`)
-        const firstResp = await this.retryDownload(() => toolsApi.DownloadFile({
+        this.logger.info(`下载聊天记录文件附件: size=${totalSize}`)
+        return await toolsApi.DownloadFileBuffer({
             AppID: attachment.payload.appId,
             AttachId: attachment.payload.attachId,
             DataLen: totalSize,
-            Section: firstChunk,
             UserName: attachment.payload.userName,
             Wxid: wxid
-        }))
-
-        const firstChunkData = this.extractChunkDownloadBuffer(firstResp.data)
-        const downloadedLength = firstChunkData.length || firstChunkData.buffer.length
-        const chunks = FileChunkHelper.calculateChunks(totalSize, downloadedLength)
-        let completeBuffer = firstChunkData.buffer
-
-        for (let i = 1; i < chunks.length; i++) {
-            const chunk = chunks[i]
-            const response = await this.retryDownload(() => toolsApi.DownloadFile({
-                AppID: attachment.payload.appId,
-                AttachId: attachment.payload.attachId,
-                DataLen: totalSize,
-                Section: chunk,
-                UserName: attachment.payload.userName,
-                Wxid: wxid,
-            }))
-            const chunkData = this.extractChunkDownloadBuffer(response.data)
-            completeBuffer = Buffer.concat([completeBuffer, chunkData.buffer])
-        }
-
-        return completeBuffer
+        })
     }
 
     private async downloadImageAttachmentChunks(attachment: ChatHistoryAttachment, wxid: string, storedMessage: Message): Promise<Buffer> {
