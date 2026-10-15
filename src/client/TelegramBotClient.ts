@@ -2743,8 +2743,8 @@ ${this.i18n.t('help.instructions')}`))
         }
 
         await this.editWechatMediaRetryMessage(ctx, '正在重试下载...')
-        const wxMessage = this.buildWechatRetryMessage(storedMessage)
         try {
+            const wxMessage = this.buildWechatRetryMessage(storedMessage)
             const filebox = await wxMessage.toFileBox()
             if (!filebox) {
                 throw new Error('下载结果为空')
@@ -2753,7 +2753,7 @@ ${this.i18n.t('help.instructions')}`))
             const fileBuffer = await filebox.toBuffer()
             await this.sendWechatRetryFile(ctx.chat.id, fileBuffer, {
                 fileName: filebox.name,
-                fileType: this.wxTypeToTgFileType(storedMessage.source_type),
+                fileType: this.wxTypeToTgFileType(wxMessage.type()),
                 caption: storedMessage.sender,
                 replyToMessageId
             })
@@ -2765,11 +2765,25 @@ ${this.i18n.t('help.instructions')}`))
     }
 
     private buildWechatRetryMessage(storedMessage: Message): WxMessage {
+        // Stored SDK types are names (e.g. "file"), while Message expects the
+        // native MsgType. Numeric types from older saved messages remain valid.
+        const mediaTypes: Record<string, number> = {
+            [WxMessage.Type.File]: 49,
+            [WxMessage.Type.Image]: 3,
+            [WxMessage.Type.Video]: 43,
+            [WxMessage.Type.Voice]: 34,
+            [WxMessage.Type.Emoji]: 47
+        }
+        const storedType = String(storedMessage.source_type || '').trim()
+        const nativeType = /^\d+$/.test(storedType) ? Number(storedType) : mediaTypes[storedType]
+        if (!Number.isSafeInteger(nativeType) || nativeType <= 0) {
+            throw new Error('原始消息类型不支持下载')
+        }
         return new WxMessage({
             MsgId: Number(storedMessage.msgId || 0),
             FromUserName: storedMessage.wxSenderId || storedMessage.toWxid || '',
             ToUserName: storedMessage.toWxid || '',
-            MsgType: Number(storedMessage.source_type),
+            MsgType: nativeType,
             Content: storedMessage.source_text,
             CreateTime: storedMessage.createTime || Math.floor(Date.now() / 1000),
             NewMsgId: storedMessage.wxMsgId,

@@ -9,6 +9,7 @@ import {Emoji, Voice, WeVideo} from 'wx2tg-puppet'
 import {WebMessageStore} from './message-store'
 
 export const MAX_MEDIA_BYTES = 50 * 1024 * 1024
+export const MAX_DOWNLOAD_BYTES = 256 * 1024 * 1024
 export type MediaKind = 'image' | 'emoji' | 'video' | 'audio' | 'voice' | 'file'
 export interface MediaFile {id: string; name: string; kind: MediaKind; mime: string; size: number; digest: string; path?: string}
 const error = (code: string, status = 400) => Object.assign(new Error(code), {code, status})
@@ -26,7 +27,7 @@ const ffmpeg = (args: string[]) => new Promise<void>((resolve,reject)=>execFile(
 
 export class WebMediaStore {
     constructor(private store: WebMessageStore, private directory = 'storage/webui-media') {fs.mkdirSync(directory,{recursive:true})}
-    async save(name: string, preference: string, stream: AsyncIterable<Uint8Array>): Promise<MediaFile> {
+    async save(name: string, preference: string, stream: AsyncIterable<Uint8Array>, source: 'upload' | 'download' = 'upload'): Promise<MediaFile> {
         if (!['auto','voice'].includes(preference)) throw error('invalidMediaType')
         name=safeFileName(name)
         const id=randomUUID(), file=path.resolve(this.directory,id), hash=createHash('sha256')
@@ -35,7 +36,7 @@ export class WebMediaStore {
         try {
             for await(const value of stream) {
                 const chunk=Buffer.from(value);size+=chunk.length
-                if(size>MAX_MEDIA_BYTES) throw error('mediaTooLarge',413)
+                if(size>(source==='download'?MAX_DOWNLOAD_BYTES:MAX_MEDIA_BYTES)) throw error(source==='download'?'downloadTooLarge':'mediaTooLarge',413)
                 if(head.length<32)head=Buffer.concat([head,chunk]).subarray(0,32)
                 hash.update(chunk)
                 let written=0

@@ -14,7 +14,7 @@ import {config} from '../config'
 import BaseMessage from '../base/BaseMessage'
 import {loadAvatar} from './avatars'
 import {parseTranscript,transcriptAttachments,publicTranscriptAttachments,publicTranscript} from './transcripts'
-import {MAX_MEDIA_BYTES} from './media'
+import {MAX_DOWNLOAD_BYTES} from './media'
 import {createGroupMentionService,normalizeMentions,Mentions} from './mentions'
 import {quoteReference,quoteXML,sendQuote} from './quotes'
 import {revokePayload,revokeWechat,revokePolicy} from './revoke'
@@ -130,7 +130,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         const box=await msg.toFileBox()
         if(!box)throw new MessageCenterError('mediaMissing',404)
         const buffer=await box.toBuffer()
-        const result=await media.save(box.name||'attachment.bin','auto',(async function*(){yield buffer})())
+        const result=await media.save(box.name||'attachment.bin','auto',(async function*(){yield buffer})(),'download')
         await store.run('UPDATE inbox SET attachmentId=? WHERE id=?',[result.id,messageId])
         return media.get(result.id)
     }
@@ -143,13 +143,13 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         const records=await parseTranscript(row.source)
         const found=transcriptAttachments(records).find(a=>a.path===nestedPath&&a.attachment.id===attachmentId)?.attachment
         if(!found)throw new MessageCenterError('mediaMissing',404)
-        if(Number(found.payload?.dataLen)>MAX_MEDIA_BYTES)throw new MessageCenterError('mediaTooLarge',413)
+        if(Number(found.payload?.dataLen)>MAX_DOWNLOAD_BYTES)throw new MessageCenterError('downloadTooLarge',413)
         const bot=AbstractClient.getSpyClient('botClient') as any
         if(!bot?.downloadChatHistoryAttachment)throw new MessageCenterError('messagesUnavailable',503)
         const source=JSON.parse(row.source)
         const stored=Object.assign(new Message(),{wxMsgId:row.remoteId,msgId:String(source.MsgId||''),toWxid:source.ToUserName,wxSenderId:row.senderId,source_text:source.Content})
         const buffer=await bot.downloadChatHistoryAttachment(found,stored)
-        const file=await media.save(found.fileName||'attachment.bin','auto',(async function*(){yield buffer})())
+        const file=await media.save(found.fileName||'attachment.bin','auto',(async function*(){yield buffer})(),'download')
         await store.run('INSERT OR REPLACE INTO transcript_media(cacheKey,attachmentId) VALUES(?,?)',[cacheKey,file.id])
         return media.get(file.id)
     }

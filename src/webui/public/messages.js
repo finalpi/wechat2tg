@@ -276,7 +276,7 @@ window.MessageCenterUI = {
                 if(image&&busy){const placeholder=node('div','image-loading-placeholder');placeholder.append(node('span','image-placeholder-icon','▧'),node('span','',t('loadingImage')));placeholder.setAttribute('role','status');card.append(placeholder)}
                 else{
                     const action=button(t(state.status==='error'?'retryMedia':kind==='file'?'downloadFile':'viewMedia'),'view-media',()=>queueMedia(state,true,transcript&&kind==='file'));action.disabled=busy
-                    if(state.status==='error'){const error=node('span','media-error-text',t(image?'imagePreviewFailed':'mediaLoadFailed'));error.title=state.error||'';card.append(error)}
+                    if(state.status==='error'){const error=node('span','media-error-text',state.error||t(image?'imagePreviewFailed':'mediaLoadFailed'));card.append(error)}
                     card.append(action)
                 }
             }
