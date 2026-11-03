@@ -9,6 +9,19 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 > [!WARNING]
 > According to feedback, the Windows protocol has the risk of account suspension, please do not use this protocol
 
+## Branch and Server Versions
+
+Choose the branch that matches your `wx2tg-server` major version:
+
+| Repository branch | Required server version |
+| --- | --- |
+| `v6` | `wx2tg-server v6` |
+| `v7` | `wx2tg-server v7` |
+
+Do not mix the `v6` branch with server v7, or the `v7` branch with server v6. When switching branches, also switch the server to the matching major version.
+
+Both branches were initialized from the same `wx2tg-v3` codebase. Creating these branches does not itself implement or verify compatibility; version-specific changes will be maintained on their respective branches.
+
 ## Main Features
 
 1. Receive messages from WeChat personal chats, group chats, official accounts, and enterprise WeChat
@@ -56,6 +69,9 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 5. After logging in, you may be logged out once after one day; after logging in again, the connection will remain stable.
 
 ## Installation & Deployment
+
+> [!IMPORTANT]
+> The deployment examples below and the repository’s `docker-compose.yml` still reference an older server image. Before deploying, replace the `wx2tg-server` image with your actual v6 image on branch `v6`, or your actual v7 image on branch `v7`. The old image tag is not the server version required by these branches.
 
 First, copy `.env.example` to `.env` and configure the environment variables.
 
