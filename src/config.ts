@@ -39,6 +39,7 @@ export const config = {
     AUTO_CREATE_GROUPS: process.env.AUTO_CREATE_GROUPS !== 'false',
     OFFICIAL_ACCOUNT_TOPICS_ENABLED: process.env.OFFICIAL_ACCOUNT_TOPICS_ENABLED?.trim().toLowerCase() === 'true',
     OFFICIAL_ACCOUNT_FORUM_CHAT_ID: process.env.OFFICIAL_ACCOUNT_FORUM_CHAT_ID || '',
+    WECHAT_CUSTOM_EMOJI_ENABLED: process.env.WECHAT_CUSTOM_EMOJI_ENABLED?.trim().toLowerCase() === 'true',
     WX_PROXY_HOST: process.env.WX_PROXY_HOST?.toString() || '',
     WX_PROXY_USERNAME: process.env.WX_PROXY_USERNAME?.toString() || '',
     WX_PROXY_PASSWORD: process.env.WX_PROXY_PASSWORD?.toString() || '',

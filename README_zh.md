@@ -36,6 +36,10 @@ amd64、arm64 独立构建，分别发布 Docker 版本加 `-amd64` / `-arm64` �
 
 可选设置 `OFFICIAL_ACCOUNT_TOPICS_ENABLED=true`，重启后首次处理公众号时自动创建一个私有论坛群，每个公众号对应独立 Topic。所有公众号的新消息切换到各自 Topic，支持从 Topic 回复；General 区域不会发送到微信。默认关闭，旧群和绑定保留，关闭后恢复旧路由。详见 [公众号 Topic 模式](docs/official-account-topics.md)。
 
+## 微信行内自定义表情（待发布）
+
+设置 `WECHAT_CUSTOM_EMOJI_ENABLED=true` 后，将 `[微笑]`、`[捂脸]` 等原生表情替换为 [WeChatPack](https://t.me/addemoji/WeChatPack) 行内自定义表情，保留富文本和普通 Unicode Emoji。需机器人创建者 Premium 或 Fragment 资格。默认关闭，开启后优先于旧图片链接；未知标记保留原文。详见 [映射、覆盖范围与限制](docs/wechat-custom-emoji.md)。现有 `v6.0.13-dev.2` 镜像尚不包含此功能。
+
 ## WebUI 配置与消息管理
 
 WebUI 随应用启动，支持中文 / English。Docker Compose **默认对外开放 TCP 17863**，访问 `http://<服务器地址>:17863/`；本地开发默认仅监听本机，地址为 `http://127.0.0.1:17863/`。WebUI 和 MCP 共用这个端口，MCP 路径为 `/mcp`。

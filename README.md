@@ -36,6 +36,10 @@ Native amd64 and arm64 builds publish independently as the Docker version plus `
 
 Optionally set `OFFICIAL_ACCOUNT_TOPICS_ENABLED=true` and restart. The first official-account message automatically provisions one private forum, with a separate topic per account. Future messages use those topics and replies route back to the matching account; General never routes to WeChat. The feature defaults off, retains old groups/bindings, and restores old routing when disabled. See [official-account topics (Chinese)](docs/official-account-topics.md).
 
+## Inline WeChat custom emoji (next development release)
+
+`WECHAT_CUSTOM_EMOJI_ENABLED=true` renders native `[微笑]` / `[Facepalm]` tokens inline using [WeChatPack](https://t.me/addemoji/WeChatPack), preserving rich text and ordinary Unicode emoji. Requires a Premium bot owner or eligible Fragment username. Defaults off and takes priority over legacy image links; unknown tokens remain unchanged. See [mapping, coverage and limits (Chinese)](docs/wechat-custom-emoji.md). This feature is not included in the existing `v6.0.13-dev.2` image.
+
 ## WebUI and message center
 
 The Chinese / English WebUI starts with the application. Docker Compose exposes **TCP 17863 on all host interfaces by default**: open `http://<server-address>:17863/`. Local development listens on loopback by default: `http://127.0.0.1:17863/`. WebUI and MCP share the same port; the MCP path is `/mcp`.

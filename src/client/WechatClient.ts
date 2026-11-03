@@ -646,7 +646,7 @@ export class WeChatClient extends AbstractClient {
                 messageParam.content = messageParam.content.replaceAll(/</g, '&lt;')
                     .replaceAll(/>/g, '&gt;')
                 // emoji 转换
-                messageParam.content = emojiConverter.convert(messageParam.content, configuration)
+                messageParam.content = emojiConverter.convert(messageParam.content, configuration, config.WECHAT_CUSTOM_EMOJI_ENABLED)
                 if (await msg.mentionSelf()) {
                     // 如果自己被 @ 了
                     const tgId = configuration.chatId
@@ -688,7 +688,7 @@ export class WeChatClient extends AbstractClient {
                     messageParam.content = messageParam.content.replaceAll(/</g, '&lt;')
                         .replaceAll(/>/g, '&gt;')
                     // emoji 转换
-                    messageParam.content = emojiConverter.convert(messageParam.content, configuration)
+                    messageParam.content = emojiConverter.convert(messageParam.content, configuration, config.WECHAT_CUSTOM_EMOJI_ENABLED)
 
                     if (isSameTelegramDestination(referMsg, bindGroup.chatId, bindGroup.threadId)) {
                         messageParam.param = {
@@ -748,7 +748,7 @@ export class WeChatClient extends AbstractClient {
                     this.logger.error(`引用消息处理失败: msgId=${msg.newMsgId}, error=${e.message}`, e)
                     // 降级处理：发送不带引用的普通消息
                     messageParam.content = messageParam.content.replaceAll(/</g, '&lt;').replaceAll(/>/g, '&gt;')
-                    messageParam.content = emojiConverter.convert(messageParam.content, configuration)
+                    messageParam.content = emojiConverter.convert(messageParam.content, configuration, config.WECHAT_CUSTOM_EMOJI_ENABLED)
                     WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 }
                 break

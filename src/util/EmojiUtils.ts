@@ -224,8 +224,6 @@ export class EmojiConverter {
         '[Twirl]': `<a href="${EmojiConverter.emojiUrl}%E8%BD%AC%E5%9C%88.webp">[Twirl]</a>`
     }
 
-    // TODO: tg://addstickers?set=WeChatPack use this one when Premium user
-    public emojiMappingPremium: Record<string, string> = {}
     public weChatToTelegramEmojiMapping: Record<string, string> = {
         '[微笑]': '🙂',
         '[撇嘴]': '😟',
@@ -446,7 +444,10 @@ export class EmojiConverter {
         '[Twirl]': '🌀',
     }
 
-    convert(text: string, config: Configuration) {
+    convert(text: string, config: Configuration, customEmojiEnabled = false) {
+        // Keep original aliases until the final HTML send boundary (including captions
+        // and quotes); legacy image links would otherwise destroy their identity.
+        if (customEmojiEnabled) return text
         let convertedText = text
         let mapping = this.emojiMapping
         if (config.emojiPicture) {

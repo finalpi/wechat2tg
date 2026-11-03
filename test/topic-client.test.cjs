@@ -4,15 +4,25 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
+const ts = require('typescript')
+const {HTMLParser} = require('telegram/extensions/html')
 const {Markup} = require('telegraf')
 const topics = require('../dist/util/TelegramTopicUtils')
 const textUtils = require('../dist/util/TelegramTextUtils')
 const chatId = -10012345
 const noop = () => undefined
 
+const compiled = new Map()
 function load(file, dependencies) {
+  if (!compiled.has(file)) {
+    const source = fs.readFileSync(path.join(__dirname, '../src', file.replace(/\.js$/, '.ts')), 'utf8')
+    compiled.set(file, ts.transpileModule(source, {
+      compilerOptions: {target: ts.ScriptTarget.ES2021, module: ts.ModuleKind.CommonJS, esModuleInterop: true, experimentalDecorators: true},
+      fileName: file.replace(/\.js$/, '.ts'),
+    }).outputText)
+  }
   const exports = {}
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../dist', file), 'utf8'), {
+  vm.runInNewContext(compiled.get(file), {
     exports, console, Buffer, process: {env: {WEBUI_ENABLED: 'false'}},
     setTimeout: () => 1, clearTimeout: noop,
     require: name => dependencies[name] || {},
@@ -20,7 +30,15 @@ function load(file, dependencies) {
   return exports
 }
 
-function fixture() {
+const emojiData = load('util/WechatCustomEmojiData.js', {})
+const emojiHtml = load('util/WechatCustomEmoji.js', {
+  './WechatCustomEmojiData': emojiData,
+  htmlparser2: require('htmlparser2'),
+  entities: require('entities'),
+})
+const [emojiAlias, customEmoji] = Object.entries(emojiData.WECHAT_CUSTOM_EMOJI)[0]
+
+function fixture(customEmojiEnabled = false) {
   const sent = [], saved = [], forwarded = [], lookups = [], commands = new Map(), actions = [], handlers = []
   let enabled = true
   const binding = {chatId, threadId: 77, wxId: 'gh_news', type: 0, isReceive: true, isForwardOthers: true}
@@ -55,13 +73,18 @@ function fixture() {
     getMessages: async () => [],
   }}
   const spy = name => name === 'wxClient' ? wxClient : name === 'botClient' ? {client: {telegram}} : name === 'botMTPClient' ? mt : {hasLogin: false}
+  const history = {nestedRecords: [], attachments: []}
+  const formatting = {transformIdentityBodyStr: (_mode, _sender, content) => content}
   const deps = {
     telegraf: {Markup}, 'telegraf/filters': {message: name => name},
     '../base/BaseClient': {AbstractClient: class {static getSpyClient(name) {return spy(name)}}},
     '../util/TelegramTopicUtils': topics, '../util/TelegramTextUtils': textUtils,
-    '../config': {config: {AI_API_KEY: 'synthetic', AI_API_URL: 'https://invalid.example', AI_CONTEXT_LIMIT: 2}},
+    '../config': {config: {AI_API_KEY: 'synthetic', AI_API_URL: 'https://invalid.example', AI_CONTEXT_LIMIT: 2, WECHAT_CUSTOM_EMOJI_ENABLED: customEmojiEnabled}},
+    '../util/WechatCustomEmoji': emojiHtml,
+    '../util/handleMsg': {getChatHistory: async () => history},
+    'wx2tg-puppet': {Message: {Type: {}, getXmlToJson: () => ({msg: {appmsg: {recorditem: 'xml'}}})}},
     '../entity/Message': {Message: class {}},
-    '../util/FormatUtils': {FormatUtils: {transformIdentityBodyStr: (_mode, _sender, content) => content}},
+    '../util/FormatUtils': {FormatUtils: formatting},
     '../service/TelegramCommandHelper': {setCommand: noop, setSimpleCommandHandler: noop},
     '../service/AiReplyService': {AiReplyService: {getInstance: () => ({generateReplySuggestion: async () => 'suggestion', formatSuggestionsForTelegram: x => x})}},
     '../util/FileUtils': {FileUtils: {downloadBufferWithProxy: async () => Buffer.from('data')}},
@@ -101,7 +124,7 @@ function fixture() {
     context.match = {input: data}
     await match.fn(context)
   }
-  return {client, bind, messages, sent, saved, forwarded, lookups, commands, ctx, action, mt, Filename,
+  return {client, bind, messages, sent, saved, forwarded, lookups, commands, ctx, action, mt, Filename, history, formatting,
     text: context => handlers.find(h => h.kind === 'text').fn(context),
     disable: () => {enabled = false},
   }
@@ -224,6 +247,122 @@ test('large MTProto uploads specify topic root and topMsgId, with original reply
   assert.equal(uploads[0].args[1].replyTo, 77)
   assert.equal(uploads[1].args[1].replyTo, 23)
   assert(uploads.every(s => s.args[1].topMsgId === 77))
+})
+
+for (const enabled of [false, true]) {
+  test(`direct HTML bypasses preserve routing and custom emoji (enabled=${enabled})`, async () => {
+    const f = fixture(enabled)
+    const caption = `<b>${emojiAlias} 🙂</b>`
+    const expected = emojiHtml.renderWechatCustomEmojiHtml(caption, enabled)
+    const msg = {...outbound(1), sender: caption, content: caption, param: {reply_id: 23}}
+    await f.client.sendLargeDocumentViaTelegramApi(msg)
+    await f.client.sendBusinessCardMessage(msg, {})
+    for (const fileType of ['photo', 'video', 'voice', 'animation', 'document']) {
+      await f.client.sendWechatRetryFile(chatId, Buffer.from('data'), {
+        fileName: 'retry', fileType, caption, threadId: 77, replyToMessageId: 23,
+      })
+    }
+    const uploads = f.sent.filter(s => s.method === 'mtFile' || ['sendPhoto', 'sendVideo', 'sendVoice', 'sendAnimation', 'sendDocument'].includes(s.method))
+    assert.equal(uploads.length, 7)
+    for (const send of uploads) {
+      const params = send.args.at(-1)
+      assert.equal(params.caption, expected)
+      assert.equal(send.method === 'mtFile' ? params.topMsgId : params.message_thread_id, 77)
+      if (send.method === 'mtFile') assert.equal(params.replyTo, 23)
+      else if (send !== uploads[1]) assert.equal(params.reply_parameters.message_id, 23)
+    }
+    assert.equal(msg.sender, caption)
+    assert.equal(msg.content, caption)
+    const attachment = {fileName: 'record.txt', title: `${emojiAlias} <literal>`, type: 'file'}
+    await f.client.sendChatHistoryAttachment(chatId, Buffer.from('data'), attachment, 23, 77)
+    const sentAttachment = f.sent.at(-1).args[2]
+    assert.equal(sentAttachment.caption, emojiHtml.renderWechatCustomEmojiHtml(`${emojiAlias} &lt;literal&gt;`, enabled))
+    assert.equal(sentAttachment.reply_parameters.message_id, 23)
+    assert.equal(sentAttachment.message_thread_id, 77)
+  })
+}
+
+test('formatted custom-emoji HTML splits at 4096 in order with first ID and raw archive preserved', async () => {
+  const f = fixture(true)
+  f.formatting.transformIdentityBodyStr = (_mode, sender, body) => `<b>${sender}</b>\n<blockquote>${body}</blockquote>`
+  const message = {...outbound(), sender: 'sender', content: 'x'.repeat(4088) + emojiAlias + '&amp;' + 'y'.repeat(5000), source_text: 'raw WeChat XML',
+    param: {reply_id: 23, inline_keyboard: [{text: 'open', callback_data: 'open'}]}}
+  const original = {...message}
+  const formatted = f.formatting.transformIdentityBodyStr(null, message.sender, message.content)
+  const expected = emojiHtml.splitTelegramHtml(emojiHtml.renderWechatCustomEmojiHtml(formatted, true), 4096)
+  const sent = []
+  let active = false
+  const base = load('message/MessageSender.js', {
+    '../client/TelegramBotClient': {TelegramBotClient: {getSpyClient: () => ({client: {telegram: {sendChatAction: async () => undefined}}})}},
+  })
+  const {TelegramBotApiMessageSender} = load('message/TelegramBotApiMessageSender.js', {
+    './MessageSender': base,
+    '../config': {config: {WECHAT_CUSTOM_EMOJI_ENABLED: true}},
+    '../util/WechatCustomEmoji': emojiHtml,
+    'abort-controller': AbortController,
+  })
+  f.client.messageSender = new TelegramBotApiMessageSender({telegram: {sendMessage: async (id, html, options) => {
+    assert.equal(active, false)
+    active = true
+    await flush()
+    sent.push({id, html, options})
+    active = false
+    return {message_id: 800 + sent.length}
+  }}})
+  assert.equal(await f.client.sendTextMsgSynchronously(message), true)
+  assert.deepEqual(sent.map(s => s.html), Array.from(expected))
+  assert(sent.length > 1)
+  for (const part of sent) {
+    assert.equal(part.id, chatId)
+    assert.equal(part.options.message_thread_id, 77)
+    assert.equal(part.options.reply_parameters.message_id, 23)
+    assert.equal(part.options.reply_markup.inline_keyboard[0][0].callback_data, 'open')
+    assert(HTMLParser.parse(part.html)[0].length <= 4096)
+    assert.equal((part.html.match(/<blockquote>/g) || []).length, (part.html.match(/<\/blockquote>/g) || []).length)
+    assert.equal((part.html.match(/<tg-emoji /g) || []).length, (part.html.match(/<\/tg-emoji>/g) || []).length)
+  }
+  assert(sent.some(s => s.html.includes(`emoji-id="${customEmoji.id}"`)))
+  assert.equal(f.saved.at(-1).tgBotMsgId, 801)
+  assert.equal(f.saved.at(-1).content, original.content)
+  assert.equal(f.saved.at(-1).source_text, original.source_text)
+  assert.equal(message.content, original.content)
+  assert.equal(message.sender, original.sender)
+})
+
+test('short disabled sends stay byte-identical and failed later chunks stop with uncertain delivery', async () => {
+  const f = fixture()
+  const short = {...outbound(), content: `<b>${emojiAlias} 🙂</b>`}
+  await f.client.sendTextMsgSynchronously(short)
+  assert.equal(f.sent.find(s => s.method === 'text').args[1], short.content)
+  let calls = 0
+  f.client.messageSender.sendText = async () => {
+    calls++
+    if (calls === 2) throw new Error('Request timeout')
+    return {message_id: 801}
+  }
+  // The existing queue-level error policy remains responsible for timeout classification.
+  f.client.dealException = async () => undefined
+  assert.equal(await f.client.sendTextMsgSynchronously({...outbound(), content: `<b>${'x'.repeat(10000)}</b>`}), false)
+  assert.equal(calls, 2)
+  assert.equal(f.client.currentDeliveryUncertain, true)
+})
+
+test('nested history renders and splits HTML without losing callback topic, reply or keyboard', async () => {
+  const f = fixture(true)
+  const stored = {...outbound(), source_text: 'xml', tgBotMsgId: 12, wxMsgId: 'wx-1'}
+  const content = `<b>${emojiAlias}${'z'.repeat(5000)}</b>`
+  f.history.nestedRecords.push({id: 'nested', content, nestedRecords: [{id: 'child', title: 'child'}], attachments: []})
+  await f.client.replyNestedChatHistory(f.ctx(), stored, 23, 'nested')
+  const replies = f.sent.filter(s => s.method === 'reply')
+  assert.equal(replies.length, 2)
+  assert(replies[0].args[1].includes(`emoji-id="${customEmoji.id}"`))
+  for (const reply of replies) {
+    assert.equal(reply.args[2].message_thread_id, 77)
+    assert.equal(reply.args[2].reply_parameters.message_id, 23)
+    assert.equal(reply.args[2].reply_markup.inline_keyboard[0][0].callback_data, 'chrw:wx-1:child')
+    assert(HTMLParser.parse(reply.args[1])[0].length <= 4096)
+  }
+  assert.equal(f.history.nestedRecords[0].content, content)
 })
 
 test('upload recovery rejects an identical filename in another topic', async () => {

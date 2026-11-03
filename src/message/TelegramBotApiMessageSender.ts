@@ -1,5 +1,7 @@
 import {MessageSender, Option, SendResult} from './MessageSender'
 import {Telegraf, TelegramError} from 'telegraf'
+import {config} from '../config'
+import {renderWechatCustomEmojiHtml} from '../util/WechatCustomEmoji'
 import AbortController from 'abort-controller'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -28,7 +30,8 @@ export class TelegramBotApiMessageSender extends MessageSender {
             this.sender.telegram.editMessageMedia(chatId, parseInt(msgId + ''), undefined, {
                 type: file.fileType,
                 media: {source: file.buff, filename: file.filename},
-                caption: file.caption,
+                caption: file.caption !== undefined && option?.parse_mode === 'HTML'
+                    ? renderWechatCustomEmojiHtml(file.caption, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024) : file.caption,
                 parse_mode: option?.parse_mode
             }, {}).then(() => {
                 resolve({message_id: msgId})
@@ -39,7 +42,7 @@ export class TelegramBotApiMessageSender extends MessageSender {
     editAudio(chatId: string | number, msgId: string | number, caption: string): Promise<SendResult> {
         this.sendAction(Number(chatId), 'typing')
         return new Promise<SendResult>((resolve, reject) => {
-            this.sender.telegram.editMessageCaption(chatId, parseInt(msgId + ''), undefined, caption, {parse_mode: 'HTML'})
+            this.sender.telegram.editMessageCaption(chatId, parseInt(msgId + ''), undefined, renderWechatCustomEmojiHtml(caption, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024), {parse_mode: 'HTML'})
                 .then(() => {
                 resolve({message_id: msgId})
             }).catch(e => reject(e))
@@ -85,7 +88,8 @@ export class TelegramBotApiMessageSender extends MessageSender {
                 reject(new Error(`Request timeout after ${timeoutMs}ms`))
             }, timeoutMs)
 
-            this.sender.telegram.sendMessage(chatId, text, sendParam).then(res => {
+            this.sender.telegram.sendMessage(chatId, option?.parse_mode === 'HTML'
+                ? renderWechatCustomEmojiHtml(text, config.WECHAT_CUSTOM_EMOJI_ENABLED) : text, sendParam).then(res => {
                 clearTimeout(timeoutId)
                 resolve({message_id: res.message_id})
             }).catch(e => {
@@ -141,7 +145,8 @@ export class TelegramBotApiMessageSender extends MessageSender {
             this.sender.telegram.callApi(`send${file.fileType.charAt(0).toUpperCase()}${file.fileType.slice(1)}` as any, {
                 chat_id: chatId,
                 [mediaParamName]: {source: file.buff, filename: file.filename},
-                caption: file.caption,
+                caption: file.caption !== undefined && option?.parse_mode === 'HTML'
+                    ? renderWechatCustomEmojiHtml(file.caption, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024) : file.caption,
                 ...sendParam
             }, {signal: abortController.signal}).then((msg: { message_id: number }) => {
                 settled = true

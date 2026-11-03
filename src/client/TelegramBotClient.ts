@@ -16,6 +16,7 @@ import {SimpleMessageSendQueueHelper} from '../util/SimpleMessageSendQueueHelper
 import {MessageSender, Option} from '../message/MessageSender'
 import {SenderFactory} from '../message/SenderFactory'
 import {FormatUtils} from '../util/FormatUtils'
+import {renderWechatCustomEmojiHtml, splitTelegramHtml} from '../util/WechatCustomEmoji'
 import {Message} from '../entity/Message'
 import {MessageService} from '../service/MessageService'
 import {FileUtils, LargeFileDownloadProgress} from '../util/FileUtils'
@@ -409,7 +410,7 @@ export class TelegramBotClient extends AbstractClient {
                 totalSize,
                 async () => botMTPClient.client.sendFile(inputPeer, {
                     file: new CustomFile(fileName, totalSize, '', message.file.file),
-                    caption: message.sender,
+                    caption: renderWechatCustomEmojiHtml(message.sender, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024),
                     replyTo: message.param?.reply_id ?? message.threadId,
                     topMsgId: message.threadId,
                     parseMode: 'html',
@@ -546,7 +547,7 @@ export class TelegramBotClient extends AbstractClient {
             const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
             const msgRes = await this.sendTelegramRequest(message.chatId, () => client.telegram.sendPhoto(message.chatId, {source: message.file.file, filename: message.file.fileName}, {
                 message_thread_id: message.threadId,
-                caption: message.content,
+                caption: renderWechatCustomEmojiHtml(message.content, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024),
                 parse_mode: 'HTML',
                 reply_markup: {
                     inline_keyboard: [[Markup.button.callback('添加为好友', `af:${message.businessCardId}`)]]
@@ -2284,9 +2285,12 @@ ${this.i18n.t('help.instructions')}`))
         if ((!message.threadId || message.threadId === 1) && await this.bindGroupService.isManagedForum(targetChatId)) return false
 
         // 在这里进行格式化，如果格式化失败会抛出异常，在保存数据库之前被捕获
-        let sendTextFormat: string
+        let chunks: string[]
         try {
-            sendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content)
+            const formatted = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content)
+            const html = renderWechatCustomEmojiHtml(formatted, config.WECHAT_CUSTOM_EMOJI_ENABLED)
+            chunks = splitTelegramHtml(html, 4096)
+            if (!chunks.length) chunks = [html]
         } catch (error) {
             this.logger.error(`文本消息格式化失败: ${message.id}`, error)
             return false
@@ -2318,72 +2322,19 @@ ${this.i18n.t('help.instructions')}`))
         let newMsg
         let success = true
 
-        // 长文本分片发送 - 确保每片都按顺序发送
-        const html = message.content
-        const maxLength = 9000
-        if (html.length > maxLength) {
-            const result = []
-            let currentLength = 0
-            let currentChunk = ''
-
-            const regex = /(<[^>]+>|[^<]+)/g
-            let match
-
-            while ((match = regex.exec(html)) !== null) {
-                const chunk = match[0]
-                const chunkLength = chunk.length
-
-                if (currentLength + chunkLength > maxLength) {
-                    result.push(currentChunk)
-                    currentChunk = ''
-                    currentLength = 0
-                }
-
-                currentChunk += chunk
-                currentLength += chunkLength
-            }
-
-            if (currentChunk) {
-                result.push(currentChunk)
-            }
-
-            // 按顺序发送每个分片，等待每个完成后再发送下一个
-            this.logger.info(`长文本消息将分 ${result.length} 片发送: ${message.id}`)
-            for (let i = 0; i < result.length; i++) {
-                let sendMsg = result[i]
-                if (result.length > 1) {
-                    sendMsg = `<b>part${i + 1}:</b>` + sendMsg
-                }
-                let partSendTextFormat: string
-                try {
-                    partSendTextFormat = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, sendMsg)
-                } catch (error) {
-                    this.logger.error(`文本消息分片格式化失败 (分片${i + 1}): ${message.id}`, error)
-                    success = false
-                    break
-                }
-                try {
-                    if (i == 0) {
-                        newMsg = await this.sendTelegramRequest(targetChatId, () => this.messageSender.sendText(targetChatId, partSendTextFormat, option))
-                    } else {
-                        await this.sendTelegramRequest(targetChatId, () => this.messageSender.sendText(targetChatId, partSendTextFormat, option))
-                    }
-                } catch (e) {
-                    this.logger.error(`文本消息发送失败 (分片${i + 1}/${result.length}): ${message.id} - ${e.message}`)
-                    this.logger.error(`错误详情: chatId=${targetChatId}, wxMsgId=${message.id}, error_code=${e.response?.error_code}, error=${e.code || e.name}`)
-                    await this.dealException(e, message)
-                    success = false
-                    break // 如果某个分片失败，停止发送后续分片
-                }
-            }
-        } else {
+        // Split the final rendered HTML, keeping tags balanced and emoji entities intact.
+        // Await every part: a failed/uncertain send must not send later parts or restart the sequence.
+        if (chunks.length > 1) this.logger.info(`长文本消息将分 ${chunks.length} 片发送: ${message.id}`)
+        for (let i = 0; i < chunks.length; i++) {
             try {
-                newMsg = await this.sendTelegramRequest(targetChatId, () => this.messageSender.sendText(targetChatId, sendTextFormat, option))
+                const sent = await this.sendTelegramRequest(targetChatId, () => this.messageSender.sendText(targetChatId, chunks[i], option))
+                if (i === 0) newMsg = sent
             } catch (e) {
-                this.logger.error(`文本消息发送失败: ${message.id} - ${e.message}`)
+                this.logger.error(`文本消息发送失败 (分片${i + 1}/${chunks.length}): ${message.id} - ${e.message}`)
                 this.logger.error(`错误详情: chatId=${targetChatId}, wxMsgId=${message.id}, error_code=${e.response?.error_code}, error=${e.code || e.name}`)
                 await this.dealException(e, message)
                 success = false
+                break
             }
         }
 
@@ -2490,7 +2441,10 @@ ${this.i18n.t('help.instructions')}`))
             }
         }
 
-        await ctx.reply(nestedRecord.content, replyOptions)
+        const html = renderWechatCustomEmojiHtml(nestedRecord.content, config.WECHAT_CUSTOM_EMOJI_ENABLED)
+        for (const chunk of splitTelegramHtml(html, 4096)) {
+            await ctx.reply(chunk, replyOptions)
+        }
         await ctx.answerCbQuery('已展开')
     }
 
@@ -2902,7 +2856,7 @@ ${this.i18n.t('help.instructions')}`))
         const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
         const sendOptions: any = {
             message_thread_id: options.threadId,
-            caption: options.caption,
+            caption: options.caption === undefined ? undefined : renderWechatCustomEmojiHtml(options.caption, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024),
             parse_mode: 'HTML'
         }
         if (options.replyToMessageId) {

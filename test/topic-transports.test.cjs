@@ -31,10 +31,19 @@ function load(file, dependencies = {}) {
   }, {filename: file})
   return exports
 }
+const emojiData = load('util/WechatCustomEmojiData.ts')
+const emojiHtml = load('util/WechatCustomEmoji.ts', {
+  './WechatCustomEmojiData': emojiData,
+  htmlparser2: require('htmlparser2'),
+  entities: require('entities'),
+})
+const {HTMLParser} = require('telegram/extensions/html')
+const {Api} = require('telegram')
+const [emojiAlias, customEmoji] = Object.entries(emojiData.WECHAT_CUSTOM_EMOJI)[0]
 const plain = value => JSON.parse(JSON.stringify(value))
 const media = fileType => ({buff: Buffer.from('test'), filename: 'test.bin', caption: 'caption', fileType})
 
-function transport(kind, failure) {
+function transport(kind, failure, enabled = false) {
   const actions = [], calls = []
   const invoke = method => async (...args) => {
     calls.push({method, args})
@@ -50,6 +59,8 @@ function transport(kind, failure) {
   if (kind === 'bot') {
     const {TelegramBotApiMessageSender} = load('message/TelegramBotApiMessageSender.ts', {
       './MessageSender': base,
+      '../config': {config: {WECHAT_CUSTOM_EMOJI_ENABLED: enabled}},
+      '../util/WechatCustomEmoji': emojiHtml,
       'abort-controller': AbortController,
     })
     sender = new TelegramBotApiMessageSender({telegram: Object.fromEntries(
@@ -58,6 +69,8 @@ function transport(kind, failure) {
   } else {
     const {TelegramApiMessageSender} = load('message/TelegramApiMessageSender.ts', {
       './MessageSender': base,
+      '../config': {config: {WECHAT_CUSTOM_EMOJI_ENABLED: enabled}},
+      '../util/WechatCustomEmoji': emojiHtml,
       'telegram/client/uploads': {CustomFile: class {
         constructor(name, size, filePath, buffer) {Object.assign(this, {name, size, filePath, buffer})}
       }},
@@ -165,6 +178,68 @@ for (const kind of ['bot', 'gram']) {
     await assert.rejects(failed.sender.sendText(-100, 'hello', {message_thread_id: 42}), /topic unavailable/)
     await assert.rejects(failed.sender.sendFile(-100, media('document'), {message_thread_id: 42}), /topic unavailable/)
     assert.equal(failed.calls.length, 2)
+  })
+}
+
+for (const kind of ['bot', 'gram']) {
+  test(`${kind} renders real custom emoji at HTML text, media and edit boundaries without mutating inputs`, async () => {
+    const f = transport(kind, undefined, true)
+    const original = `<b>${emojiAlias} 🙂</b><code>${emojiAlias}</code><tg-emoji emoji-id="${customEmoji.id}">${customEmoji.emoji}</tg-emoji>`
+    const option = {parse_mode: 'HTML', message_thread_id: 42, reply_id: 91}
+    const file = {...media('document'), caption: original}
+    const beforeFile = {...file}, beforeOption = {...option}
+    await f.sender.sendText(-100, original, option)
+    await f.sender.sendFile(-100, file, option)
+    await f.sender.editFile(-100, 91, {fileType: 'audio', caption: original}, option)
+    await f.sender.editAudio(-100, 91, original)
+    const htmls = kind === 'bot'
+      ? [f.calls[0].args[1], f.calls[1].args[1].caption, f.calls[2].args[3].caption, f.calls[3].args[3]]
+      : [f.calls[0].args[1].message, f.calls[1].args[1].caption, f.calls[2].args[1].text, f.calls[3].args[1].text]
+    for (const html of htmls) {
+      assert.equal(html, emojiHtml.renderWechatCustomEmojiHtml(original, true))
+      assert.equal((html.match(/<tg-emoji /g) || []).length, 2)
+      assert(html.includes(`<code>${emojiAlias}</code>`))
+      assert(html.includes('🙂'))
+      // Exercise the installed GramJS parser, not merely copied HTML strings.
+      const [text, entities] = HTMLParser.parse(html)
+      const custom = entities.filter(e => e instanceof Api.MessageEntityCustomEmoji)
+      assert.equal(custom.length, 2)
+      for (const entity of custom) {
+        assert.equal(entity.documentId.toString(), customEmoji.id)
+        assert.equal(text.slice(entity.offset, entity.offset + entity.length), customEmoji.emoji)
+        assert(entity.getBytes().length > 0)
+      }
+    }
+    assert.deepEqual(file, beforeFile)
+    assert.deepEqual(option, beforeOption)
+    const params = kind === 'bot' ? f.calls[0].args[2] : f.calls[0].args[1]
+    assert.equal(kind === 'bot' ? params.message_thread_id : params.topMsgId, 42)
+    assert.equal(kind === 'bot' ? params.reply_parameters.message_id : params.replyTo, 91)
+  })
+
+  test(`${kind} leaves disabled and non-HTML text/captions unchanged`, async () => {
+    for (const [enabled, parse_mode] of [[false, 'HTML'], [true, undefined], [true, 'MarkdownV2']]) {
+      const f = transport(kind, undefined, enabled)
+      const original = `${emojiAlias} 🙂`
+      await f.sender.sendText(-100, original, {parse_mode})
+      await f.sender.sendFile(-100, {...media('photo'), caption: original}, {parse_mode})
+      await f.sender.editFile(-100, 91, {fileType: 'photo', caption: original}, {parse_mode})
+      assert.equal(kind === 'bot' ? f.calls[0].args[1] : f.calls[0].args[1].message, original)
+      assert.equal(f.calls[1].args[1].caption, original)
+      assert.equal(kind === 'bot' ? f.calls[2].args[3].caption : f.calls[2].args[1].text, original)
+      if (!enabled) {
+        await f.sender.editAudio(-100, 91, original)
+        assert.equal(kind === 'bot' ? f.calls[3].args[3] : f.calls[3].args[1].text, original)
+      }
+    }
+  })
+
+  test(`${kind} emoji permission errors and timeouts are not automatically resent`, async () => {
+    for (const failure of [Object.assign(new Error('CUSTOM_EMOJI_INVALID'), {response: {error_code: 400}}), new Error('Request timeout')]) {
+      const f = transport(kind, failure, true)
+      await assert.rejects(f.sender.sendText(-100, emojiAlias, {parse_mode: 'HTML', message_thread_id: 42}), error => error === failure)
+      assert.equal(f.calls.length, 1)
+    }
   })
 }
 

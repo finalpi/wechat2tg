@@ -5,6 +5,8 @@ import * as uploadMethods from 'telegram/client/uploads'
 import {CustomFile} from 'telegram/client/uploads'
 import fs from 'node:fs'
 import {Api} from 'telegram'
+import {config} from '../config'
+import {renderWechatCustomEmojiHtml} from '../util/WechatCustomEmoji'
 
 export class TelegramApiMessageSender extends MessageSender {
     private sender: GramClient
@@ -52,7 +54,8 @@ export class TelegramApiMessageSender extends MessageSender {
                 sendParam.file = new CustomFile(file.filename, file.buff.length, tempFilePath)
             }
             if (file.caption) {
-                sendParam.text = file.caption
+                sendParam.text = option?.parse_mode === 'HTML'
+                    ? renderWechatCustomEmojiHtml(file.caption, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024) : file.caption
             }
             if (sendParam.message) {
                 this.sender.editMessage(inputPeerChannelFromMessage, sendParam).then(res => {
@@ -78,7 +81,7 @@ export class TelegramApiMessageSender extends MessageSender {
         const inputPeerChannelFromMessage = await this.sender.getInputEntity(chatId) || chatId
         const sendParam: messageMethods.EditMessageParams = {
             message: parseInt(msgId + ''),
-            text: caption,
+            text: renderWechatCustomEmojiHtml(caption, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024),
             parseMode: 'html'
         }
         return new Promise((resolve, reject) => {
@@ -102,7 +105,8 @@ export class TelegramApiMessageSender extends MessageSender {
         const inputPeerChannelFromMessage = await this.sender.getInputEntity(chatId) || chatId
         return new Promise((resolve, reject) => {
             const sendParam: messageMethods.SendMessageParams = {
-                message: text,
+                message: option?.parse_mode === 'HTML'
+                    ? renderWechatCustomEmojiHtml(text, config.WECHAT_CUSTOM_EMOJI_ENABLED) : text,
             }
             if (option) {
                 if (option.message_thread_id !== undefined) {
@@ -159,7 +163,8 @@ export class TelegramApiMessageSender extends MessageSender {
                 sendParam.forceDocument = true
             }
             if (file.caption) {
-                sendParam.caption = file.caption
+                sendParam.caption = option?.parse_mode === 'HTML'
+                    ? renderWechatCustomEmojiHtml(file.caption, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024) : file.caption
             }
             this.sender.sendFile(inputPeerChannelFromMessage, sendParam).then(res => {
                 resolve({
