@@ -1,13 +1,10 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-import * as tg from 'telegraf/src/core/types/typegram'
 import {Markup} from 'telegraf'
 import {InlineKeyboardButton} from '@telegraf/types/markup'
 import I18n from '../i18n'
 
 export class KeyboardPageUtils {
     private i18n = I18n.getInstance()
-    
+
     constructor(
         public data: dataType[],
         public page: number,
@@ -25,10 +22,10 @@ export class KeyboardPageUtils {
 
         for (let i = 0; i < pageData.length; i += 2) {
             const buttonRow = [
-                Markup.button.callback(`🌐${pageData[i].remark}`, `${this.actionMark}:${pageData[i].action}`)
+                Markup.button.callback(pageData[i].remark || pageData[i].action, `${this.actionMark}:${pageData[i].action}`)
             ]
             if (i + 1 < pageData.length) {
-                buttonRow.push(Markup.button.callback(`🌐${pageData[i + 1].remark}`, `${this.actionMark}:${pageData[i + 1].action}`))
+                buttonRow.push(Markup.button.callback(pageData[i + 1].remark || pageData[i + 1].action, `${this.actionMark}:${pageData[i + 1].action}`))
             }
             buttons.push(buttonRow)
         }

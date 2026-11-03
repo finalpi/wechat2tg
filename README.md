@@ -153,7 +153,9 @@ Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot
 
 - `/forward`: Toggle forwarding of messages from other people or bots in the group
 
-- `/user`: Get WeChat user list; click the button to create a new group or bind a user (can search by name or remarks, e.g., `/user Zhang` to find WeChat users containing "Zhang")
+- `/user`: List WeChat contacts, excluding official accounts; search by name or remark, e.g. `/user Zhang`, then create a group or bind the contact.
+
+- `/official`: List official accounts separately; search by name or remark, e.g. `/official WeChat Pay`, then create a group or bind the account to the current Telegram group.
 
 - `/room`: Get WeChat group list; click the button to create a new group or bind a WeChat group (can search by name or remarks, e.g., `/room takeout` to find WeChat groups containing "takeout")
 
@@ -170,6 +172,16 @@ Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot
 - `/unbind`: Unbind WeChat group or WeChat user (only supported in group usage)
 
 - `/quit`: Exit and disband group
+
+Contact, official-account, and group searches also support bot mentions in groups:
+
+```text
+/user@your_bot Zhang San
+/official@your_bot WeChat Pay
+/room@your_bot Project A (Development)
+```
+
+Replace `@your_bot` with your bot username. Queries preserve internal spaces and punctuation. List buttons show names or remarks without an added emoji prefix.
 
 ## Environment Variables
 

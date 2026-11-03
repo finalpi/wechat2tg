@@ -288,6 +288,7 @@ export class TelegramBotClient extends AbstractClient {
             ? TELEGRAM_GROUP_CHAT_SEND_INTERVAL_MS
             : TELEGRAM_PRIVATE_CHAT_SEND_INTERVAL_MS
 
+        // eslint-disable-next-line no-constant-condition
         while (true) {
             const now = Date.now()
             const nextAllowedAt = Math.max(
@@ -456,7 +457,7 @@ export class TelegramBotClient extends AbstractClient {
             return
         }
         const bot = TelegramBotClient.getSpyClient('botClient').client as Telegraf
-        await this.sendTelegramRequest(chatId, () => bot.telegram.deleteMessage(chatId, messageId)).catch(() => {})
+        await this.sendTelegramRequest(chatId, () => bot.telegram.deleteMessage(chatId, messageId)).catch(() => undefined)
     }
 
     private async findRecentUploadedTelegramDocumentMessageId(
@@ -818,21 +819,21 @@ export class TelegramBotClient extends AbstractClient {
             ctx.answerCbQuery(this.i18n.t('settings.language_changed'))
         })
 
-        bot.action(/^us:page-/, async ctx => {
-            const pageNum = ctx.match.input.split('-')[1]
-            const data = await WxContactRepository.getInstance().getAll()
+        bot.action(/^(?:us|of):page-/, async ctx => {
+            const [actionMark, pageNum] = ctx.match.input.split(':page-')
+            const data = await this.getContactList(actionMark === 'of')
             const dataMap = data.map(item => {
                 return {
                     remark: item.remark ? item.remark : item.nickName,
                     action: item.userName
                 }
             })
-            const page = new KeyboardPageUtils(dataMap, parseInt(pageNum), 'us')
+            const page = new KeyboardPageUtils(dataMap, parseInt(pageNum), actionMark)
             ctx.editMessageReplyMarkup(page.getMarkup())
             ctx.answerCbQuery()
         })
 
-        bot.action(/^us:/, async ctx => {
+        bot.action(/^(?:us|of):/, async ctx => {
             const wxId = ctx.match.input.split(':')[1]
             const contact = await TelegramBotClient.getSpyClient('wxClient').client.Contact.find({id: wxId})
             if (contact) {
@@ -985,7 +986,7 @@ export class TelegramBotClient extends AbstractClient {
                 const fileBuffer = await this.downloadChatHistoryAttachment(attachment, storedMessage)
                 const replyToMessageId = ctx.callbackQuery?.message?.['message_id'] || storedMessage.tgBotMsgId
                 await this.sendChatHistoryAttachment(ctx.chat.id, fileBuffer, attachment, Number(replyToMessageId))
-                await ctx.telegram.deleteMessage(ctx.chat.id, statusMessage.message_id).catch(() => {})
+                await ctx.telegram.deleteMessage(ctx.chat.id, statusMessage.message_id).catch(() => undefined)
             } catch (e) {
                 this.logger.error('下载聊天记录附件失败:', e)
                 await ctx.reply('附件下载失败')
@@ -1010,7 +1011,7 @@ export class TelegramBotClient extends AbstractClient {
                 }
                 const fileBuffer = await this.downloadChatHistoryAttachment(attachment, storedMessage)
                 await this.sendChatHistoryAttachment(ctx.chat.id, fileBuffer, attachment, Number(tgBotMsgId))
-                await ctx.telegram.deleteMessage(ctx.chat.id, statusMessage.message_id).catch(() => {})
+                await ctx.telegram.deleteMessage(ctx.chat.id, statusMessage.message_id).catch(() => undefined)
             } catch (e) {
                 this.logger.error('下载聊天记录附件失败:', e)
                 await ctx.reply('附件下载失败')
@@ -1373,6 +1374,35 @@ export class TelegramBotClient extends AbstractClient {
         }
     }
 
+    private async getContactList(official: boolean, query = '') {
+        const repository = WxContactRepository.getInstance()
+        const contacts = query
+            ? await repository.getByNickNameOrRemark(query)
+            : await repository.getAll()
+        return (contacts || []).filter(contact => contact.userName.startsWith('gh_') === official)
+    }
+
+    private async showContactList(ctx: Context, query: string, official: boolean) {
+        if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
+            return ctx.reply(this.i18n.t('login.please_login_wx'))
+        }
+        const contacts = await this.getContactList(official, query)
+        if (contacts.length === 0) {
+            return ctx.reply(this.i18n.t(official ? 'official.no_accounts' : 'user.no_contacts'))
+        }
+        const data = contacts.map(contact => ({
+            remark: contact.remark || contact.nickName,
+            action: contact.userName
+        }))
+        const page = new KeyboardPageUtils(data, 1, official ? 'of' : 'us')
+        if (query) page.pageSize = 999
+        const inGroup = ctx.chat?.type.includes('group')
+        const prompt = official
+            ? (inGroup ? 'official.bind_account' : 'official.create_account_group')
+            : (inGroup ? 'user.bind_contact' : 'user.create_contact_group')
+        return ctx.reply(this.i18n.t(prompt), {reply_markup: page.getMarkup()})
+    }
+
     private onBotCommand(bot: Telegraf) {
         TgCommandHelper.setCommand(bot)
         TgCommandHelper.setSimpleCommandHandler(bot)
@@ -1555,62 +1585,19 @@ ${this.i18n.t('help.instructions')}`))
             }
         })
 
-        bot.command('user', async ctx => {
-            if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
-                ctx.reply(this.i18n.t('login.please_login_wx'))
-                return
-            }
-            // 获取消息文本
-            const messageText = ctx.update.message.text
-
-            // 正则表达式用来分离命令后面的参数
-            const match = messageText.match(/\/user\s+([\p{L}\p{N}_]+)/u)
-            let data
-            if (match) {
-                const userName = match[1]
-                data = await WxContactRepository.getInstance().getByNickNameOrRemark(userName)
-            } else {
-                data = await WxContactRepository.getInstance().getAll()
-            }
-            if (!data || data.length === 0) {
-                ctx.reply(this.i18n.t('user.no_contacts'))
-                return
-            }
-            const dataMap = data.map(item => {
-                return {
-                    remark: item.remark ? item.remark : item.nickName,
-                    action: item.userName
-                }
-            })
-            const page = new KeyboardPageUtils(dataMap, 1, 'us')
-            if (match) {
-                page.pageSize = 999
-            }
-            let text
-            if (ctx.chat && ctx.chat.type.includes('group')) {
-                text = this.i18n.t('user.bind_contact')
-            } else {
-                text = this.i18n.t('user.create_contact_group')
-            }
-            ctx.reply(text, {
-                reply_markup: page.getMarkup()
-            })
-        })
+        // Telegraf's payload already excludes /command@bot and preserves the full query.
+        bot.command('user', ctx => this.showContactList(ctx, ctx.payload.trim(), false))
+        bot.command('official', ctx => this.showContactList(ctx, ctx.payload.trim(), true))
 
         bot.command('room', async ctx => {
             if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
                 ctx.reply(this.i18n.t('login.please_login_wx'))
                 return
             }
-            // 获取消息文本
-            const messageText = ctx.update.message.text
-
-            // 正则表达式用来分离命令后面的参数
-            const match = messageText.match(/\/room\s+([\p{L}\p{N}_]+)/u)
+            const query = ctx.payload.trim()
             let data
-            if (match) {
-                const userName = match[1]
-                data = await WxRoomRepository.getInstance().getByNickNameOrRemark(userName)
+            if (query) {
+                data = await WxRoomRepository.getInstance().getByNickNameOrRemark(query)
             } else {
                 data = await WxRoomRepository.getInstance().getAll()
             }
@@ -1625,7 +1612,7 @@ ${this.i18n.t('help.instructions')}`))
                 }
             })
             const page = new KeyboardPageUtils(dataMap, 1, 'ro')
-            if (match) {
+            if (query) {
                 page.pageSize = 999
             }
             let text
@@ -1961,6 +1948,7 @@ ${this.i18n.t('help.instructions')}`))
         // bot.launch 会在 long polling 运行期间一直等待；运行中的短暂网络错误
         // 由 Telegraf 自身持续重试。这里负责覆盖首次启动时网络尚未恢复，
         // 以及 polling 意外退出的场景，不能因为有限次数重试耗尽而永久假活。
+        // eslint-disable-next-line no-constant-condition
         while (true) {
             try {
                 await bot.launch(() => {
