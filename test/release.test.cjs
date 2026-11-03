@@ -6,6 +6,7 @@ const crypto = require('node:crypto')
 const path = require('node:path')
 const {execFileSync} = require('node:child_process')
 const http = require('node:http')
+const yaml = require('js-yaml')
 const {WxBot} = require('wx2tg-puppet')
 const {msgApi} = require('wx2tg-puppet/dist/api/MsgApi')
 const pkg = require('../package.json')
@@ -17,10 +18,30 @@ test('package, lockfile, installed puppet, Compose, and README versions agree', 
   assert.equal(require('wx2tg-puppet/package.json').version, pkg.version)
   for (const name of ['docker-compose.yml', 'README.md', 'README_zh.md']) {
     const source = fs.readFileSync(path.join(root, name), 'utf8')
-    assert(source.includes(`image: finalpi/wechat2tg-v3:v${pkg.version}`))
+    assert(source.includes(`image: finalpi/wechat2tg:v${pkg.version}`))
     assert(source.includes(`image: finalpi/wx2tg-server:v${pkg.version}`))
-    assert(!source.includes('image: finalpi/wechat2tg-v3:latest'))
+    assert(!source.includes('image: finalpi/wechat2tg-v3:'))
+    assert(!source.includes('image: finalpi/wechat2tg:latest'))
+    assert(!source.includes('image: finalpi/wechat2tg:dev'))
   }
+})
+
+test('README Compose schemas and callback hostname match the actual stack', () => {
+  const compose = yaml.load(fs.readFileSync(path.join(root, 'docker-compose.yml'), 'utf8'))
+  assert.equal(compose.services.wechat2tg.image, `finalpi/wechat2tg:v${pkg.version}`)
+  assert.equal(compose.services.wechat2tg.container_name, 'wechat2tg-v6')
+  assert.equal(compose.services['wx2tg-v3'], undefined)
+  for (const name of ['README.md', 'README_zh.md']) {
+    const source = fs.readFileSync(path.join(root, name), 'utf8')
+    const blocks = [...source.matchAll(/```yaml\n(services:\n[\s\S]*?)```/g)]
+    assert.equal(blocks.length, 1, `${name} must contain one complete Compose example`)
+    assert.deepEqual(yaml.load(blocks[0][1]), compose, `${name} Compose must match docker-compose.yml`)
+    for (const command of ['exec', 'restart', 'logs --tail=100']) {
+      assert(source.includes(`docker compose ${command} wechat2tg`))
+    }
+  }
+  const config = fs.readFileSync(path.join(root, 'app.conf.example'), 'utf8')
+  assert(config.includes('syncmessagebusinessuri = "http://wechat2tg:8056/message/callback/{0}"'))
 })
 
 test('vendored artifact matches the lockfile SHA-512', () => {

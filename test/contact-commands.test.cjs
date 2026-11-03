@@ -6,6 +6,7 @@ const path = require('node:path')
 const vm = require('node:vm')
 const {Telegraf, Markup} = require('telegraf')
 const zh = require('../dist/i18n/locales/zh-CN').default
+const {WechatAccountClassificationService} = require('../dist/service/WechatAccountClassificationService')
 
 function load(file, dependencies) {
   const exports = {}
@@ -16,9 +17,10 @@ function load(file, dependencies) {
   return exports
 }
 
-function fixture({contacts = [], rooms = [], loggedIn = true} = {}) {
+function fixture({contacts = [], rooms = [], loggedIn = true, topic, managedForum = false} = {}) {
   const replies = [], edits = [], queries = [], menus = [], selected = [], bindings = []
-  const i18n = {t: key => zh[key] || key}
+  const i18n = {t: (key, params = {}) => Object.entries(params).reduce((value, [name, replacement]) => value.replaceAll(`{{${name}}}`, replacement), zh[key] || key)}
+  const classification = new WechatAccountClassificationService({getSession: async () => undefined, readFlags: async () => new Map(), backfillFlags: async () => undefined})
   const baseDependencies = {'../i18n': {getInstance: () => i18n}}
   const keyboard = load('util/KeyboardPageUtils.js', {...baseDependencies, telegraf: {Markup}})
   const contactsRepository = {
@@ -47,8 +49,10 @@ function fixture({contacts = [], rooms = [], loggedIn = true} = {}) {
   const {TelegramBotClient} = load('client/TelegramBotClient.js', {
     ...baseDependencies,
     telegraf: {Markup},
+    '../util/TelegramTopicUtils': require('../dist/util/TelegramTopicUtils'),
     '../base/BaseClient': {AbstractClient: class {static getSpyClient() {return wxClient}}},
     '../service/TelegramCommandHelper': commandHelper,
+    '../service/WechatAccountClassificationService': {WechatAccountClassificationService: {getInstance: () => classification}},
     '../util/KeyboardPageUtils': keyboard,
     '../repository/WxContactRepository': {WxContactRepository: {getInstance: () => contactsRepository}},
     '../repository/WxRoomRepository': {WxRoomRepository: {getInstance: () => roomRepository}},
@@ -57,6 +61,8 @@ function fixture({contacts = [], rooms = [], loggedIn = true} = {}) {
   const client = Object.create(TelegramBotClient.prototype)
   client.i18n = i18n
   client.bindGroupService = {
+    isManagedForum: async () => managedForum,
+    resolveWechat: async () => topic,
     removeByChatIdOrWxId: async () => undefined,
     createOrUpdate: async value => bindings.push(value),
   }
@@ -90,8 +96,8 @@ function fixture({contacts = [], rooms = [], loggedIn = true} = {}) {
   }
 }
 
-const people = Array.from({length: 12}, (_, i) => ({userName: `wxid_${i}`, nickName: `用户${i}`, remark: ''}))
-const official = Array.from({length: 12}, (_, i) => ({userName: `gh_${i}`, nickName: `公众号${i}`, remark: ''}))
+const people = Array.from({length: 12}, (_, i) => ({userName: `wxid_${i}`, nickName: `用户${i}`, remark: '', verifyFlag: 0}))
+const official = Array.from({length: 12}, (_, i) => ({userName: `gh_${i}`, nickName: `公众号${i}`, remark: '', verifyFlag: 24}))
 const mixed = people.flatMap((person, i) => [person, official[i]])
 const dataButtons = markup => markup.inline_keyboard.flat().filter(b => !b.callback_data.includes(':page-'))
 
@@ -124,8 +130,8 @@ for (const command of ['user', 'official', 'room']) {
     test(`/${command}${mention} preserves spaces and punctuation in a group search`, async () => {
       const query = '项目 A（研发）-1'
       const f = fixture({contacts: [
-        {userName: 'wxid_match', nickName: query, remark: ''},
-        {userName: 'gh_match', nickName: query, remark: ''},
+        {userName: 'wxid_match', nickName: query, remark: '', verifyFlag: 0},
+        {userName: 'gh_match', nickName: query, remark: '', verifyFlag: 8},
       ], rooms: [{chatroomId: 'room@chatroom', nickName: query, remark: ''}]})
       await f.command(`/${command}${mention}  ${query}  `, 'supergroup')
       assert.deepEqual(f.queries, [{kind: command === 'room' ? 'room' : 'contact', query}])
@@ -143,6 +149,19 @@ test('user search does not show official-only matches, and official search does 
   assert.equal(f.replies[0].text, '未查找到联系人')
   await f.command('/official 用户')
   assert.equal(f.replies[1].text, '未查找到公众号')
+})
+
+test('VerifyFlag overrides misleading names and unknown records are not called personal contacts', async () => {
+  const f = fixture({contacts: [
+    {userName: 'gh_personal', nickName: '普通联系人', verifyFlag: 0},
+    {userName: 'brand_news', nickName: '不带前缀的公众号', verifyFlag: 24},
+    {userName: 'unknown_contact', nickName: '资料待同步', verifyFlag: null},
+  ]})
+  await f.command('/user')
+  assert.deepEqual(Array.from(dataButtons(f.replies[0].options.reply_markup), b => b.callback_data), ['us:gh_personal'])
+  await f.command('/official')
+  assert.deepEqual(Array.from(dataButtons(f.replies[1].options.reply_markup), b => b.callback_data), ['of:brand_news'])
+  assert.match(f.replies[1].text, /1.*VerifyFlag/)
 })
 
 test('room pages have no decorative emoji and keep emojis that are part of the real name', async () => {
@@ -177,12 +196,31 @@ test('mentioned commands with no query list only their own category', async () =
 })
 
 test('legacy official-account buttons still bind and blank names fall back to account ID', async () => {
-  const f = fixture({contacts: [{userName: 'gh_empty', nickName: '', remark: ''}]})
+  const f = fixture({contacts: [{userName: 'gh_empty', nickName: '', remark: '', verifyFlag: 8}]})
   await f.command('/official')
   assert.equal(dataButtons(f.replies[0].options.reply_markup)[0].text, 'gh_empty')
   await f.action('us:gh_legacy', 'supergroup')
   assert.equal(f.bindings[0].wxId, 'gh_legacy')
 })
+
+for (const prefix of ['of', 'us']) {
+  test(`${prefix}: non-prefix official selection opens the topic without creating a legacy group`, async () => {
+    const f = fixture({topic: {chatId: -10012345, threadId: 77}})
+    await f.action(`${prefix}:brand_selected`)
+    assert.equal(f.replies[0].text, 'https://t.me/c/12345/77')
+    assert.equal(f.bindings.length, 0)
+  })
+}
+
+for (const data of ['of:gh_selected', 'us:wxid_selected', 'ro:room@chatroom']) {
+  test(`${data} cannot rebind the managed forum`, async () => {
+    const f = fixture({managedForum: true})
+    await f.action(data, 'supergroup')
+    assert.equal(f.bindings.length, 0)
+    assert.equal(f.selected.length, 0)
+    assert.match(f.replies[0].text, /\/official/)
+  })
+}
 
 test('command mentions for another bot are ignored, and official listing requires login', async () => {
   const f = fixture({contacts: mixed, loggedIn: false})

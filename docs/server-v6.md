@@ -2,7 +2,7 @@
 
 ## 本次同步范围
 
-服务端 `v6` 分支由 `875` 的 `041e67b` 派生，本次与 bot、puppet 统一为 `v6.0.12`。puppet 已修复此前 `3.0.8` 的回调正文丢弃及二进制文件分片不兼容问题，并保留已发布版本的续登并发保护。`v7` 暂不改动。版本与本地制品安装规则见 [发行规则](releases.md)。
+服务端 `v6` 分支由 `875` 的 `041e67b` 派生，当前与 bot、puppet 配套开发版为 `v6.0.13-dev.1`，只维护 `v6` 分支，通过完整 tag 的 `-dev.N` 后缀区分开发版。puppet 已修复此前 `3.0.8` 的回调正文丢弃及二进制文件分片不兼容问题，并保留已发布版本的续登并发保护。`v7` 暂不改动。版本与本地制品安装规则见 [发行规则](releases.md)。
 
 本轮验证为离线回归，不是微信/Telegram 真实登录联调；本地标签不代表 npm/Docker 已发布。
 
@@ -10,9 +10,10 @@
 
 - `.env`：bot 的配置；从 `.env.example` 复制。
 - `conf/app.conf`：server 的配置；从 `app.conf.example` 复制。已有部署应合并新增项，保留自己的端口、Redis 认证和网络地址。
-- Compose 固定使用 `finalpi/wx2tg-server:v6.0.12` 和 `finalpi/wechat2tg-v3:v6.0.12`。server 的 `httpport=8058` 与 `.env` 的 `BASE_API=http://wx2tg-server:8058/api`、Compose 端口一致；没有照搬上游私有部署的端口和凭据。
-- `syncmessagebusinessuri` 中的 `{0}` 由 server 替换为账号 wxid。同一 Compose 网络通过 `wx2tg-v3:8056` 访问时，不必把回调端口发布到宿主机。
-- 这些是示例默认值，不会自动修改已有的 `.env` 或 `conf/app.conf`；本次没有部署、重启服务或执行数据库迁移。
+- Compose 固定使用 `finalpi/wx2tg-server:v6.0.13-dev.1` 和 `finalpi/wechat2tg:v6.0.13-dev.1`。server 的 `httpport=8058` 与 `.env` 的 `BASE_API=http://wx2tg-server:8058/api`、Compose 端口一致；没有照搬上游私有部署的端口和凭据。
+- `syncmessagebusinessuri` 中的 `{0}` 由 server 替换为账号 wxid。同一 Compose 网络通过 `wechat2tg:8056` 访问时，不必把回调端口发布到宿主机。
+- bot 的 Compose 服务名为 `wechat2tg`，容器名为 `wechat2tg-v6`；bot 镜像使用与 Git 标签相同的完整版本（含开头的 `v`），稳定/开发滚动别名分别为 `v6` / `v6-dev`，不发布全局 `latest` / `dev`。架构后缀镜像在对应构建成功后即可使用，通用标签等两种架构完成。旧镜像和旧仓库标签保留，不再更新旧 bot 仓库。
+- 这些是示例默认值，不会自动修改已有的 `.env`、`home_202.env` 或 `conf/app.conf`，私有配置绝不能被模板覆盖；本次没有部署、重启服务或执行数据库迁移。`wx2tg-server` 的镜像、命名空间和版本不因 bot 改名而变化，用户现有生产后端保持原样。
 - 消息归档查询会暴露聊天内容。server API 和回调端口应仅允许可信网络访问；如果发布到公网，需要额外的访问控制，`corsalloworigins` 不是鉴权。
 
 ### 目前保留 polling
@@ -44,7 +45,7 @@ server 的 `conf/app.conf`：
 ```ini
 msgpush = true
 syncmessage = true
-syncmessagebusinessuri = "http://wx2tg-v3:8056/message/callback/{0}"
+syncmessagebusinessuri = "http://wechat2tg:8056/message/callback/{0}"
 callbacktimeout = "5s"
 ```
 
@@ -91,7 +92,7 @@ server 工作目录为 `/usr/wic-go`，因此消息目录落在宿主机 `./serv
 | 位置 | 作用 |
 | --- | --- |
 | `./server-data/messages` | server 保存的微信消息归档 |
-| `./config/db/wechat2Tg.db` | bot 的 Telegram/微信消息关联、引用、撤回和 AI 上下文等数据 |
+| `./config/db/wx2tg.db` | bot 的 Telegram/微信消息关联、引用、撤回和 AI 上下文等数据 |
 | `./config/db/puppet.db` | puppet 的账号、联系人等状态 |
 
 `.env` 的 `AUTO_DELETE_OLD_MESSAGES` / `MESSAGE_RETENTION_DAYS` **只清理 bot 数据库，不清理 server 归档**。当前 bot 不调用 `/api/Msg/QueryLocal` 补历史；`WeChatClient.onMessage` 还会过滤早于本次启动时间的消息。因此 server 留有记录不代表 bot 会自动补发漏掉的 Telegram 消息。
@@ -161,6 +162,12 @@ server 收到微信通知
 普通文件每片最多 512 KiB，沿用最多 3 次尝试；每次请求超时 180 秒，以覆盖首次 CDN 回退的等待预算。64 位 `NewMsgId` 保持精度；错误不暴露附件凭据。图片、视频及大于 80 MiB 文件的 `DownloadFileMessage` 保持原路径。
 
 默认消息模式仍为 polling，不会因升级而静默切换成 callback。
+
+## 开发版新增功能
+
+`v6.0.13-dev.1` 合并了 `wx2tg-v3-dev` 的 WebUI / MCP 消息中心，并增加默认关闭的 [公众号 Topic 模式](official-account-topics.md)。新消息中心另有自己的 SQLite 历史与附件缓存，和 server 归档、bot 绑定库分别管理；现有旧消息清理任务不自动清理这两类新存储。
+
+WebUI 保存的配置位于 `storage/webui-config.json`，优先于环境变量；部署不能覆盖用户的 `.env`，需要同时核对是否存在历史 WebUI 覆盖值。默认示例开启 WebUI，公网访问应使用 HTTPS 和独立访问令牌，不可把令牌放入 URL。
 
 ## 核对依据
 

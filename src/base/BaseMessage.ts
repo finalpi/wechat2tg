@@ -1,6 +1,8 @@
 export default interface BaseMessage {
     id: string,
     chatId: number,
+    threadId?: number,
+    conversationWxId?: string,
     content: any,
     // 发送者身份id
     senderId: string,

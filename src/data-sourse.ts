@@ -2,6 +2,8 @@ import {DataSource} from 'typeorm'
 import {Configuration} from './entity/Configuration'
 import {BindGroup} from './entity/BindGroup'
 import {Message} from './entity/Message'
+import {OfficialAccountForum} from './entity/OfficialAccountForum'
+import {OfficialAccountTopic} from './entity/OfficialAccountTopic'
 import fs from 'node:fs'
 import {WxContact} from './entity/WxContact'
 import {WxRoom} from './entity/WxRoom'
@@ -10,7 +12,7 @@ import {WeChatClient} from './client/WechatClient'
 export const AppDataSource = new DataSource({
     type: 'sqlite',
     database: 'storage/db/wx2tg.db',
-    entities: [Configuration, BindGroup, Message],
+    entities: [Configuration, BindGroup, Message, OfficialAccountForum, OfficialAccountTopic],
     synchronize: true,
 })
 
@@ -26,7 +28,8 @@ export function getGeWeChatDataSource(): DataSource {
                 entities: [WxContact,WxRoom],
                 logger: 'debug',
                 logging: 'all',
-                synchronize: true,
+                // The SDK owns puppet.db schema; this mirror must not remove SDK columns.
+                synchronize: false,
             })
         }
         return gewechatDataSource

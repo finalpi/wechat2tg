@@ -6,11 +6,23 @@ export interface NestedChatHistory {
   content: string
   nestedRecords: NestedChatHistory[]
   attachments: ChatHistoryAttachment[]
+  entries?: ChatHistoryEntry[]
+}
+
+export interface ChatHistoryEntry {
+  id: string
+  sender: string
+  time: string
+  type: string
+  text: string
+  attachmentId?: string
+  nestedId?: string
+  url?: string
 }
 
 export interface ChatHistoryAttachment {
   id: string
-  type: 'image' | 'file'
+  type: 'image' | 'file' | 'video'
   title: string
   fileName: string
   sourceName: string
@@ -21,6 +33,7 @@ export interface ChatHistoryResult {
   content: string
   nestedRecords: NestedChatHistory[]
   attachments: ChatHistoryAttachment[]
+  entries?: ChatHistoryEntry[]
 }
 
 // 处理聊天记录
@@ -99,6 +112,10 @@ export async function getChatHistory(
             attachments.push(attachment)
           }
           chatContent = `[${dataTypeName}]`
+        } else if (dataType === 4) {
+          const attachment = buildVideoAttachment(item, index)
+          if (attachment) attachments.push(attachment)
+          chatContent = `[${dataTypeName}]${item.datatitle ? `\n${item.datatitle}` : ''}`
         } else if (dataType === 8) {
           const attachment = buildFileAttachment(item, index)
           if (attachment) {
@@ -244,6 +261,29 @@ function buildFileAttachment(item: any, index: number): ChatHistoryAttachment | 
       dataLen,
       fullMd5: item.fullmd5 || '',
       userName: item.dataitemsource?.hashusername || item.sourcename || ''
+    }
+  }
+}
+
+function buildVideoAttachment(item: any, index: number): ChatHistoryAttachment | undefined {
+  const cdnDataUrl = String(item.cdndataurl || '')
+  const rawCdnDataKey = String(item.cdndatakey || '')
+  if (!cdnDataUrl || !rawCdnDataKey) return undefined
+  const title = String(item.datatitle || '视频')
+  const name = String(item.datatitle || item.dataid || `video-${index + 1}`)
+  const size = Number(item.datasize || item.fullsize || 0)
+  return {
+    id: `${index + 1}`,
+    type: 'video',
+    title,
+    fileName: /\.mp4$/i.test(name) ? name : `${name}.mp4`,
+    sourceName: String(item.sourcename || ''),
+    payload: {
+      cdnDataUrl,
+      rawCdnDataKey,
+      dataId: String(item.dataid || index + 1),
+      dataLen: Number.isFinite(size) && size > 0 ? size : 0,
+      fullMd5: String(item.fullmd5 || '')
     }
   }
 }

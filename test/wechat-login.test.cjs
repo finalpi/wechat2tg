@@ -7,30 +7,37 @@ const vm = require('node:vm')
 const {EventEmitter} = require('node:events')
 
 // Run the real compiled client methods without booting Telegram or SQLite.
-function clientClass(config = {}) {
+function clientClass(config = {}, spies = {}) {
   const exports = {}
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../dist/client/WechatClient.js'), 'utf8'), {
     exports,
+    process: {env: {WEBUI_ENABLED: 'false'}},
     // Keep bounded login-retry tests deterministic without real sleeps.
     setTimeout: callback => queueMicrotask(callback),
     require(name) {
-      if (name === '../base/BaseClient') return {AbstractClient: class {}}
+      if (name === '../base/BaseClient') return {AbstractClient: class {static getSpyClient(key) {return spies[key]}}}
       if (name === '../i18n') return {getInstance: () => ({})}
       if (name === '../config') return {config}
+      if (name === '../service/WechatAccountClassificationService') return {WechatAccountClassificationService: {getInstance: () => ({isOfficialAccount: async (_id, flag) => require('wx2tg-puppet').isOfficialAccountVerifyFlag(flag)})}}
+      if (name === '../webui/message-visibility') return {isControlMessage: () => false}
       if (name === '../entity/BindGroup') return {BindGroup: class {}}
+      if (name === '../util/TelegramTopicUtils') return require('../dist/util/TelegramTopicUtils')
+      if (name === '../util/FormatUtils') return {FormatUtils: {transformTitleStr: () => ''}}
+      if (name === '../util/EmojiUtils') return {EmojiConverter: class {convert(value) {return value}}}
+      if (name === 'wx2tg-puppet') return {Message: {Type: {Text: 1, Quote: 99}, getXmlToJson: () => ({msg: {appmsg: {refermsg: {type: 1, content: 'quoted preview'}}}})}}
       return {}
     },
   })
   return exports.WeChatClient
 }
 
-function fixture(config) {
-  const Client = clientClass(config)
+function fixture(config, spies) {
+  const Client = clientClass(config, spies)
   const client = Object.create(Client.prototype)
   client.client = new EventEmitter()
   client.startTime = 10
   client.loginReady = Promise.resolve()
-  client.logger = {debug: () => undefined, error: () => undefined}
+  client.logger = {debug: () => undefined, info: () => undefined, warn: () => undefined, error: () => undefined}
   return client
 }
 
@@ -69,9 +76,10 @@ test('message event handler observes asynchronous failures', async () => {
   client.onMessage = async () => {throw new Error('synthetic processing failure')}
   client.init()
   client.client.emit('message', oldMessage)
-  await Promise.resolve()
+  // The merged capture path adds an async hop before its final error handler.
+  await new Promise(resolve => setImmediate(resolve))
   assert.equal(errors.length, 1)
-  assert.match(errors[0][1].message, /synthetic processing failure/)
+  assert.match(errors[0][0], /Wechat message handling failed/)
 })
 
 test('transient account lookup is retried before delivering the same message', async () => {
@@ -118,11 +126,32 @@ for (const enabled of [false, true]) {
     client.creatingGroups = new Map()
     client.messageService = {getByWxMsgId: async () => null}
     client.configurationService = {getConfig: async () => ({selfMessage: true})}
-    client.bindGroupService = {getByWxId: async () => null}
+    client.bindGroupService = {getByWxId: async () => null, resolveWechat: async () => null}
     let creates = 0
     client.groupOperate = {createGroup: async () => {creates++; return null}}
-    const contact = {_wxid: 'wxid_contact', _alias: '', alias: async () => '', name: () => 'contact', avatar: async () => ''}
+    const contact = {_wxid: 'wxid_contact', verifyFlag: 0, _alias: '', alias: async () => '', name: () => 'contact', avatar: async () => ''}
     await client.onMessage({...oldMessage, date: () => 20, self: () => false, room: async () => null, from: async () => contact})
     assert.equal(creates, enabled ? 1 : 0)
+  })
+}
+
+for (const quoted of [false, true]) {
+  test(`WeChat official ${quoted ? 'quote' : 'text'} carries the resolved topic with independent-group creation disabled`, async () => {
+    const sent = []
+    const client = fixture({AUTO_CREATE_GROUPS: false, OFFICIAL_ACCOUNT_TOPICS_ENABLED: true}, {botClient: {sendMessage: async message => sent.push(message)}})
+    client._wxInfo = {wxid: 'self'}
+    client.configurationService = {getConfig: async () => ({receivePublicAccount: true})}
+    client.messageService = {getByWxMsgId: async id => id === 'quoted' ? {chatId: -100123, threadId: 88, tgBotMsgId: 4} : null}
+    client.bindGroupService = {resolveWechat: async () => ({wxId: 'brand_news', chatId: -100123, threadId: 77, type: 0, isReceive: true})}
+    client.groupOperate = {createGroup: async () => {throw new Error('Must not create a separate group')}}
+    const contact = {_wxid: 'brand_news', verifyFlag: 24, _alias: '', alias: async () => '', name: () => 'Publisher'}
+    await client.onMessage({...oldMessage, date: () => 20, type: () => quoted ? 99 : 1, self: () => false,
+      room: async () => null, from: async () => contact, mentionSelf: async () => false, refer: {svrid: 'quoted'}})
+    assert.equal(sent.length, 1)
+    assert.equal(sent[0].chatId, -100123)
+    assert.equal(sent[0].threadId, 77)
+    assert.equal(sent[0].conversationWxId, 'brand_news')
+    if (quoted) assert.match(sent[0].content, /quoted preview/)
+    assert.equal(sent[0].param?.reply_id, undefined, 'a quote in another topic must not become a Telegram reply')
   })
 }

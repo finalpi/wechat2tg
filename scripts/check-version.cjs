@@ -8,7 +8,7 @@ try {
   const version = fs.readFileSync(path.join(root, 'VERSION'), 'utf8').trim()
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
   const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'))
-  assert.match(version, /^6\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/)
+  assert.match(version, /^6\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-dev\.[1-9]\d*)?$/)
   assert.equal(pkg.version, version, 'package.json must match VERSION')
   assert.equal(lock.version, version, 'lockfile version must match VERSION')
   assert.equal(lock.packages[''].version, version)

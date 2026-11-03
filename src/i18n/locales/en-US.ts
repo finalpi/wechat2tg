@@ -54,6 +54,8 @@ const enUS = {
   'user.bind_contact': 'Bind contact',
   'user.create_contact_group': 'Create contact group',
   'official.no_accounts': 'No official accounts found',
+  'contact.classification_pending': '{{count}} contacts still have unknown VerifyFlag metadata. Retry shortly or narrow the search; lookups are backfilled in bounded batches.',
+  'official.destination_unavailable': 'Contact classification or the official-account topic is not ready. No separate group was created. Retry later; use the forum recovery procedure if creation had an uncertain result.',
   'official.bind_account': 'Bind official account',
   'official.create_account_group': 'Create official account group',
   'room.no_groups': 'No groups found',

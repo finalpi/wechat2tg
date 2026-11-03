@@ -25,10 +25,11 @@ export class MessageRepository {
         })
     }
 
-    async getByBotMsgId(chatId: number,tgBotMsgId: number) {
+    async getByBotMsgId(chatId: number,tgBotMsgId: number, threadId?: number) {
         return await this.repository.findOneBy({
             chatId: chatId,
-            tgBotMsgId: tgBotMsgId
+            tgBotMsgId: tgBotMsgId,
+            ...(threadId === undefined ? {} : {threadId})
         })
     }
 
@@ -38,10 +39,11 @@ export class MessageRepository {
         })
     }
 
-    async listRecentByChatId(chatId: number, limit = 20) {
+    async listRecentByChatId(chatId: number, limit = 20, threadId?: number) {
         return await this.repository.find({
             where: {
-                chatId: chatId
+                chatId: chatId,
+                ...(threadId === undefined ? {} : {threadId})
             },
             order: {
                 id: 'DESC'

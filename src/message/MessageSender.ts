@@ -22,14 +22,18 @@ export abstract class MessageSender {
 
     abstract deleteMessage(chatId: undefined | number, msgId: number)
 
-    sendAction(chatId: number, action: ChatAction) {
-        TelegramBotClient.getSpyClient('botClient').client.telegram.sendChatAction(chatId, action)
-            .catch(() => { /* sendChatAction 仅用于状态提示，失败不影响业务 */ })
+    sendAction(chatId: number, action: ChatAction, threadId?: number) {
+        const telegram = TelegramBotClient.getSpyClient('botClient').client.telegram
+        const request = threadId === undefined
+            ? telegram.sendChatAction(chatId, action)
+            : telegram.sendChatAction(chatId, action, {message_thread_id: threadId})
+        request.catch(() => { /* sendChatAction 仅用于状态提示，失败不影响业务 */ })
     }
 }
 
 export interface Option {
     reply_id?: number,
+    message_thread_id?: number,
     inline_keyboard?: InlineKeyboard[],
     parse_mode?: 'Markdown' | 'MarkdownV2' | 'HTML'
 }

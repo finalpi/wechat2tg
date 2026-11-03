@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  IMAGE: finalpi/wechat2tg-v3
+  IMAGE: finalpi/wechat2tg
 
 jobs:
   validate:
@@ -18,7 +18,8 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       app_version: ${{ steps.meta.outputs.app_version }}
-      is_release: ${{ steps.meta.outputs.is_release }}
+      channel: ${{ steps.meta.outputs.channel }}
+      is_tagged: ${{ steps.meta.outputs.is_tagged }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -38,7 +39,11 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == "push" &&
                 "$GITHUB_REF_TYPE" == "tag" ]]; then
             APP_VERSION="$GITHUB_REF_NAME"
-            IS_RELEASE=true
+            IS_TAGGED=true
+            CHANNEL=stable
+            if [[ "$APP_VERSION" == *-dev.* ]]; then
+              CHANNEL=dev
+            fi
           else
             if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ||
                   "$GITHUB_REF" != "refs/heads/v6" ]]; then
@@ -46,14 +51,17 @@ jobs:
               exit 1
             fi
             APP_VERSION="v6-dev-${GITHUB_SHA:0:7}"
-            IS_RELEASE=false
+            IS_TAGGED=false
+            CHANNEL=dev
           fi
           echo "app_version=$APP_VERSION" >> "$GITHUB_OUTPUT"
-          echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "is_tagged=$IS_TAGGED" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies and test
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
+          npm rebuild sqlite3 --no-audit --no-fund
           npm test
 
   build:
@@ -74,7 +82,8 @@ jobs:
             runner: ubuntu-24.04-arm
     env:
       APP_VERSION: ${{ needs.validate.outputs.app_version }}
-      IS_RELEASE: ${{ needs.validate.outputs.is_release }}
+      CHANNEL: ${{ needs.validate.outputs.channel }}
+      IS_TAGGED: ${{ needs.validate.outputs.is_tagged }}
       ARCH: ${{ matrix.arch }}
     steps:
       - name: Checkout code
@@ -100,8 +109,12 @@ jobs:
             *) echo 'Unsupported architecture'; exit 1 ;;
           esac
           TAGS="$IMAGE:$APP_VERSION-$ARCH"
-          if [[ "$IS_RELEASE" == "true" ]]; then
-            TAGS="$TAGS,$IMAGE:v6-latest-$ARCH"
+          if [[ "$IS_TAGGED" == "true" ]]; then
+            if [[ "$CHANNEL" == "stable" ]]; then
+              TAGS="$TAGS,$IMAGE:v6-$ARCH"
+            else
+              TAGS="$TAGS,$IMAGE:v6-dev-$ARCH"
+            fi
           fi
           echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
 
@@ -123,7 +136,8 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       APP_VERSION: ${{ needs.validate.outputs.app_version }}
-      IS_RELEASE: ${{ needs.validate.outputs.is_release }}
+      CHANNEL: ${{ needs.validate.outputs.channel }}
+      IS_TAGGED: ${{ needs.validate.outputs.is_tagged }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -143,8 +157,12 @@ jobs:
         run: |
           set -euo pipefail
           TAGS=(-t "$IMAGE:$APP_VERSION")
-          if [[ "$IS_RELEASE" == "true" ]]; then
-            TAGS+=(-t "$IMAGE:v6-latest")
+          if [[ "$IS_TAGGED" == "true" ]]; then
+            if [[ "$CHANNEL" == "stable" ]]; then
+              TAGS+=(-t "$IMAGE:v6")
+            else
+              TAGS+=(-t "$IMAGE:v6-dev")
+            fi
           fi
           docker buildx imagetools create "${TAGS[@]}" \
             "$IMAGE:$APP_VERSION-amd64" \
@@ -152,11 +170,13 @@ jobs:
           docker buildx imagetools inspect "$IMAGE:$APP_VERSION"
 
       - name: Docker Hub Description
-        if: needs.validate.outputs.is_release == 'true'
+        if: >-
+          needs.validate.outputs.is_tagged == 'true' &&
+          needs.validate.outputs.channel == 'stable'
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-          repository: finalpi/wechat2tg-v3
+          repository: finalpi/wechat2tg
           readme-filepath: ./README.md
           short-description: 'Telegram收发微信消息'

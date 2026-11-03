@@ -20,6 +20,7 @@ import {ConverterHelper} from '../util/FfmpegUtils'
 import crypto from 'crypto'
 import path from 'node:path'
 import {normalizeEscapedTelegramCommandText} from '../util/TelegramTextUtils'
+import {getTelegramThreadId} from '../util/TelegramTopicUtils'
 
 export class UserMTProtoClient extends AbstractClient {
     private readonly DEFAULT_FILTER_ID = 115
@@ -42,12 +43,15 @@ export class UserMTProtoClient extends AbstractClient {
 
                 // 添加事件处理器
                 this.client?.addEventHandler(async event => {
+                    // Telegram omits the peer for some delete events. IDs alone are not globally unique.
+                    const chatId = Number(event.chatId?.toString())
+                    if (!Number.isSafeInteger(chatId) || !chatId) return
                     for (const deletedId of event.deletedIds) {
-                        const msg = await MessageService.getInstance().getByBotMsgId(undefined, deletedId)
-                        if (!msg) return
+                        const msg = await MessageService.getInstance().getByBotMsgId(chatId, deletedId)
+                        if (!msg || msg.chatId !== chatId) continue
 
                         const wxClient: WeChatClient = UserMTProtoClient.getSpyClient('wxClient') as WeChatClient
-                        if (wxClient.wxInfo.wxid !== msg.wxSenderId) return
+                        if (wxClient.wxInfo.wxid !== msg.wxSenderId) continue
 
                         await wxClient.revokeMessage(msg)
                     }
@@ -69,8 +73,6 @@ export class UserMTProtoClient extends AbstractClient {
         this.client?.getMe().then(me => {
             const mineId = me.id
             this.client.addEventHandler(async event => {
-                const chatIdsAll = await BindGroupService.getInstance().getAll()
-                const chatIds = chatIdsAll.filter(i => i.isForwardOthers).map(i => i.chatId)
                 const msg = event.message
                 if (msg.fromId instanceof Api.PeerUser && msg.fromId.userId.eq(mineId)) {
                     // 我发送的消息
@@ -78,13 +80,14 @@ export class UserMTProtoClient extends AbstractClient {
                 }
                 const botId = returnBigInt(config.botId)
                 const msgChatId = msg.chatId?.toJSNumber()
-                const exist = await BindGroupService.getInstance().getByChatId(msgChatId)
+                const threadId = getTelegramThreadId(msg)
+                const exist = await BindGroupService.getInstance().resolveTelegram(msgChatId, threadId)
                 if (!exist) {
                     // 未绑定消息直接返回
                     return
                 }
                 if (msg.fromId instanceof Api.PeerUser && !msg.fromId.userId.eq(mineId)
-                    && !msg.fromId.userId.eq(botId) && chatIds.includes(msgChatId)) {
+                    && !msg.fromId.userId.eq(botId) && exist.isForwardOthers) {
                     const doSend = () => {
                         if (msg.message) {
                             const isEscapedCommandText = msg.message.startsWith('\\/')
@@ -98,6 +101,8 @@ export class UserMTProtoClient extends AbstractClient {
                                 wxId: '',
                                 sender: '{me}',
                                 chatId: msgChatId,
+                                threadId,
+                                conversationWxId: exist.wxId,
                                 content: text,
                                 type: 0
                             }
@@ -110,6 +115,8 @@ export class UserMTProtoClient extends AbstractClient {
                                 wxId: '',
                                 sender: '{me}',
                                 chatId: msgChatId,
+                                threadId,
+                                conversationWxId: exist.wxId,
                                 content: '',
                                 type: 1
                             }

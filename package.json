@@ -1,20 +1,25 @@
 {
   "name": "wechat2tg",
-  "version": "6.0.12",
+  "version": "6.0.13-dev.1",
   "description": "simple kit send wechat message to telegram",
   "main": "app.ts",
   "esModuleInterop": true,
   "scripts": {
     "dev": "ts-node src/app.ts",
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-webui.cjs",
     "check:version": "node scripts/check-version.cjs",
     "test": "npm run build && node --test test/*.test.cjs",
-    "start": "NODE_ENV=production node dist/app.js"
+    "webui": "node dist/webui/standalone.js",
+    "test:webui": "npm run build && node --test test/webui.test.cjs",
+    "start": "NODE_ENV=production node dist/app.js",
+    "test:mcp": "npm run build && node --test test/mcp.test.cjs",
+    "mcp": "node scripts/wechat-mcp.cjs"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "axios": "^1.9.0",
     "crypto": "^1.0.1",
     "dotenv": "^16.0.3",
@@ -33,7 +38,8 @@
     "telegram": "2.21.2",
     "tencentcloud-sdk-nodejs": "^4.0.977",
     "typeorm": "^0.3.24",
-    "wx2tg-puppet": "6.0.12"
+    "wx2tg-puppet": "6.0.13-dev.1",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.5",

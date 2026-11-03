@@ -54,6 +54,8 @@ const zhCN = {
   'user.bind_contact': '绑定联系人',
   'user.create_contact_group': '创建联系人群组',
   'official.no_accounts': '未查找到公众号',
+  'contact.classification_pending': '还有 {{count}} 个联系人的 VerifyFlag 资料未确认；可稍后重试或缩小查询范围，系统会分批补查。',
+  'official.destination_unavailable': '联系人类型尚未确认或公众号话题尚未准备好，未创建新的独立群。请稍后重试；创建结果不确定时请按论坛恢复说明处理。',
   'official.bind_account': '绑定公众号',
   'official.create_account_group': '创建公众号群组',
   'room.no_groups': '未查找到群组',

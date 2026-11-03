@@ -51,7 +51,7 @@ export class TelegramBotApiMessageSender extends MessageSender {
     }
 
     sendText(chatId: string | number, text: string, option?: Option): Promise<SendResult> {
-        this.sendAction(Number(chatId), 'typing')
+        this.sendAction(Number(chatId), 'typing', option?.message_thread_id)
         const sendParam: tt.ExtraReplyMessage = {}
 
         // 文本消息添加 30 秒超时控制
@@ -59,6 +59,9 @@ export class TelegramBotApiMessageSender extends MessageSender {
 
         return new Promise((resolve, reject) => {
             if (option) {
+                if (option.message_thread_id !== undefined) {
+                    sendParam.message_thread_id = option.message_thread_id
+                }
                 if (option.reply_id) {
                     sendParam.reply_parameters = {
                         message_id: option.reply_id
@@ -98,9 +101,12 @@ export class TelegramBotApiMessageSender extends MessageSender {
         caption?: string,
         fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
     }, option?: Option): Promise<SendResult> {
-        this.sendAction(Number(chatId), 'upload_document')
+        this.sendAction(Number(chatId), 'upload_document', option?.message_thread_id)
         const sendParam: tt.ExtraReplyMessage = {}
         if (option) {
+            if (option.message_thread_id !== undefined) {
+                sendParam.message_thread_id = option.message_thread_id
+            }
             if (option.reply_id) {
                 sendParam.reply_parameters = {
                     message_id: option.reply_id

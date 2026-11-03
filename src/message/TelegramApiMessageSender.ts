@@ -98,14 +98,18 @@ export class TelegramApiMessageSender extends MessageSender {
     }
 
     async sendText(chatId: string | number, text: string, option?: Option): Promise<SendResult> {
-        this.sendAction(Number(chatId), 'typing')
+        this.sendAction(Number(chatId), 'typing', option?.message_thread_id)
         const inputPeerChannelFromMessage = await this.sender.getInputEntity(chatId) || chatId
         return new Promise((resolve, reject) => {
             const sendParam: messageMethods.SendMessageParams = {
                 message: text,
             }
             if (option) {
-                if (option.reply_id) {
+                if (option.message_thread_id !== undefined) {
+                    sendParam.topMsgId = option.message_thread_id
+                    // GramJS only constructs InputReplyToMessage when replyTo is set.
+                    sendParam.replyTo = option.reply_id ?? option.message_thread_id
+                } else if (option.reply_id) {
                     sendParam.replyTo = option.reply_id
                 }
                 if (option.parse_mode) {
@@ -129,7 +133,7 @@ export class TelegramApiMessageSender extends MessageSender {
         fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
     }, option?: Option): Promise<SendResult> {
         const inputPeerChannelFromMessage = await this.sender.getInputEntity(chatId) || chatId
-        this.sendAction(Number(chatId), 'upload_document')
+        this.sendAction(Number(chatId), 'upload_document', option?.message_thread_id)
         return new Promise((resolve, reject) => {
             const sendParam: uploadMethods.SendFileInterface = {
                 workers: 3,
@@ -140,7 +144,11 @@ export class TelegramApiMessageSender extends MessageSender {
                 sendParam.forceDocument = true
             }
             if (option) {
-                if (option.reply_id) {
+                if (option.message_thread_id !== undefined) {
+                    sendParam.topMsgId = option.message_thread_id
+                    // GramJS only constructs InputReplyToMessage when replyTo is set.
+                    sendParam.replyTo = option.reply_id ?? option.message_thread_id
+                } else if (option.reply_id) {
                     sendParam.replyTo = option.reply_id
                 }
                 if (option.parse_mode) {

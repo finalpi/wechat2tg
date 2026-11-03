@@ -1,8 +1,11 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import dotenv from 'dotenv'
+import {loadPersistentEnvironment} from './webui/store'
 
 dotenv.config()
+// WebUI 保存的配置优先于环境变量，并随 storage 挂载持久化。
+loadPersistentEnvironment()
 
 export const config = {
     BOT_TOKEN: process.env.BOT_TOKEN?.toString() || '', // tg bot father 申请的 bot token
@@ -34,6 +37,8 @@ export const config = {
     CALLBACK_PORT: process.env.CALLBACK_PORT?.toString() || '8056',
     // During migration, keep receiving in bound chats without creating duplicate Telegram groups.
     AUTO_CREATE_GROUPS: process.env.AUTO_CREATE_GROUPS !== 'false',
+    OFFICIAL_ACCOUNT_TOPICS_ENABLED: process.env.OFFICIAL_ACCOUNT_TOPICS_ENABLED?.trim().toLowerCase() === 'true',
+    OFFICIAL_ACCOUNT_FORUM_CHAT_ID: process.env.OFFICIAL_ACCOUNT_FORUM_CHAT_ID || '',
     WX_PROXY_HOST: process.env.WX_PROXY_HOST?.toString() || '',
     WX_PROXY_USERNAME: process.env.WX_PROXY_USERNAME?.toString() || '',
     WX_PROXY_PASSWORD: process.env.WX_PROXY_PASSWORD?.toString() || '',

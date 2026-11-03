@@ -1,6 +1,9 @@
-import {Entity, Column, PrimaryGeneratedColumn} from 'typeorm'
+import {Entity, Column, PrimaryGeneratedColumn, Index} from 'typeorm'
 
 @Entity()
+@Index('idx_message_chat_history',['chatId','id'])
+@Index('idx_message_topic_history',['chatId','threadId','id'])
+@Index('idx_message_wechat_receipt',['wxMsgId','tgBotMsgId'])
 export class Message {
     @PrimaryGeneratedColumn()
     id: number
@@ -9,6 +12,12 @@ export class Message {
         default: 0
     })
     chatId: number
+
+    @Column({nullable: true})
+    threadId?: number
+
+    @Column({nullable: true})
+    conversationWxId?: string
 
     @Column({
         default: 0

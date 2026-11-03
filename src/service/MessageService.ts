@@ -24,16 +24,16 @@ export class MessageService {
         return await this.repository.getByWxMsgId(wxMsgId)
     }
 
-    async getByBotMsgId(chatId: number, tgBotMsgId: number) {
-        return await this.repository.getByBotMsgId(chatId, tgBotMsgId)
+    async getByBotMsgId(chatId: number, tgBotMsgId: number, threadId?: number) {
+        return await this.repository.getByBotMsgId(chatId, tgBotMsgId, threadId)
     }
 
     async getByFhMsgId(fhMsgId: string) {
         return await this.repository.getByFhMsgId(fhMsgId)
     }
 
-    async listRecentByChatId(chatId: number, limit = 20) {
-        return await this.repository.listRecentByChatId(chatId, limit)
+    async listRecentByChatId(chatId: number, limit = 20, threadId?: number) {
+        return await this.repository.listRecentByChatId(chatId, limit, threadId)
     }
 
     // 删除指定天数之前的旧消息

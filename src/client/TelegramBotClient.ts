@@ -1,3 +1,4 @@
+import {annotateTelegramRecall} from '../webui/telegram-recall'
 import {Context, Markup, session, Telegraf} from 'telegraf'
 import {config, useProxy} from '../config'
 import {SocksProxyAgent} from 'socks-proxy-agent'
@@ -44,7 +45,11 @@ import {MessageTypeUtils} from '../util/MessageTypeUtils'
 import {normalizeEscapedTelegramCommandText} from '../util/TelegramTextUtils'
 import {AiReplyService} from '../service/AiReplyService'
 import {CustomFile} from 'telegram/client/uploads'
+import {WebMessageStore} from '../webui/message-store'
+import {telegramDeliveryUncertain} from '../webui/delivery'
 import {Api} from 'telegram'
+import {getTelegramThreadId, isSameTelegramDestination} from '../util/TelegramTopicUtils'
+import {WechatAccountClassificationService} from '../service/WechatAccountClassificationService'
 
 interface LargeFileProgressEditor {
     update(text: string, force?: boolean, inlineKeyboard?: Array<{ text: string, callback_data: string }>): Promise<void>
@@ -64,10 +69,12 @@ type FileSendResult = {
 }
 
 type TelegramSendResult = MessageRetryResult & {
+    deliveryUncertain?:boolean
     skipRetry?: boolean
 }
 
 interface QueuedTelegramMessage {
+    webui?: boolean
     message: BaseMessage
     messageId: string
     isRetry: boolean
@@ -170,6 +177,12 @@ export class TelegramBotClient extends AbstractClient {
         this.telegramMessageQueue.push(item)
         void this.processTelegramMessageQueue()
     }
+    public mirrorWebUI(message:BaseMessage):Promise<TelegramSendResult> {
+        return new Promise(resolve=>this.enqueueTelegramMessage({message,messageId:`webui:${message.id}`,isRetry:true,webui:true,resolve}))
+    }
+    public isWebUISyncActive(wxMsgId:string) {
+        return this.activeWebUISync.has(wxMsgId) || this.telegramMessageQueue.some(item=>item.message.id === wxMsgId) || this.messageBufferService.hasScheduledMessage(wxMsgId)
+    }
 
     private enqueueTelegramRetry(message: BaseMessage, messageId: string): Promise<TelegramSendResult> {
         return new Promise(resolve => {
@@ -191,6 +204,9 @@ export class TelegramBotClient extends AbstractClient {
                 }
 
                 this.currentRetryAfterMs = undefined
+                this.currentDeliveryUncertain = false
+                this.activeWebUISync.add(item.message.id)
+                if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(item.message.id,'syncing').catch(() => undefined)
                 let result: TelegramSendResult
                 try {
                     result = await this.sendBufferedMessage(item.message)
@@ -200,10 +216,12 @@ export class TelegramBotClient extends AbstractClient {
                 }
 
                 const retryAfterMs = Math.max(result.retryAfterMs || 0, this.currentRetryAfterMs || 0) || undefined
-                result = {...result, retryAfterMs}
+                this.activeWebUISync.delete(item.message.id)
+                if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(item.message.id,result.success ? 'synced' : this.currentDeliveryUncertain || result.skipRetry || result.deliveryUncertain ? 'unknown' : 'failed').catch(() => undefined)
+                result = {...result,retryAfterMs,deliveryUncertain:this.currentDeliveryUncertain || result.skipRetry || result.deliveryUncertain}
 
                 if (item.isRetry) {
-                    item.resolve?.(result.skipRetry ? {...result, success: true} : result)
+                    item.resolve?.(item.webui ? result : result.skipRetry ? {...result, success: true} : result)
                     continue
                 }
 
@@ -227,6 +245,8 @@ export class TelegramBotClient extends AbstractClient {
     }
 
     private async sendBufferedMessage(message: BaseMessage): Promise<TelegramSendResult> {
+        if (message.type !== 6 && message.chatId && (!message.threadId || message.threadId === 1)
+            && await this.bindGroupService.isManagedForum(message.chatId)) return {success: false}
         if (message.type === 0) {
             return {success: await this.sendTextMsgSynchronously(message)}
         }
@@ -256,6 +276,7 @@ export class TelegramBotClient extends AbstractClient {
             return await request()
         } catch (error) {
             this.recordTelegramRetryAfter(error)
+            if(telegramDeliveryUncertain(error))this.currentDeliveryUncertain = true
             throw error
         }
     }
@@ -311,6 +332,8 @@ export class TelegramBotClient extends AbstractClient {
     private createMessageEntity(message: BaseMessage): Message {
         const messageEntity = new Message()
         messageEntity.chatId = message.chatId
+        messageEntity.threadId = message.threadId
+        messageEntity.conversationWxId = message.conversationWxId
         messageEntity.wxMsgId = message.id
         messageEntity.type = message.type
         messageEntity.wxSenderId = message.senderId
@@ -348,7 +371,9 @@ export class TelegramBotClient extends AbstractClient {
                     fileType: message.file.sendType,
                     caption: message.sender
                 }, {
-                    parse_mode: 'HTML'
+                    parse_mode: 'HTML',
+                    message_thread_id: message.threadId,
+                    reply_id: message.param?.reply_id
                 }))
 
             messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
@@ -372,8 +397,8 @@ export class TelegramBotClient extends AbstractClient {
         const fileName = message.file.fileName || 'wechat-large-file'
         const totalSize = message.file.file.length
         const progressNoticeMessageId = message.param?.telegramUploadNoticeMessageId
-            || await this.sendTelegramFileNotice(message.chatId, fileName)
-        const progressEditor = await this.createTelegramUploadProgressEditor(message.chatId, fileName, totalSize, progressNoticeMessageId)
+            || await this.sendTelegramFileNotice(message.chatId, fileName, message.threadId)
+        const progressEditor = await this.createTelegramUploadProgressEditor(message.chatId, fileName, totalSize, progressNoticeMessageId, message.threadId)
         const uploadStartedAt = Date.now()
         await progressEditor.update(this.formatTelegramUploadProgress(fileName, 0, totalSize), true)
 
@@ -385,6 +410,8 @@ export class TelegramBotClient extends AbstractClient {
                 async () => botMTPClient.client.sendFile(inputPeer, {
                     file: new CustomFile(fileName, totalSize, '', message.file.file),
                     caption: message.sender,
+                    replyTo: message.param?.reply_id ?? message.threadId,
+                    topMsgId: message.threadId,
                     parseMode: 'html',
                     forceDocument: true,
                     workers: 3,
@@ -410,7 +437,8 @@ export class TelegramBotClient extends AbstractClient {
                 message.chatId,
                 fileName,
                 totalSize,
-                uploadStartedAt
+                uploadStartedAt,
+                message.threadId
             )
             if (uploadedMessageId) {
                 this.logger.info(`Telegram 大文件上传超时后确认已成功: fileName=${fileName}, tgMsgId=${uploadedMessageId}`)
@@ -465,12 +493,14 @@ export class TelegramBotClient extends AbstractClient {
         chatId: number,
         fileName: string,
         totalSize: number,
-        uploadStartedAt: number
+        uploadStartedAt: number,
+        threadId?: number
     ): Promise<number | undefined> {
         try {
             const inputPeer = await botMTPClient.client.getInputEntity(chatId)
             const messages = await botMTPClient.client.getMessages(inputPeer, {limit: 10})
             for (const msg of messages || []) {
+                if (getTelegramThreadId(msg) !== threadId) continue
                 const document = msg?.document
                 if (!document) {
                     continue
@@ -505,9 +535,9 @@ export class TelegramBotClient extends AbstractClient {
         await botMTPClient.client.connect()
     }
 
-    private async sendTelegramFileNotice(chatId: number, fileName: string): Promise<number> {
+    private async sendTelegramFileNotice(chatId: number, fileName: string, threadId?: number): Promise<number> {
         const bot = TelegramBotClient.getSpyClient('botClient').client as Telegraf
-        const sent = await this.sendTelegramRequest(chatId, () => bot.telegram.sendMessage(chatId, fileName))
+        const sent = await this.sendTelegramRequest(chatId, () => bot.telegram.sendMessage(chatId, fileName, {message_thread_id: threadId}))
         return sent.message_id
     }
 
@@ -515,6 +545,7 @@ export class TelegramBotClient extends AbstractClient {
         try {
             const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
             const msgRes = await this.sendTelegramRequest(message.chatId, () => client.telegram.sendPhoto(message.chatId, {source: message.file.file, filename: message.file.fileName}, {
+                message_thread_id: message.threadId,
                 caption: message.content,
                 parse_mode: 'HTML',
                 reply_markup: {
@@ -536,6 +567,7 @@ export class TelegramBotClient extends AbstractClient {
             const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
             const msgJson = TelegramBotClient.getSpyClient('wxClient').client.Message.getXmlToJson(message.source_text)
             const msgRes = await this.sendTelegramRequest(message.chatId, () => client.telegram.sendLocation(message.chatId, parseFloat(msgJson.msg.location.x), parseFloat(msgJson.msg.location.y), {
+                message_thread_id: message.threadId,
                 reply_markup: {
                     inline_keyboard: [[Markup.button.callback(msgJson.msg.location.poiname || msgJson.msg.location.label, 'null')]]
                 }
@@ -553,19 +585,11 @@ export class TelegramBotClient extends AbstractClient {
     private async sendRevokeMessage(message: BaseMessage, messageEntity: Message): Promise<boolean> {
         try {
             const revokeMsg = await this.messageService.getByWxMsgId(message.revokeMsgId)
+            // Recall follows the original delivery, not today's routing or feature flag.
+            const chatId = revokeMsg?.chatId || message.chatId
+            const original = revokeMsg || {threadId: message.threadId}
             const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
-            let param = undefined
-            if (revokeMsg) {
-                param = {
-                    reply_parameters: {
-                        message_id: revokeMsg.tgBotMsgId
-                    }
-                }
-            }
-            const msgRes = await this.sendTelegramRequest(message.chatId, () => client.telegram.sendMessage(message.chatId, message.content, param))
-
-            messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
-            await this.messageService.createOrUpdate(messageEntity)
+            await annotateTelegramRecall(WebMessageStore.getInstance(),client.telegram,message.wxId,String(message.revokeMsgId),chatId,original,'',message.content || '消息已撤回',action=>this.sendTelegramRequest(chatId,action))
             return true
         } catch (e) {
             await this.dealException(e, message)
@@ -598,11 +622,13 @@ export class TelegramBotClient extends AbstractClient {
     private processingMessages = new Set<string>()
     // 所有转发消息和重试共用同一发送队列
     private telegramMessageQueue: QueuedTelegramMessage[] = []
+    private activeWebUISync = new Set<string>()
     private isProcessingQueue = false
     private telegramQueueBlockedUntil = 0
     private telegramNextGlobalSendAt = 0
     private telegramNextSendAtByChat = new Map<string, number>()
     private currentRetryAfterMs: number | undefined
+    private currentDeliveryUncertain = false
     // i18n实例
     private i18n = I18n.getInstance()
     // Telegram Bot 连接状态管理
@@ -634,6 +660,7 @@ export class TelegramBotClient extends AbstractClient {
                 password: config.PASSWORD
             }
 
+            // SAFETY: Proxy agents implement Node's Agent contract; this bridges differing dependency type versions.
             const socksAgent = new SocksProxyAgent(info) as unknown as http.Agent
             this.client = new Telegraf(config.BOT_TOKEN, {
                 telegram: {
@@ -642,6 +669,7 @@ export class TelegramBotClient extends AbstractClient {
             })
         } else if ((config.PROTOCOL === 'http' || config.PROTOCOL === 'https') && config.HOST !== '' && config.PORT !== '') {
             const proxyUrl = `${config.PROTOCOL}://${config.USERNAME}:${config.PASSWORD}@${config.HOST}:${config.PORT}`
+            // SAFETY: Proxy agents implement Node's Agent contract; this bridges differing dependency type versions.
             const httpAgent = new HttpsProxyAgent(proxyUrl) as unknown as http.Agent
             this.client = new Telegraf(config.BOT_TOKEN, {
                 telegram: {
@@ -682,7 +710,7 @@ export class TelegramBotClient extends AbstractClient {
 
         // 检查是否是Telegram API响应错误
         if (e.response && e.response.error_code) {
-            if (e.response.error_code === 403) {
+            if (e.response.error_code === 403 && !message.threadId && !await this.bindGroupService.isManagedForum(message.chatId)) {
                 this.bindGroupService.removeByChatIdOrWxId(message.chatId, message.senderId)
                 const config = await this.configurationService.getConfig()
                 message.chatId = config.botId
@@ -702,6 +730,29 @@ export class TelegramBotClient extends AbstractClient {
         else {
             this.logger.warn(`未知错误，消息将通过缓冲区重试: ${message.id} - ${e.message || e}`)
         }
+    }
+
+    private currentThread(ctx: Context): number | undefined {
+        return getTelegramThreadId(ctx.message ?? ctx.callbackQuery?.message)
+    }
+
+    private belongsToContext(stored: Message | undefined, ctx: Context): boolean {
+        return isSameTelegramDestination(stored, ctx.chat?.id, this.currentThread(ctx))
+    }
+
+    private async blockForumMutation(ctx: Context): Promise<boolean> {
+        if (!await this.bindGroupService.isManagedForum(ctx.chat?.id)) return false
+        await ctx.reply('公众号话题群不支持整群解绑、重绑、更新或退出。请在私聊中使用 /official。', {
+            message_thread_id: this.currentThread(ctx)
+        })
+        return true
+    }
+
+    private async ingressReply(ctx: Context): Promise<{replyMessageId: number} | undefined> {
+        const replyId = ctx.message?.['reply_to_message']?.message_id
+        if (!replyId) return undefined
+        const stored = await this.messageService.getByBotMsgId(ctx.chat.id, replyId, this.currentThread(ctx))
+        return this.belongsToContext(stored, ctx) ? {replyMessageId: replyId} : undefined
     }
 
     private onBotAction(bot: Telegraf) {
@@ -764,7 +815,7 @@ export class TelegramBotClient extends AbstractClient {
         })
 
         bot.action(/^message/, async ctx => {
-            const bindGroup = await this.bindGroupService.getByChatId(ctx.chat.id)
+            const bindGroup = await this.bindGroupService.resolveTelegram(ctx.chat.id, this.currentThread(ctx))
             if (bindGroup) {
                 bindGroup.isReceive = !bindGroup.isReceive
                 await this.bindGroupService.createOrUpdate(bindGroup)
@@ -779,7 +830,7 @@ export class TelegramBotClient extends AbstractClient {
         })
 
         bot.action(/^forward/, async ctx => {
-            const bindGroup = await this.bindGroupService.getByChatId(ctx.chat.id)
+            const bindGroup = await this.bindGroupService.resolveTelegram(ctx.chat.id, this.currentThread(ctx))
             if (bindGroup) {
                 bindGroup.isForwardOthers = !bindGroup.isForwardOthers
                 await this.bindGroupService.createOrUpdate(bindGroup)
@@ -820,8 +871,9 @@ export class TelegramBotClient extends AbstractClient {
         })
 
         bot.action(/^(?:us|of):page-/, async ctx => {
+            await ctx.answerCbQuery()
             const [actionMark, pageNum] = ctx.match.input.split(':page-')
-            const data = await this.getContactList(actionMark === 'of')
+            const {contacts: data} = await this.getContactList(actionMark === 'of')
             const dataMap = data.map(item => {
                 return {
                     remark: item.remark ? item.remark : item.nickName,
@@ -830,10 +882,11 @@ export class TelegramBotClient extends AbstractClient {
             })
             const page = new KeyboardPageUtils(dataMap, parseInt(pageNum), actionMark)
             ctx.editMessageReplyMarkup(page.getMarkup())
-            ctx.answerCbQuery()
         })
 
         bot.action(/^(?:us|of):/, async ctx => {
+            await ctx.answerCbQuery()
+            if (await this.blockForumMutation(ctx)) return
             const wxId = ctx.match.input.split(':')[1]
             const contact = await TelegramBotClient.getSpyClient('wxClient').client.Contact.find({id: wxId})
             if (contact) {
@@ -849,6 +902,18 @@ export class TelegramBotClient extends AbstractClient {
                     this.updateGroupByChatId(group.chatId)
                     ctx.reply(this.i18n.t('binding.success'))
                 } else {
+                    let topic: BindGroup | undefined
+                    try {
+                        topic = await this.bindGroupService.resolveWechat(wxId, contact.name())
+                    } catch (error) {
+                        this.logger?.warn('Contact destination is not ready', error?.code || error?.name)
+                        await ctx.reply(this.i18n.t('official.destination_unavailable'))
+                        return
+                    }
+                    if (topic?.threadId) {
+                        await ctx.reply(`https://t.me/c/${String(topic.chatId).replace(/^-100/, '')}/${topic.threadId}`)
+                        return
+                    }
                     // bot中使用，创建新的群组
                     const telegramGroupOperateService = new TelegramGroupOperateService(this.bindGroupService, TelegramBotClient.getSpyClient('userMTPClient').client)
                     let bindGroup = new BindGroup()
@@ -873,7 +938,6 @@ export class TelegramBotClient extends AbstractClient {
                     }
                 }
             }
-            ctx.answerCbQuery()
         })
 
         bot.action(/^ro:page-/, async ctx => {
@@ -891,6 +955,7 @@ export class TelegramBotClient extends AbstractClient {
         })
 
         bot.action(/^ro:/, async ctx => {
+            if (await this.blockForumMutation(ctx)) return
             const wxId = ctx.match.input.split(':')[1]
             const room = await TelegramBotClient.getSpyClient('wxClient').client.Room.find({id: wxId})
             if (room) {
@@ -947,7 +1012,7 @@ export class TelegramBotClient extends AbstractClient {
         bot.action(/^chr:/, async ctx => {
             try {
                 const [, tgBotMsgId, nestedId] = ctx.match.input.split(':')
-                const storedMessage = await this.messageService.getByBotMsgId(ctx.chat.id, Number(tgBotMsgId))
+                const storedMessage = await this.messageService.getByBotMsgId(ctx.chat.id, Number(tgBotMsgId), this.currentThread(ctx))
                 await this.replyNestedChatHistory(ctx, storedMessage, Number(tgBotMsgId), nestedId)
             } catch (e) {
                 this.logger.error('展开嵌套聊天记录失败:', e)
@@ -973,7 +1038,7 @@ export class TelegramBotClient extends AbstractClient {
                 await ctx.answerCbQuery('开始下载')
                 const statusMessage = await ctx.reply('正在下载合并消息附件...')
                 const storedMessage = await this.messageService.getByWxMsgId(wxMsgId)
-                if (!storedMessage?.source_text) {
+                if (!this.belongsToContext(storedMessage, ctx) || !storedMessage?.source_text) {
                     await ctx.reply('原始聊天记录已过期，无法下载附件')
                     return
                 }
@@ -985,7 +1050,7 @@ export class TelegramBotClient extends AbstractClient {
                 }
                 const fileBuffer = await this.downloadChatHistoryAttachment(attachment, storedMessage)
                 const replyToMessageId = ctx.callbackQuery?.message?.['message_id'] || storedMessage.tgBotMsgId
-                await this.sendChatHistoryAttachment(ctx.chat.id, fileBuffer, attachment, Number(replyToMessageId))
+                await this.sendChatHistoryAttachment(ctx.chat.id, fileBuffer, attachment, Number(replyToMessageId), storedMessage.threadId)
                 await ctx.telegram.deleteMessage(ctx.chat.id, statusMessage.message_id).catch(() => undefined)
             } catch (e) {
                 this.logger.error('下载聊天记录附件失败:', e)
@@ -998,8 +1063,8 @@ export class TelegramBotClient extends AbstractClient {
                 const [, tgBotMsgId, nestedId, attachmentId] = ctx.match.input.split(':')
                 await ctx.answerCbQuery('开始下载')
                 const statusMessage = await ctx.reply('正在下载合并消息附件...')
-                const storedMessage = await this.messageService.getByBotMsgId(ctx.chat.id, Number(tgBotMsgId))
-                if (!storedMessage?.source_text) {
+                const storedMessage = await this.messageService.getByBotMsgId(ctx.chat.id, Number(tgBotMsgId), this.currentThread(ctx))
+                if (!this.belongsToContext(storedMessage, ctx) || !storedMessage?.source_text) {
                     await ctx.reply('原始聊天记录已过期，无法下载附件')
                     return
                 }
@@ -1010,7 +1075,7 @@ export class TelegramBotClient extends AbstractClient {
                     return
                 }
                 const fileBuffer = await this.downloadChatHistoryAttachment(attachment, storedMessage)
-                await this.sendChatHistoryAttachment(ctx.chat.id, fileBuffer, attachment, Number(tgBotMsgId))
+                await this.sendChatHistoryAttachment(ctx.chat.id, fileBuffer, attachment, Number(tgBotMsgId), storedMessage.threadId)
                 await ctx.telegram.deleteMessage(ctx.chat.id, statusMessage.message_id).catch(() => undefined)
             } catch (e) {
                 this.logger.error('下载聊天记录附件失败:', e)
@@ -1039,7 +1104,7 @@ export class TelegramBotClient extends AbstractClient {
             // 处理完毕
             const messageId = ctx.message.message_id
             const chatId = ctx.chat.id
-            const exist = await this.bindGroupService.getByChatId(chatId)
+            const exist = await this.bindGroupService.resolveTelegram(chatId, this.currentThread(ctx))
             // 处理等待用户输入的指令
             if (await this.dealWithCommand(ctx, rawText)) {
                 return
@@ -1048,7 +1113,6 @@ export class TelegramBotClient extends AbstractClient {
                 // 未绑定消息直接返回
                 return
             }
-            const replyMessageId = ctx.update.message['reply_to_message']?.message_id
             // 其他 bot 的命令会进来，不处理
             if (!isEscapedCommandText && typeof text === 'string' && text.startsWith('/')) {
                 return
@@ -1059,14 +1123,12 @@ export class TelegramBotClient extends AbstractClient {
                 wxId: '',
                 sender: '{me}',
                 chatId: chatId,
+                threadId: this.currentThread(ctx),
+                conversationWxId: exist.wxId,
                 content: text,
                 type: 0
             }
-            if (replyMessageId) {
-                message.param = {
-                    replyMessageId: replyMessageId
-                }
-            }
+            message.param = await this.ingressReply(ctx)
             // 发送消息到微信
             TelegramBotClient.getSpyClient('wxClient').sendMessage(message)
         })
@@ -1091,7 +1153,7 @@ export class TelegramBotClient extends AbstractClient {
                 return
             }
             const chatId = ctx.chat.id
-            const exist = await this.bindGroupService.getByChatId(chatId)
+            const exist = await this.bindGroupService.resolveTelegram(chatId, this.currentThread(ctx))
             if (!exist) {
                 // 未绑定消息直接返回
                 return
@@ -1164,12 +1226,17 @@ export class TelegramBotClient extends AbstractClient {
             }
             const messageId = ctx.message.message_id
             const chatId = ctx.chat.id
+            const exist = await this.bindGroupService.resolveTelegram(chatId, this.currentThread(ctx))
+            if (!exist) return
             const baseMessage: BaseMessage = {
                 id: messageId + '',
                 senderId: '',
                 wxId: '',
                 sender: '{me}',
                 chatId: chatId,
+                threadId: this.currentThread(ctx),
+                conversationWxId: exist.wxId,
+                param: await this.ingressReply(ctx),
                 content: '',
                 type: 1
             }
@@ -1200,7 +1267,7 @@ export class TelegramBotClient extends AbstractClient {
         }
         const messageId = ctx.message.message_id
         const chatId = ctx.chat.id
-        const exist = await this.bindGroupService.getByChatId(chatId)
+        const exist = await this.bindGroupService.resolveTelegram(chatId, this.currentThread(ctx))
         if (!exist) {
             // 未绑定消息直接返回
             return
@@ -1211,6 +1278,9 @@ export class TelegramBotClient extends AbstractClient {
             wxId: '',
             sender: '{me}',
             chatId: chatId,
+            threadId: this.currentThread(ctx),
+            conversationWxId: exist.wxId,
+            param: await this.ingressReply(ctx),
             content: '',
             type: 1
         }
@@ -1359,14 +1429,17 @@ export class TelegramBotClient extends AbstractClient {
             })
         }
         // 带有文本的消息单独发送文本
-        if (ctx.text) {
-            const text = normalizeEscapedTelegramCommandText(ctx.text)
+        if (ctx.text || ctx.message.caption) {
+            const text = normalizeEscapedTelegramCommandText(ctx.text || ctx.message.caption)
             const textMessage: BaseMessage = {
                 id: messageId + '',
                 senderId: '',
                 wxId: '',
                 sender: '{me}',
                 chatId: chatId,
+                threadId: this.currentThread(ctx),
+                conversationWxId: exist.wxId,
+                param: baseMessage.param,
                 content: text,
                 type: 0
             }
@@ -1379,16 +1452,18 @@ export class TelegramBotClient extends AbstractClient {
         const contacts = query
             ? await repository.getByNickNameOrRemark(query)
             : await repository.getAll()
-        return (contacts || []).filter(contact => contact.userName.startsWith('gh_') === official)
+        const classified = await WechatAccountClassificationService.getInstance().classifyContacts(contacts || [])
+        return {contacts: official ? classified.official : classified.contacts, unknown: classified.unknown.length}
     }
 
     private async showContactList(ctx: Context, query: string, official: boolean) {
         if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
             return ctx.reply(this.i18n.t('login.please_login_wx'))
         }
-        const contacts = await this.getContactList(official, query)
+        const {contacts, unknown} = await this.getContactList(official, query)
         if (contacts.length === 0) {
-            return ctx.reply(this.i18n.t(official ? 'official.no_accounts' : 'user.no_contacts'))
+            return ctx.reply(unknown ? this.i18n.t('contact.classification_pending', {count: String(unknown)})
+                : this.i18n.t(official ? 'official.no_accounts' : 'user.no_contacts'))
         }
         const data = contacts.map(contact => ({
             remark: contact.remark || contact.nickName,
@@ -1400,7 +1475,8 @@ export class TelegramBotClient extends AbstractClient {
         const prompt = official
             ? (inGroup ? 'official.bind_account' : 'official.create_account_group')
             : (inGroup ? 'user.bind_contact' : 'user.create_contact_group')
-        return ctx.reply(this.i18n.t(prompt), {reply_markup: page.getMarkup()})
+        const text = this.i18n.t(prompt) + (unknown ? '\n' + this.i18n.t('contact.classification_pending', {count: String(unknown)}) : '')
+        return ctx.reply(text, {reply_markup: page.getMarkup()})
     }
 
     private onBotCommand(bot: Telegraf) {
@@ -1485,6 +1561,7 @@ ${this.i18n.t('help.instructions')}`))
         })
 
         bot.command('quit', async ctx => {
+            if (await this.blockForumMutation(ctx)) return
             if (!TelegramBotClient.getSpyClient('userMTPClient').hasLogin) {
                 return ctx.reply(this.i18n.t('login.please_login_user_bot'))
             }
@@ -1503,6 +1580,7 @@ ${this.i18n.t('help.instructions')}`))
         })
 
         bot.command('update', async (ctx) => {
+            if (await this.blockForumMutation(ctx)) return
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 await this.updateGroupByChatId(ctx.chat.id)
             } else {
@@ -1511,6 +1589,7 @@ ${this.i18n.t('help.instructions')}`))
         })
 
         bot.command('unbind', async (ctx) => {
+            if (await this.blockForumMutation(ctx)) return
             if (ctx.chat && ctx.chat.type.includes('group')) {
                 await this.bindGroupService.removeByChatIdOrWxId(ctx.chat.id, undefined)
                 ctx.reply(this.i18n.t('unbind.success'))
@@ -1521,7 +1600,7 @@ ${this.i18n.t('help.instructions')}`))
 
         bot.command('message', async (ctx) => {
             if (ctx.chat && ctx.chat.type.includes('group')) {
-                const bindGroup = await this.bindGroupService.getByChatId(ctx.chat.id)
+                const bindGroup = await this.bindGroupService.resolveTelegram(ctx.chat.id, this.currentThread(ctx))
                 if (!bindGroup) {
                     ctx.reply(this.i18n.t('message.not_bound'))
                     return
@@ -1543,7 +1622,7 @@ ${this.i18n.t('help.instructions')}`))
 
         bot.command('forward', async (ctx) => {
             if (ctx.chat && ctx.chat.type.includes('group')) {
-                const bindGroup = await this.bindGroupService.getByChatId(ctx.chat.id)
+                const bindGroup = await this.bindGroupService.resolveTelegram(ctx.chat.id, this.currentThread(ctx))
                 if (!bindGroup) {
                     ctx.reply(this.i18n.t('forward.not_bound'))
                     return
@@ -1631,8 +1710,8 @@ ${this.i18n.t('help.instructions')}`))
             if (!replyMessageId) {
                 return ctx.reply(this.i18n.t('revoke.reply_required'))
             }
-            const msg = await this.messageService.getByBotMsgId(ctx.chat.id, replyMessageId)
-            if (!msg) {
+            const msg = await this.messageService.getByBotMsgId(ctx.chat.id, replyMessageId, this.currentThread(ctx))
+            if (!this.belongsToContext(msg, ctx)) {
                 return ctx.reply(this.i18n.t('revoke.failed'))
             }
             const wxClient: WeChatClient = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
@@ -1657,6 +1736,7 @@ ${this.i18n.t('help.instructions')}`))
     }
 
     private async updateGroupByChatId(chatId: number) {
+        if (await this.bindGroupService.isManagedForum(chatId)) return
         const bindItem = await this.bindGroupService.getByChatId(chatId)
         if (bindItem) {
             const telegramGroupOperateService = new TelegramGroupOperateService(this.bindGroupService, TelegramBotClient.getSpyClient('userMTPClient').client)
@@ -1709,6 +1789,11 @@ ${this.i18n.t('help.instructions')}`))
     }
 
     private async handleAiCommand(ctx: Context) {
+        if (await this.bindGroupService.isManagedForum(ctx.chat?.id)
+            && !await this.bindGroupService.resolveTelegram(ctx.chat.id, this.currentThread(ctx))) {
+            await ctx.reply('请在有效的公众号话题中使用 /ai。', {message_thread_id: this.currentThread(ctx)})
+            return
+        }
         const text = ctx.text || ''
         const args = text.replace(/^\/ai(@\w+)?\s*/i, '').trim()
         const [action] = args.split(/\s+/).filter(Boolean)
@@ -1757,7 +1842,7 @@ ${this.i18n.t('help.instructions')}`))
             const appConfig = await this.configurationService.getConfig()
             const defaultContextLimit = appConfig.aiContextLimit || (config.AI_CONTEXT_LIMIT > 0 ? config.AI_CONTEXT_LIMIT : 20)
             const contextLimit = aiOptions.contextLimit || defaultContextLimit
-            const recentMessages = await this.messageService.listRecentByChatId(ctx.chat.id, contextLimit * 3)
+            const recentMessages = await this.messageService.listRecentByChatId(ctx.chat.id, contextLimit * 3, this.currentThread(ctx))
             const wxClient = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
             const selfWxId = wxClient?.wxInfo?.wxid || ''
             const suggestion = await AiReplyService.getInstance().generateReplySuggestion(recentMessages, aiOptions.instruction, contextLimit, this.i18n.getLanguage(), selfWxId)
@@ -2180,18 +2265,23 @@ ${this.i18n.t('help.instructions')}`))
         // 只有在 chatId 无效时才通过 wxId 查询数据库
         let targetChatId = message.chatId
         if (!targetChatId) {
-            const bindGroup = await this.bindGroupService.getByWxId(message.wxId)
+            const bindGroup = await this.bindGroupService.resolveWechat(message.wxId, message.sender)
             if (!bindGroup) {
                 this.logger.error(`文本消息发送失败: 未找到绑定群组 - wxId=${message.wxId}, msgId=${message.id}`)
                 return false
             }
             targetChatId = bindGroup.chatId
+            message.threadId = bindGroup.threadId
+            message.conversationWxId = bindGroup.wxId
         }
 
         if (!targetChatId) {
             this.logger.error(`文本消息发送失败: chatId 无效 - wxId=${message.wxId}, msgId=${message.id}`)
             return false
         }
+
+        message.chatId = targetChatId
+        if ((!message.threadId || message.threadId === 1) && await this.bindGroupService.isManagedForum(targetChatId)) return false
 
         // 在这里进行格式化，如果格式化失败会抛出异常，在保存数据库之前被捕获
         let sendTextFormat: string
@@ -2208,6 +2298,7 @@ ${this.i18n.t('help.instructions')}`))
         this.logger.info(`开始发送文本消息: wxMsgId=${message.id}, chatId=${targetChatId}`)
 
         const option: Option = {
+            message_thread_id: message.threadId,
             parse_mode: 'HTML'
         }
         if (message.param?.reply_id) {
@@ -2296,6 +2387,7 @@ ${this.i18n.t('help.instructions')}`))
             }
         }
 
+        if(newMsg && !success)this.currentDeliveryUncertain = true
         // 更新chatId
         if (newMsg && success) {
             messageEntity.tgBotMsgId = parseInt(newMsg.message_id + '')
@@ -2363,11 +2455,11 @@ ${this.i18n.t('help.instructions')}`))
     }
 
     private getAttachmentButtonText(attachment: ChatHistoryAttachment) {
-        return attachment.type === 'image' ? '下载图片' : '下载文件'
+        return attachment.type === 'image' ? '下载图片' : attachment.type === 'video' ? '下载视频' : '下载文件'
     }
 
     private async replyNestedChatHistory(ctx: Context, storedMessage: Message | undefined, replyToMessageId: number, nestedId: string) {
-        if (!storedMessage?.source_text) {
+        if (!this.belongsToContext(storedMessage, ctx) || !storedMessage?.source_text) {
             await ctx.answerCbQuery('聊天记录已过期')
             return
         }
@@ -2382,6 +2474,7 @@ ${this.i18n.t('help.instructions')}`))
         }
 
         const replyOptions: any = {
+            message_thread_id: storedMessage.threadId,
             parse_mode: 'HTML',
             reply_parameters: {
                 message_id: replyToMessageId || storedMessage.tgBotMsgId
@@ -2427,12 +2520,35 @@ ${this.i18n.t('help.instructions')}`))
         return undefined
     }
 
-    private async downloadChatHistoryAttachment(attachment: ChatHistoryAttachment, storedMessage: Message): Promise<Buffer> {
+    public async downloadChatHistoryAttachment(attachment: ChatHistoryAttachment, storedMessage: Message): Promise<Buffer> {
         const wxConfig = await wxConfigService.get()
         const wxid = wxConfig?.wxid || ''
+        if (attachment.type === 'video') {
+            // Forwarded records have CDN credentials, not the ordinary video's
+            // 32-bit MsgId. Download the full video with the server's type-4 path.
+            const response = await toolsApi.CdnDownloadRecordItem({
+                Wxid: wxid,
+                CdnDataKey: attachment.payload.rawCdnDataKey,
+                CdnDataUrl: attachment.payload.cdnDataUrl,
+                DataId: attachment.payload.dataId || attachment.id,
+                DataSize: attachment.payload.dataLen || 0,
+                DataType: 4,
+                IsThumb: 0,
+                FullMd5: attachment.payload.fullMd5 || '',
+                Diagnostic: false
+            })
+            if (response.data?.Success !== true || Number(response.data?.Code) !== 0) {
+                throw new Error('聊天记录视频下载失败')
+            }
+            const buffer = this.extractImageDownloadBuffer(response.data)
+            if (buffer.length < 12 || buffer.subarray(4, 8).toString() !== 'ftyp') {
+                throw new Error('聊天记录视频返回格式不是 MP4')
+            }
+            return buffer
+        }
         if (attachment.type === 'image') {
             const recordItemAesKey = attachment.payload.rawFileAesKey || attachment.payload.fileAesKey
-            this.logger.info(`下载聊天记录图片附件(recorditem): cdnDataUrl=${String(attachment.payload.fileNo).slice(0, 60)}, aesKey=${attachment.payload.fileAesKey}, rawKey=${attachment.payload.rawFileAesKey}, usedKey=${recordItemAesKey}, dataSize=${attachment.payload.dataLen}`)
+            this.logger.info(`下载聊天记录图片附件(recorditem): dataSize=${attachment.payload.dataLen}`)
             const response = await toolsApi.CdnDownloadRecordItem({
                 CdnDataKey: recordItemAesKey,
                 CdnDataUrl: attachment.payload.fileNo,
@@ -2477,64 +2593,44 @@ ${this.i18n.t('help.instructions')}`))
 
     private async downloadRecordItemFileAttachment(attachment: ChatHistoryAttachment, wxid: string): Promise<Buffer> {
         const recordItemKey = attachment.payload.rawCdnDataKey || attachment.payload.cdnDataKey
-        this.logger.info(`下载聊天记录文件附件(recorditem): cdnDataUrl=${String(attachment.payload.cdnDataUrl).slice(0, 60)}, aesKey=${attachment.payload.cdnDataKey}, rawKey=${attachment.payload.rawCdnDataKey}, usedKey=${recordItemKey}, dataSize=${attachment.payload.dataLen}`)
-        const response = await toolsApi.CdnDownloadRecordItem({
-            CdnDataKey: recordItemKey,
-            CdnDataUrl: attachment.payload.cdnDataUrl,
-            DataId: attachment.id,
-            DataSize: attachment.payload.dataLen || 0,
-            FullMd5: attachment.payload.fullMd5 || '',
-            IsThumb: 0,
-            Wxid: wxid
-        })
-        this.logger.info(`下载聊天记录文件附件(recorditem): message=${response.data?.Message}, success=${response.data?.Success}, dataKeys=${Object.keys(response.data?.Data || {}).join(',')}`)
-        if (response.data?.Message === '成功' || response.data?.Success === true) {
-            return this.extractImageDownloadBuffer(response.data)
+        this.logger.info(`下载聊天记录文件附件(recorditem): dataSize=${attachment.payload.dataLen}`)
+        try {
+            const response = await toolsApi.CdnDownloadRecordItem({
+                CdnDataKey: recordItemKey,
+                CdnDataUrl: attachment.payload.cdnDataUrl,
+                DataId: attachment.id,
+                DataSize: attachment.payload.dataLen || 0,
+                DataType: 8,
+                FullMd5: attachment.payload.fullMd5 || '',
+                IsThumb: 0,
+                Wxid: wxid
+            })
+            if (response.data?.Success === true && Number(response.data?.Code) === 0) {
+                const buffer = this.extractImageDownloadBuffer(response.data)
+                const expected = Number(attachment.payload.dataLen || 0)
+                if (expected > 0 && buffer.length !== expected) throw new Error('聊天记录文件长度不一致')
+                return buffer
+            }
+        } catch {
+            // Do not log Axios request details: they contain CDN credentials.
         }
+        this.logger.warn('聊天记录文件 CDN 下载未完成，尝试文件分片下载')
         return await this.downloadFileAttachmentChunks(attachment, wxid)
     }
 
     private async downloadFileAttachmentChunks(attachment: ChatHistoryAttachment, wxid: string): Promise<Buffer> {
         const totalSize = Number(attachment.payload.dataLen || 0)
-        if (totalSize <= 0) {
-            throw new Error(`Invalid attachment size for ${attachment.type}`)
+        if (!Number.isSafeInteger(totalSize) || totalSize <= 0 || totalSize > 0xffffffff || !attachment.payload.attachId) {
+            throw new Error('Invalid file attachment size or identifier')
         }
-
-        const firstChunk = FileChunkHelper.getChunk(totalSize, 0)
-        if (!firstChunk) {
-            throw new Error('Invalid first file chunk')
-        }
-
-        this.logger.info(`下载聊天记录文件附件: size=${totalSize}, userName=${attachment.payload.userName}, attachId=${String(attachment.payload.attachId).slice(0, 80)}`)
-        const firstResp = await this.retryDownload(() => toolsApi.DownloadFile({
+        this.logger.info(`下载聊天记录文件附件: size=${totalSize}`)
+        return await toolsApi.DownloadFileBuffer({
             AppID: attachment.payload.appId,
             AttachId: attachment.payload.attachId,
             DataLen: totalSize,
-            Section: firstChunk,
             UserName: attachment.payload.userName,
             Wxid: wxid
-        }))
-
-        const firstChunkData = this.extractChunkDownloadBuffer(firstResp.data)
-        const downloadedLength = firstChunkData.length || firstChunkData.buffer.length
-        const chunks = FileChunkHelper.calculateChunks(totalSize, downloadedLength)
-        let completeBuffer = firstChunkData.buffer
-
-        for (let i = 1; i < chunks.length; i++) {
-            const chunk = chunks[i]
-            const response = await this.retryDownload(() => toolsApi.DownloadFile({
-                AppID: attachment.payload.appId,
-                AttachId: attachment.payload.attachId,
-                DataLen: totalSize,
-                Section: chunk,
-                UserName: attachment.payload.userName,
-                Wxid: wxid,
-            }))
-            const chunkData = this.extractChunkDownloadBuffer(response.data)
-            completeBuffer = Buffer.concat([completeBuffer, chunkData.buffer])
-        }
-
-        return completeBuffer
+        })
     }
 
     private async downloadImageAttachmentChunks(attachment: ChatHistoryAttachment, wxid: string, storedMessage: Message): Promise<Buffer> {
@@ -2699,11 +2795,12 @@ ${this.i18n.t('help.instructions')}`))
         return undefined
     }
 
-    private async sendChatHistoryAttachment(chatId: number, fileBuffer: Buffer, attachment: ChatHistoryAttachment, replyToMessageId: number) {
+    private async sendChatHistoryAttachment(chatId: number, fileBuffer: Buffer, attachment: ChatHistoryAttachment, replyToMessageId: number, threadId?: number) {
         await this.sendWechatRetryFile(chatId, fileBuffer, {
+            threadId,
             fileName: attachment.fileName,
-            fileType: attachment.type === 'image' ? 'photo' : 'document',
-            caption: attachment.type === 'image' ? undefined : attachment.title,
+            fileType: attachment.type === 'image' ? 'photo' : attachment.type === 'video' ? 'video' : 'document',
+            caption: attachment.type === 'image' ? undefined : String(attachment.title ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
             replyToMessageId,
             useDedicatedUploadNotice: true
         })
@@ -2713,23 +2810,25 @@ ${this.i18n.t('help.instructions')}`))
         const storedMessage = await this.messageService.getByWxMsgId(wxMsgId)
         const callbackMessage = ctx.callbackQuery?.message
         const replyToMessageId = callbackMessage?.['message_id']
-        if (!storedMessage || !storedMessage.source_text || !storedMessage.source_type) {
+        if (!this.belongsToContext(storedMessage, ctx) || !storedMessage.source_text || !storedMessage.source_type) {
             await ctx.reply('原始消息记录不存在，无法重试下载')
             return
         }
 
         await this.editWechatMediaRetryMessage(ctx, '正在重试下载...')
-        const wxMessage = this.buildWechatRetryMessage(storedMessage)
         try {
+            const wxMessage = this.buildWechatRetryMessage(storedMessage)
             const filebox = await wxMessage.toFileBox()
             if (!filebox) {
                 throw new Error('下载结果为空')
             }
 
             const fileBuffer = await filebox.toBuffer()
-            await this.sendWechatRetryFile(ctx.chat.id, fileBuffer, {
+            await this.sendWechatRetryFile(storedMessage.chatId, fileBuffer, {
+                threadId: storedMessage.threadId,
+                conversationWxId: storedMessage.conversationWxId,
                 fileName: filebox.name,
-                fileType: this.wxTypeToTgFileType(storedMessage.source_type),
+                fileType: this.wxTypeToTgFileType(wxMessage.type()),
                 caption: storedMessage.sender,
                 replyToMessageId
             })
@@ -2741,11 +2840,25 @@ ${this.i18n.t('help.instructions')}`))
     }
 
     private buildWechatRetryMessage(storedMessage: Message): WxMessage {
+        // Stored SDK types are names (e.g. "file"), while Message expects the
+        // native MsgType. Numeric types from older saved messages remain valid.
+        const mediaTypes: Record<string, number> = {
+            [WxMessage.Type.File]: 49,
+            [WxMessage.Type.Image]: 3,
+            [WxMessage.Type.Video]: 43,
+            [WxMessage.Type.Voice]: 34,
+            [WxMessage.Type.Emoji]: 47
+        }
+        const storedType = String(storedMessage.source_type || '').trim()
+        const nativeType = /^\d+$/.test(storedType) ? Number(storedType) : mediaTypes[storedType]
+        if (!Number.isSafeInteger(nativeType) || nativeType <= 0) {
+            throw new Error('原始消息类型不支持下载')
+        }
         return new WxMessage({
             MsgId: Number(storedMessage.msgId || 0),
             FromUserName: storedMessage.wxSenderId || storedMessage.toWxid || '',
             ToUserName: storedMessage.toWxid || '',
-            MsgType: Number(storedMessage.source_type),
+            MsgType: nativeType,
             Content: storedMessage.source_text,
             CreateTime: storedMessage.createTime || Math.floor(Date.now() / 1000),
             NewMsgId: storedMessage.wxMsgId,
@@ -2755,6 +2868,8 @@ ${this.i18n.t('help.instructions')}`))
 
     private async sendWechatRetryFile(chatId: number, fileBuffer: Buffer, options: {
         fileName: string
+        threadId?: number
+        conversationWxId?: string
         fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
         caption?: string
         replyToMessageId?: number
@@ -2767,6 +2882,8 @@ ${this.i18n.t('help.instructions')}`))
                 wxId: '',
                 sender: options.caption || '',
                 chatId,
+                threadId: options.threadId,
+                conversationWxId: options.conversationWxId,
                 content: '',
                 type: 1,
                 file: {
@@ -2774,15 +2891,17 @@ ${this.i18n.t('help.instructions')}`))
                     file: fileBuffer,
                     sendType: 'document'
                 },
-                param: options.replyToMessageId && !options.useDedicatedUploadNotice ? {
-                    telegramUploadNoticeMessageId: options.replyToMessageId
-                } : undefined
+                param: {
+                    reply_id: options.replyToMessageId,
+                    telegramUploadNoticeMessageId: !options.useDedicatedUploadNotice ? options.replyToMessageId : undefined
+                }
             })
             return
         }
 
         const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
         const sendOptions: any = {
+            message_thread_id: options.threadId,
             caption: options.caption,
             parse_mode: 'HTML'
         }
@@ -2890,6 +3009,7 @@ ${this.i18n.t('help.instructions')}`))
             }
 
             const sent = await this.sendTelegramRequest(chatId, () => bot.telegram.sendMessage(chatId, text, {
+                message_thread_id: this.currentThread(ctx),
                 ...(inlineKeyboard ? {
                     reply_markup: {
                         inline_keyboard: [inlineKeyboard]
@@ -2934,9 +3054,9 @@ ${this.i18n.t('help.instructions')}`))
         }
     }
 
-    private async createTelegramUploadProgressEditor(chatId: number, fileName: string, totalSize?: number, existingMessageId?: number): Promise<LargeFileProgressEditor> {
+    private async createTelegramUploadProgressEditor(chatId: number, fileName: string, totalSize?: number, existingMessageId?: number, threadId?: number): Promise<LargeFileProgressEditor> {
         const bot = TelegramBotClient.getSpyClient('botClient').client as Telegraf
-        const messageId = existingMessageId ?? (await this.sendTelegramRequest(chatId, () => bot.telegram.sendMessage(chatId, fileName))).message_id
+        const messageId = existingMessageId ?? (await this.sendTelegramRequest(chatId, () => bot.telegram.sendMessage(chatId, fileName, {message_thread_id: threadId}))).message_id
         let lastText = ''
         let lastEditTime = 0
         let retryAfterUntil = 0

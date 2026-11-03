@@ -38,7 +38,7 @@ syncmessageinterval = "1s"
 syncmessageautostop = "0"
 callbacktimeout = "5s"
 # 必须是 server 容器可访问的地址；{0} 由 server 替换为登录 wxid。
-syncmessagebusinessuri = "http://wx2tg-v3:8056/message/callback/{0}"
+syncmessagebusinessuri = "http://wechat2tg:8056/message/callback/{0}"
 # 按消息 ID 去重；0 关闭。
 messagededupwindow = "2m"
 logoutbusinessuri = ""

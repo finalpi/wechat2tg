@@ -18,6 +18,9 @@ export class WxContact {
     @Column('integer', {nullable: true})
     sex: number
 
+    @Column('integer', {nullable: true})
+    verifyFlag: number | null
+
     @Column('text', {nullable: true})
     remark: string
 

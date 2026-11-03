@@ -2,6 +2,9 @@ import {Entity, Column, PrimaryGeneratedColumn} from 'typeorm'
 
 @Entity()
 export class BindGroup {
+    // Runtime-only destination context; forum mappings live in their own table.
+    threadId?: number
+
     @PrimaryGeneratedColumn()
     id: number
 

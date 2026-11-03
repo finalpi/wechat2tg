@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "wechat": {
+      "command": "node",
+      "args": ["/absolute/path/to/wechat2tg/scripts/wechat-mcp.cjs"],
+      "env": {
+        "WECHAT_MCP_URL": "http://127.0.0.1:17863/mcp",
+        "WECHAT_MCP_TOKEN_FILE": "/absolute/path/to/private/mcp-token"
+      }
+    }
+  }
+}

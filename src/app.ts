@@ -5,20 +5,13 @@ import {ConfigurationService} from './service/ConfigurationService'
 import {LogUtils} from './util/LogUtil'
 import {config} from './config'
 import {MessageService} from './service/MessageService'
+import {startWebUI} from './webui/server'
+import I18n from './i18n'
+import {createMessageCenter} from './webui/messages'
 
 // 校验配置是否配置了必填项
-if (!config.API_HASH){
-    console.error('请配置 API_HASH')
-    process.exit(1)
-}
-if (!config.API_ID){
-    console.error('请配置 API_ID')
-    process.exit(1)
-}
-if (!config.BOT_TOKEN){
-    console.error('请配置 BOT_TOKEN')
-    process.exit(1)
-}
+const missingCredentials = ['API_HASH', 'API_ID', 'BOT_TOKEN'].filter(key => !config[key])
+let webUIStarted = false
 
 // 定时清理旧消息的任务
 function scheduleOldMessageCleanup() {
@@ -70,13 +63,30 @@ async function cleanupOldMessages() {
 
 AppDataSource.initialize()
     .then(async () => {
-        ConfigurationService.getInstance().getConfig().then(()=>{
+        return ConfigurationService.getInstance().getConfig().then(()=>{
+            startWebUI(config, {
+                read: () => ConfigurationService.getInstance().getConfig() as unknown as Promise<Record<string, unknown>>,
+                save: async patch => {
+                    const current = await ConfigurationService.getInstance().getConfig()
+                    await ConfigurationService.getInstance().saveConfig(Object.assign(current, patch))
+                    if (patch.language) I18n.getInstance().setLanguage(patch.language as 'zh-CN' | 'en-US')
+                },
+            }, createMessageCenter())
+            webUIStarted = true
+            if (missingCredentials.length) {
+                console.error(`请在 WebUI 配置 ${missingCredentials.join(', ')}，保存后重启应用。`)
+                return
+            }
             new ClientFactory().create('botClient').login()
             // 启动定时清理任务
             scheduleOldMessageCleanup()
         })
     })
-    .catch((error) => console.log(error))
+    .catch((error) => {
+        console.log(error)
+        // Connection setup remains available when the database cannot be opened.
+        if (!webUIStarted) startWebUI(config)
+    })
 
 
 process.on('uncaughtException', (err) => {

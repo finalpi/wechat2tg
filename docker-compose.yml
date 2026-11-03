@@ -1,13 +1,14 @@
-version: '3'
-
 services:
-  wx2tg-v3:
-    image: finalpi/wechat2tg-v3:v6.0.12
-    container_name: wx2tg-v3
-    # 同一 Compose 网络访问回调端口不需要发布到宿主机。
-    # 当前默认 polling；外部 server 使用 callback 时按需开放端口并配置访问控制。
-    # ports:
-    #   - "8056:8056"
+  wechat2tg:
+    image: finalpi/wechat2tg:v6.0.13-dev.1
+    container_name: wechat2tg-v6
+    environment:
+      WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"
+      WEBUI_HOST: "0.0.0.0"
+      WEBUI_PORT: "${WEBUI_PORT:-17863}"
+    ports:
+      - "${WEBUI_BIND_ADDRESS:-0.0.0.0}:${WEBUI_PORT:-17863}:${WEBUI_PORT:-17863}"
+      # - "8056:8056" # callback 模式且需宿主机访问时启用 / Optional callback exposure
     volumes:
       - ./config:/app/storage
       - ./save-files:/app/save-files # 保存文件夹挂载后贴纸文件不需要重新转换
@@ -18,7 +19,7 @@ services:
 
   wx2tg-server:
     # v6 分支配套 server v6；v7 分支部署时使用对应的 v7 镜像。
-    image: finalpi/wx2tg-server:v6.0.12
+    image: finalpi/wx2tg-server:v6.0.13-dev.1
     container_name: wx2tg-server
     ports:
       - "8058:8058"

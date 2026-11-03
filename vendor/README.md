@@ -1,16 +1,18 @@
 # 固定的 puppet 发行制品
 
-- 文件：`wx2tg-puppet-6.0.12.tgz`
+当前开发版使用：
+
+- 文件：`wx2tg-puppet-6.0.13-dev.1.tgz`
 - 来源仓库：`https://github.com/finalpi/wx2tg-puppet`
-- 来源分支：`v6`
-- 来源提交：`f0d8af1db4cc64afad721f6aa7d78f7b34256a37`
-- 对应本地 Git 标签：`v6.0.12`
-- 包版本：`6.0.12`
-- SHA-256：`870eaea0dcfa1bcae01e1c5e0ef353d5c9420cbd07c100a6e8213436eed1810c`
-- npm SHA-512 integrity：由 `package-lock.json` 记录，`npm ci` 和 `test/release.test.cjs` 会验证。
+- 唯一维护分支：`v6`（dev 是 tag 后缀，不是分支）
+- 来源提交：`6eb6fb828ff59271f5875cdd300985ac61b3b7a1`
+- 对应发行标签：`v6.0.13-dev.1`
+- 包版本：`6.0.13-dev.1`
+- SHA-256：`89ba3b519fad15fa28319ca380e34ef8828c700269e7e2213544a5e24aca9c57`
+- npm SHA-512 integrity：由 `package-lock.json` 保存，`npm ci` 和 `test/release.test.cjs` 验证。
 
-这是从上述源码提交执行 `npm test`、`npm pack` 生成的完整 npm 包，已验证重新打包与本文件逐字节相同。不是从 `node_modules` 手工修改或拼装的制品；不包含配置凭据或真实消息。
+由上述源码执行测试、构建和 `npm pack` 生成，不是修改 `node_modules` 得到的补丁，不包含配置凭据或真实消息。当前 lockfile 仅使用这一开发版制品；目录内旧 `6.0.12` 包保留为历史参考，不参与当前安装。
 
-保留本文件是为了在 npm `6.0.12` 尚未发布时保持 bot 可重现构建。`package.json` 精确依赖 `6.0.12`，lockfile 将它解析到本目录。必须保留 lockfile 和此制品；不要改用尚不存在的 registry URL 或手填 integrity。
+保留制品是为了在 npm registry 尚未发布该版本时仍能重现构建。`package.json` 精确依赖 `6.0.13-dev.1`，lockfile 将其解析到本目录；不要删除 lockfile 后改用不存在的 registry 地址，也不要手填 integrity。
 
-此记录说明本地来源，不代表该提交、Git 标签或 npm 包已经发布远程。更新方法与正式发布顺序见 [发行规则](../docs/releases.md)。
+这个来源记录不代表 npm registry 已发布。Git tag 工作流上传的是 npm 格式 Actions artifact，不会自动 npm publish。完整规则见 [发行说明](../docs/releases.md)。
