@@ -10,12 +10,12 @@ import sharp from 'sharp'
 import {FormatUtils} from '../util/FormatUtils'
 import {config} from '../config'
 import {FileUtils} from '../util/FileUtils'
+import {TelegramChatFolderService} from './TelegramChatFolderService'
 
 export class TelegramGroupOperateService {
     private bindGroupService: BindGroupService
     private client: GramClient
     private configService: ConfigurationService = ConfigurationService.getInstance()
-    private readonly folderName = 'WeChat'
     // 创建群组队列，保证不重复
     private createGroupQueue: BindGroup[] = []
 
@@ -205,8 +205,8 @@ export class TelegramGroupOperateService {
 
             // 更新信息
             await this.updateGroup(contactOrRoom)
-            // 添加到文件夹
-            this.addToFolder(bindGroup.chatId)
+            // Folder organization is optional: never delay or fail a persisted binding.
+            void this.addToFolder(bindGroup.chatId)
             this.createGroupQueue = this.createGroupQueue.filter(i => i.wxId !== contactOrRoom.wxId)
             // 添加绑定
             return bindGroup
@@ -228,30 +228,15 @@ export class TelegramGroupOperateService {
     }
 
     async addToFolder(chatId: number): Promise<void> {
-        const result = await this.client?.invoke(new Api.messages.GetDialogFilters())
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        const dialogFilter: Api.TypeDialogFilter = result?.filters.find(it => it.title === this.folderName)
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        // TODO: #42 Cannot read properties of undefined (reading 'id')
-        const id = dialogFilter?.id
-        const entity = await this.client?.getInputEntity(chatId)
-        if (entity && dialogFilter) {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            const exist = dialogFilter.includePeers.find(it => it.chatId === entity.chatId)
-            if (!exist) {
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                dialogFilter.includePeers.push(entity)
-                await this.client?.invoke(new Api.messages.UpdateDialogFilter({
-                    id: id,
-                    filter: dialogFilter,
-                })).catch(e => {
-                    // this.tgBotClient.bot.telegram.sendMessage(this.tgBotClient.chatId, this.i18n.t('common.addGroupToFolderFail'))
-                })
+        if (!this.client) return
+        try {
+            const result = await TelegramChatFolderService.forClient(this.client).addChat(chatId)
+            if (result.status === 'skipped' && result.reason !== 'excluded') {
+                console.info(`[TelegramGroupOperateService] 文件夹整理已跳过（${result.reason}），群组和绑定仍可正常使用`)
             }
+        } catch {
+            // Even an unexpected organizer failure must not become an unhandled rejection.
+            console.warn('[TelegramGroupOperateService] 文件夹整理未完成，群组和绑定仍可正常使用')
         }
     }
 }

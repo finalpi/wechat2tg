@@ -32,6 +32,10 @@ Native amd64 and arm64 builds publish independently as the Docker version plus `
 6. WebUI contact search, multi-type messaging, attachment downloads, and Telegram delivery tracking
 7. Eleven MCP tools with WebUI token management and client configuration export
 
+## Automatic chat-folder overflow
+
+New groups are organized into `WeChat`, `WeChat 2`, `WeChat 3`, and so on using the logged-in account’s Telegram limits. If no folder slot remains, group creation, binding, and forwarding still succeed; the chat stays available in All Chats. Existing settings and unrelated/shared folders are preserved. See [folder allocation and failure behavior (Chinese)](docs/telegram-chat-folders.md).
+
 ## Official accounts in forum topics
 
 Optionally set `OFFICIAL_ACCOUNT_TOPICS_ENABLED=true` and restart. The first official-account message automatically provisions one private forum, with a separate topic per account. Future messages use those topics and replies route back to the matching account; General never routes to WeChat. The feature defaults off, retains old groups/bindings, and restores old routing when disabled. See [official-account topics (Chinese)](docs/official-account-topics.md).

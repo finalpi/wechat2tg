@@ -4,6 +4,7 @@ import {TelegramClient} from 'telegram/client/TelegramClient'
 import {returnBigInt} from 'telegram/Helpers'
 import {OfficialAccountForum} from '../entity/OfficialAccountForum'
 import {OfficialAccountTopic} from '../entity/OfficialAccountTopic'
+import {TelegramChatFolderService} from './TelegramChatFolderService'
 import type {OfficialForumStorage, OfficialForumTelegram, OfficialTopicOptions} from './OfficialAccountForumService'
 
 export class TypeOrmOfficialForumStorage implements OfficialForumStorage {
@@ -157,6 +158,13 @@ export class GramJsOfficialForumTelegram implements OfficialForumTelegram {
             || member.status !== 'administrator' || !member.can_manage_topics
             || !member.can_invite_users || !member.can_delete_messages) {
             throw new Error(`Forum ${chatId} is not ready: verify forum mode and bot manage_topics/invite_users/delete_messages rights, then retry`)
+        }
+        // A forum occupies one folder slot regardless of its topic count. Folder
+        // organization must never block readiness or trigger another forum creation.
+        try {
+            void TelegramChatFolderService.forClient(user).addChat(chatId).catch(() => undefined)
+        } catch {
+            // Keep the verified forum usable even if the optional organizer fails.
         }
     }
 

@@ -32,6 +32,10 @@ amd64、arm64 独立构建，分别发布 Docker 版本加 `-amd64` / `-arm64` �
 6. WebUI 联系人搜索、多类型收发、附件下载与 Telegram 同步跟踪
 7. 十一个微信 MCP 工具，支持 WebUI 管理 Token 与导出客户端配置
 
+## 聊天文件夹自动扩容
+
+新群按 Telegram 返回的账号限额依次放入 `WeChat`、`WeChat 2`、`WeChat 3` 等文件夹。文件夹总数也满额时，群组照常创建、绑定和转发，仍可在「全部聊天」找到。保留现有设置和其他/共享文件夹。详见 [文件夹分配与失败处理](docs/telegram-chat-folders.md)。
+
 ## 公众号集中到论坛 Topic
 
 可选设置 `OFFICIAL_ACCOUNT_TOPICS_ENABLED=true`，重启后首次处理公众号时自动创建一个私有论坛群，每个公众号对应独立 Topic。所有公众号的新消息切换到各自 Topic，支持从 Topic 回复；General 区域不会发送到微信。默认关闭，旧群和绑定保留，关闭后恢复旧路由。详见 [公众号 Topic 模式](docs/official-account-topics.md)。

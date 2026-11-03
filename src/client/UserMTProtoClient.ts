@@ -21,11 +21,9 @@ import crypto from 'crypto'
 import path from 'node:path'
 import {normalizeEscapedTelegramCommandText} from '../util/TelegramTextUtils'
 import {getTelegramThreadId} from '../util/TelegramTopicUtils'
+import {TelegramChatFolderService} from '../service/TelegramChatFolderService'
 
 export class UserMTProtoClient extends AbstractClient {
-    private readonly DEFAULT_FILTER_ID = 115
-    private readonly folderName = 'WeChat'
-
     async login(authParams: authMethods.UserAuthParams | authMethods.BotAuthParams): Promise<boolean> {
         if (!UserMTProtoClient.getSpyClient('userMTPClient')) {
             const clientFactory = new ClientFactory()
@@ -39,7 +37,7 @@ export class UserMTProtoClient extends AbstractClient {
             try {
                 await this.client?.start(authParams)
                 this.hasLogin = true
-                this.createFolder()
+                void this.createFolder()
 
                 // 添加事件处理器
                 this.client?.addEventHandler(async event => {
@@ -209,10 +207,14 @@ export class UserMTProtoClient extends AbstractClient {
     }
 
     sendMessage(message: BaseMessage): Promise<boolean> {
+        // AbstractClient requires these arguments; this session has no send hook.
+        void message
         throw new Error('Method not implemented.')
     }
 
     handlerMessage(event: Event, message: BaseMessage): Promise<unknown> {
+        void event
+        void message
         throw new Error('Method not implemented.')
     }
 
@@ -246,52 +248,17 @@ export class UserMTProtoClient extends AbstractClient {
     }
 
     async createFolder(): Promise<void> {
-        const result = await this.client?.invoke(new Api.messages.GetDialogFilters())
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        const values = result.filters.map(it => {
-            return it.className === 'DialogFilter' ? it.id : 0
-        })
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        const value = result?.filters.find(it => it.title === this.folderName)
-        let id
-        if (value) {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            id = value.id
-        } else {
-            id = Math.max(...values) + 1 || this.DEFAULT_FILTER_ID
-        }
-        if (id === 1) {
-            id = 100
-        }
-        const config = await ConfigurationService.getInstance().getConfig()
-        // console.log('filter id', id)
-        if (!value) {
-            // log.info('创建 TG 文件夹')
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            this.client?.getInputEntity(config.botId).then(botEntity => {
-                if (botEntity) {
-                    const dialogFilter = new Api.DialogFilter({
-                        id: id,
-                        title: this.folderName,
-                        pinnedPeers: [botEntity],
-                        includePeers: [botEntity],
-                        excludePeers: [],
-                    })
-                    this.client?.invoke(new Api.messages.UpdateDialogFilter({
-                        id: id,
-                        filter: dialogFilter,
-                    })).catch(e => {
-                        if (e.errorMessage.includes('DIALOG_FILTERS_TOO_MUCH')) {
-                            // 已经到达文件夹创建的上限,不再创建新的文件夹
-                            return
-                        }
-                    })
-                }
-            })
+        if (!this.client) return
+        try {
+            const configuration = await ConfigurationService.getInstance().getConfig()
+            if (!Number.isSafeInteger(configuration?.botId) || configuration.botId <= 0) return
+            const result = await TelegramChatFolderService.forClient(this.client).ensurePrimaryFolder(configuration.botId)
+            if (result.status === 'skipped') {
+                console.info(`[UserMTProtoClient] 初始文件夹整理已跳过（${result.reason}），不影响登录和建群`)
+            }
+        } catch {
+            // This bootstrap is intentionally detached from login, so consume all failures.
+            console.warn('[UserMTProtoClient] 初始文件夹整理未完成，不影响登录和建群')
         }
     }
 
