@@ -55,7 +55,9 @@ COPY --from=builder-lottie-to-png /application/bin/lottie_to_gif.sh /usr/bin
 RUN chmod +x /usr/bin/lottie_to_png /usr/bin/lottie_common.sh /usr/bin/lottie_to_gif.sh
 
 COPY package*.json tsconfig.json ./
-RUN npm install -g npm@10.7.0 && npm install
+# Lockfile resolves puppet to the verified local release artifact until npm publication.
+COPY vendor/ ./vendor/
+RUN npm install -g npm@10.7.0 && npm ci
 RUN npm install wx-voice -g
 RUN wx-voice compile
 

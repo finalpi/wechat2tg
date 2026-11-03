@@ -4,7 +4,10 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - v*
+      - 'v6.*'
+
+permissions:
+  contents: read
 
 jobs:
   build-and-push:
@@ -13,6 +16,35 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Validate release and test
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run check:version
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm test
+          if [[ "$GITHUB_EVENT_NAME" == "push" &&
+                "$GITHUB_REF_TYPE" == "tag" ]]; then
+            APP_VERSION="$GITHUB_REF_NAME"
+            IMAGE_TAGS="finalpi/wechat2tg-v3:$APP_VERSION,finalpi/wechat2tg-v3:v6-latest"
+          else
+            if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ||
+                  "$GITHUB_REF" != "refs/heads/v6" ]]; then
+              echo 'Manual builds must use branch v6'
+              exit 1
+            fi
+            APP_VERSION="v6-dev-${GITHUB_SHA:0:7}"
+            IMAGE_TAGS="finalpi/wechat2tg-v3:$APP_VERSION"
+          fi
+          echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
+          echo "IMAGE_TAGS=$IMAGE_TAGS" >> "$GITHUB_ENV"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -20,39 +52,22 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Login to DockerHub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      #      - name: Create cache directory
-      #        run: mkdir -p /tmp/.buildx-cache
-      #
-      #      - name: Cache Docker layers
-      #        uses: actions/cache@v2
-      #        with:
-      #          path: /tmp/.buildx-cache
-      #          key: ${{ runner.os }}-buildx-${{ github.sha }}
-      #          restore-keys: |
-      #            ${{ runner.os }}-buildx-
-
-      - name: Generate App Version
-        run: echo APP_VERSION=`git describe --tags --always` >> $GITHUB_ENV
-
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: |
-            finalpi/wechat2tg-v3:latest
-            finalpi/wechat2tg-v3:${{ env.APP_VERSION }}
+          tags: ${{ env.IMAGE_TAGS }}
           platforms: linux/amd64,linux/arm64/v8
-      #          cache-from: type=local,src=/tmp/.buildx-cache
-      #          cache-to: type=local,mode=max,dest=/tmp/.buildx-cache
 
       - name: Docker Hub Description
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}

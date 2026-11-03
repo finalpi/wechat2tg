@@ -1,0 +1,16 @@
+.git
+**/node_modules
+dist
+.env
+.env.*
+!.env.example
+conf
+config
+storage
+save-files
+redis-data
+server-data
+server-logs
+logs
+.idea
+.DS_Store

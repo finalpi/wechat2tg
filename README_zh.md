@@ -1,4 +1,4 @@
-# wechat2tg-v3
+# wechat2tg（v6）
 
 中文 | [English](README.md)
 
@@ -71,13 +71,13 @@
 ## 部署安装
 
 > [!IMPORTANT]
-> 本分支的部署示例使用 `finalpi/wx2tg-server:v6-latest`，配套 `v6` 分支。后续同步到 `v7` 时需使用对应的 v7 server 镜像。当前 `wx2tg-puppet 3.0.8` 尚未适配新版带正文回调及二进制文件分片下载，不能仅凭配置同步视为完整兼容；详见 [v6 配置与消息链路说明](docs/server-v6.md)。
+> 本次三个仓库统一为 **`v6.0.12`**：bot / puppet 包版本 `6.0.12`，server 与 bot 镜像标签 `v6.0.12`。本地标签不代表已经发布 npm/Docker。版本、发布顺序与历史分支说明见 [发行规则](docs/releases.md)；消息模式、存储与升级注意事项见 [v6 配置与消息链路说明](docs/server-v6.md)。v7 本轮不改动。
 
 先复制一份 `.env.example` 为 `.env` 文件，然后配置 `.env` 文件中的环境变量
 
 复制项目中的 `app.conf.example` 为 `app.conf` 文件到 `conf` 目录，将 Redis 地址设置为你部署的 Redis 的地址。已有部署请合并新增配置，不要直接覆盖自己的端口、Redis 凭据和回调地址。
 
-默认保留 `.env` 中的 `MODE=polling`，以及 server 的 `syncmessage=false`、`msgpush=false`。服务端新增消息归档默认启用 SQLite，保存在宿主机 `./server-data/messages`，与 bot 的 `./config` 数据库独立。不要直接照搬上游的 `msgpush=true`；当前依赖会丢弃回调正文。可选 PostgreSQL、迁移注意事项和回调适配建议见上面的详细说明。
+默认保留 `.env` 中的 `MODE=polling`，以及 server 的 `syncmessage=false`、`msgpush=false`。服务端新增消息归档默认启用 SQLite，保存在宿主机 `./server-data/messages`，与 bot 的 `./config` 数据库独立。puppet `6.0.12` 已支持带正文回调和二进制文件分片；切换到 callback 时需同时配置 server 的 `msgpush=true` 和可达的回调地址，详见上面的说明。
 
 ### docker-compose
 
@@ -88,7 +88,7 @@ version: '3'
 
 services:
   wx2tg-v3:
-    image: finalpi/wechat2tg-v3:latest
+    image: finalpi/wechat2tg-v3:v6.0.12
     container_name: wx2tg-v3
     # ports:
     #   - "8056:8056" # 仅外部 server 回调时按需发布；同一 Compose 网络无需发布
@@ -101,7 +101,7 @@ services:
       - wx2tg-server
 
   wx2tg-server:
-    image: finalpi/wx2tg-server:v6-latest
+    image: finalpi/wx2tg-server:v6.0.12
     container_name: wx2tg-server
     ports:
       - "8058:8058"
@@ -266,8 +266,8 @@ wx2tg-server 需要保证和你登陆地在同一个区域，如果遇到输入�
 
 ## 参与开发
 
-1. fork 项目，切换到 `wx2tg-v3-dev` 分支，或者新建一个分支。请不要直接提交代码到主分支
-2. 提交 Pull Request 到 `wx2tg-v3-dev` 分支
+1. fork 项目，从 `v6` 创建功能分支；v7 相关改动单独处理。
+2. 提交 Pull Request 到对应维护分支，版本更新遵循 [发行规则](docs/releases.md)。
 
 
 ## License

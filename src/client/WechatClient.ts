@@ -43,6 +43,7 @@ export class WeChatClient extends AbstractClient {
     private _wxInfo
     // 登陆时间
     private startTime
+    private loginReady: Promise<void> | undefined
     // 正在创建的群组 Map，用于防止并发创建重复群组
     private creatingGroups: Map<string, Promise<BindGroup>> = new Map()
 
@@ -155,20 +156,45 @@ export class WeChatClient extends AbstractClient {
             })
             return
         }
+        // Callback mode can deliver messages before start() resolves.
+        this.startTime = Math.floor(Date.now() / 1000)
         this.client.start().then(async () => {
             getGeWeChatDataSource().initialize().then(() => {
                 this.logger.info('DataSource initialized')
             }).catch((e) => {
                 this.logger.error('DataSource initialize failed', e)
             })
-            this.startTime = new Date().getTime() / 1000
         })
         return true
     }
 
+    private waitForLogin(): Promise<void> {
+        if (!this.loginReady) {
+            const pending = (async () => {
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    try {
+                        const info = await this.client.info()
+                        if (!info?.wxid) throw new Error('微信账号信息尚未就绪')
+                        this._wxInfo = info
+                        this.hasLogin = true
+                        return
+                    } catch (error) {
+                        if (attempt === 2) throw error
+                        await new Promise(resolve => setTimeout(resolve, 1000))
+                    }
+                }
+            })()
+            this.loginReady = pending
+            // A transient failure must not leave every subsequent message behind a rejected gate.
+            void pending.catch(() => {
+                if (this.loginReady === pending) this.loginReady = undefined
+            })
+        }
+        return this.loginReady
+    }
+
     async loginSuccess() {
-        this._wxInfo = await this.client.info()
-        this.hasLogin = true
+        // Notifications and binding maintenance are not prerequisites for receiving messages.
         const config = await this.configurationService.getConfig()
         const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
         const i18n = I18n.getInstance()
@@ -225,7 +251,7 @@ export class WeChatClient extends AbstractClient {
                     this.logger.info(`开始发送文件到微信: tgMsgId=${message.id}, chatId=${message.chatId}, wxId=${bindGroup.wxId}, fileName=${message.file.fileName}, size=${this.formatBytes(message.file.file.length)}`)
                     if (message.file.fileName.endsWith('.mp4')) {
                         message.file.fileName = new Date().getTime() + 'video.mp4'
-                        const url = FileUtils.saveFile(message.file.file, message.file.fileName)
+                        FileUtils.saveFile(message.file.file, message.file.fileName)
                         this.logger.info(`开始处理视频文件: tgMsgId=${message.id}, fileName=${message.file.fileName}, size=${this.formatBytes(message.file.file.length)}`)
                         // 提取视频封面
                         const ffmpegUtil = await new ConverterHelper()
@@ -349,7 +375,8 @@ export class WeChatClient extends AbstractClient {
         return {appmsg, attach, expireAt}
     }
 
-    handlerMessage(event: Event, message: BaseMessage): Promise<unknown> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    handlerMessage(_event: Event, _message: BaseMessage): Promise<unknown> {
         throw new Error('Method not implemented.')
     }
 
@@ -389,7 +416,7 @@ export class WeChatClient extends AbstractClient {
             })
         })
 
-        this.client.on('all', msg => { // 如需额外的处理逻辑可以监听 all 事件 该事件将返回回调地址接收到的所有原始数据
+        this.client.on('all', () => { // 如需额外的处理逻辑可以监听 all 事件 该事件将返回回调地址接收到的所有原始数据
         })
 
         this.client.on('friendship', (friendship) => {
@@ -411,15 +438,19 @@ export class WeChatClient extends AbstractClient {
 
         this.client.on('message', (msg) => {
             // 此处放回的msg为Message类型 可以使用Message类的方法
-            this.onMessage(msg)
+            void this.onMessage(msg).catch(error => this.logger.error('处理微信消息失败:', error))
         })
 
-        this.client.on('login', (msg) => {
-            this.loginSuccess()
+        this.client.on('login', () => {
+            this.loginReady = undefined
+            void this.waitForLogin().then(() => this.loginSuccess())
+                .catch(error => this.logger.error('初始化微信登录状态失败:', error))
         })
     }
 
     async onMessage(msg: WxMessage) {
+        // The puppet emits login before dispatch, but async listeners are not awaited by EventEmitter.
+        await this.waitForLogin()
         this.logger.debug(`收到微信消息: type=${msg.type()}, msgId=${msg.newMsgId}, toId=${msg.toId}, text=${msg.text()?.substring(0, 100)}, xml=${msg._xml}`)
 
         // TODO: 只处理新消息，丢弃历史消息（未来可以增加选项更好的保存聊天记录）
@@ -603,7 +634,7 @@ export class WeChatClient extends AbstractClient {
                 if (appLinkList) {
                     // 判断是否是数组，有可能是对象
                     if (Array.isArray(appLinkList)) {
-                        messageParam.content = appLinkList.map((it, index) => {
+                        messageParam.content = appLinkList.map(it => {
                             return `<a href="${it.url}">${it.title}</a><blockquote>${it.summary || it.digest}</blockquote>`
                         }).join('\n')
                     } else {
@@ -621,13 +652,13 @@ export class WeChatClient extends AbstractClient {
                     if (referSvrid) {
                         referMsg = await this.messageService.getByWxMsgId(referSvrid)
                     }
-                    
+
                     // 因为是html模式 原始的文本中的<>需要转义
                     messageParam.content = messageParam.content.replaceAll(/</g, '&lt;')
                         .replaceAll(/>/g, '&gt;')
                     // emoji 转换
                     messageParam.content = emojiConverter.convert(messageParam.content, configuration)
-                    
+
                     if (referMsg) {
                         messageParam.param = {
                             reply_id: referMsg.tgBotMsgId
@@ -664,10 +695,11 @@ export class WeChatClient extends AbstractClient {
                                 case 47: // 表情消息
                                     quoteContent = '[表情]'
                                     break
-                                case 49: // 应用消息（链接、嵌套引用等）- 保持原有处理方式
+                                case 49: { // 应用消息（链接、嵌套引用等）- 保持原有处理方式
                                     const newJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.refermsg.content)
                                     quoteContent = newJson.msg.appmsg.title
                                     break
+                                }
                                 default:
                                     // 其他未知类型
                                     quoteContent = '[消息]'
@@ -776,7 +808,7 @@ export class WeChatClient extends AbstractClient {
                 messageParam.revokeMsgId = msgJson.sysmsg.revokemsg.newmsgid
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
-            case WxMessage.Type.ChatHistroy:
+            case WxMessage.Type.ChatHistroy: {
                 msgJson = WxMessage.getXmlToJson(msg._xml)
                 const recordJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.recorditem)
                 const chatHistory = await getChatHistory(recordJson, msg, WxMessage.Type, WxMessage.getXmlToJson)
@@ -790,12 +822,14 @@ export class WeChatClient extends AbstractClient {
                 }
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
-            case WxMessage.Type.MiniApp:
+            }
+            case WxMessage.Type.MiniApp: {
                 msgJson = WxMessage.getXmlToJson(msg._xml)
                 const miniProgram = await getMiniprogram(msgJson, msg)
                 messageParam.content = miniProgram
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
+            }
             default:
                 if (MessageTypeUtils.SKIP_TYPE_LIST.includes(msg.type() + '')) {
                     break

@@ -29,7 +29,8 @@ longlinkenabled = true
 longlinkconnecttimeout = "30s"
 
 # 与 .env.example 的 MODE=polling 配套，保留客户端拉取模式。
-# 不要只把 MODE 改成 callback：当前 wx2tg-puppet 3.0.8 忽略回调正文，需先适配。
+# 使用 puppet 6.0.12 的 callback 时，设 MODE=callback、msgpush=true，
+# 可同时开启 syncmessage=true 作短链兜底，并确保下面的回调地址可达。
 syncmessage = false
 msgpush = false
 syncmessageinterval = "1s"

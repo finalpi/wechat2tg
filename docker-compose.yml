@@ -2,10 +2,10 @@ version: '3'
 
 services:
   wx2tg-v3:
-    image: finalpi/wechat2tg-v3:latest
+    image: finalpi/wechat2tg-v3:v6.0.12
     container_name: wx2tg-v3
     # 同一 Compose 网络访问回调端口不需要发布到宿主机。
-    # 当前默认 polling；外部 server 使用 callback 前需先适配 puppet，再按需开放端口。
+    # 当前默认 polling；外部 server 使用 callback 时按需开放端口并配置访问控制。
     # ports:
     #   - "8056:8056"
     volumes:
@@ -18,7 +18,7 @@ services:
 
   wx2tg-server:
     # v6 分支配套 server v6；v7 分支部署时使用对应的 v7 镜像。
-    image: finalpi/wx2tg-server:v6-latest
+    image: finalpi/wx2tg-server:v6.0.12
     container_name: wx2tg-server
     ports:
       - "8058:8058"

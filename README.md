@@ -1,4 +1,4 @@
-# wechat2tg-v3
+# wechat2tg (v6)
 
 [中文](README_zh.md) | English
 
@@ -71,13 +71,13 @@ Both branches were initialized from the same `wx2tg-v3` codebase. Creating these
 ## Installation & Deployment
 
 > [!IMPORTANT]
-> This branch uses `finalpi/wx2tg-server:v6-latest`, paired with branch `v6`. When these changes are later synchronized to `v7`, use the corresponding v7 server image. The pinned `wx2tg-puppet 3.0.8` still needs adaptation for message-bearing callbacks and binary file-section downloads; synchronizing configuration does not imply full compatibility. See [v6 configuration and message flow notes (Chinese)](docs/server-v6.md).
+> All three repositories now target **`v6.0.12`**: bot and puppet package versions are `6.0.12`; bot/server Docker tags are `v6.0.12`. Local Git tags do not mean npm/Docker artifacts have been published. See [release rules (Chinese)](docs/releases.md) and [v6 configuration and message flow notes (Chinese)](docs/server-v6.md). The v7 line is unchanged in this release.
 
 First, copy `.env.example` to `.env` and configure the environment variables.
 
 Copy `app.conf.example` to `app.conf` in the `conf` directory and set the Redis address to your deployed Redis address. For existing deployments, merge the new settings instead of overwriting your ports, Redis credentials, and callback URL.
 
-Keep `MODE=polling` in `.env` and `syncmessage=false`, `msgpush=false` on the server. Server-side message archiving now defaults to SQLite at host path `./server-data/messages`, independent of the bot database under `./config`. Do not copy upstream’s `msgpush=true`: the pinned dependency discards callback bodies. The linked notes cover optional PostgreSQL storage, migration precautions, and required callback changes.
+Keep `MODE=polling` in `.env` and `syncmessage=false`, `msgpush=false` on the server. Server-side message archiving now defaults to SQLite at host path `./server-data/messages`, independent of the bot database under `./config`. Puppet `6.0.12` supports message-bearing callbacks and binary file sections. To switch to callback mode, also configure `msgpush=true` and a reachable callback URL on the server; see the linked notes.
 
 ### docker-compose
 
@@ -88,7 +88,7 @@ version: '3'
 
 services:
   wx2tg-v3:
-    image: finalpi/wechat2tg-v3:latest
+    image: finalpi/wechat2tg-v3:v6.0.12
     container_name: wx2tg-v3
     # ports:
     #   - "8056:8056" # Only for external callbacks; not needed within the Compose network
@@ -101,7 +101,7 @@ services:
       - wx2tg-server
 
   wx2tg-server:
-    image: finalpi/wx2tg-server:v6-latest
+    image: finalpi/wx2tg-server:v6.0.12
     container_name: wx2tg-server
     ports:
       - "8058:8058"
@@ -255,9 +255,9 @@ If not in the same region, you can configure WeChat proxy login in environment v
 
 ## Participating in Development
 
-1. Fork the project, switch to the `wx2tg-v3-dev` branch, or create a new branch. Please do not directly submit code to the main branch.
+1. Fork the project and create a feature branch from `v6`; keep v7 work separate.
 
-2. Submit a Pull Request to the `wx2tg-v3-dev` branch
+2. Submit a Pull Request to the matching maintenance branch and follow the [release rules (Chinese)](docs/releases.md).
 
 ## License
 

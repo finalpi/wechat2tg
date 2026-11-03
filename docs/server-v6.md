@@ -2,15 +2,15 @@
 
 ## 本次同步范围
 
-以服务端 `fk-zhang` 的 `875` 分支、提交 `041e67b` 为对照，客户端依赖为 npm 发布的 `wx2tg-puppet@3.0.8`。本次先同步本仓库 `v6` 的部署配置；`v7` 暂不改动，后续同步时需替换为对应版本的 server 镜像。
+服务端 `v6` 分支由 `875` 的 `041e67b` 派生，本次与 bot、puppet 统一为 `v6.0.12`。puppet 已修复此前 `3.0.8` 的回调正文丢弃及二进制文件分片不兼容问题，并保留已发布版本的续登并发保护。`v7` 暂不改动。版本与本地制品安装规则见 [发行规则](releases.md)。
 
-新增配置不等于全部协议已适配。特别是带正文回调和普通文件分片下载，当前 puppet 仍有下面列出的兼容性问题。
+本轮验证为离线回归，不是微信/Telegram 真实登录联调；本地标签不代表 npm/Docker 已发布。
 
 ## 配置与部署
 
 - `.env`：bot 的配置；从 `.env.example` 复制。
 - `conf/app.conf`：server 的配置；从 `app.conf.example` 复制。已有部署应合并新增项，保留自己的端口、Redis 认证和网络地址。
-- Compose 使用 `finalpi/wx2tg-server:v6-latest`。server 的 `httpport=8058` 与 `.env` 的 `BASE_API=http://wx2tg-server:8058/api`、Compose 端口一致；没有照搬上游私有部署的端口和凭据。
+- Compose 固定使用 `finalpi/wx2tg-server:v6.0.12` 和 `finalpi/wechat2tg-v3:v6.0.12`。server 的 `httpport=8058` 与 `.env` 的 `BASE_API=http://wx2tg-server:8058/api`、Compose 端口一致；没有照搬上游私有部署的端口和凭据。
 - `syncmessagebusinessuri` 中的 `{0}` 由 server 替换为账号 wxid。同一 Compose 网络通过 `wx2tg-v3:8056` 访问时，不必把回调端口发布到宿主机。
 - 这些是示例默认值，不会自动修改已有的 `.env` 或 `conf/app.conf`；本次没有部署、重启服务或执行数据库迁移。
 - 消息归档查询会暴露聊天内容。server API 和回调端口应仅允许可信网络访问；如果发布到公网，需要额外的访问控制，`corsalloworigins` 不是鉴权。
@@ -29,6 +29,26 @@ msgpush = false
 两个 server 开关都要保留为 `false`：仅关闭 `syncmessage` 不足以阻止长连接通知在 `msgpush=true` 时主动调用 Sync 消费消息。此组合让客户端主动拉取消息，同时仍允许 server 保存消息历史。
 
 `msgpush=false` 时 server 的长连接仍可能发送空通知；polling 模式的 puppet 不启动 HTTP 回调监听，因此可能出现空回调连接失败日志。这不等于客户端轮询失败，也不要为消除日志而打开 `msgpush`。本文不把该组合称为“server 完全不发回调”。
+
+### 切换到 callback（puppet 6.0.12）
+
+bot 的 `.env`：
+
+```dotenv
+MODE=callback
+CALLBACK_PORT=8056
+```
+
+server 的 `conf/app.conf`：
+
+```ini
+msgpush = true
+syncmessage = true
+syncmessagebusinessuri = "http://wx2tg-v3:8056/message/callback/{0}"
+callbacktimeout = "5s"
+```
+
+`syncmessage=true` 开启短链兜底；正文回调直接进入 puppet 消息处理队列，空/时间戳通知才触发 Sync。不要让旧 puppet `3.0.8` 与这一配置混用。已有运行配置需要自行合并并重启相应本地服务后生效，本次没有自动改动或重启。
 
 ### 新增配置组
 
@@ -104,7 +124,7 @@ puppet 每秒调用 POST /api/Msg/Sync
 
 server 仍保留 `Data.AddMsgs`，新增 `Data.Messages` 本身不要求修改当前 polling 消息解析器。开启 SQLite 消息归档也不要求 bot 改读数据库。
 
-### 当前 callback 与上游正文推送不兼容
+### 已修复的 callback 兼容问题（旧版 3.0.8）
 
 上游 `msgpush=true` 时：
 
@@ -123,24 +143,24 @@ server 收到微信通知
 
 另一个问题是该依赖在 polling 启动时会发出 `login` 事件，而 callback 初始化分支没有对应事件；bot 的 `loginSuccess` 依赖这个事件，不能只开启 HTTP 端口就认为适配完成。
 
-### 后续应在 puppet 修复的内容
+### v6.0.12 的处理与剩余边界
 
-1. HTTP 回调携带消息时直接解析并处理该批数据，复用 Sync 消息解析逻辑，避免再拉一次后丢掉原批次。
-2. 兼容上游仍可能发送的空通知/时间戳通知，此类通知再触发 Sync；处理并发及尾批，不能因已有同步进行中而静默丢弃带正文回调。
-3. 使用保留大整数精度的 JSON 解析，避免 64 位 `NewMsgId` 被普通 `JSON.parse` 舍入，并对回调/轮询重叠做去重。
-4. 补齐 callback 分支的 `login` 事件、初始化顺序和错误处理；当前 HTTP 200 并不表示已成功转发 Telegram。
-5. 回调接收端限制请求大小、校验账号/数据并限制网络访问。当前路径没有新增 token/签名认证，不能把 CORS 当作鉴权。
-6. 如果需要“断线不漏、失败可补发”，还需设计 server 的持久化投递队列或基于归档的游标补偿，不能把当前异步存储当作已经具备可靠投递。
+1. 带正文回调直接处理 `Data.AddMsgs`，与轮询共用消息解析队列；保留空通知、Go 时间戳通知和 5 分钟兜底 Sync。
+2. 无损处理 64 位消息 ID，回调/轮询共享 2 分钟、最多 10,000 项的进程内去重；同步期间的新通知触发后续拉取，避免并发 Sync。
+3. callback 监听成功后发出 `login`，不再清空并丢弃初始化消息。bot 会等待异步登录信息初始化后处理即时消息。
+4. 单次回调上限 8 MiB；非法信封返回 400、错误路径 404、超限 413、处理失败 500，不回显原始消息。单条消息处理最多尝试 3 次，失败不会阻断同批其他消息。HTTP 200 表示 puppet 同步分发了事件，不代表 Telegram 已成功收到。
+5. 当前路径没有新增 token/签名认证，只允许可信网络访问，不能把 CORS 当作鉴权。
+6. 如果需要“断线不漏、失败可补发”，仍需 server 持久化投递队列或归档游标补偿。现有内存队列、去重和异步归档不提供端到端可靠投递保证。
 
 上游回调目前没有可靠重试或失败回滚：游标先推进、HTTP POST 后执行，非 2xx 状态也不一定被调用方当作失败。修复 puppet 的正文处理可以消除这处确定的不兼容，但不能单独保证端到端不丢消息。
 
-本次仅同步配置并记录适配结论，没有修改 `node_modules`、本地 puppet 仓库或服务端源码，也没有更改 bot 的默认运行模式。
+## 文件下载适配
 
-## 另一个需要跟进的接口变化：文件下载
+服务端提交 `db823d3` 将 `POST /api/Tools/DownloadFile` 的成功返回改为 HTTP 200/206 二进制。puppet `6.0.12` 已改为直接读取字节、校验长度/范围并按实际字节数推进偏移，同时兼容旧 JSON/Base64 成功响应。
 
-服务端提交 `db823d3` 将 `POST /api/Tools/DownloadFile` 的成功返回改为 HTTP 200/206 的二进制，不再返回 JSON/Base64。当前 puppet 的 `ToolsApi.DownloadFile` / `Message.toFileBox` 仍读取 `Data.data.iLen` 和 `Data.data.buffer`，因此走此接口的普通文件下载不兼容。
+普通文件每片最多 512 KiB，沿用最多 3 次尝试；每次请求超时 180 秒，以覆盖首次 CDN 回退的等待预算。64 位 `NewMsgId` 保持精度；错误不暴露附件凭据。图片、视频及大于 80 MiB 文件的 `DownloadFileMessage` 保持原路径。
 
-需要在 puppet 使用二进制响应、按实际收到的字节数推进分片偏移，并区分失败 JSON；不能固定按请求分片长度累加。图片、视频以及 `DownloadFileMessage` 不属于这次 server 接口格式变更。此问题与消息归档无关，但部署最新 v6 server 前也需要处理。
+默认消息模式仍为 polling，不会因升级而静默切换成 callback。
 
 ## 核对依据
 
@@ -153,8 +173,9 @@ server 收到微信通知
 - `comm/Util.go` 的 `HttpPosthb`：超时、HTTP 状态与重试行为。
 - `docs/download-file.md`：二进制文件分片接口。
 
-客户端实际安装依赖（本地另一个 puppet 源码仓库标为 3.0.7，不作为本次 3.0.8 行为的唯一依据）：
+客户端 puppet 源码（此次已将本地原 `3.0.7` 与发布的 `3.0.8` 差异核对并保留修复）：
 
-- `node_modules/wx2tg-puppet/dist/index.js`：`loginSuccess`、`startCallbackServer`、`handleCallbackMessage`、`startPollingMode`、`handleMsgOnce`。
-- `node_modules/wx2tg-puppet/dist/core/Message.js`：`toFileBox`。
+- `wx2tg-puppet/src/index.ts`：登录、HTTP 回调、串行 Sync 和消息处理。
+- `wx2tg-puppet/src/utils/CallbackPayload.ts`：回调正文校验和无损 JSON。
+- `wx2tg-puppet/src/utils/downloadFileSection.ts`、`src/core/Message.ts`：二进制分片下载。
 - `src/client/WechatClient.ts`：配置传入、事件订阅、`onMessage`。

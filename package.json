@@ -1,12 +1,14 @@
 {
   "name": "wechat2tg",
-  "version": "3.0.0",
+  "version": "6.0.12",
   "description": "simple kit send wechat message to telegram",
   "main": "app.ts",
   "esModuleInterop": true,
   "scripts": {
     "dev": "ts-node src/app.ts",
     "build": "tsc",
+    "check:version": "node scripts/check-version.cjs",
+    "test": "npm run build && node --test test/*.test.cjs",
     "start": "NODE_ENV=production node dist/app.js"
   },
   "keywords": [],
@@ -31,7 +33,7 @@
     "telegram": "2.21.2",
     "tencentcloud-sdk-nodejs": "^4.0.977",
     "typeorm": "^0.3.24",
-    "wx2tg-puppet": "3.0.8"
+    "wx2tg-puppet": "6.0.12"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.5",
