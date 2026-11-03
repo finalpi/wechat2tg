@@ -1,14 +1,16 @@
 # v6：单分支、双发行通道
 
-## 当前开发版：v6.0.13-dev.1
+## 当前开发版：v6.0.13-dev.2
+
+本版修复 bot 创建公众号论坛时管理员头衔过长、Telegram 拒绝授权的问题，并补充真实 API 长度约束的回归测试。已创建的论坛保持原 ID，重试继续授权和建 Topic；puppet/server 本轮仅对齐发行版本，不改变实际微信服务。
 
 **三个仓库只使用 `v6` 维护分支。`dev` 是 tag / 制品通道，不是另一个分支。** 分支最新提交可能仍在开发，不能把分支 HEAD 当成已验收稳定版。
 
 | 仓库 | 分支 | 本次 Git 标签 | 配套制品 |
 | --- | --- | --- | --- |
-| `wechat2tg` | `v6` | `v6.0.13-dev.1` | 包版本 `6.0.13-dev.1`；`finalpi/wechat2tg:v6.0.13-dev.1` |
-| `wx2tg-puppet` | `v6` | `v6.0.13-dev.1` | `wx2tg-puppet@6.0.13-dev.1` 的 npm 格式打包文件 |
-| `fk-zhang` / wx2tg-server | `v6` | `v6.0.13-dev.1` | `finalpi/wx2tg-server:v6.0.13-dev.1`（amd64） |
+| `wechat2tg` | `v6` | `v6.0.13-dev.2` | 包版本 `6.0.13-dev.2`；`finalpi/wechat2tg:v6.0.13-dev.2` |
+| `wx2tg-puppet` | `v6` | `v6.0.13-dev.2` | `wx2tg-puppet@6.0.13-dev.2` 的 npm 格式打包文件 |
+| `fk-zhang` / wx2tg-server | `v6` | `v6.0.13-dev.2` | `finalpi/wx2tg-server:v6.0.13-dev.2`（amd64） |
 
 此次合并 `origin/wx2tg-v3-dev` 的 `6625545`，包含 WebUI、MCP、消息中心和附件改进；保留 v6 的带正文回调、无损消息 ID、二进制下载、禁止自动建群及 `/official` 等改动，并增加默认关闭的公众号 Topic 模式。server 本次只调整发行元数据，不改变协议或部署配置。
 
@@ -34,18 +36,18 @@
 
 bot 工作流先验证版本并运行测试，再并行执行两个互不等待的原生构建：
 
-- `Build amd64`：`ubuntu-24.04`，发布 `v6.0.13-dev.1-amd64`。
-- `Build arm64`：`ubuntu-24.04-arm`，发布 `v6.0.13-dev.1-arm64`。
+- `Build amd64`：`ubuntu-24.04`，发布 `v6.0.13-dev.2-amd64`。
+- `Build arm64`：`ubuntu-24.04-arm`，发布 `v6.0.13-dev.2-arm64`。
 - 两种架构分别使用 GHA 构建缓存；`fail-fast=false`，ARM 失败不会取消已成功的 amd64。
-- 两边都成功后，才合并通用多架构标签 `v6.0.13-dev.1` 和对应通道别名。
+- 两边都成功后，才合并通用多架构标签 `v6.0.13-dev.2` 和对应通道别名。
 
-想尽早部署 amd64 时，使用 `finalpi/wechat2tg:v6.0.13-dev.1-amd64`，或开发滚动别名 `v6-dev-amd64`。ARM 对应 `v6.0.13-dev.1-arm64` / `v6-dev-arm64`。正式 Git tag `v6.0.13` 发布 Docker `v6.0.13`、`v6.0.13-amd64` 和 `v6.0.13-arm64`，稳定别名为 `v6-amd64` / `v6-arm64`，合并后更新 `v6`。手动快照只发布 `v6-dev-<短 SHA>-amd64` / `v6-dev-<短 SHA>-arm64` 和合并的 `v6-dev-<短 SHA>`，不更新任何滚动别名。
+想尽早部署 amd64 时，使用 `finalpi/wechat2tg:v6.0.13-dev.2-amd64`，或开发滚动别名 `v6-dev-amd64`。ARM 对应 `v6.0.13-dev.2-arm64` / `v6-dev-arm64`。正式 Git tag `v6.0.13` 发布 Docker `v6.0.13`、`v6.0.13-amd64` 和 `v6.0.13-arm64`，稳定别名为 `v6-amd64` / `v6-arm64`，合并后更新 `v6`。手动快照只发布 `v6-dev-<短 SHA>-amd64` / `v6-dev-<短 SHA>-arm64` 和合并的 `v6-dev-<短 SHA>`，不更新任何滚动别名。
 
 因此不必等整个工作流结束才能更新 amd64；部署端应核对目标提交和 **`Build amd64` 成功**。通用标签仍等待 ARM，保留正确的多架构内容，不会先用 amd64 覆盖掉 ARM。具体耗时受原生依赖编译、缓存和 runner 排队影响，不承诺固定 30 分钟。server 有原生库限制，仍只构建 amd64，不伪装支持 ARM。
 
 ## 固定 puppet 制品
 
-`vendor/wx2tg-puppet-6.0.13-dev.1.tgz` 由本次 puppet 源码构建。bot 的 `package.json` 精确声明 `6.0.13-dev.1`，lockfile 将其解析到本地制品并保存 npm 计算的 SHA-512 integrity。
+`vendor/wx2tg-puppet-6.0.13-dev.2.tgz` 由本次 puppet 源码构建。bot 的 `package.json` 精确声明 `6.0.13-dev.2`，lockfile 将其解析到本地制品并保存 npm 计算的 SHA-512 integrity。
 
 这使 Docker / `npm ci` 不依赖尚未发布的 npm registry 版本。保留 lockfile 和 vendor 文件；不要手填不存在的 registry URL 或伪造 integrity。puppet 的 tag 工作流会上传 npm 格式 `.tgz` 为 Actions artifact，**不自动执行 npm publish**。
 
@@ -59,8 +61,8 @@ npm test
 npm pack --pack-destination ../wechat2tg/vendor
 
 # wechat2tg
-npm install --package-lock-only --ignore-scripts ./vendor/wx2tg-puppet-6.0.13-dev.1.tgz
-npm pkg set dependencies.wx2tg-puppet=6.0.13-dev.1
+npm install --package-lock-only --ignore-scripts ./vendor/wx2tg-puppet-6.0.13-dev.2.tgz
+npm pkg set dependencies.wx2tg-puppet=6.0.13-dev.2
 npm install --package-lock-only --ignore-scripts --offline
 npm ci
 npm run check:version

@@ -1,6 +1,6 @@
 {
   "name": "wechat2tg",
-  "version": "6.0.13-dev.1",
+  "version": "6.0.13-dev.2",
   "description": "simple kit send wechat message to telegram",
   "main": "app.ts",
   "esModuleInterop": true,
@@ -38,7 +38,7 @@
     "telegram": "2.21.2",
     "tencentcloud-sdk-nodejs": "^4.0.977",
     "typeorm": "^0.3.24",
-    "wx2tg-puppet": "6.0.13-dev.1",
+    "wx2tg-puppet": "6.0.13-dev.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {
