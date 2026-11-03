@@ -7,7 +7,7 @@ const vm = require('node:vm')
 const {EventEmitter} = require('node:events')
 
 // Run the real compiled client methods without booting Telegram or SQLite.
-function clientClass() {
+function clientClass(config = {}) {
   const exports = {}
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../dist/client/WechatClient.js'), 'utf8'), {
     exports,
@@ -16,14 +16,16 @@ function clientClass() {
     require(name) {
       if (name === '../base/BaseClient') return {AbstractClient: class {}}
       if (name === '../i18n') return {getInstance: () => ({})}
+      if (name === '../config') return {config}
+      if (name === '../entity/BindGroup') return {BindGroup: class {}}
       return {}
     },
   })
   return exports.WeChatClient
 }
 
-function fixture() {
-  const Client = clientClass()
+function fixture(config) {
+  const Client = clientClass(config)
   const client = Object.create(Client.prototype)
   client.client = new EventEmitter()
   client.startTime = 10
@@ -108,3 +110,19 @@ test('optional login maintenance failure does not block subsequent messages', as
   assert.equal(entered, true)
   await client.onMessage(oldMessage)
 })
+
+for (const enabled of [false, true]) {
+  test(`automatic group creation can be ${enabled ? 'enabled' : 'disabled for migration'}`, async () => {
+    const client = fixture({AUTO_CREATE_GROUPS: enabled})
+    client._wxInfo = {wxid: 'wxid_owner'}
+    client.creatingGroups = new Map()
+    client.messageService = {getByWxMsgId: async () => null}
+    client.configurationService = {getConfig: async () => ({selfMessage: true})}
+    client.bindGroupService = {getByWxId: async () => null}
+    let creates = 0
+    client.groupOperate = {createGroup: async () => {creates++; return null}}
+    const contact = {_wxid: 'wxid_contact', _alias: '', alias: async () => '', name: () => 'contact', avatar: async () => ''}
+    await client.onMessage({...oldMessage, date: () => 20, self: () => false, room: async () => null, from: async () => contact})
+    assert.equal(creates, enabled ? 1 : 0)
+  })
+}

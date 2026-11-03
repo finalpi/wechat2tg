@@ -506,6 +506,10 @@ export class WeChatClient extends AbstractClient {
             wxId = 'app'
         }
         let bindGroup = await this.bindGroupService.getByWxId(wxId)
+        if (!bindGroup && !config.AUTO_CREATE_GROUPS) {
+            this.logger.debug(`跳过未绑定微信会话，自动建群已关闭: wxId=${wxId}`)
+            return
+        }
         // 如果找不到就创建一个新的群组
         if (!bindGroup && wxId !== this._wxInfo.wxid) {
             // 检查是否正在创建该群组
