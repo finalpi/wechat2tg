@@ -6,5 +6,11 @@ avatar/*
 .env
 dist
 storage/**
+# Docker deployment config, credentials and persisted messages
+/conf/
+/config/
+/redis-data/
+/server-data/
+/server-logs/
 logs
 .github

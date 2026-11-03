@@ -71,11 +71,13 @@ Both branches were initialized from the same `wx2tg-v3` codebase. Creating these
 ## Installation & Deployment
 
 > [!IMPORTANT]
-> The deployment examples below and the repository’s `docker-compose.yml` still reference an older server image. Before deploying, replace the `wx2tg-server` image with your actual v6 image on branch `v6`, or your actual v7 image on branch `v7`. The old image tag is not the server version required by these branches.
+> This branch uses `finalpi/wx2tg-server:v6-latest`, paired with branch `v6`. When these changes are later synchronized to `v7`, use the corresponding v7 server image. The pinned `wx2tg-puppet 3.0.8` still needs adaptation for message-bearing callbacks and binary file-section downloads; synchronizing configuration does not imply full compatibility. See [v6 configuration and message flow notes (Chinese)](docs/server-v6.md).
 
 First, copy `.env.example` to `.env` and configure the environment variables.
 
-Copy `app.conf.example` to `app.conf` in the `conf` directory and set the Redis address to your deployed Redis address.
+Copy `app.conf.example` to `app.conf` in the `conf` directory and set the Redis address to your deployed Redis address. For existing deployments, merge the new settings instead of overwriting your ports, Redis credentials, and callback URL.
+
+Keep `MODE=polling` in `.env` and `syncmessage=false`, `msgpush=false` on the server. Server-side message archiving now defaults to SQLite at host path `./server-data/messages`, independent of the bot database under `./config`. Do not copy upstream’s `msgpush=true`: the pinned dependency discards callback bodies. The linked notes cover optional PostgreSQL storage, migration precautions, and required callback changes.
 
 ### docker-compose
 
@@ -89,7 +91,7 @@ services:
     image: finalpi/wechat2tg-v3:latest
     container_name: wx2tg-v3
     # ports:
-       # - "8056:8056" # Only needed for callback mode
+    #   - "8056:8056" # Only for external callbacks; not needed within the Compose network
     volumes:
       - ./config:/app/storage
       - ./save-files:/app/save-files # After mounting save-files folder, sticker files do not need to be converted again
@@ -99,13 +101,16 @@ services:
       - wx2tg-server
 
   wx2tg-server:
-    # image: finalpi/wx2tg-server:v3-latest # v3 stable version
-    image: finalpi/wx2tg-server:v5-latest
+    image: finalpi/wx2tg-server:v6-latest
     container_name: wx2tg-server
     ports:
       - "8058:8058"
     volumes:
       - ./conf:/usr/wic-go/conf
+      - ./server-data:/usr/wic-go/data
+      - ./server-logs:/usr/wic-go/logs
+    environment:
+      MESSAGE_STORE_POSTGRES_DSN: "${MESSAGE_STORE_POSTGRES_DSN:-}"
     restart: unless-stopped
     depends_on:
       - wx2tg-redis

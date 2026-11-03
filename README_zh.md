@@ -71,11 +71,13 @@
 ## 部署安装
 
 > [!IMPORTANT]
-> 下方部署示例及仓库中的 `docker-compose.yml` 仍引用旧版 server 镜像。部署前，请将 `wx2tg-server` 镜像替换为实际使用的对应版本：`v6` 分支使用 v6 镜像，`v7` 分支使用 v7 镜像。旧镜像标签不代表这两个分支要求的 server 版本。
+> 本分支的部署示例使用 `finalpi/wx2tg-server:v6-latest`，配套 `v6` 分支。后续同步到 `v7` 时需使用对应的 v7 server 镜像。当前 `wx2tg-puppet 3.0.8` 尚未适配新版带正文回调及二进制文件分片下载，不能仅凭配置同步视为完整兼容；详见 [v6 配置与消息链路说明](docs/server-v6.md)。
 
 先复制一份 `.env.example` 为 `.env` 文件，然后配置 `.env` 文件中的环境变量
 
-复制项目中的 `app.conf.example` 为 `app.conf` 文件到 `conf` 目录，将 Redis 地址设置为你部署的 Redis 的地址
+复制项目中的 `app.conf.example` 为 `app.conf` 文件到 `conf` 目录，将 Redis 地址设置为你部署的 Redis 的地址。已有部署请合并新增配置，不要直接覆盖自己的端口、Redis 凭据和回调地址。
+
+默认保留 `.env` 中的 `MODE=polling`，以及 server 的 `syncmessage=false`、`msgpush=false`。服务端新增消息归档默认启用 SQLite，保存在宿主机 `./server-data/messages`，与 bot 的 `./config` 数据库独立。不要直接照搬上游的 `msgpush=true`；当前依赖会丢弃回调正文。可选 PostgreSQL、迁移注意事项和回调适配建议见上面的详细说明。
 
 ### docker-compose
 
@@ -89,7 +91,7 @@ services:
     image: finalpi/wechat2tg-v3:latest
     container_name: wx2tg-v3
     # ports:
-       # - "8056:8056" # callback 模式才需要暴露端口
+    #   - "8056:8056" # 仅外部 server 回调时按需发布；同一 Compose 网络无需发布
     volumes:
       - ./config:/app/storage
       - ./save-files:/app/save-files # 保存文件夹挂载后贴纸文件不需要重新转换
@@ -99,13 +101,16 @@ services:
       - wx2tg-server
 
   wx2tg-server:
-    # image: finalpi/wx2tg-server:v3-latest # v3 稳定版
-    image: finalpi/wx2tg-server:v5-latest
+    image: finalpi/wx2tg-server:v6-latest
     container_name: wx2tg-server
     ports:
       - "8058:8058"
     volumes:
       - ./conf:/usr/wic-go/conf
+      - ./server-data:/usr/wic-go/data
+      - ./server-logs:/usr/wic-go/logs
+    environment:
+      MESSAGE_STORE_POSTGRES_DSN: "${MESSAGE_STORE_POSTGRES_DSN:-}"
     restart: unless-stopped
     depends_on:
       - wx2tg-redis

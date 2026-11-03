@@ -1,26 +1,84 @@
+# wx2tg-server 配置；v6 分支配套 server v6，v7 分支配套 server v7。
+# 复制为 conf/app.conf。保留本部署的容器地址，不要复制其他环境的凭据。
 appname = wxapi
 httpaddr = "0.0.0.0"
 httpport = 8058
 proxyport = 8888
-runmode = dev
+runmode = prod
 viewspath = "template"
 autorender = false
 copyrequestbody = true
 EnableDocs = true
+
+# 原始微信事件诊断日志包含消息正文，默认关闭；启用前注意隐私和磁盘空间。
+# WECHAT_RAW_EVENT_LOG / WECHAT_RAW_EVENT_LOG_DIR / WECHAT_RAW_EVENT_LOG_RETENTION 优先。
+wechatraweventlog = false
+wechatraweventlogdir = "logs/wechat-events"
+wechatraweventlogretention = "24h"
+
 redislink = wx2tg-redis:6379
 redispass = ""
 redisdbnum = 7
-ocrurl = ""
-syncmessagebusinessuri = "http://wx2tg-v3:8056/message/callback/{0}"
-logoutbusinessuri = ""
+
+# 兼容旧配置项；新版 server 登录/恢复后始终自动调度心跳和二次登录。
+autoheartbeat = true
+# auto：Linux/macOS 且启用长连接时用长链，否则用短链；可选 auto/long/short。
+heartbeatmode = "auto"
+heartbeatretryinterval = "10s"
+longlinkenabled = true
+longlinkconnecttimeout = "30s"
+
+# 与 .env.example 的 MODE=polling 配套，保留客户端拉取模式。
+# 不要只把 MODE 改成 callback：当前 wx2tg-puppet 3.0.8 忽略回调正文，需先适配。
 syncmessage = false
 msgpush = false
-rabbitmq = false
+syncmessageinterval = "1s"
+# 0 表示不自动停止短链兜底同步。
+syncmessageautostop = "0"
+callbacktimeout = "5s"
+# 必须是 server 容器可访问的地址；{0} 由 server 替换为登录 wxid。
+syncmessagebusinessuri = "http://wx2tg-v3:8056/message/callback/{0}"
+# 按消息 ID 去重；0 关闭。
+messagededupwindow = "2m"
+logoutbusinessuri = ""
 
 sessionon = true
-
 SessionName = "wxapi"
 ServerName = "wxapi"
+rabbitmq = false
+rabbitmqurl = ""
+rabbitmqexchange = "wxapi"
+ocrurl = ""
 
-longlinkenabled = true
-longlinkconnecttimeout = "1m"
+# 服务端消息归档，与 wechat2tg 的 storage/db/wechat2Tg.db 相互独立。
+# Compose 挂载 ./server-data:/usr/wic-go/data，重建容器不丢失 SQLite 消息。
+savelocalmessage = true
+# sqlite 或 postgres；不会自动切换后端或双写。
+messagestore = "sqlite"
+localmessagedir = "data/messages"
+# PostgreSQL 优先使用 server 容器环境变量 MESSAGE_STORE_POSTGRES_DSN。
+# 不要提交真实 DSN/密码；此模板默认不启用 PostgreSQL，也不创建 PG 数据库。
+messagepgdsn = ""
+messagepgmaxopenconns = 8
+messagepgmaxidleconns = 4
+messagepgtimeout = "15s"
+messagepgconnmaxlifetime = "5m"
+# 切到 PG 时默认导入 SQLite 历史；保留旧库挂载，先备份并停止其他读写服务。
+# 只有全新无历史的 PG 安装才设 false；不能跳过已经开始的迁移。
+# PG 布局升级及导入需要额外磁盘空间和 schema CREATE 权限，禁止新旧版本混跑。
+messagepgautomigratesqlite = true
+messagepgmigrationtimeout = "2h"
+# PG 通讯录后台补全；关闭自动补全不影响被动采集或手动同步。
+messagecontactautosync = true
+messagecontactsyncinterval = "24h"
+messagecontactrequestinterval = "1s"
+messagecontactsynctimeout = "2h"
+
+# 浏览器跨域来源白名单（逗号或空格分隔）；空值仅同源/服务器调用，不支持通配符。
+corsalloworigins = ""
+# 不在收消息链路自动维护历史 SQLite 大库，避免锁库阻塞回调。
+# 如需维护，停服务、备份后单独执行。
+messagestoreautomigratelegacy = false
+messagestoreautomigrateconversation = false
+messagestoreautocleanupweixin = false
+messagestoreautovacuum = false

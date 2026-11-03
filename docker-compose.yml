@@ -4,8 +4,10 @@ services:
   wx2tg-v3:
     image: finalpi/wechat2tg-v3:latest
     container_name: wx2tg-v3
-      # ports:
-    # - "8056:8056" # callback 模式才需要暴露端口
+    # 同一 Compose 网络访问回调端口不需要发布到宿主机。
+    # 当前默认 polling；外部 server 使用 callback 前需先适配 puppet，再按需开放端口。
+    # ports:
+    #   - "8056:8056"
     volumes:
       - ./config:/app/storage
       - ./save-files:/app/save-files # 保存文件夹挂载后贴纸文件不需要重新转换
@@ -15,13 +17,18 @@ services:
       - wx2tg-server
 
   wx2tg-server:
-    # image: finalpi/wx2tg-server:v3-latest # v3 稳定版
-    image: finalpi/wx2tg-server:v5-latest
+    # v6 分支配套 server v6；v7 分支部署时使用对应的 v7 镜像。
+    image: finalpi/wx2tg-server:v6-latest
     container_name: wx2tg-server
     ports:
       - "8058:8058"
     volumes:
       - ./conf:/usr/wic-go/conf
+      - ./server-data:/usr/wic-go/data # 服务端本地消息库，与 bot 的 ./config 独立
+      - ./server-logs:/usr/wic-go/logs # 启用原始事件诊断日志时持久化
+    environment:
+      # 仅 messagestore=postgres 时使用，真实 DSN 放入未提交的 .env。
+      MESSAGE_STORE_POSTGRES_DSN: "${MESSAGE_STORE_POSTGRES_DSN:-}"
     restart: unless-stopped
     depends_on:
       - wx2tg-redis
