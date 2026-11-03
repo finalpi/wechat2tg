@@ -11,7 +11,7 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 
 ## v6 versions and channels
 
-**Use one maintenance branch, `v6`; tags distinguish stable and development releases. There is no `v6-dev` maintenance branch.** The current coordinated development version is `v6.0.13-dev.3`, paired with the matching puppet/server versions. Do not mix it with server v7.
+**Use one maintenance branch, `v6`; tags distinguish stable and development releases. There is no `v6-dev` maintenance branch.** The current coordinated stable version is `v6.0.13`, paired with the matching puppet/server versions. Do not mix it with server v7.
 
 | Channel | Full Git / Docker version | Rolling bot alias |
 | --- | --- | --- |
@@ -71,7 +71,7 @@ The Chinese / English WebUI starts with the application. Docker Compose exposes 
 - Images automatically load previews; images inside merged histories load when their record is expanded. Failed previews offer a manual retry. Files and other media load on demand. Click images to open a large preview with wheel/button zoom, rotation, fit-to-window and drag-to-pan; press Esc or click the backdrop to close. Official-account posts display one or more articles with clickable titles, summaries and read-more links. Links, locations, and contact cards have rich cards. Group messages separate sender, avatar, and content; merged chat histories expand into cards with downloadable embedded files and images, including nested attachments. Nested histories expand one level at a time. Media transport XML and non-chat function, game-badge and counter control packets are excluded from conversation display and retry.
 - Messages sent from WebUI or MCP also appear in WebUI and synchronize to Telegram. Request IDs prevent duplicate sends. `submitted` means WeChat returned a message ID, not that the recipient read it. Uncertain send results are never retried automatically.
 - Videos in shared chat histories, including nested records, can be downloaded as Telegram videos or played and downloaded in WebUI. Full MP4 downloads use RecordItem `DataType=4`, keeping record uint64 IDs out of the ordinary video API. The server must support record video downloads (v6.0.6 or later in the v6 series).
-- File downloads use `wx2tg-puppet 6.0.13-dev.3`, supporting both legacy JSON and the binary `200/206` sections introduced in server v6.0.10. Ordinary files and shared-record file fallbacks advance by actual received bytes, including short sections; shared-record files explicitly use `DataType=8`. The first CDN fallback section may wait for the entire file, so file requests have a separate 180-second timeout. Empty, inconsistent or merely claimed successful responses are rejected. WebUI download caching allows up to 256 MiB; uploads remain limited to 50 MiB. Failed cards show the actual error. Telegram download buttons restore both saved media type names and legacy numeric types.
+- File downloads use `wx2tg-puppet 6.0.13`, supporting both legacy JSON and the binary `200/206` sections introduced in server v6.0.10. Ordinary files and shared-record file fallbacks advance by actual received bytes, including short sections; shared-record files explicitly use `DataType=8`. The first CDN fallback section may wait for the entire file, so file requests have a separate 180-second timeout. Empty, inconsistent or merely claimed successful responses are rejected. WebUI download caching allows up to 256 MiB; uploads remain limited to 50 MiB. Failed cards show the actual error. Telegram download buttons restore both saved media type names and legacy numeric types.
 - Messages sent to WeChat through a bound Telegram conversation also appear in WebUI, including text, quoted replies and media. They show their Telegram origin and WeChat send status without being forwarded back to Telegram or counted as unread Telegram deliveries. Attachments and captions are separate WeChat messages; cached media can be previewed or downloaded. If caching fails, WebUI prompts you to view the attachment in Telegram.
 - Red conversation counters mean tracked Telegram deliveries that are pending, in flight, or definitely failed. Successful synchronization clears them. Unverified historical receipts and uncertain delivery results are displayed separately and do not count as unread. Opening a conversation does not clear unsent Telegram deliveries.
 - Retry to Telegram only without resending to WeChat. Parallel retries are blocked; an uncertain Telegram outcome requires explicit confirmation before another attempt.
@@ -164,7 +164,7 @@ Normal startup leaves the WebUI available if Telegram credentials are missing. F
 ## Installation & Deployment
 
 > [!IMPORTANT]
-> The current development release is **`v6.0.13-dev.3`**. It merges WebUI / MCP / message-history improvements from `wx2tg-v3-dev`, preserves the v6 callback/download fixes, and adds optional official-account forum topics. Stable versions have no `-dev.N` suffix. Development builds never update stable aliases; image availability depends on the relevant architecture job succeeding. See [release rules (Chinese)](docs/releases.md) and [message flow notes (Chinese)](docs/server-v6.md).
+> The current stable release is **`v6.0.13`**. It includes the v3-dev WebUI/MCP improvements, v6 callback/download fixes, official-account topics, inline WeChat custom emoji, and nonfatal chat-folder overflow. It updates stable aliases only and preserves existing development tags. See [release rules (Chinese)](docs/releases.md).
 
 For a new deployment, copy `.env.example` to `.env` and configure the environment variables. Never overwrite existing private configuration, including the user’s `home_202.env`; merge required changes manually.
 
@@ -176,7 +176,7 @@ Use Docker Engine with Docker Compose v2, or Node.js 18+ for local development. 
 
 ### Docker Compose
 
-Use the repository's `docker-compose.yml`; no WebUI override file is required. It pins the full version `finalpi/wechat2tg:v6.0.13-dev.3` rather than a rolling alias. amd64 users can select the matching `-amd64` image as soon as that build finishes, without waiting for ARM.
+Use the repository's `docker-compose.yml`; no WebUI override file is required. It pins the full version `finalpi/wechat2tg:v6.0.13` rather than a rolling alias. amd64 users can select the matching `-amd64` image as soon as that build finishes, without waiting for ARM.
 
 The commands below initialize a new stack. For an existing deployment, preserve old images and private configuration; update only the bot with `docker compose pull wechat2tg` and `docker compose up -d --no-deps wechat2tg` after reviewing your local Compose. The `wx2tg-server` image, namespace, and version in this example are unchanged; do not replace or restart the existing production backend as part of this bot naming correction.
 
@@ -202,7 +202,7 @@ The default Compose file is:
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.13-dev.3
+    image: finalpi/wechat2tg:v6.0.13
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"
@@ -220,7 +220,7 @@ services:
       - wx2tg-server
 
   wx2tg-server:
-    image: finalpi/wx2tg-server:v6.0.13-dev.3
+    image: finalpi/wx2tg-server:v6.0.13
     container_name: wx2tg-server
     ports:
       - "8058:8058"

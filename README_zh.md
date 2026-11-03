@@ -11,7 +11,7 @@
 
 ## v6 版本与通道
 
-**只维护 `v6` 分支，开发版和稳定版靠 tag 区分，不建立 `v6-dev` 分支。** 当前配套开发版为 `v6.0.13-dev.3`，配合同版本 puppet 和 wx2tg-server；不要与 server v7 混用。
+**只维护 `v6` 分支，开发版和稳定版靠 tag 区分，不建立 `v6-dev` 分支。** 当前配套正式版为 `v6.0.13`，配合同版本 puppet 和 wx2tg-server；不要与 server v7 混用。
 
 | 通道 | 完整 Git / Docker 版本 | bot 滚动别名 |
 | --- | --- | --- |
@@ -71,7 +71,7 @@ WebUI 随应用启动，支持中文 / English。Docker Compose **默认对外�
 - 收到的图片默认自动加载预览，合并记录中的图片在所在记录展开后加载；加载失败可手动重试。文件和其他媒体仍可按需查看或下载。点击图片可大图预览，支持滚轮或按钮缩放、左右旋转、适应窗口和放大后拖动，按 Esc 或点击背景关闭；公众号图文按单篇或多篇文章展示可点击标题和摘要，支持阅读全文；链接、位置和名片使用卡片展示。群聊分层显示头像、发言人和内容；合并聊天记录支持展开，内嵌文件、图片及嵌套记录中的附件可下载；嵌套聊天可逐层展开。图片、文件的协议 XML 不作为正文显示，功能同步、游戏红点和计数控制包不会作为聊天消息显示或补发。
 - WebUI / MCP 发出的消息会显示在消息管理中，并同步到 Telegram。请求编号防止重复提交。“已提交”仅表示微信服务返回了消息编号，不代表对方已读；结果不确定时不会自动重发。
 - 合并聊天记录及嵌套记录中的视频可下载；Telegram 使用视频消息发送，WebUI 提供播放和下载。使用服务端 RecordItem `DataType=4` 下载完整 MP4，不把记录的 64 位消息 ID 传给普通视频下载接口；需要支持该接口的服务端（v6 系列自 v6.0.6 起支持）。
-- 文件下载使用 `wx2tg-puppet 6.0.13-dev.3`，兼容旧版 JSON 和服务端 v6.0.10 的二进制 `200/206` 分片响应。普通文件及合并记录的文件回退按实际收到字节数推进，不会因短分片跳过内容；合并记录文件显式使用 `DataType=8`。首个 CDN 回退分片可能等待整份文件下载，SDK 为文件请求单独设置 180 秒超时。仅声明成功、空内容或长度不一致都不会作为有效文件发送。WebUI 下载缓存上限为 256 MiB，上传发送仍限 50 MiB；失败卡片直接显示错误原因。Telegram 下载按钮兼容保存的媒体类型名称和旧数字类型。
+- 文件下载使用 `wx2tg-puppet 6.0.13`，兼容旧版 JSON 和服务端 v6.0.10 的二进制 `200/206` 分片响应。普通文件及合并记录的文件回退按实际收到字节数推进，不会因短分片跳过内容；合并记录文件显式使用 `DataType=8`。首个 CDN 回退分片可能等待整份文件下载，SDK 为文件请求单独设置 180 秒超时。仅声明成功、空内容或长度不一致都不会作为有效文件发送。WebUI 下载缓存上限为 256 MiB，上传发送仍限 50 MiB；失败卡片直接显示错误原因。Telegram 下载按钮兼容保存的媒体类型名称和旧数字类型。
 - 通过已绑定 Telegram 会话发往微信的文字、引用回复和媒体，也会显示在 WebUI 中，标明“来自 Telegram”和微信发送状态，不会再转发回 Telegram，也不计入 Telegram 未读数量。附件和附带文字分别记录；已缓存的媒体可预览或下载，缓存失败时提示在 Telegram 查看附件。
 - 红色数量只表示明确跟踪到的 Telegram 待发送、发送中或确定失败消息，同步成功后自动消除。历史零回执和结果不确定的消息单独显示，不计入未读。打开会话不会清除尚未同步到 Telegram 的消息。
 - 支持“仅补发到 Telegram”，不会重发到微信；禁止并行重复补发，结果不确定时需明确确认后才能再次尝试。
@@ -164,7 +164,7 @@ Docker 将 `./config` 挂载为 `/app/storage`；备份时同时保留 `save-fil
 ## 部署安装
 
 > [!IMPORTANT]
-> 当前开发版为 **`v6.0.13-dev.3`**，合并了 `wx2tg-v3-dev` 的 WebUI / MCP / 消息历史改进，保留 v6 的回调和文件下载修复，并增加可选的公众号 Topic 模式。正式版不带 `-dev.N`；本次开发版不会更新稳定通道。镜像是否可用以对应架构的 Actions 构建成功为准。见 [发行规则](docs/releases.md) 与 [消息链路说明](docs/server-v6.md)。
+> 当前正式版为 **`v6.0.13`**，包含 v3 dev 的 WebUI/MCP 改进、v6 回调/文件下载修复、公众号 Topic、微信行内表情及文件夹自动扩容。仅更新稳定通道，保留已有开发标签。详见 [发行规则](docs/releases.md)。
 
 全新部署先复制一份 `.env.example` 为 `.env` 文件，然后配置环境变量。已有私有配置（包括用户的 `home_202.env`）绝不能覆盖，所需新增项应手动合并。
 
@@ -176,7 +176,7 @@ Docker 部署使用 Docker Engine 和 Docker Compose v2；本地开发使用 Nod
 
 ### Docker Compose
 
-直接使用仓库的 `docker-compose.yml`，无需再叠加 WebUI 覆盖文件。主配置固定完整版本 `finalpi/wechat2tg:v6.0.13-dev.3`，不跟随滚动别名。amd64 用户可以改用同版本 `-amd64` 镜像以提前部署，无需等待 ARM。
+直接使用仓库的 `docker-compose.yml`，无需再叠加 WebUI 覆盖文件。主配置固定完整版本 `finalpi/wechat2tg:v6.0.13`，不跟随滚动别名。amd64 用户可以改用同版本 `-amd64` 镜像以提前部署，无需等待 ARM。
 
 以下命令用于初始化全新整套服务。已有部署应保留旧镜像和私有配置，核对本地 Compose 后，仅用 `docker compose pull wechat2tg` 和 `docker compose up -d --no-deps wechat2tg` 更新 bot。本示例的 `wx2tg-server` 镜像、命名空间和版本保持不变；本次 bot 命名修正不能替换或重启已有生产后端。
 
@@ -202,7 +202,7 @@ docker compose restart wechat2tg
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.13-dev.3
+    image: finalpi/wechat2tg:v6.0.13
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"
@@ -220,7 +220,7 @@ services:
       - wx2tg-server
 
   wx2tg-server:
-    image: finalpi/wx2tg-server:v6.0.13-dev.3
+    image: finalpi/wx2tg-server:v6.0.13
     container_name: wx2tg-server
     ports:
       - "8058:8058"
