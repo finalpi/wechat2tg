@@ -147,7 +147,8 @@ export class GramJsOfficialForumTelegram implements OfficialForumTelegram {
         await user.invoke(new Api.channels.EditAdmin({
             channel, userId: botInfo.username ? `@${botInfo.username}` : returnBigInt(config.botId),
             adminRights: new Api.ChatAdminRights({manageTopics: true, inviteUsers: true, deleteMessages: true}),
-            rank: 'Official accounts'
+            // Telegram administrator titles must not exceed 16 characters.
+            rank: 'WeChat accounts'
         }))
         // Check the Bot API view after awaiting the actual MTProto RPC, never an event listener.
         const chat = await bot.getChat(chatId)

@@ -264,7 +264,14 @@ test('GramJS adapter uses forum flags, marked peer IDs, awaited admin RPC and se
                 return {}
             }
             if (request instanceof Api.channels.InviteToChannel) { members.add(String(request.users[0])); return {} }
-            if (request instanceof Api.channels.EditAdmin) { await Promise.resolve(); promoted = true; return {} }
+            if (request instanceof Api.channels.EditAdmin) {
+                // Telegram rejects administrator titles longer than 16 characters.
+                // A permissive RPC mock previously hid the production provisioning failure.
+                if ([...request.rank].length > 16) {
+                    throw Object.assign(new Error('ADMIN_RANK_INVALID'), {code: 400, errorMessage: 'ADMIN_RANK_INVALID'})
+                }
+                await Promise.resolve(); promoted = true; return {}
+            }
             if (request instanceof Api.channels.CreateForumTopic) {
                 return new Api.Updates({chats: [], users: [], date: 0, seq: 0, updates: [
                     new Api.UpdateNewChannelMessage({pts: 999, ptsCount: 1, message: new Api.MessageService({
@@ -292,6 +299,7 @@ test('GramJS adapter uses forum flags, marked peer IDs, awaited admin RPC and se
     assert.equal(create.megagroup, true)
     assert.equal(create.forum, true)
     const admin = requests.find(request => request instanceof Api.channels.EditAdmin)
+    assert.ok([...admin.rank].length <= 16)
     assert.equal(admin.adminRights.manageTopics, true)
     assert.equal(admin.adminRights.inviteUsers, true)
     assert.equal(admin.adminRights.deleteMessages, true)
