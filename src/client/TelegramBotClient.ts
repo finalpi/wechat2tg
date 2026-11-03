@@ -26,7 +26,8 @@ import * as path from 'node:path'
 import TgCommandHelper from '../service/TelegramCommandHelper'
 import {TelegramGroupOperateService} from '../service/TelegramGroupOperateService'
 import {WxContactRepository} from '../repository/WxContactRepository'
-import {KeyboardPageUtils} from '../util/KeyboardPageUtils'
+import {DirectoryKind, DirectoryPager, DirectoryScope} from '../util/DirectoryPager'
+import {answerDirectoryCallback, deliverDirectoryPage, replyDirectoryText} from '../util/DirectoryPageDelivery'
 import {BindGroup} from '../entity/BindGroup'
 import {WxRoomRepository} from '../repository/WxRoomRepository'
 import {WeChatClient} from './WechatClient'
@@ -741,11 +742,11 @@ export class TelegramBotClient extends AbstractClient {
         return isSameTelegramDestination(stored, ctx.chat?.id, this.currentThread(ctx))
     }
 
-    private async blockForumMutation(ctx: Context): Promise<boolean> {
+    private async blockForumMutation(ctx: Context, directoryMarkup?: Parameters<typeof replyDirectoryText>[2]): Promise<boolean> {
         if (!await this.bindGroupService.isManagedForum(ctx.chat?.id)) return false
-        await ctx.reply('公众号话题群不支持整群解绑、重绑、更新或退出。请在私聊中使用 /official。', {
-            message_thread_id: this.currentThread(ctx)
-        })
+        const text = '公众号话题群不支持整群解绑、重绑、更新或退出。请在私聊中使用 /official。'
+        if (directoryMarkup) await replyDirectoryText(ctx, text, directoryMarkup)
+        else await ctx.reply(text, {message_thread_id: this.currentThread(ctx)})
         return true
     }
 
@@ -757,6 +758,9 @@ export class TelegramBotClient extends AbstractClient {
     }
 
     private onBotAction(bot: Telegraf) {
+        bot.action(/^dl:/, ctx => this.handleDirectoryCallback(ctx, ctx.match.input))
+        bot.action(/^(?:us|of|ro):/, ctx => this.handleDirectoryCallback(ctx, ctx.match.input))
+
         // 数字键盘点击
         bot.action(/num-(.+)/, ctx => {
             const match = ctx.match[1]
@@ -869,131 +873,6 @@ export class TelegramBotClient extends AbstractClient {
             TgCommandHelper.setCommand(bot)
             // 发送语言已切换的提示
             ctx.answerCbQuery(this.i18n.t('settings.language_changed'))
-        })
-
-        bot.action(/^(?:us|of):page-/, async ctx => {
-            await ctx.answerCbQuery()
-            const [actionMark, pageNum] = ctx.match.input.split(':page-')
-            const {contacts: data} = await this.getContactList(actionMark === 'of')
-            const dataMap = data.map(item => {
-                return {
-                    remark: item.remark ? item.remark : item.nickName,
-                    action: item.userName
-                }
-            })
-            const page = new KeyboardPageUtils(dataMap, parseInt(pageNum), actionMark)
-            ctx.editMessageReplyMarkup(page.getMarkup())
-        })
-
-        bot.action(/^(?:us|of):/, async ctx => {
-            await ctx.answerCbQuery()
-            if (await this.blockForumMutation(ctx)) return
-            const wxId = ctx.match.input.split(':')[1]
-            const contact = await TelegramBotClient.getSpyClient('wxClient').client.Contact.find({id: wxId})
-            if (contact) {
-                if (ctx.chat && ctx.chat.type.includes('group')) {
-                    await this.bindGroupService.removeByChatIdOrWxId(ctx.chat.id, wxId)
-                    // 群组中使用，重新绑定
-                    const group = new BindGroup()
-                    group.chatId = ctx.chat.id
-                    group.wxId = wxId
-                    group.type = 0
-                    group.name = contact.name()
-                    await this.bindGroupService.createOrUpdate(group)
-                    this.updateGroupByChatId(group.chatId)
-                    ctx.reply(this.i18n.t('binding.success'))
-                } else {
-                    let topic: BindGroup | undefined
-                    try {
-                        topic = await this.bindGroupService.resolveWechat(wxId, contact.name())
-                    } catch (error) {
-                        this.logger?.warn('Contact destination is not ready', error?.code || error?.name)
-                        await ctx.reply(this.i18n.t('official.destination_unavailable'))
-                        return
-                    }
-                    if (topic?.threadId) {
-                        await ctx.reply(`https://t.me/c/${String(topic.chatId).replace(/^-100/, '')}/${topic.threadId}`)
-                        return
-                    }
-                    // bot中使用，创建新的群组
-                    const telegramGroupOperateService = new TelegramGroupOperateService(this.bindGroupService, TelegramBotClient.getSpyClient('userMTPClient').client)
-                    let bindGroup = new BindGroup()
-                    bindGroup.wxId = wxId
-                    bindGroup.name = contact.name()
-                    bindGroup.avatarLink = await contact.avatar()
-                    bindGroup.type = 0
-                    const alias = await contact.alias()
-                    if (alias !== bindGroup.name) {
-                        bindGroup.alias = alias
-                    }
-                    bindGroup = await telegramGroupOperateService.createGroup(bindGroup)
-                    const inviteLink = await ctx.telegram.exportChatInviteLink(bindGroup.chatId)
-                    if (inviteLink) {
-                        ctx.reply(this.i18n.t('group.create_success'), {
-                            reply_markup: {
-                                inline_keyboard: [
-                                    [{text: this.i18n.t('group.open'), url: inviteLink}]
-                                ]
-                            }
-                        })
-                    }
-                }
-            }
-        })
-
-        bot.action(/^ro:page-/, async ctx => {
-            const pageNum = ctx.match.input.split('-')[1]
-            const data = await WxRoomRepository.getInstance().getAll()
-            const dataMap = data.map(item => {
-                return {
-                    remark: item.remark ? item.remark : item.nickName,
-                    action: item.chatroomId
-                }
-            })
-            const page = new KeyboardPageUtils(dataMap, parseInt(pageNum), 'ro')
-            ctx.editMessageReplyMarkup(page.getMarkup())
-            ctx.answerCbQuery()
-        })
-
-        bot.action(/^ro:/, async ctx => {
-            if (await this.blockForumMutation(ctx)) return
-            const wxId = ctx.match.input.split(':')[1]
-            const room = await TelegramBotClient.getSpyClient('wxClient').client.Room.find({id: wxId})
-            if (room) {
-                if (ctx.chat && ctx.chat.type.includes('group')) {
-                    await this.bindGroupService.removeByChatIdOrWxId(ctx.chat.id, wxId)
-                    // 群组中使用，重新绑定
-                    const group = new BindGroup()
-                    group.chatId = ctx.chat.id
-                    group.wxId = wxId
-                    group.type = 1
-                    group.name = room.name
-                    await this.bindGroupService.createOrUpdate(group)
-                    this.updateGroupByChatId(group.chatId)
-                    ctx.reply(this.i18n.t('binding.success'))
-                } else {
-                    // bot中使用，创建新的群组
-                    const telegramGroupOperateService = new TelegramGroupOperateService(this.bindGroupService, TelegramBotClient.getSpyClient('userMTPClient').client)
-                    let bindGroup = new BindGroup()
-                    bindGroup.wxId = wxId
-                    bindGroup.name = room.name
-                    const avatar = await room.avatar()
-                    bindGroup.avatarLink = avatar.url
-                    bindGroup.type = 1
-                    bindGroup = await telegramGroupOperateService.createGroup(bindGroup)
-                    const inviteLink = await ctx.telegram.exportChatInviteLink(bindGroup.chatId)
-                    if (inviteLink) {
-                        ctx.reply(this.i18n.t('group.create_success'), {
-                            reply_markup: {
-                                inline_keyboard: [
-                                    [{text: this.i18n.t('group.open'), url: inviteLink}]
-                                ]
-                            }
-                        })
-                    }
-                }
-            }
-            ctx.answerCbQuery()
         })
 
         bot.action(/^fr:/, async ctx => {
@@ -1457,27 +1336,247 @@ export class TelegramBotClient extends AbstractClient {
         return {contacts: official ? classified.official : classified.contacts, unknown: classified.unknown.length}
     }
 
+    private directoryPager?: DirectoryPager
+    private directoryCallbacks?: Map<string, Promise<void>>
+    private directoryPendingCallbacks?: Map<string, Promise<void>>
+
+    private getDirectoryPager(): DirectoryPager {
+        return this.directoryPager ??= new DirectoryPager()
+    }
+
+    private directoryScope(ctx: Context): DirectoryScope {
+        const wxClient = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
+        const account = wxClient?.wxInfo
+        const threadId = this.currentThread(ctx)
+        return {
+            chatId: ctx.chat?.id,
+            userId: ctx.from?.id,
+            threadId: threadId && threadId > 1 ? threadId : undefined,
+            accountId: account?.wxid || account?.['id']
+        }
+    }
+
+    private async handleDirectoryCallback(ctx: Context, callback: string): Promise<void> {
+        // Acknowledge before repositories or the per-message queue can block.
+        const acknowledgement = answerDirectoryCallback(ctx)
+        const scope = this.directoryScope(ctx)
+        if (!Number.isSafeInteger(scope.chatId) || !Number.isSafeInteger(scope.userId) || scope.userId <= 0) {
+            await acknowledgement
+            return
+        }
+        const key = String(ctx.chat?.id) + ':' + ctx.callbackQuery?.message?.message_id
+        const pending = this.directoryPendingCallbacks ??= new Map()
+        const callbackKey = JSON.stringify([key, scope, callback])
+        const existing = pending.get(callbackKey)
+        if (existing) {
+            await acknowledgement
+            await existing
+            return
+        }
+        if (pending.size >= 1024) {
+            await acknowledgement
+            await replyDirectoryText(ctx, this.i18n.t('pagination.unavailable'))
+            return
+        }
+        const queues = this.directoryCallbacks ??= new Map()
+        const previous = queues.get(key) ?? Promise.resolve()
+        const operation = previous.then(async () => {
+            await acknowledgement
+            if (JSON.stringify(scope) !== JSON.stringify(this.directoryScope(ctx))) {
+                await replyDirectoryText(ctx, this.i18n.t('pagination.expired'))
+                return
+            }
+            if (callback.startsWith('dl:')) {
+                // Resolve inside the queue: ownership, account changes and expiry are checked at execution time.
+                const resolved = this.getDirectoryPager().resolve(this.directoryScope(ctx), callback)
+                if (!resolved) {
+                    await replyDirectoryText(ctx, this.i18n.t('pagination.expired'))
+                    return
+                }
+                const {state} = resolved
+                if (resolved.type === 'select') {
+                    await this.selectDirectoryItem(ctx, state.kind, resolved.item.action, state.token)
+                } else {
+                    let page = state.page
+                    if (resolved.type === 'page') page = resolved.page
+                    else if (resolved.type !== 'back') page = 1
+                    await this.showDirectoryPage(ctx, state.kind, resolved.type === 'all' ? '' : state.query, page, true)
+                }
+                return
+            }
+            const legacy = /^(us|of|ro):(.+)$/.exec(callback)
+            if (!legacy) {
+                await replyDirectoryText(ctx, this.i18n.t('pagination.expired'))
+                return
+            }
+            const kind = legacy[1] as DirectoryKind
+            if (legacy[2].startsWith('page-')) {
+                const rawPage = legacy[2].slice(5)
+                const page = /^-?\d+$/.test(rawPage) ? Number(rawPage) : NaN
+                if (!Number.isSafeInteger(page)) {
+                    await replyDirectoryText(ctx, this.i18n.t('pagination.expired'))
+                    return
+                }
+                await this.showDirectoryPage(ctx, kind, '', Math.max(1, page), true)
+            } else if (/^[^:\s]+$/.test(legacy[2])) {
+                await this.selectDirectoryItem(ctx, kind, legacy[2])
+            } else {
+                await replyDirectoryText(ctx, this.i18n.t('pagination.expired'))
+            }
+        }).catch(async error => {
+            this.logger?.warn('Directory callback unavailable', error?.code || error?.name)
+            await replyDirectoryText(ctx, this.i18n.t('pagination.unavailable'))
+        })
+        queues.set(key, operation)
+        // Coalesce only overlapping clicks; a completed transient failure must
+        // not permanently disable its button. Retrying later remains explicit.
+        pending.set(callbackKey, operation)
+        try {
+            await operation
+        } finally {
+            if (queues.get(key) === operation) queues.delete(key)
+            if (pending.get(callbackKey) === operation) pending.delete(callbackKey)
+        }
+    }
+
+    private translateDirectory(key: string, params: Record<string, string | number> = {}): string {
+        return this.i18n.t(key, Object.fromEntries(Object.entries(params).map(([name, value]) => [name, String(value)])))
+    }
+
     private async showContactList(ctx: Context, query: string, official: boolean) {
-        if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
-            return ctx.reply(this.i18n.t('login.please_login_wx'))
+        await this.showDirectoryPage(ctx, official ? 'of' : 'us', query, 1, false)
+    }
+
+    private async showDirectoryPage(ctx: Context, kind: DirectoryKind, query: string, page: number, edit: boolean) {
+        if (!TelegramBotClient.getSpyClient('wxClient')?.hasLogin) {
+            await replyDirectoryText(ctx, this.i18n.t('login.please_login_wx'))
+            return
         }
-        const {contacts, unknown} = await this.getContactList(official, query)
-        if (contacts.length === 0) {
-            return ctx.reply(unknown ? this.i18n.t('contact.classification_pending', {count: String(unknown)})
-                : this.i18n.t(official ? 'official.no_accounts' : 'user.no_contacts'))
+        try {
+            const scope = this.directoryScope(ctx)
+            let unknown = 0
+            let items: Array<{remark: string, action: string}>
+            if (kind === 'ro') {
+                const repository = WxRoomRepository.getInstance()
+                const rooms = query ? await repository.getByNickNameOrRemark(query) : await repository.getAll()
+                items = (rooms || []).map(room => ({remark: room.remark || room.nickName || room.chatroomId, action: room.chatroomId}))
+            } else {
+                const result = await this.getContactList(kind === 'of', query)
+                unknown = result.unknown
+                items = result.contacts.map(contact => ({remark: contact.remark || contact.nickName || contact.userName, action: contact.userName}))
+            }
+            if (JSON.stringify(scope) !== JSON.stringify(this.directoryScope(ctx))) {
+                await replyDirectoryText(ctx, this.i18n.t('pagination.expired'))
+                return
+            }
+            const inGroup = ctx.chat?.type.includes('group')
+            const labels = {
+                ro: {bind: 'room.bind_group', create: 'room.create_wx_group', empty: 'room.no_groups'},
+                of: {bind: 'official.bind_account', create: 'official.create_account_group', empty: 'official.no_accounts'},
+                us: {bind: 'user.bind_contact', create: 'user.create_contact_group', empty: 'user.no_contacts'}
+            }[kind]
+            const view = this.getDirectoryPager().render({
+                scope, kind, query, page, items,
+                prompt: this.i18n.t(inGroup ? labels.bind : labels.create),
+                notice: unknown ? this.i18n.t('contact.classification_pending', {count: String(unknown)}) : undefined,
+                emptyText: unknown ? '' : this.i18n.t(labels.empty)
+            }, (key, params) => this.translateDirectory(key, params))
+            await deliverDirectoryPage(ctx, view, edit)
+        } catch (error) {
+            this.logger?.warn('Directory unavailable', error?.code || error?.name)
+            await replyDirectoryText(ctx, this.i18n.t('pagination.unavailable'))
         }
-        const data = contacts.map(contact => ({
-            remark: contact.remark || contact.nickName,
-            action: contact.userName
-        }))
-        const page = new KeyboardPageUtils(data, 1, official ? 'of' : 'us')
-        if (query) page.pageSize = 999
-        const inGroup = ctx.chat?.type.includes('group')
-        const prompt = official
-            ? (inGroup ? 'official.bind_account' : 'official.create_account_group')
-            : (inGroup ? 'user.bind_contact' : 'user.create_contact_group')
-        const text = this.i18n.t(prompt) + (unknown ? '\n' + this.i18n.t('contact.classification_pending', {count: String(unknown)}) : '')
-        return ctx.reply(text, {reply_markup: page.getMarkup()})
+    }
+
+    private async selectDirectoryItem(ctx: Context, kind: DirectoryKind, wxId: string, returnToken?: string) {
+        const back = returnToken
+            ? this.getDirectoryPager().backButton(returnToken, (key, params) => this.translateDirectory(key, params))
+            : {text: this.i18n.t('pagination.back'), callback_data: kind + ':page-1'}
+        const markup = {inline_keyboard: [[back]]}
+        const reply = (text: string) => replyDirectoryText(ctx, text, markup)
+        const scope = this.directoryScope(ctx)
+        const isCurrent = () => JSON.stringify(scope) === JSON.stringify(this.directoryScope(ctx))
+            && (!returnToken || this.getDirectoryPager().resolve(scope, 'dl:' + returnToken + ':b'))
+        try {
+            if (await this.blockForumMutation(ctx, markup)) return
+            const wxClient = TelegramBotClient.getSpyClient('wxClient')
+            if (!wxClient?.hasLogin) {
+                await reply(this.i18n.t('login.please_login_wx'))
+                return
+            }
+            const isRoom = kind === 'ro'
+            const item = isRoom ? await wxClient.client.Room.find({id: wxId}) : await wxClient.client.Contact.find({id: wxId})
+            if (!isCurrent()) {
+                await reply(this.i18n.t('pagination.expired'))
+                return
+            }
+            if (!item) {
+                await reply(this.i18n.t('pagination.selection_unavailable'))
+                return
+            }
+            const name = isRoom ? item.name : item.name()
+            if (ctx.chat?.type.includes('group')) {
+                await this.bindGroupService.removeByChatIdOrWxId(ctx.chat.id, wxId)
+                const group = new BindGroup()
+                group.chatId = ctx.chat.id
+                group.wxId = wxId
+                group.type = isRoom ? 1 : 0
+                group.name = name
+                await this.bindGroupService.createOrUpdate(group)
+                try {
+                    await this.updateGroupByChatId(group.chatId)
+                } catch (error) {
+                    this.logger?.warn('Directory binding metadata update failed', error?.code || error?.name)
+                }
+                await reply(this.i18n.t('binding.success'))
+                return
+            }
+            if (!isRoom) {
+                let topic: BindGroup | undefined
+                try {
+                    topic = await this.bindGroupService.resolveWechat(wxId, name)
+                } catch (error) {
+                    this.logger?.warn('Contact destination is not ready', error?.code || error?.name)
+                    await reply(this.i18n.t('official.destination_unavailable'))
+                    return
+                }
+                if (topic?.threadId) {
+                    await reply('https://t.me/c/' + String(topic.chatId).replace(/^-100/, '') + '/' + topic.threadId)
+                    return
+                }
+            }
+            const service = new TelegramGroupOperateService(this.bindGroupService, TelegramBotClient.getSpyClient('userMTPClient').client)
+            let group = new BindGroup()
+            group.wxId = wxId
+            group.name = name
+            group.type = isRoom ? 1 : 0
+            const avatar = await item.avatar()
+            group.avatarLink = isRoom ? avatar?.url : avatar
+            if (!isRoom) {
+                const alias = await item.alias()
+                if (alias !== name) group.alias = alias
+            }
+            if (!isCurrent()) {
+                await reply(this.i18n.t('pagination.expired'))
+                return
+            }
+            // External creation is intentionally attempted once, even if its result is uncertain.
+            group = await service.createGroup(group)
+            if (!group?.chatId) {
+                await reply(this.i18n.t('pagination.selection_unavailable'))
+                return
+            }
+            const inviteLink = await ctx.telegram.exportChatInviteLink(group.chatId)
+            await replyDirectoryText(ctx, this.i18n.t('group.create_success'), {
+                inline_keyboard: [
+                    ...(inviteLink ? [[{text: this.i18n.t('group.open'), url: inviteLink}]] : []),
+                    [back]
+                ]
+            })
+        } catch (error) {
+            this.logger?.warn('Directory selection unavailable', error?.code || error?.name)
+            await reply(this.i18n.t('pagination.selection_unavailable'))
+        }
     }
 
     private onBotCommand(bot: Telegraf) {
@@ -1669,42 +1768,7 @@ ${this.i18n.t('help.instructions')}`))
         bot.command('user', ctx => this.showContactList(ctx, ctx.payload.trim(), false))
         bot.command('official', ctx => this.showContactList(ctx, ctx.payload.trim(), true))
 
-        bot.command('room', async ctx => {
-            if (!TelegramBotClient.getSpyClient('wxClient').hasLogin) {
-                ctx.reply(this.i18n.t('login.please_login_wx'))
-                return
-            }
-            const query = ctx.payload.trim()
-            let data
-            if (query) {
-                data = await WxRoomRepository.getInstance().getByNickNameOrRemark(query)
-            } else {
-                data = await WxRoomRepository.getInstance().getAll()
-            }
-            if (!data || data.length === 0) {
-                ctx.reply(this.i18n.t('room.no_groups'))
-                return
-            }
-            const dataMap = data.map(item => {
-                return {
-                    remark: item.remark ? item.remark : item.nickName,
-                    action: item.chatroomId
-                }
-            })
-            const page = new KeyboardPageUtils(dataMap, 1, 'ro')
-            if (query) {
-                page.pageSize = 999
-            }
-            let text
-            if (ctx.chat && ctx.chat.type.includes('group')) {
-                text = this.i18n.t('room.bind_group')
-            } else {
-                text = this.i18n.t('room.create_wx_group')
-            }
-            ctx.reply(text, {
-                reply_markup: page.getMarkup()
-            })
-        })
+        bot.command('room', ctx => this.showDirectoryPage(ctx, 'ro', ctx.payload.trim(), 1, false))
 
         bot.command('revoke', async ctx => {
             const replyMessageId = ctx.update.message['reply_to_message']?.message_id

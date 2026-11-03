@@ -327,6 +327,8 @@ Contact, official-account, and group searches also support bot mentions in group
 
 Replace `@your_bot` with your bot username. Queries preserve internal spaces and punctuation. List buttons show names or remarks without an added emoji prefix.
 
+Next release: these lists use rich-text pages with 30 entries, search-preserving navigation and Back buttons. Confirmed HTML/edit failures have bounded plain-text/new-message fallback; expired menus prompt a fresh command. See [directory pagination (Chinese)](docs/directory-pagination.md). This change is not in the published `v6.0.13` image yet.
+
 ## Environment Variables
 
 | Name | Required | Description                                                         |
