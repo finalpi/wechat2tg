@@ -9,9 +9,16 @@ on:
 permissions:
   contents: read
 
+env:
+  IMAGE: finalpi/wechat2tg-v3
+
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
+  validate:
+    name: Validate release and test
+    runs-on: ubuntu-24.04
+    outputs:
+      app_version: ${{ steps.meta.outputs.app_version }}
+      is_release: ${{ steps.meta.outputs.is_release }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -22,17 +29,16 @@ jobs:
           node-version: '22'
           cache: npm
 
-      - name: Validate release and test
+      - name: Validate release metadata
+        id: meta
         shell: bash
         run: |
           set -euo pipefail
           npm run check:version
-          npm ci --ignore-scripts --no-audit --no-fund
-          npm test
           if [[ "$GITHUB_EVENT_NAME" == "push" &&
                 "$GITHUB_REF_TYPE" == "tag" ]]; then
             APP_VERSION="$GITHUB_REF_NAME"
-            IMAGE_TAGS="finalpi/wechat2tg-v3:$APP_VERSION,finalpi/wechat2tg-v3:v6-latest"
+            IS_RELEASE=true
           else
             if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ||
                   "$GITHUB_REF" != "refs/heads/v6" ]]; then
@@ -40,13 +46,87 @@ jobs:
               exit 1
             fi
             APP_VERSION="v6-dev-${GITHUB_SHA:0:7}"
-            IMAGE_TAGS="finalpi/wechat2tg-v3:$APP_VERSION"
+            IS_RELEASE=false
           fi
-          echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
-          echo "IMAGE_TAGS=$IMAGE_TAGS" >> "$GITHUB_ENV"
+          echo "app_version=$APP_VERSION" >> "$GITHUB_OUTPUT"
+          echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Install dependencies and test
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm test
+
+  build:
+    name: Build ${{ matrix.arch }}
+    needs: validate
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    env:
+      APP_VERSION: ${{ needs.validate.outputs.app_version }}
+      IS_RELEASE: ${{ needs.validate.outputs.is_release }}
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Each platform uses a native runner; neither job waits for the other.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Select architecture tags
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$ARCH" in
+            amd64|arm64) ;;
+            *) echo 'Unsupported architecture'; exit 1 ;;
+          esac
+          TAGS="$IMAGE:$APP_VERSION-$ARCH"
+          if [[ "$IS_RELEASE" == "true" ]]; then
+            TAGS="$TAGS,$IMAGE:v6-latest-$ARCH"
+          fi
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push architecture image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          platforms: ${{ matrix.platform }}
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha,scope=wx2tg-v6-${{ matrix.arch }}
+          cache-to: type=gha,scope=wx2tg-v6-${{ matrix.arch }},mode=max
+
+  publish:
+    name: Publish multi-architecture image
+    needs: [validate, build]
+    runs-on: ubuntu-24.04
+    env:
+      APP_VERSION: ${{ needs.validate.outputs.app_version }}
+      IS_RELEASE: ${{ needs.validate.outputs.is_release }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -57,17 +137,22 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ env.IMAGE_TAGS }}
-          platforms: linux/amd64,linux/arm64/v8
+      - name: Combine the completed architecture images
+        id: manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAGS=(-t "$IMAGE:$APP_VERSION")
+          if [[ "$IS_RELEASE" == "true" ]]; then
+            TAGS+=(-t "$IMAGE:v6-latest")
+          fi
+          docker buildx imagetools create "${TAGS[@]}" \
+            "$IMAGE:$APP_VERSION-amd64" \
+            "$IMAGE:$APP_VERSION-arm64"
+          docker buildx imagetools inspect "$IMAGE:$APP_VERSION"
 
       - name: Docker Hub Description
-        if: github.event_name == 'push' && github.ref_type == 'tag'
+        if: needs.validate.outputs.is_release == 'true'
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
