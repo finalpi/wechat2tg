@@ -12,7 +12,15 @@ import {config} from '../config'
 import {FileUtils} from '../util/FileUtils'
 import {TelegramChatFolderService} from './TelegramChatFolderService'
 
+interface GroupMetadataState {
+    queue: Promise<void>
+    pending: Map<string, Promise<void>>
+    blockedUntil: number
+}
+
 export class TelegramGroupOperateService {
+    // Startup, manual updates and new service instances share one metadata lane per account client.
+    private static readonly metadataStates = new WeakMap<GramClient, GroupMetadataState>()
     private bindGroupService: BindGroupService
     private client: GramClient
     private configService: ConfigurationService = ConfigurationService.getInstance()
@@ -24,87 +32,86 @@ export class TelegramGroupOperateService {
         this.client = client
     }
 
-    // 更新群组信息
-    public async updateGroup(contactOrRoom: BindGroup) {
+    // Metadata is optional: serialize requests, but never sleep/retry through a FloodWait.
+    public async updateGroup(contactOrRoom: BindGroup): Promise<void> {
+        if (!this.client) return
+        let state = TelegramGroupOperateService.metadataStates.get(this.client)
+        if (!state) {
+            state = {queue: Promise.resolve(), pending: new Map(), blockedUntil: 0}
+            TelegramGroupOperateService.metadataStates.set(this.client, state)
+        }
+        if (Date.now() < state.blockedUntil) return
+        const input = {...contactOrRoom}
+        const key = JSON.stringify([input.chatId, input.wxId, input.name, input.alias, input.avatarLink, input.type])
+        const pending = state.pending.get(key)
+        if (pending) return pending
+        const operation = state.queue.then(() => this.updateGroupMetadata(input, state))
+        state.queue = operation.catch(() => undefined)
+        state.pending.set(key, operation)
         try {
-            const oldBindGroup = await this.bindGroupService.getByChatId(contactOrRoom.chatId)
-            if (!oldBindGroup) {
-                return
-            }
-            const entity = await this.client.getEntity(returnBigInt(contactOrRoom.chatId))
-            if (!entity) {
-                return
-            }
-            oldBindGroup.alias = contactOrRoom.alias
-            // 更新头像
-            if (contactOrRoom.avatarLink !== oldBindGroup.avatarLink) {
-                oldBindGroup.avatarLink = contactOrRoom.avatarLink
-                let buff
+            await operation
+        } finally {
+            if (state.pending.get(key) === operation) state.pending.delete(key)
+        }
+    }
+
+    private async updateGroupMetadata(input: BindGroup, state: GroupMetadataState): Promise<void> {
+        // A previous queued job may have established a cooldown after this one was enqueued.
+        if (Date.now() < state.blockedUntil) return
+        let updated: BindGroup | undefined
+        let changed = false
+        try {
+            const stored = await this.bindGroupService.getByChatId(input.chatId)
+            if (!stored) return
+            updated = {...stored}
+            const entity = await this.client.getEntity(returnBigInt(input.chatId))
+            if (!entity || !(entity.className === 'Chat' || entity.className === 'Channel' && entity.megagroup)) return
+            if (input.avatarLink && input.avatarLink !== stored.avatarLink) {
                 try {
-                    if (contactOrRoom.avatarLink) {
-                        buff = await FileUtils.getInstance().downloadUrl2Buffer(contactOrRoom.avatarLink)
-                    }
-                } catch (e) {
-                    console.error(e)
-                }
-                if (!buff) {
-                    return
-                }
-                try {
+                    const buff = await FileUtils.getInstance().downloadUrl2Buffer(input.avatarLink)
+                    if (!buff?.length) throw new Error('Empty group avatar')
                     const avatarBuff = await sharp(buff).toFormat('png').resize(200).toBuffer()
                     await this.updateGroupAvatar(entity, avatarBuff)
-                } catch (e) {
-                    if (this.isFloodWaitError(e)) {
-                        console.warn(`[TelegramGroupOperateService] 头像更新触发 Telegram 限流，跳过本次更新，等待 ${e.seconds || 'unknown'} 秒`)
-                    } else {
-                        console.error('[TelegramGroupOperateService] 更新群头像失败:', e)
-                    }
+                    updated.avatarLink = input.avatarLink
+                    changed = true
+                } catch (error) {
+                    // An avatar FloodWait must also stop the following title edit.
+                    if (this.isFloodWaitError(error)) throw error
+                    console.warn('[TelegramGroupOperateService] 更新群头像失败，保留原头像:', error?.message)
                 }
             }
-            // 更新群组名
-            let name
-            if (contactOrRoom.type === 0) {
-                if (contactOrRoom.alias === contactOrRoom.name) {
-                    oldBindGroup.alias = ''
-                    contactOrRoom.alias = ''
-                }
-                name = FormatUtils.transformTitleStr(config.CREATE_CONTACT_NAME, contactOrRoom.alias, contactOrRoom.name, '')
-                if (!name) {
-                    name = '未命名'
-                }
+            const alias = input.type === 0 && input.alias === input.name ? '' : input.alias
+            const name = input.type === 0
+                ? FormatUtils.transformTitleStr(config.CREATE_CONTACT_NAME, alias, input.name, '') || '未命名'
+                : FormatUtils.transformTitleStr(config.CREATE_ROOM_NAME, alias, '', input.name) || '未命名群聊'
+            // GramJS may return a stale cached entity after a successful edit.
+            if (updated.name !== name && entity.title !== name) {
+                await this.client.invoke(entity.className === 'Channel'
+                    ? new Api.channels.EditTitle({channel: entity, title: name})
+                    : new Api.messages.EditChatTitle({chatId: entity.id, title: name}))
+            }
+            if (updated.name !== name || updated.alias !== alias) {
+                updated.name = name
+                updated.alias = alias
+                changed = true
+            }
+        } catch (error) {
+            if (this.isFloodWaitError(error)) {
+                const seconds = Number(error.seconds)
+                const wait = Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : 60
+                state.blockedUntil = Date.now() + wait * 1000
+                console.warn(`[TelegramGroupOperateService] 群名/头像更新触发 Telegram 限流，暂停元数据同步 ${wait} 秒；不影响消息转发`)
             } else {
-                name = FormatUtils.transformTitleStr(config.CREATE_ROOM_NAME, contactOrRoom.alias, '', contactOrRoom.name)
-                if (!name) {
-                    name = '未命名群聊'
-                }
+                console.error('[TelegramGroupOperateService] 更新群组信息失败:', error?.message)
             }
-
-            if (name !== oldBindGroup.name) {
-                oldBindGroup.name = name
-                // 超级群
-                if (entity.className === 'Channel' && entity.megagroup) {
-                    if (entity.title !== name) {
-                        await this.client?.invoke(
-                            new Api.channels.EditTitle({
-                                channel: entity,
-                                title: name,
-                            })
-                        )
-                    }
-                } else if (entity.className === 'Chat') {
-                    if (entity.title !== name) {
-                        await this.client?.invoke(
-                            new Api.messages.EditChatTitle({
-                                chatId: entity.id,
-                                title: name,
-                            })
-                        )
-                    }
-                }
+        }
+        // Persist only confirmed changes, including an avatar succeeded before a title FloodWait.
+        if (changed && updated) {
+            try {
+                await this.bindGroupService.createOrUpdate(updated)
+            } catch (error) {
+                console.error('[TelegramGroupOperateService] 保存群组信息失败:', error?.message)
             }
-            this.bindGroupService.createOrUpdate(oldBindGroup)
-        } catch (e) {
-            console.log(e)
         }
     }
 

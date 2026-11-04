@@ -7,16 +7,16 @@ const vm = require('node:vm')
 const {EventEmitter} = require('node:events')
 
 // Run the real compiled client methods without booting Telegram or SQLite.
-function clientClass(config = {}, spies = {}) {
+function clientClass(config = {}, spies = {}, schedule = callback => queueMicrotask(callback)) {
   const exports = {}
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../dist/client/WechatClient.js'), 'utf8'), {
     exports,
     process: {env: {WEBUI_ENABLED: 'false'}},
     // Keep bounded login-retry tests deterministic without real sleeps.
-    setTimeout: callback => queueMicrotask(callback),
+    setTimeout: schedule,
     require(name) {
       if (name === '../base/BaseClient') return {AbstractClient: class {static getSpyClient(key) {return spies[key]}}}
-      if (name === '../i18n') return {getInstance: () => ({})}
+      if (name === '../i18n') return {getInstance: () => ({t: key => key})}
       if (name === '../config') return {config}
       if (name === '../service/WechatAccountClassificationService') return {WechatAccountClassificationService: {getInstance: () => ({isOfficialAccount: async (_id, flag) => require('wx2tg-puppet').isOfficialAccountVerifyFlag(flag)})}}
       if (name === '../webui/message-visibility') return {isControlMessage: () => false}
@@ -31,8 +31,8 @@ function clientClass(config = {}, spies = {}) {
   return exports.WeChatClient
 }
 
-function fixture(config, spies) {
-  const Client = clientClass(config, spies)
+function fixture(config, spies, schedule) {
+  const Client = clientClass(config, spies, schedule)
   const client = Object.create(Client.prototype)
   client.client = new EventEmitter()
   client.startTime = 10
@@ -117,6 +117,59 @@ test('optional login maintenance failure does not block subsequent messages', as
   await client.onMessage(oldMessage)
   assert.equal(entered, true)
   await client.onMessage(oldMessage)
+})
+
+test('startup metadata sync delays between completed updates instead of scheduling all groups at 500ms', async () => {
+  const timers = [], started = [], warnings = []
+  const client = fixture({}, {botClient: {client: {telegram: {sendMessage: async () => undefined}}}},
+    (callback, delay) => timers.push({callback, delay}))
+  client.configurationService = {getConfig: async () => ({syncWechat: true, chatId: 1})}
+  client.bindGroupService = {fixGroup: async () => undefined, getAll: async () => [{chatId: 1}, {chatId: 2}, {chatId: 3}]}
+  client.logger.warn = (...args) => warnings.push(args)
+  let release, active = 0, maximum = 0
+  client.updateGroupByChatId = async id => {
+    started.push(id)
+    maximum = Math.max(maximum, ++active)
+    if (id === 1) await new Promise(resolve => {release = resolve})
+    active--
+    if (id === 2) throw new Error('optional metadata unavailable')
+  }
+  await client.loginSuccess()
+  assert.equal(timers.length, 1)
+  assert.equal(timers[0].delay, 10000)
+  const synchronization = timers.shift().callback()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(timers.length, 1, 'Only the next group should be scheduled')
+  assert.equal(timers[0].delay, 500)
+  timers.shift().callback()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(started, [1])
+  assert.equal(timers.length, 0, 'Wait for the active update, not just its timer')
+  release()
+  for (const id of [2, 3]) {
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(timers.length, 1)
+    assert.equal(timers[0].delay, 500)
+    timers.shift().callback()
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(started.at(-1), id)
+  }
+  await synchronization
+  assert.equal(maximum, 1)
+  assert.equal(warnings.length, 1, 'A failed group must not abort subsequent optional updates')
+})
+
+test('startup metadata repository failures are caught at the timer boundary', async () => {
+  const timers = [], warnings = []
+  const client = fixture({}, {botClient: {client: {telegram: {sendMessage: async () => undefined}}}},
+    callback => timers.push(callback))
+  client.configurationService = {getConfig: async () => ({syncWechat: true, chatId: 1})}
+  client.bindGroupService = {fixGroup: async () => undefined, getAll: async () => {throw new Error('database unavailable')}}
+  client.logger.warn = (...args) => warnings.push(args)
+  await client.loginSuccess()
+  await assert.doesNotReject(timers.shift()())
+  assert.equal(warnings.length, 1)
+  assert.equal(timers.length, 0)
 })
 
 for (const enabled of [false, true]) {

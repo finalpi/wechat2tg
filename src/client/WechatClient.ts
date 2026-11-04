@@ -237,12 +237,19 @@ export class WeChatClient extends AbstractClient {
         await this.bindGroupService.fixGroup()
         if (config.syncWechat) {
             setTimeout(async () => {
-                const allBind = await this.bindGroupService.getAll()
-                for (const bindGroup of allBind) {
-                    // 添加延迟防止接口调用过快
-                    setTimeout(() => {
-                        this.updateGroupByChatId(bindGroup.chatId)
-                    }, 500)
+                try {
+                    const allBind = await this.bindGroupService.getAll()
+                    for (const bindGroup of allBind) {
+                        // Space completed updates apart; equal-delay timers otherwise launch one burst.
+                        await new Promise(resolve => setTimeout(resolve, 500))
+                        try {
+                            await this.updateGroupByChatId(bindGroup.chatId)
+                        } catch (error) {
+                            this.logger.warn('Startup group metadata update failed:', error?.message)
+                        }
+                    }
+                } catch (error) {
+                    this.logger.warn('Startup group metadata synchronization unavailable:', error?.message)
                 }
             }, 10000)
         }
@@ -906,7 +913,7 @@ export class WeChatClient extends AbstractClient {
                     if (alias !== bindItem.name) {
                         bindItem.alias = alias
                     }
-                    telegramGroupOperateService.updateGroup(bindItem)
+                    await telegramGroupOperateService.updateGroup(bindItem)
                 }
             } else {
                 const wxRoom = await WeChatClient.getSpyClient('wxClient').client.Room.find({id: bindItem.wxId})
@@ -916,7 +923,7 @@ export class WeChatClient extends AbstractClient {
                     bindItem.alias = wxRoom.remark
                     const avatar = await wxRoom.avatar()
                     bindItem.avatarLink = avatar.url
-                    telegramGroupOperateService.updateGroup(bindItem)
+                    await telegramGroupOperateService.updateGroup(bindItem)
                 }
             }
         }

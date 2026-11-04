@@ -1946,7 +1946,7 @@ ${this.i18n.t('help.instructions')}`))
                     if (alias !== bindItem.name) {
                         bindItem.alias = alias
                     }
-                    telegramGroupOperateService.updateGroup(bindItem)
+                    await telegramGroupOperateService.updateGroup(bindItem)
                 }
             } else {
                 const wxRoom = await TelegramBotClient.getSpyClient('wxClient').client.Room.find({id: bindItem.wxId})
@@ -1956,7 +1956,7 @@ ${this.i18n.t('help.instructions')}`))
                     bindItem.alias = wxRoom.remark
                     const avatar = await wxRoom.avatar()
                     bindItem.avatarLink = avatar.url
-                    telegramGroupOperateService.updateGroup(bindItem)
+                    await telegramGroupOperateService.updateGroup(bindItem)
                 }
             }
         } else {
