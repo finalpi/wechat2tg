@@ -26,7 +26,8 @@ import * as path from 'node:path'
 import TgCommandHelper from '../service/TelegramCommandHelper'
 import {TelegramGroupOperateService} from '../service/TelegramGroupOperateService'
 import {WxContactRepository} from '../repository/WxContactRepository'
-import {DirectoryKind, DirectoryPager, DirectoryScope} from '../util/DirectoryPager'
+import {DirectoryKind, DirectoryPager, DirectoryScope, DirectoryState} from '../util/DirectoryPager'
+import {createGroupMentionService} from '../webui/mentions'
 import {answerDirectoryCallback, deliverDirectoryPage, isRichDirectoryMessage, replyDirectoryText} from '../util/DirectoryPageDelivery'
 import {BindGroup} from '../entity/BindGroup'
 import {WxRoomRepository} from '../repository/WxRoomRepository'
@@ -1339,6 +1340,14 @@ export class TelegramBotClient extends AbstractClient {
     private directoryPager?: DirectoryPager
     private directoryCallbacks?: Map<string, Promise<void>>
     private directoryPendingCallbacks?: Map<string, Promise<void>>
+    private directoryMembers?: ReturnType<typeof createGroupMentionService>
+
+    private getDirectoryMembers() {
+        return this.directoryMembers ??= createGroupMentionService(() => {
+            const client = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
+            return client?.hasLogin ? client.wxInfo?.wxid || '' : ''
+        })
+    }
 
     private getDirectoryPager(): DirectoryPager {
         return this.directoryPager ??= new DirectoryPager()
@@ -1395,13 +1404,21 @@ export class TelegramBotClient extends AbstractClient {
                 }
                 const {state} = resolved
                 if (resolved.type === 'select') {
-                    await this.selectDirectoryItem(ctx, state.kind, resolved.item.action, state.token)
+                    if (state.kind === 'gr') {
+                        await this.showDirectoryPage(ctx, 'gm', '', 1, true, !isRichDirectoryMessage(ctx), {
+                            roomId: resolved.item.action, parentToken: state.token
+                        })
+                    } else if (state.kind === 'ct' || state.kind === 'gm') {
+                        await this.showContactDetails(ctx, state, resolved.item.action, resolved.item.remark)
+                    } else {
+                        await this.selectDirectoryItem(ctx, state.kind, resolved.item.action, state.token)
+                    }
                 } else {
                     let page = state.page
                     if (resolved.type === 'page') page = resolved.page
                     else if (resolved.type !== 'back' && resolved.type !== 'compat') page = 1
                     const compatibility = resolved.type === 'compat' || !isRichDirectoryMessage(ctx)
-                    await this.showDirectoryPage(ctx, state.kind, resolved.type === 'all' ? '' : state.query, page, true, compatibility)
+                    await this.showDirectoryPage(ctx, state.kind, resolved.type === 'all' ? '' : state.query, page, true, compatibility, state)
                 }
                 return
             }
@@ -1410,7 +1427,7 @@ export class TelegramBotClient extends AbstractClient {
                 await replyDirectoryText(ctx, this.i18n.t('pagination.expired'))
                 return
             }
-            const kind = legacy[1] as DirectoryKind
+            const kind = legacy[1] as 'us' | 'of' | 'ro'
             if (legacy[2].startsWith('page-')) {
                 const rawPage = legacy[2].slice(5)
                 const page = /^-?\d+$/.test(rawPage) ? Number(rawPage) : NaN
@@ -1448,7 +1465,8 @@ export class TelegramBotClient extends AbstractClient {
         await this.showDirectoryPage(ctx, official ? 'of' : 'us', query, 1, false)
     }
 
-    private async showDirectoryPage(ctx: Context, kind: DirectoryKind, query: string, page: number, edit: boolean, compatibility = false) {
+    private async showDirectoryPage(ctx: Context, kind: DirectoryKind, query: string, page: number, edit: boolean, compatibility = false,
+        context: {roomId?: string; parentToken?: string} = {}) {
         if (!TelegramBotClient.getSpyClient('wxClient')?.hasLogin) {
             await replyDirectoryText(ctx, this.i18n.t('login.please_login_wx'))
             return
@@ -1456,8 +1474,21 @@ export class TelegramBotClient extends AbstractClient {
         try {
             const scope = this.directoryScope(ctx)
             let unknown = 0
+            let notice: string | undefined
             let items: Array<{remark: string, action: string}>
-            if (kind === 'ro') {
+            if (kind === 'gm') {
+                if (!context.roomId) throw new Error('Missing member directory room')
+                const members = await this.getDirectoryMembers().members(context.roomId)
+                const contacts = await WxContactRepository.getInstance().getAll()
+                const remarks = new Map(contacts.map(contact => [contact.userName, contact.remark]))
+                const search = query.toLocaleLowerCase()
+                items = members.filter(member => !query || [member.wxId, member.name, member.nickname, remarks.get(member.wxId)]
+                    .some(value => value?.toLocaleLowerCase().includes(search)))
+                    .map(member => ({remark: member.displayName || remarks.get(member.wxId) || member.name, action: member.wxId}))
+                const rooms = await WxRoomRepository.getInstance().getAll()
+                const room = rooms.find(row => row.chatroomId === context.roomId)
+                notice = (room?.remark || room?.nickName || context.roomId) + '\n' + context.roomId
+            } else if (kind === 'ro' || kind === 'gr') {
                 const repository = WxRoomRepository.getInstance()
                 const rooms = query ? await repository.getByNickNameOrRemark(query) : await repository.getAll()
                 items = (rooms || []).map(room => ({remark: room.remark || room.nickName || room.chatroomId, action: room.chatroomId}))
@@ -1474,12 +1505,16 @@ export class TelegramBotClient extends AbstractClient {
             const labels = {
                 ro: {bind: 'room.bind_group', create: 'room.create_wx_group', empty: 'room.no_groups'},
                 of: {bind: 'official.bind_account', create: 'official.create_account_group', empty: 'official.no_accounts'},
-                us: {bind: 'user.bind_contact', create: 'user.create_contact_group', empty: 'user.no_contacts'}
+                us: {bind: 'user.bind_contact', create: 'user.create_contact_group', empty: 'user.no_contacts'},
+                ct: {bind: 'directory.contacts_prompt', create: 'directory.contacts_prompt', empty: 'user.no_contacts'},
+                gr: {bind: 'directory.groups_prompt', create: 'directory.groups_prompt', empty: 'room.no_groups'},
+                gm: {bind: 'directory.members_prompt', create: 'directory.members_prompt', empty: 'directory.no_members'}
             }[kind]
             const view = this.getDirectoryPager().render({
                 scope, kind, query, page, items,
+                roomId: context.roomId, parentToken: context.parentToken,
                 prompt: this.i18n.t(inGroup ? labels.bind : labels.create),
-                notice: unknown ? this.i18n.t('contact.classification_pending', {count: String(unknown)}) : undefined,
+                notice: notice || (unknown ? this.i18n.t('contact.classification_pending', {count: String(unknown)}) : undefined),
                 emptyText: unknown ? '' : this.i18n.t(labels.empty)
             }, (key, params) => this.translateDirectory(key, params))
             await deliverDirectoryPage(ctx, view, edit, compatibility)
@@ -1489,7 +1524,46 @@ export class TelegramBotClient extends AbstractClient {
         }
     }
 
-    private async selectDirectoryItem(ctx: Context, kind: DirectoryKind, wxId: string, returnToken?: string) {
+    private async showContactDetails(ctx: Context, state: DirectoryState, wxId: string, selectedName: string) {
+        const markup = {inline_keyboard: [[this.getDirectoryPager().backButton(state.token,
+            (key, params) => this.translateDirectory(key, params))]]}
+        const reply = (text: string) => replyDirectoryText(ctx, text, markup)
+        if (!TelegramBotClient.getSpyClient('wxClient')?.hasLogin) {
+            await reply(this.i18n.t('login.please_login_wx'))
+            return
+        }
+        const contact = await WxContactRepository.getInstance().getByUserName(wxId)
+        if (!this.getDirectoryPager().resolve(this.directoryScope(ctx), 'dl:' + state.token + ':b')) {
+            await reply(this.i18n.t('pagination.expired'))
+            return
+        }
+        if (!contact && state.kind !== 'gm') {
+            await reply(this.i18n.t('pagination.selection_unavailable'))
+            return
+        }
+        const lines = [this.i18n.t('directory.detail_title')]
+        const field = (key: string, value: unknown) => {
+            if (typeof value !== 'string' || !value.trim()) return
+            const clean = Array.from(value, char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 ? ' ' : char).join('').trim()
+            const points = Array.from(clean)
+            lines.push(this.i18n.t('directory.' + key) + '：' + (points.length > 200 ? points.slice(0, 199).join('') + '…' : clean))
+        }
+        field('wxid', wxId)
+        if (state.kind === 'gm') field('group_nickname', selectedName)
+        field('nickname', contact?.nickName)
+        field('remark', contact?.remark)
+        field('alias', contact?.alias)
+        if (contact?.sex === 1 || contact?.sex === 2) {
+            field('sex', this.i18n.t(contact.sex === 1 ? 'directory.male' : 'directory.female'))
+        }
+        field('region', [contact?.country, contact?.province, contact?.city].filter(Boolean).join(' / '))
+        field('signature', contact?.signature)
+        field('description', contact?.description)
+        lines.push(this.i18n.t('directory.cache_notice'))
+        await reply(lines.join('\n'))
+    }
+
+    private async selectDirectoryItem(ctx: Context, kind: 'us' | 'of' | 'ro', wxId: string, returnToken?: string) {
         const back = returnToken
             ? this.getDirectoryPager().backButton(returnToken, (key, params) => this.translateDirectory(key, params))
             : {text: this.i18n.t('pagination.back'), callback_data: kind + ':page-1'}
@@ -1770,6 +1844,33 @@ ${this.i18n.t('help.instructions')}`))
         bot.command('official', ctx => this.showContactList(ctx, ctx.payload.trim(), true))
 
         bot.command('room', ctx => this.showDirectoryPage(ctx, 'ro', ctx.payload.trim(), 1, false))
+
+        // Read-only browsing never enters the existing bind/create selection path.
+        bot.command('contacts', ctx => this.showDirectoryPage(ctx, 'ct', ctx.payload.trim(), 1, false))
+        bot.command('members', async ctx => {
+            if (!TelegramBotClient.getSpyClient('wxClient')?.hasLogin) {
+                await replyDirectoryText(ctx, this.i18n.t('login.please_login_wx'))
+                return
+            }
+            try {
+                const scope = this.directoryScope(ctx)
+                const query = ctx.payload.trim()
+                const binding = !query && ctx.chat?.type.includes('group')
+                    ? await this.bindGroupService.resolveTelegram(ctx.chat.id, this.currentThread(ctx)) : undefined
+                if (JSON.stringify(scope) !== JSON.stringify(this.directoryScope(ctx))) {
+                    await replyDirectoryText(ctx, this.i18n.t('pagination.expired'))
+                    return
+                }
+                if (binding?.type === 1 && binding.wxId?.endsWith('@chatroom')) {
+                    await this.showDirectoryPage(ctx, 'gm', '', 1, false, false, {roomId: binding.wxId})
+                } else {
+                    await this.showDirectoryPage(ctx, 'gr', query, 1, false)
+                }
+            } catch (error) {
+                this.logger?.warn('Member directory unavailable', error?.code || error?.name)
+                await replyDirectoryText(ctx, this.i18n.t('pagination.unavailable'))
+            }
+        })
 
         bot.command('revoke', async ctx => {
             const replyMessageId = ctx.update.message['reply_to_message']?.message_id

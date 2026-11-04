@@ -303,6 +303,10 @@ Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot
 
 - `/room`: Get WeChat group list; click the button to create a new group or bind a WeChat group (can search by name or remarks, e.g., `/room takeout` to find WeChat groups containing "takeout")
 
+- `/contacts [name or remark]`: Read-only contact directory. Select a name to view cached WeChat ID, username, remark, region, signature and other available details; pagination and Back preserve your position. Never binds or creates groups.
+
+- `/members [group name or remark]`: Select a WeChat group, browse its members and open member details. Supports pagination and returning to the original group list. Without arguments in a bound Telegram group or topic, opens the corresponding WeChat group directly. Only known profile fields are displayed.
+
 - `/revoke`: Revoke message (reply to the message to be revoked)
 
 - `/relogin`: Secondary login (use only when unexpectedly logged out after login, try to login with previously cached login information)

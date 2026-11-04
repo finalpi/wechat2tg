@@ -39,7 +39,7 @@ const richButtons = message => richNodes(message.rich_message?.blocks, 'button')
 const messageButtons = message => [...richButtons(message), ...externalButtons(message)]
 const resultText = message => message.rich_message ? richText(message.rich_message.blocks[0]) : message.text
 
-function fixture({contacts = [], rooms = [], loggedIn = true, topic, managedForum = false, pagerOptions} = {}) {
+function fixture({contacts = [], rooms = [], members = [], loggedIn = true, topic, managedForum = false, pagerOptions} = {}) {
   const replies = [], edits = [], queries = [], menus = [], selected = [], bindings = [], creations = [], events = [], apiCalls = []
   const sources = new Map()
   const failures = {reply: [], edit: [], ack: []}
@@ -52,6 +52,10 @@ function fixture({contacts = [], rooms = [], loggedIn = true, topic, managedForu
       events.push('repository')
       if (hooks.repository) await hooks.repository(kind)
       return rows
+    },
+    getByUserName: async id => {
+      if (hooks.detail) return hooks.detail(id)
+      return rows.find(row => row.userName === id) || null
     },
     getByNickNameOrRemark: async query => {
       events.push('repository')
@@ -86,6 +90,10 @@ function fixture({contacts = [], rooms = [], loggedIn = true, topic, managedForu
     '../service/WechatAccountClassificationService': {WechatAccountClassificationService: {getInstance: () => classification}},
     '../util/DirectoryPager': pagerModule,
     '../util/DirectoryPageDelivery': deliveryModule,
+    '../webui/mentions': {createGroupMentionService: () => ({members: async roomId => {
+      events.push('members:' + roomId)
+      return hooks.members ? hooks.members(roomId) : members
+    }})},
     '../repository/WxContactRepository': {WxContactRepository: {getInstance: () => repository('contact', contacts)}},
     '../repository/WxRoomRepository': {WxRoomRepository: {getInstance: () => repository('room', rooms)}},
     '../entity/BindGroup': {BindGroup: class {}},
@@ -102,6 +110,7 @@ function fixture({contacts = [], rooms = [], loggedIn = true, topic, managedForu
   client.bindGroupService = {
     isManagedForum: async () => managedForum,
     resolveWechat: async () => hooks.resolve ? hooks.resolve() : topic,
+    resolveTelegram: async (chatId, threadId) => hooks.telegramBinding ? hooks.telegramBinding(chatId, threadId) : topic,
     removeByChatIdOrWxId: async () => undefined,
     createOrUpdate: async value => bindings.push(value),
   }
@@ -850,4 +859,201 @@ test('repository, destination and optional group-update rejections are contained
   f.failures.reply.push(new Error('selection reply failed'))
   await f.action('ro:room@chatroom', 'supergroup')
   assert.equal(f.bindings.length, 2)
+})
+
+for (const context of ['private', {type: 'supergroup', threadId: 77}]) {
+  test(`/contacts shows cached profile details and returns to the original search/page (${JSON.stringify(context)})`, async () => {
+    const contacts = people.map(person => ({...person, remark: '备注 ' + person.nickName, alias: 'real_alias',
+      sex: 2, country: '中国', province: '广东', city: '深圳', signature: '<hello> & world', description: '描述'}))
+    const f = fixture({contacts, managedForum: true})
+    await f.command('/contacts@test_bot 用户', context)
+    assert(f.menus.some(c => c.command === 'contacts' && c.description === zh['command.contacts']))
+    assert(f.menus.some(c => c.command === 'members' && c.description === zh['command.members']))
+    await f.action(button(f.replies[0], ':p:2'), context)
+    await f.action(dataButtons(f.edits.at(-1))[0].callback_data, context)
+    const detail = f.replies.at(-1)
+    assert.match(resultText(detail), /微信 ID：wxid_30/)
+    assert.match(resultText(detail), /昵称：用户30/)
+    assert.match(resultText(detail), /备注：备注 用户30/)
+    assert.match(resultText(detail), /微信号：real_alias/)
+    assert.match(resultText(detail), /性别：女/)
+    assert.match(resultText(detail), /地区：中国 \/ 广东 \/ 深圳/)
+    assert(resultText(detail).includes('<hello> & world'))
+    assert(detail.rich_message.skip_entity_detection)
+    await f.action(button(detail, ':b'), context)
+    const state = f.resolve(dataButtons(f.edits.at(-1))[0].callback_data, context).state
+    assert.equal(state.kind, 'ct')
+    assert.equal(state.query, '用户')
+    assert.equal(state.page, 2)
+    assert.equal(f.selected.length + f.bindings.length + f.creations.length, 0)
+  })
+}
+
+test('read-only contact compatibility buttons retain their details and return action', async () => {
+  const f = fixture({contacts: people})
+  f.failures.reply.push(badRequest('rich_message is not supported'))
+  await f.command('/contacts')
+  const page = f.replies.at(-1)
+  assert.equal(page.rich_message, undefined)
+  await f.action(dataButtons(page)[0].callback_data)
+  const detail = f.replies.at(-1)
+  assert.equal(detail.rich_message, undefined)
+  assert.match(detail.text, /wxid_0/)
+  assert.equal(detail.options.parse_mode, undefined)
+  await f.action(button(detail, ':b'))
+  assert.equal(f.resolve(dataButtons(f.edits.at(-1))[0].callback_data).state.kind, 'ct')
+  assert.equal(f.bindings.length + f.creations.length, 0)
+})
+
+const groupMembers = Array.from({length: 63}, (_, i) => ({wxId: `member_${i}`, name: `群名${i}`,
+  nickname: `昵称${i}`, displayName: `群名${i}`, hasAvatar: false}))
+
+test('/members preserves group search/page, room identity, member pagination and non-friend detail', async () => {
+  const rooms = Array.from({length: 32}, (_, i) => ({chatroomId: `group_${i}@chatroom`, nickName: `项目 A ${i}`}))
+  const f = fixture({rooms, members: groupMembers, managedForum: true})
+  const context = {type: 'supergroup', threadId: 77}
+  await f.command('/members@test_bot 项目 A', context)
+  await f.action(button(f.replies[0], ':p:2'), context)
+  const groupsPage = f.edits.at(-1)
+  await f.action(dataButtons(groupsPage)[0].callback_data, context)
+  let members = f.edits.at(-1)
+  assert.equal(f.resolve(dataButtons(members)[0].callback_data, context).state.roomId, 'group_30@chatroom')
+  assert(members.text.includes('项目 A 30'))
+  assert.equal(dataButtons(members).length, 30)
+  await f.action(button(members, ':p:2'), context)
+  members = f.edits.at(-1)
+  await f.action(dataButtons(members)[0].callback_data, context)
+  const detail = f.replies.at(-1)
+  assert.match(resultText(detail), /微信 ID：member_30/)
+  assert.match(resultText(detail), /群内名称：群名30/)
+  await f.action(button(detail, ':b'), context)
+  const restoredMembers = f.edits.at(-1)
+  const state = f.resolve(dataButtons(restoredMembers)[0].callback_data, context).state
+  assert.equal(state.kind, 'gm')
+  assert.equal(state.page, 2)
+  assert.equal(state.roomId, 'group_30@chatroom')
+  const parent = messageButtons(restoredMembers).find(b => b.text === zh['directory.back_groups'])
+  assert(parent)
+  await f.action(parent.callback_data, context)
+  const restoredGroups = f.resolve(dataButtons(f.edits.at(-1))[0].callback_data, context).state
+  assert.equal(restoredGroups.kind, 'gr')
+  assert.equal(restoredGroups.query, '项目 A')
+  assert.equal(restoredGroups.page, 2)
+  assert(f.events.filter(e => e.startsWith('members:')).every(e => e === 'members:group_30@chatroom'))
+  assert.equal(f.selected.length + f.bindings.length + f.creations.length, 0)
+  assert(f.apiCalls.every(call => call.payload.message_thread_id === undefined || call.payload.message_thread_id === 77))
+})
+
+test('/members in a bound topic resolves the exact topic and displays that WeChat group directly', async () => {
+  const f = fixture({members: groupMembers, contacts: [{userName: 'member_0', nickName: '好友昵称', alias: '真实微信号'}]})
+  const context = {type: 'supergroup', threadId: 88}
+  f.hooks.telegramBinding = async (chatId, threadId) => {
+    assert.equal(chatId, -10012345)
+    assert.equal(threadId, 88)
+    return {type: 1, wxId: 'bound@chatroom'}
+  }
+  await f.command('/members', context)
+  const page = f.replies.at(-1)
+  assert.equal(f.resolve(dataButtons(page)[0].callback_data, context).state.kind, 'gm')
+  assert(f.events.includes('members:bound@chatroom'))
+  await f.action(dataButtons(page)[0].callback_data, context)
+  assert.match(resultText(f.replies.at(-1)), /好友昵称/)
+  assert.match(resultText(f.replies.at(-1)), /真实微信号/)
+  assert.equal(f.bindings.length + f.creations.length, 0)
+})
+
+test('member compatibility mode retains the room and group return across navigation', async () => {
+  const f = fixture({members: groupMembers, rooms: [{chatroomId: 'room@chatroom', nickName: '测试群'}]})
+  await f.command('/members')
+  await f.action(button(f.replies[0], ':c'))
+  await f.action(dataButtons(f.edits.at(-1))[0].callback_data)
+  await f.action(button(f.edits.at(-1), ':p:2'))
+  const members = f.edits.at(-1)
+  assert.equal(members.rich_message, undefined)
+  assert.equal(f.resolve(dataButtons(members)[0].callback_data).state.roomId, 'room@chatroom')
+  await f.action(dataButtons(members)[0].callback_data)
+  assert.match(f.replies.at(-1).text, /member_30/)
+  await f.action(button(f.replies.at(-1), ':b'))
+  const parent = externalButtons(f.edits.at(-1)).find(b => b.text === zh['directory.back_groups'])
+  await f.action(parent.callback_data)
+  assert.equal(f.resolve(dataButtons(f.edits.at(-1))[0].callback_data).state.kind, 'gr')
+})
+
+test('member loading errors are contained and a later explicit click can retry', async () => {
+  const f = fixture({rooms: [{chatroomId: 'room@chatroom', nickName: '群'}]})
+  await f.command('/members')
+  const select = dataButtons(f.replies[0])[0].callback_data
+  f.hooks.members = async () => {throw new Error('private upstream response')}
+  await f.action(select)
+  assert.equal(f.replies.at(-1).text, zh['pagination.unavailable'])
+  delete f.hooks.members
+  await f.action(select)
+  assert(f.edits.at(-1).text.includes(zh['directory.no_members']))
+  assert(messageButtons(f.edits.at(-1)).some(b => b.text === zh['directory.back_groups']))
+  assert.equal(f.bindings.length + f.creations.length, 0)
+})
+
+for (const command of ['contacts', 'members']) {
+  test(`/${command} rejects wrong scope, expired callbacks and offline browsing`, async () => {
+    let now = 100
+    const f = fixture({contacts: people, rooms: [{chatroomId: 'room@chatroom', nickName: '群'}],
+      pagerOptions: {ttlMs: 10, now: () => now}})
+    const context = {type: 'supergroup', threadId: 77}
+    await f.command(`/${command}`, context)
+    const select = dataButtons(f.replies[0])[0].callback_data
+    for (const invalid of [{...context, userId: 999}, {...context, chatId: -999}, {...context, threadId: 88}]) {
+      await f.action(select, invalid)
+      assert.equal(f.replies.at(-1).text, zh['pagination.expired'])
+    }
+    now = 111
+    await f.action(select, context)
+    assert.equal(f.replies.at(-1).text, zh['pagination.expired'])
+    f.wxClient.hasLogin = false
+    await f.command(`/${command}`, context)
+    assert.equal(f.replies.at(-1).text, zh['login.please_login_wx'])
+    assert.equal(f.edits.length + f.selected.length + f.bindings.length + f.creations.length, 0)
+  })
+}
+
+test('read-only views do not expose records if the account changes while loading', async () => {
+  const f = fixture({contacts: people, rooms: [{chatroomId: 'room@chatroom', nickName: '群'}]})
+  await f.command('/contacts')
+  f.hooks.detail = async () => {f.wxClient.wxInfo.wxid = 'another'; return people[0]}
+  await f.action(dataButtons(f.replies[0])[0].callback_data)
+  assert.equal(resultText(f.replies.at(-1)), zh['pagination.expired'])
+  f.wxClient.wxInfo.wxid = 'wx_owner'
+  await f.command('/members')
+  f.hooks.members = async () => {f.wxClient.wxInfo.wxid = 'another'; return groupMembers}
+  await f.action(dataButtons(f.replies.at(-1))[0].callback_data)
+  assert.equal(resultText(f.replies.at(-1)), zh['pagination.expired'])
+  assert.equal(f.edits.length, 0)
+})
+
+test('deleted contacts and unavailable optional profile fields are handled without guessing', async () => {
+  const contacts = [...people]
+  const f = fixture({contacts})
+  await f.command('/contacts')
+  const select = dataButtons(f.replies[0])[0].callback_data
+  contacts.shift()
+  await f.action(select)
+  assert.equal(resultText(f.replies.at(-1)), zh['pagination.selection_unavailable'])
+  assert(button(f.replies.at(-1), ':b'))
+  await f.command('/contacts')
+  await f.action(dataButtons(f.replies.at(-1))[0].callback_data)
+  const detail = resultText(f.replies.at(-1))
+  assert.match(detail, /wxid_1/)
+  assert(!/undefined|null|性别：|地区：/.test(detail))
+  assert.equal(f.selected.length + f.bindings.length + f.creations.length, 0)
+})
+
+test('very long Unicode profile fields stay below Telegram limits without broken surrogate pairs', async () => {
+  const long = '😀'.repeat(1000)
+  const f = fixture({contacts: [{userName: 'wx_1', nickName: long, remark: long, alias: long,
+    country: long, province: long, city: long, signature: long, description: long, verifyFlag: 0}]})
+  await f.command('/contacts')
+  await f.action(dataButtons(f.replies[0])[0].callback_data)
+  const detail = resultText(f.replies.at(-1))
+  assert(detail.length < 4096)
+  assert(detail.includes('…'))
+  assert.equal(detail, Buffer.from(detail).toString('utf8'))
 })

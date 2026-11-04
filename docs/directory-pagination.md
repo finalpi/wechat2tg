@@ -9,6 +9,14 @@
 
 实现采用官方 [`sendRichMessage`](https://core.telegram.org/bots/api#sendrichmessage)、[`RichTextButton`](https://core.telegram.org/bots/api#richtextbutton) 和 [`RichMessageButton`](https://core.telegram.org/bots/api#richmessagebutton)。`style: "link"` 的回调按钮可以嵌在富文本段落中，按下后仍产生标准 CallbackQuery。翻页通过 [`editMessageText`](https://core.telegram.org/bots/api#editmessagetext) 的 `rich_message` 参数更新，不同时传入普通 `text`。
 
+## 只读联系人与群成员
+
+- `/contacts [名称或备注]` 列出普通联系人，点击姓名查看详情，不进入绑定或建群流程。
+- `/members [群名称或备注]` 列出微信群，点击群名打开群成员，再点击成员查看详情。在已绑定微信群的 Telegram 群组/Topic 内直接发送 `/members`，会使用当前群组/Topic 对应的微信绑定。
+- 成员每页 30 人，可返回原群列表的搜索和页码；成员详情的「返回列表」恢复原成员页。
+- 成员名单复用现有微信群成员接口与 60 秒缓存；联系人详情只读取本地缓存，展示微信 ID、微信号、昵称、备注、性别、地区、签名和描述中已有的字段。非好友成员没有缓存资料时仅显示 ID 和群内名称，不伪造缺失资料。
+- 原生富文本、兼容键盘、账号/用户/聊天/Topic 隔离及过期规则均与原目录相同。`/user`、`/room`、`/official` 的原有绑定行为不变。
+
 ## 翻页与返回
 
 - 搜索结果也按每页 30 条展示，上一页、下一页保留完整查询和类别。

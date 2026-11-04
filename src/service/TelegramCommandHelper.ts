@@ -25,6 +25,8 @@ export default class TgCommandHelper {
             {command: 'user', description: i18n.t('command.user')},
             {command: 'official', description: i18n.t('command.official')},
             {command: 'room', description: i18n.t('command.room')},
+            {command: 'contacts', description: i18n.t('command.contacts')},
+            {command: 'members', description: i18n.t('command.members')},
             {command: 'relogin', description: i18n.t('command.relogin')},
             {command: 'getqr', description: i18n.t('command.getqr')},
             {command: 'unbind', description: i18n.t('command.unbind')},

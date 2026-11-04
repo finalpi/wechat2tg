@@ -1,6 +1,6 @@
 import {randomBytes} from 'node:crypto'
 
-export type DirectoryKind = 'us' | 'of' | 'ro';
+export type DirectoryKind = 'us' | 'of' | 'ro' | 'ct' | 'gr' | 'gm';
 export type DirectoryScope = Readonly<{
     chatId: number;
     userId: number;
@@ -14,6 +14,8 @@ export type DirectoryState = Readonly<{
     kind: DirectoryKind;
     query: string;
     page: number;
+    roomId?: string;
+    parentToken?: string;
     items: readonly DirectoryItem[];
 }>;
 export type DirectoryButton = {text: string; callback_data: string};
@@ -46,6 +48,9 @@ export type DirectoryRenderInput = {
     kind: DirectoryKind;
     query: string;
     page: number;
+    /** Read-only member lists retain their room and the originating group page. */
+    roomId?: string;
+    parentToken?: string;
     /** Complete, already-filtered results. Only the visible page is retained. */
     items: readonly DirectoryItem[];
     prompt: string;
@@ -121,6 +126,8 @@ export class DirectoryPager {
             kind: input.kind,
             query: input.query,
             page,
+            ...(input.roomId ? {roomId: input.roomId} : {}),
+            ...(input.parentToken ? {parentToken: input.parentToken} : {}),
             items: Object.freeze(input.items.slice(start, start + PAGE_SIZE)
                 .map(item => Object.freeze({remark: item.remark, action: item.action}))),
         })
@@ -183,7 +190,11 @@ export class DirectoryPager {
         if (page > 1) shortcuts.push({text: translate('pagination.home'), callback_data: `dl:${token}:h`})
         if (input.query) shortcuts.push({text: translate('pagination.clear_search'), callback_data: `dl:${token}:a`})
         if (shortcuts.length) rows.push(shortcuts)
-        for (const row of [navigation, shortcuts]) {
+        const parent = input.parentToken
+            ? [{...backButton(input.parentToken, translate), text: translate('directory.back_groups')}]
+            : []
+        if (parent.length) rows.push(parent)
+        for (const row of [navigation, shortcuts, parent]) {
             if (!row.length) continue
             const text: DirectoryRichText[] = []
             for (const button of row) {
