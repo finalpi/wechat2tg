@@ -1,18 +1,18 @@
 # v6：单分支、双发行通道
 
-## 当前正式版：v6.0.16
+## 当前 Bot 正式版：v6.0.17
 
-本版实际合并 puppet 的最新 860-v3（7d9590c），保留 v6 回调/同步保护，补齐下载完整性校验、选择性重试和兼容接口，并修复 [接龙消息被当作未知类型丢弃](solitaire-messages.md)。SDK 标签工作流增加 npm 发布及 registry 验证；server 仅对齐发行元数据，不修改已有微信服务。
+本版新增 Telegram `/contacts` 联系人详情与 `/members` 微信群成员只读浏览，支持分页、返回与兼容键盘，不改变原目录的绑定/建群行为。仅发布 Bot；puppet 和 server 继续使用 `v6.0.16`，不推送它们的新 tag，也不部署或重启服务。跨组件只要求 `v6` 大版本一致，不再要求完整版本相同；Bot 自身版本、锁文件和目标 tag 仍严格一致。
 
 **三个仓库只使用 `v6` 维护分支。`dev` 是 tag / 制品通道，不是另一个分支。** 分支最新提交可能仍在开发，不能把分支 HEAD 当成已验收稳定版。
 
-| 仓库 | 分支 | 本次 Git 标签 | 配套制品 |
+| 仓库 | 分支 | 使用的 Git 标签 | 配套制品 |
 | --- | --- | --- | --- |
-| `wechat2tg` | `v6` | `v6.0.16` | 包版本 `6.0.16`；`finalpi/wechat2tg:v6.0.16` |
+| `wechat2tg` | `v6` | `v6.0.17`（本次发布） | 包版本 `6.0.17`；`finalpi/wechat2tg:v6.0.17` |
 | `wx2tg-puppet` | `v6` | `v6.0.16` | `wx2tg-puppet@6.0.16` 的 npm 格式打包文件 |
 | `fk-zhang` / wx2tg-server | `v6` | `v6.0.16` | `finalpi/wx2tg-server:v6.0.16`（amd64） |
 
-此次合并 `origin/wx2tg-v3-dev` 的 `6625545`，包含 WebUI、MCP、消息中心和附件改进；保留 v6 的带正文回调、无损消息 ID、二进制下载、禁止自动建群及 `/official` 等改动，并增加默认关闭的公众号 Topic 模式。server 本次只调整发行元数据，不改变协议或部署配置。
+此前 `v6.0.16` 合并 puppet 的最新 860-v3（7d9590c），保留 v6 回调/同步保护，补齐下载完整性校验、选择性重试和兼容接口，并修复 [接龙消息被当作未知类型丢弃](solitaire-messages.md)。本版保留这些功能。
 
 ## 版本编号与通道
 
@@ -26,7 +26,7 @@
 
 例如：`v6.0.13-dev.1` → `v6.0.13-dev.2` → 验收后 `v6.0.13`；后续再进入 `v6.0.14-dev.1`。`N` 从 1 开始，不允许前导零。npm / `package.json` / `VERSION` 去掉前面的 `v`；Git 标签和 bot Docker 完整版本均保留 `v`，校验要求完整的 `v` + `VERSION`。
 
-- 同一套发行在三个仓库创建相同完整 tag，bot 精确依赖同版本 puppet，不用 `^` / `~`。
+- Bot、puppet、server 可独立递增版本并创建各自 tag，只要求同为 `v6`；无需为了 Bot 更新而重发 SDK/server。Bot 仍精确固定实际使用的 puppet 版本（不用 `^` / `~`），锁文件和制品必须与该依赖版本一致。这个校验仅检查版本规则，不代替具体接口兼容性验收。
 - **开发 tag 永远不更新稳定别名。** server 的开发 GitHub Release 标记为 prerelease，不抢占 stable latest。
 - 完整版本 tag 不移动、不覆盖；重发修复使用新的 `dev.N` 或正式版本号。
 - 历史 `wx2tg-v3`、`860-v3`、`875`、`v51.*`、裸 `v6` / `v7` 等保留，不重写历史。旧 Git tag `v6` 不是滚动发行入口；脚本使用 `refs/heads/v6` 和 `refs/tags/v6.X.Y…` 避免歧义。
@@ -36,18 +36,18 @@
 
 bot 工作流先验证版本并运行测试，再并行执行两个互不等待的原生构建：
 
-- `Build amd64`：`ubuntu-24.04`，发布 `v6.0.13-amd64`。
-- `Build arm64`：`ubuntu-24.04-arm`，发布 `v6.0.13-arm64`。
+- `Build amd64`：`ubuntu-24.04`，发布 `v6.0.17-amd64`。
+- `Build arm64`：`ubuntu-24.04-arm`，发布 `v6.0.17-arm64`。
 - 两种架构分别使用 GHA 构建缓存；`fail-fast=false`，ARM 失败不会取消已成功的 amd64。
-- 两边都成功后，才合并通用多架构标签 `v6.0.16` 和对应通道别名。
+- 两边都成功后，才合并通用多架构标签 `v6.0.17` 和对应通道别名。
 
-想尽早部署 amd64 时，使用 `finalpi/wechat2tg:v6.0.13-amd64`，或稳定滚动别名 `v6-amd64`。ARM 对应 `v6.0.13-arm64` / `v6-arm64`。正式 Git tag `v6.0.16` 发布 Docker `v6.0.16`、`v6.0.13-amd64` 和 `v6.0.13-arm64`，稳定别名为 `v6-amd64` / `v6-arm64`，合并后更新 `v6`。手动快照只发布 `v6-dev-<短 SHA>-amd64` / `v6-dev-<短 SHA>-arm64` 和合并的 `v6-dev-<短 SHA>`，不更新任何滚动别名。
+想尽早部署 amd64 时，使用 `finalpi/wechat2tg:v6.0.17-amd64`，或稳定滚动别名 `v6-amd64`。ARM 对应 `v6.0.17-arm64` / `v6-arm64`。正式 Git tag `v6.0.17` 发布 Docker `v6.0.17`、`v6.0.17-amd64` 和 `v6.0.17-arm64`，稳定别名为 `v6-amd64` / `v6-arm64`，合并后更新 `v6`。手动快照只发布 `v6-dev-<短 SHA>-amd64` / `v6-dev-<短 SHA>-arm64` 和合并的 `v6-dev-<短 SHA>`，不更新任何滚动别名。
 
 因此不必等整个工作流结束才能更新 amd64；部署端应核对目标提交和 **`Build amd64` 成功**。通用标签仍等待 ARM，保留正确的多架构内容，不会先用 amd64 覆盖掉 ARM。具体耗时受原生依赖编译、缓存和 runner 排队影响，不承诺固定 30 分钟。server 有原生库限制，仍只构建 amd64，不伪装支持 ARM。
 
 ## 固定 puppet 制品
 
-`vendor/wx2tg-puppet-6.0.16.tgz` 由本次 puppet 源码构建。bot 的 `package.json` 精确声明 `6.0.16`，lockfile 将其解析到本地制品并保存 npm 计算的 SHA-512 integrity。
+`vendor/wx2tg-puppet-6.0.16.tgz` 沿用此前验证的 puppet 制品，本次不重打包或修改。bot 的 `package.json` 精确声明 `6.0.16`，lockfile 将其解析到本地制品并保存 npm 计算的 SHA-512 integrity。
 
 这使 Docker / `npm ci` 不依赖尚未发布的 npm registry 版本。保留 lockfile 和 vendor 文件；不要手填不存在的 registry URL 或伪造 integrity。puppet 的 tag 工作流会上传 npm 格式 `.tgz`；独立 `publish.yml` 在验证、测试后执行 npm 发布并核验 registry，正式版用 `latest`、开发版用 `v6-dev`。发布需要有效的 NPM_TOKEN 和对应免交互权限。
 
@@ -69,15 +69,15 @@ npm run check:version
 npm test
 ```
 
-推送新发行标签会触发 SDK 的 npm 发布；认证失败必须明确报告，不能把 artifact 上传当作已发布。若改用 registry 来源，重新生成 lockfile 并校验制品，不能移动已有 Git tag。
+只有推送 SDK 仓库的新发行标签才会触发它的 npm 发布；仅推送 Bot 标签不会重发 SDK。认证失败必须明确报告，不能把 artifact 上传当作已发布。若改用 registry 来源，重新生成 lockfile 并校验制品，不能移动已有 Git tag。
 
 ## 发布与部署检查
 
-1. 三仓库 `VERSION`、包版本、锁文件、依赖和目标 tag 一致。
+1. 每个待发布仓库自身的 `VERSION`、包版本、锁文件和目标 tag 一致。跨组件只要求 `v6` 大版本一致；Bot 的精确 SDK 依赖、SDK 锁文件和制品须匹配，Compose 中 server 仍固定一个完整 `v6.X.Y`（或开发版）标签。
 2. bot / puppet 运行 `npm run check:version`、`npm test`；server 运行 `bash scripts/check-release-version.sh`、`go test ./buildinfo`。
 3. 同时验证稳定 / dev 版本格式、错 tag 拒绝、开发构建不能覆盖稳定通道。
 4. 完成 merge、检查 diff，提交本次文件；不要把 server 工作区原有测试修改、样本消息或私有配置带进提交。
-5. 明确授权后推送 `v6` 分支和指定完整 tag。bot/server 会构建镜像，server 会创建对应正式 / prerelease Release，puppet 会上传打包 artifact，并在独立工作流中发布 npm、核验版本。
+5. 明确授权后仅推送本次需要发布的仓库的 `v6` 分支和指定完整 tag。Bot/server 各自的 tag 会触发自己的镜像构建；只有 server tag 才创建其 Release，只有 puppet tag 才上传 SDK artifact 并发布 npm。本次仅推送 Bot `v6.0.17`。
 6. 部署前备份 SQLite、会话和 Compose，保留旧镜像；不覆盖用户现有 `.env`、`home_202.env` 等私有配置，不把示例文件覆盖到部署目录。已有微信服务的部署与新 bot 更新分开处理：此次命名修正不更改 `wx2tg-server` 镜像/命名空间/版本，也不更新或重启用户现有生产后端。
 7. 先验证 amd64 制品、服务健康、旧绑定和配置校验值，再做真实双向消息验收。离线测试不等于真实微信 / Telegram 全链路已验收。
 

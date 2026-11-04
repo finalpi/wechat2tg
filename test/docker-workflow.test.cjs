@@ -23,6 +23,7 @@ function runStep(script, variables = {}, {version = '6.0.13', packageVersion = v
     fs.mkdirSync(path.join(temp, 'scripts'))
     fs.copyFileSync(path.join(root, 'scripts/check-version.cjs'), path.join(temp, 'scripts/check-version.cjs'))
     fs.writeFileSync(path.join(temp, 'VERSION'), `${version}\n`)
+    fs.copyFileSync(path.join(root, 'docker-compose.yml'), path.join(temp, 'docker-compose.yml'))
     const pkg = {name: 'wechat2tg', version: packageVersion,
       scripts: {'check:version': 'node scripts/check-version.cjs'},
       dependencies: {'wx2tg-puppet': version}}

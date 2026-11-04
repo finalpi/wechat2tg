@@ -13,13 +13,13 @@ const pkg = require('../package.json')
 const lock = require('../package-lock.json')
 const root = path.resolve(__dirname, '..')
 
-test('package, lockfile, installed puppet, Compose, and README versions agree', () => {
+test('bot release metadata agrees and pinned puppet/server stay within v6', () => {
   execFileSync(process.execPath, ['scripts/check-version.cjs'], {cwd: root})
-  assert.equal(require('wx2tg-puppet/package.json').version, pkg.version)
+  assert.equal(require('wx2tg-puppet/package.json').version, pkg.dependencies['wx2tg-puppet'])
   for (const name of ['docker-compose.yml', 'README.md', 'README_zh.md']) {
     const source = fs.readFileSync(path.join(root, name), 'utf8')
     assert(source.includes(`image: finalpi/wechat2tg:v${pkg.version}`))
-    assert(source.includes(`image: finalpi/wx2tg-server:v${pkg.version}`))
+    assert.match(source, /image: finalpi\/wx2tg-server:v6\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-dev\.[1-9]\d*)?\s*\n/)
     assert(!source.includes('image: finalpi/wechat2tg-v3:'))
     assert(!source.includes('image: finalpi/wechat2tg:latest'))
     assert(!source.includes('image: finalpi/wechat2tg:dev'))
@@ -46,7 +46,7 @@ test('README Compose schemas and callback hostname match the actual stack', () =
 
 test('vendored artifact matches the lockfile SHA-512', () => {
   const dependency = lock.packages['node_modules/wx2tg-puppet']
-  assert.equal(dependency.resolved, `file:vendor/wx2tg-puppet-${pkg.version}.tgz`)
+  assert.equal(dependency.resolved, `file:vendor/wx2tg-puppet-${pkg.dependencies['wx2tg-puppet']}.tgz`)
   const bytes = fs.readFileSync(path.join(root, dependency.resolved.slice(5)))
   assert.equal('sha512-' + crypto.createHash('sha512').update(bytes).digest('base64'), dependency.integrity)
 })
