@@ -1,3 +1,4 @@
+/* global TemplatePreview */
 'use strict'
 
 const copy = {
@@ -14,7 +15,7 @@ const englishFields = {
     BOT_TOKEN:['Bot Token','Get your Telegram bot token from @BotFather.'], API_ID:['API ID','Create an application at my.telegram.org to get your ID.'], API_HASH:['API Hash','The application credential paired with your API ID.'], BASE_API:['WeChat service URL','The wx2tg-server API URL, e.g. http://wx2tg-server:8058/api.'], DEVICE_TYPE:['Login device','Choose the device protocol used to sign in to WeChat.'], MODE:['Message delivery mode','Polling fetches messages periodically; callback receives server pushes.'], CALLBACK_PORT:['Callback port','Listening port for callback mode. Must differ from the WebUI port.'], CALLBACK_API:['Callback service URL','Optional callback service URL used by the application.'], FILE_API:['File service URL','Optional URL for a separate file service.'], receivePublicAccount:['Receive official account messages','Forward WeChat official account messages to Telegram.'], onlyReceiveOfficialNotify:['Only official account notifications','Skip regular articles and receive notification messages only.'], selfMessage:['Forward your own messages','Include messages you send in your Telegram conversations.'], emojiPicture:['Show emoji as image links','Display original emoji using image links.'], syncWechat:['Sync contacts and groups on startup','Refresh contact information, group names, and avatars on the next startup.'], language:['Bot language','Language used by Telegram bot menus and messages.'], PROXY_PROTOCOL:['Telegram proxy protocol','Choose Direct connection if you do not need a proxy.'], PROXY_HOST:['Proxy host','An IP address or hostname, without protocol or port.'], PROXY_PORT:['Proxy port','The port your proxy server listens on.'], PROXY_USERNAME:['Proxy username','Optional authentication username.'], PROXY_PASSWORD:['Proxy password','Optional authentication password.'], WX_PROXY_HOST:['WeChat SOCKS proxy','Use a login proxy in the same region as your WeChat account.'], WX_PROXY_USERNAME:['WeChat proxy username','Optional WeChat proxy authentication username.'], WX_PROXY_PASSWORD:['WeChat proxy password','Optional WeChat proxy authentication password.'], AI_API_URL:['AI API URL','The complete chat completions URL of an OpenAI-compatible service.'], AI_API_KEY:['AI API Key','The access key used to call your AI service.'], AI_MODEL:['Model name','Enter a model supported by your connected service.'], AI_CONTEXT_LIMIT:['Default context size','Fallback number of messages when no bot context size is set.'], aiContextLimit:['Bot context size','Takes priority over the default. New requests use this value immediately.'], autoTranscript:['Automatically transcribe voice','Use Tencent Cloud ASR to transcribe voice messages. Credentials are required below.'], TENCENT_SECRET_ID:['Tencent Cloud Secret ID','Access identifier for Tencent Cloud speech recognition.'], TENCENT_SECRET_KEY:['Tencent Cloud Secret Key','Secret key for Tencent Cloud speech recognition.'], SEND_TO_WX_MAX_RETRIES:['WeChat maximum retries','Use 0 for unlimited retries.'], SEND_TO_WX_TIMEOUT:['WeChat send timeout (ms)','How long to wait for a single delivery attempt.'], SEND_TO_TG_MAX_RETRIES:['Telegram maximum retries','Use 0 for unlimited retries.'], SEND_TO_TG_RETRY_DELAY:['Telegram retry interval (ms)','Base waiting time for exponential backoff.'], MESSAGE_BUFFER_EXPIRE_TIME:['Message buffer lifetime (ms)','Queued messages are removed after this duration.'], AUTO_DELETE_OLD_MESSAGES:['Automatically clean up message history','Deletes database records only. Expired messages cannot be quoted or recalled.'], MESSAGE_RETENTION_DAYS:['Message retention (days)','Remove history records older than this period.'], LOG_LEVEL:['Log level','Use info for everyday operation, or debug when troubleshooting.'], DEBUG_MODE:['Debug mode','Log additional diagnostics. Logs may contain message content.'],
 }
 ;['CONTACT_MESSAGE','OFFICIAL_MESSAGE','ROOM_MESSAGE','CONTACT_MESSAGE_GROUP','OFFICIAL_MESSAGE_GROUP','ROOM_MESSAGE_GROUP','CREATE_ROOM_NAME','CREATE_CONTACT_NAME','MESSAGE_DISPLAY'].forEach((key,i)=>{
-    englishFields[key]=[['Contact message prefix','Official account prefix','Group message prefix','Bound contact group prefix','Bound official account group prefix','Bound WeChat group prefix','New WeChat group name','New contact group name','Message body format'][i],'Supports existing HTML formatting and #[…] placeholders.']
+    englishFields[key] = [['Contact message prefix','Official account prefix','Group message prefix','Bound contact group prefix','Bound official account group prefix','Bound WeChat group prefix','New WeChat group name','New contact group name','Message body format'][i],'Supports existing HTML formatting and #[…] placeholders.']
 })
 
 Object.assign(copy.en, {previewTitle:'Live preview',previewDescription:'Sample messages update as you type. Nothing is sent.',previewLabel:'Preview',previewContact:'Contact',previewGroup:'Group chat',previewOfficial:'Official account',previewSample:'Sample data',previewAlias:'Alias',previewName:'Name',previewTopic:'Group name',previewBody:'Message',sampleAlias:'Alex · Design',sampleName:'Alex',sampleTopic:'Weekend plans',sampleOfficial:'Daily updates',sampleGroupAlias:'Our weekend group',sampleBody:'Good morning! Shall we meet at 10 tomorrow? ☀️',previewEmpty:'This template produces an empty result.',previewNote:'Formatting preview only. Telegram determines final font and rendering; unsupported HTML is omitted here.',previewPlain:'Group name · plain text',previewFallback:'Test without an alias',previewTime:'Example · 10:24'})
@@ -56,253 +57,255 @@ Object.assign(copy.en,{downloadTooLarge:'Downloaded attachments are limited to 2
 const paths = {
     link:'M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-2 2 M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l2-2', send:'m22 2-7 20-4-9-9-4 20-7Z M22 2 11 13', type:'M4 4h16 M12 4v16 M8 20h8', globe:'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M3 12h18 M12 3c5 5 5 13 0 18-5-5-5-13 0-18', spark:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z M20 3v4 M18 5h4', bell:'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4', sliders:'M4 21v-7 M4 10V3 M12 21v-9 M12 8V3 M20 21v-5 M20 12V3 M1 10h6 M9 12h6 M17 16h6', grid:'M3 3h7v7H3V3Z M14 3h7v7h-7V3Z M3 14h7v7H3v-7Z M14 14h7v7h-7v-7Z', message:'M21 11a8 8 0 0 1-8 8H8l-5 3 1-6a8 8 0 0 1-1-5 9 9 0 0 1 18 0Z M7 10h.01 M12 10h.01 M17 10h.01', bridge:'M3 16V8 M21 16V8 M3 12c6-8 12-8 18 0 M3 16h18 M8 8v8 M16 8v8', arrow:'M4 12h16 M14 6l6 6-6 6', check:'m5 12 4 4L19 6', search:'M16 10a6 6 0 1 1-12 0 6 6 0 0 1 12 0 M15 15l6 6', shield:'m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z m-4 9 3 3 5-6', info:'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M12 11v6 M12 7h.01', logout:'M10 3H4v18h6 M8 12h13 m-5-5 5 5-5 5', eye:'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
 }
-paths.refresh='M20 7v5h-5 M4 17v-5h5 M6 7a7 7 0 0 1 12-2l2 3 M4 16l2 3a7 7 0 0 0 12-2'
-const $=id=>document.getElementById(id)
-const icon=name=>{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');const p=document.createElementNS(svg.namespaceURI,'path');p.setAttribute('d',paths[name]||paths.sliders);svg.append(p);return svg}
-const node=(tag,className,text)=>{const el=document.createElement(tag);if(className)el.className=className;if(text!==undefined)el.textContent=text;return el}
-let language='zh'
-try{language=localStorage.getItem('webui-language')||'zh'}catch{}
-if(!copy[language])language='zh'
+paths.refresh = 'M20 7v5h-5 M4 17v-5h5 M6 7a7 7 0 0 1 12-2l2 3 M4 16l2 3a7 7 0 0 0 12-2'
+const $ = id=>document.getElementById(id)
+const icon = name=>{const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');const p = document.createElementNS(svg.namespaceURI,'path');p.setAttribute('d',paths[name] || paths.sliders);svg.append(p);return svg}
+const node = (tag,className,text)=>{const el = document.createElement(tag);if(className)el.className = className;if(text !== undefined)el.textContent = text;return el}
+let language = 'zh'
+try{language = localStorage.getItem('webui-language') || 'zh'}catch{}
+if(!copy[language])language = 'zh'
 Object.assign(copy.zh,{mcp:'MCP 接入',mcpCaption:'连接你的 AI 客户端',mcpInvalidSettings:'MCP 设置格式不正确。',mcpInvalidEndpoint:'请输入以 /mcp 结尾的有效访问地址。',mcpHTTPSRequired:'远程访问请使用 HTTPS，或配置本地 SSH 隧道。',mcpInvalidToken:'Token 需为 16–256 位字母、数字或 . _ ~ -，不能包含空格。',mcpTokensMustDiffer:'读写和只读 Token 不能相同。',mcpConflict:'设置已被其他页面更新，请切换页面重新加载。'})
 Object.assign(copy.en,{mcp:'MCP access',mcpCaption:'Connect your AI client',mcpInvalidSettings:'Invalid MCP settings.',mcpInvalidEndpoint:'Enter a valid endpoint ending in /mcp.',mcpHTTPSRequired:'Use HTTPS for remote access, or a local SSH tunnel.',mcpInvalidToken:'Token must contain 16–256 letters, digits, or . _ ~ -, without spaces.',mcpTokensMustDiffer:'Read and write tokens must differ.',mcpConflict:'Settings changed in another page. Reopen this page to reload.'})
 Object.assign(copy.zh,{closeImagePreview:'关闭图片预览',revokeExpired:'已超过微信撤回时限：普通消息 2 分钟，文件 3 小时。',revokeMessage:'撤回',messageRevoked:'消息已撤回',confirmRevoke:'确定撤回这条微信消息，并在 Telegram 发送引用原消息的撤回提示？原记录会保留，撤回时限由微信校验。',confirmRevokeUnknown:'上次撤回结果不确定。请先确认微信状态；继续可能重复请求撤回，并在 Telegram 发送引用原消息的撤回提示。确定继续？',revokeUnavailable:'缺少原始微信编号或消息尚未提交，无法撤回。',revokeOwnOnly:'只能撤回当前微信账号自己发送的消息。',revokeUnknown:'撤回结果不确定，请先检查微信，不要自动重试。',revokeInProgress:'撤回正在处理中。',revokeStatus_revoking:'正在撤回',revokeStatus_revoked:'已撤回',revokeStatus_failed:'微信拒绝撤回，请检查撤回时限和权限。',revokeStatus_unknown:'撤回结果不确定，请检查微信。',syncRevokeTelegram:'同步撤回到 Telegram',quoteMessage:'引用',quoteReplyTo:'回复',quoteUnavailable:'这条消息缺少可引用的微信编号。',quoteWrongConversation:'只能引用当前会话的消息。',quoteTextOnly:'引用回复仅支持文字。',quoteMentionsUnsupported:'当前微信协议接口不支持引用与艾特同时发送，请分别使用。',mentionKeyboardHelp:'↑↓ 切换 · Enter 选择 · Esc 关闭；选中后自动回到聊天框。',mentionMembers:'@ 群成员',mentionEveryone:'所有人',mentionSearch:'搜索群昵称、备注或微信 ID…',mentionLoading:'正在读取群成员…',mentionEmpty:'未找到群成员。',mentionLimit:'最多选择 20 位成员。',mentionAllHelp:'艾特仅用于文字；@所有人需要微信允许的群主或管理员权限。',invalidMentions:'艾特参数不正确。',mentionAllExclusive:'@所有人不能与单个成员同时选择。',mentionsGroupOnly:'艾特只支持微信群聊。',mentionsTextOnly:'艾特仅支持文字消息。',groupMembersUnavailable:'无法读取群成员，请确认微信在线并稍后重试。',mentionMemberMissing:'选中的成员已不在群中，请重新选择。',mentionTextTooLong:'加上艾特内容后超过 4000 字符，请缩短消息。',wechatSendRejected:'微信拒绝了发送请求，请检查群权限。'})
 Object.assign(copy.en,{closeImagePreview:'Close image preview',revokeExpired:'WeChat recall window expired: ordinary messages 2 minutes, files 3 hours.',revokeMessage:'Revoke',messageRevoked:'Message revoked',confirmRevoke:'Revoke this WeChat message and send a quoted recall notice in Telegram? The original record is retained. WeChat enforces its recall time limit.',confirmRevokeUnknown:'The last recall outcome is uncertain. Check WeChat first. Continuing may repeat the request and send a quoted recall notice in Telegram. The original record is retained. Continue?',revokeUnavailable:'Original WeChat receipt missing or message not submitted.',revokeOwnOnly:'Only messages sent by the current WeChat account can be revoked.',revokeUnknown:'Recall outcome is uncertain. Check WeChat before retrying.',revokeInProgress:'Recall is in progress.',revokeStatus_revoking:'Revoking',revokeStatus_revoked:'Revoked',revokeStatus_failed:'WeChat rejected the recall. Check time limits and permissions.',revokeStatus_unknown:'Recall outcome uncertain. Check WeChat.',syncRevokeTelegram:'Sync recall to Telegram',quoteMessage:'Reply',quoteReplyTo:'Replying to',quoteUnavailable:'This message has no valid WeChat reference ID.',quoteWrongConversation:'Only messages in this conversation can be quoted.',quoteTextOnly:'Quoted replies support text only.',quoteMentionsUnsupported:'The current WeChat protocol cannot combine quoted replies with mentions. Use them separately.',mentionKeyboardHelp:'↑↓ Navigate · Enter Select · Esc Close. Selection returns to the composer.',mentionMembers:'@ Group members',mentionEveryone:'Everyone',mentionSearch:'Search group name, remark, or WeChat ID…',mentionLoading:'Loading group members…',mentionEmpty:'No matching members.',mentionLimit:'Select at most 20 members.',mentionAllHelp:'Mentions apply to text only. @Everyone requires owner/admin permissions granted by WeChat.',invalidMentions:'Invalid mention parameters.',mentionAllExclusive:'@Everyone cannot be combined with individual mentions.',mentionsGroupOnly:'Mentions require a WeChat group.',mentionsTextOnly:'Mentions apply to text messages only.',groupMembersUnavailable:'Unable to read group members. Check WeChat connectivity and try again.',mentionMemberMissing:'A selected member is no longer in the group. Select again.',mentionTextTooLong:'Text including mentions exceeds 4000 characters.',wechatSendRejected:'WeChat rejected the send request. Check group permissions.'})
-let token='',data=null,selected='messages',draft={},errors={},busy=false,toastTimer
-const authStorageKey='webui-access-token'
-function forgetAuth(){try{localStorage.removeItem(authStorageKey)}catch{};try{sessionStorage.removeItem(authStorageKey)}catch{}}
+let token = '',data = null,selected = 'messages',draft = {},errors = {},busy = false,toastTimer
+const authStorageKey = 'webui-access-token'
+function forgetAuth(){try{localStorage.removeItem(authStorageKey)}catch{}try{sessionStorage.removeItem(authStorageKey)}catch{}}
 function saveAuth(remember){
     try{sessionStorage.setItem(authStorageKey,token)}catch{}
     try{if(remember)localStorage.setItem(authStorageKey,token);else localStorage.removeItem(authStorageKey)}catch{}
 }
 function restoreAuth(){
-    try{const remembered=localStorage.getItem(authStorageKey);if(remembered){$('remember-token').checked=true;return remembered}}catch{}
-    try{return sessionStorage.getItem(authStorageKey)||''}catch{return ''}
+    try{const remembered = localStorage.getItem(authStorageKey);if(remembered){$('remember-token').checked = true;return remembered}}catch{}
+    try{return sessionStorage.getItem(authStorageKey) || ''}catch{return ''}
 }
-function showAuth(){token='';forgetAuth();document.querySelector('.app-shell').inert=true;$('auth-overlay').classList.remove('hidden');$('access-token').focus()}
-let previewScenario='contact',previewWithoutAlias=false
+function showAuth(){token = '';forgetAuth();document.querySelector('.app-shell').inert = true;$('auth-overlay').classList.remove('hidden');$('access-token').focus()}
+let previewScenario = 'contact',previewWithoutAlias = false
 let messageCenter
-const t=(key,params={})=>Object.entries(params).reduce((text,[name,value])=>text.replaceAll(`{${name}}`,value),copy[language][key]||copy.en[key]||key)
-const fieldCopy=f=>language==='en'?englishFields[f.key]||[f.key,'']:[f.label,f.description]
-const currentValue=f=>Object.hasOwn(draft,f.key)?draft[f.key]:data.values[f.key]
+const t = (key,params = {})=>Object.entries(params).reduce((text,[name,value])=>text.replaceAll(`{${name}}`,value),copy[language][key] || copy.en[key] || key)
+const fieldCopy = f=>language === 'en' ? englishFields[f.key] || [f.key,''] : [f.label,f.description]
+const currentValue = f=>Object.hasOwn(draft,f.key) ? draft[f.key] : data.values[f.key]
 
 function translate(){
-    document.documentElement.lang=language==='zh'?'zh-CN':'en'
-    document.title=`wechat2tg · ${language==='zh'?'配置控制台':'Configuration console'}`
-    document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=t(el.dataset.i18n)})
-    document.querySelectorAll('[data-title]').forEach(el=>{el.title=t(el.dataset.title);el.setAttribute('aria-label',t(el.dataset.title))})
-    $('language-label').textContent=$('auth-language').textContent=language==='zh'?'English':'简体中文'
-    $('search').placeholder=t('search');$('search').setAttribute('aria-label',t('search'))
+    document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en'
+    document.title = `wechat2tg · ${language === 'zh' ? '配置控制台' : 'Configuration console'}`
+    document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent = t(el.dataset.i18n)})
+    document.querySelectorAll('[data-title]').forEach(el=>{el.title = t(el.dataset.title);el.setAttribute('aria-label',t(el.dataset.title))})
+    $('language-label').textContent = $('auth-language').textContent = language === 'zh' ? 'English' : '简体中文'
+    $('search').placeholder = t('search');$('search').setAttribute('aria-label',t('search'))
     $('navigation').setAttribute('aria-label',t('configuration'))
     if(data)render()
 }
-function switchLanguage(){language=language==='zh'?'en':'zh';try{localStorage.setItem('webui-language',language)}catch{};errors={};$('auth-error').textContent='';translate()}
-async function api(method='GET',body,route='/api/config'){
+function switchLanguage(){language = language === 'zh' ? 'en' : 'zh';try{localStorage.setItem('webui-language',language)}catch{}errors = {};$('auth-error').textContent = '';translate()}
+async function api(method = 'GET',body,route = '/api/config'){
     let response
-    try{response=await fetch(route,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined})}catch{throw new Error(t('networkError'))}
-    const result=await response.json()
-    if(!response.ok){if(response.status===401)showAuth();throw new Error(t(result.error||'serverError'))}
+    try{response = await fetch(route,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body ? JSON.stringify(body) : undefined})}catch{throw new Error(t('networkError'))}
+    const result = await response.json()
+    if(!response.ok){if(response.status === 401)showAuth();throw new Error(t(result.error || 'serverError'))}
     return result
 }
-function toast(message,error=false){clearTimeout(toastTimer);$('toast').textContent=message;$('toast').classList.toggle('error',error);$('toast').classList.remove('hidden');toastTimer=setTimeout(()=>$('toast').classList.add('hidden'),error?8000:4500)}
+function toast(message,error = false){clearTimeout(toastTimer);$('toast').textContent = message;$('toast').classList.toggle('error',error);$('toast').classList.remove('hidden');toastTimer = setTimeout(()=>$('toast').classList.add('hidden'),error ? 8000 : 4500)}
 async function mediaTransfer(route,file){
     let response
-    try{response=await fetch(route,{method:file?'POST':'GET',headers:{Authorization:`Bearer ${token}`,...(file?{'Content-Type':'application/octet-stream'}:{})},body:file})}catch{throw new Error(t('networkError'))}
-    if(!response.ok){if(response.status===401)showAuth();const result=await response.json();throw new Error(t(result.error||'serverError'))}
-    return file?response.json():response.blob()
+    try{response = await fetch(route,{method:file ? 'POST' : 'GET',headers:{Authorization:`Bearer ${token}`,...(file ? {'Content-Type':'application/octet-stream'} : {})},body:file})}catch{throw new Error(t('networkError'))}
+    if(!response.ok){if(response.status === 401)showAuth();const result = await response.json();throw new Error(t(result.error || 'serverError'))}
+    return file ? response.json() : response.blob()
 }
 function updateSummary(){
-    const count=Object.keys(draft).length
-    const complete=Boolean(data.secrets.BOT_TOKEN&&data.secrets.API_HASH&&data.values.API_ID)
-    $('credential-status').textContent=t(complete?'configured':'needsSetup')
-    $('connection-state').textContent=t(complete?'ready':'setup')
-    $('forward-status').textContent=data.runtimeAvailable?`${data.fields.filter(f=>f.source==='runtime'&&f.type==='boolean'&&data.values[f.key]).length} ${t('active')}`:t('offline')
-    $('runtime-tag').textContent=t(data.runtimeAvailable?'available':'offline')
-    $('save-status').textContent=t(count?'unsaved':data.restartRequired?'restart':'saved')
-    $('change-count').textContent=count?`${count} ${t('pending')}`:''
-    $('pending-title').textContent=count?`${count} ${t('pending')}`:t('allSaved')
-    $('pending-description').textContent=t(count?'pendingDescription':'savedDescription')
-    $('save-label').textContent=t(busy?'saving':'save')
-    $('save').disabled=busy||!count;$('discard').disabled=busy||!count
+    const count = Object.keys(draft).length
+    const complete = Boolean(data.secrets.BOT_TOKEN && data.secrets.API_HASH && data.values.API_ID)
+    $('credential-status').textContent = t(complete ? 'configured' : 'needsSetup')
+    $('connection-state').textContent = t(complete ? 'ready' : 'setup')
+    $('forward-status').textContent = data.runtimeAvailable ? `${data.fields.filter(f=>f.source === 'runtime' && f.type === 'boolean' && data.values[f.key]).length} ${t('active')}` : t('offline')
+    $('runtime-tag').textContent = t(data.runtimeAvailable ? 'available' : 'offline')
+    $('save-status').textContent = t(count ? 'unsaved' : data.restartRequired ? 'restart' : 'saved')
+    $('change-count').textContent = count ? `${count} ${t('pending')}` : ''
+    $('pending-title').textContent = count ? `${count} ${t('pending')}` : t('allSaved')
+    $('pending-description').textContent = t(count ? 'pendingDescription' : 'savedDescription')
+    $('save-label').textContent = t(busy ? 'saving' : 'save')
+    $('save').disabled = busy || !count;$('discard').disabled = busy || !count
     $('restart-banner').classList.toggle('hidden',!data.restartRequired)
-    $('savebar-icon').replaceChildren(icon(count?'info':'check'))
+    $('savebar-icon').replaceChildren(icon(count ? 'info' : 'check'))
 }
 function edit(f,value,container){
-    if(f.type==='password'&&value==='')delete draft[f.key]
-    else if(String(value)===String(data.values[f.key])&&f.type!=='password')delete draft[f.key]
-    else draft[f.key]=value
+    if(f.type === 'password' && value === '')delete draft[f.key]
+    else if(String(value) === String(data.values[f.key]) && f.type !== 'password')delete draft[f.key]
+    else draft[f.key] = value
     delete errors[f.key]
     container.classList.toggle('modified',Object.hasOwn(draft,f.key))
     container.classList.remove('invalid');container.querySelector('.field-error')?.remove()
     updateSummary()
-    if(f.group==='templates')updateTemplatePreviews()
+    if(f.group === 'templates')updateTemplatePreviews()
 }
-function previewSample(){return {alias:previewWithoutAlias?'':t('sampleAlias'),name:t('sampleName'),topic:t('sampleTopic'),official:t('sampleOfficial'),groupAlias:previewWithoutAlias?'':t('sampleGroupAlias'),body:t('sampleBody')}}
-function previewValues(){return Object.fromEntries(data.fields.filter(f=>f.group==='templates').map(f=>[f.key,currentValue(f)]))}
+Object.assign(copy.en, {memberName:'Member group nickname, otherwise WeChat nickname',previewMemberName:'Group nickname',sampleMemberName:'Alex · Weekend',previewFallback:'Test without alias / group nickname'})
+Object.assign(copy.zh, {memberName:'成员自己的群昵称，没有时用微信昵称',previewMemberName:'成员群昵称',sampleMemberName:'小林（出行协调）',previewFallback:'测试没有备注 / 群昵称的情况'})
+function previewSample(){return {alias:previewWithoutAlias ? '' : t('sampleAlias'),name:t('sampleName'),memberName:previewWithoutAlias ? '' : t('sampleMemberName'),topic:t('sampleTopic'),official:t('sampleOfficial'),groupAlias:previewWithoutAlias ? '' : t('sampleGroupAlias'),body:t('sampleBody')}}
+function previewValues(){return Object.fromEntries(data.fields.filter(f=>f.group === 'templates').map(f=>[f.key,currentValue(f)]))}
 function paintPreview(target,key){
-    const result=TemplatePreview.example(key,previewValues(),previewSample(),previewScenario)
+    const result = TemplatePreview.example(key,previewValues(),previewSample(),previewScenario,data.templateDefaults)
     target.replaceChildren()
     target.classList.toggle('plain-preview',result.plain)
     if(!result.text)target.append(node('span','preview-empty',t('previewEmpty')))
-    else if(result.plain)target.textContent=result.text
+    else if(result.plain)target.textContent = result.text
     else target.append(TemplatePreview.richText(document,result.text))
 }
 function updateTemplatePreviews(){
     document.querySelectorAll('[data-preview-key]').forEach(el=>paintPreview(el,el.dataset.previewKey))
 }
 function renderTemplatePanel(){
-    const context=document.querySelector('.context-panel')
-    let panel=$('template-preview-panel')
-    if(!panel){panel=node('section','preview-card');panel.id='template-preview-panel';context.prepend(panel)}
-    panel.classList.toggle('hidden',selected!=='templates')
-    context.classList.toggle('preview-context',selected==='templates')
-    if(selected!=='templates')return
+    const context = document.querySelector('.context-panel')
+    let panel = $('template-preview-panel')
+    if(!panel){panel = node('section','preview-card');panel.id = 'template-preview-panel';context.prepend(panel)}
+    panel.classList.toggle('hidden',selected !== 'templates')
+    context.classList.toggle('preview-context',selected === 'templates')
+    if(selected !== 'templates')return
     panel.replaceChildren()
-    const heading=node('div','preview-card-heading');heading.append(node('h3','',t('previewTitle')),node('span','live-badge','LIVE'));panel.append(heading,node('p','preview-description',t('previewDescription')))
-    const tabs=node('div','preview-tabs');tabs.setAttribute('role','group');tabs.setAttribute('aria-label',t('previewSample'))
-    for(const kind of ['contact','group','official']){const button=node('button',`preview-tab${previewScenario===kind?' active':''}`,t(`preview${kind[0].toUpperCase()+kind.slice(1)}`));button.type='button';button.setAttribute('aria-pressed',String(previewScenario===kind));button.addEventListener('click',()=>{previewScenario=kind;renderTemplatePanel();updateTemplatePreviews()});tabs.append(button)}
+    const heading = node('div','preview-card-heading');heading.append(node('h3','',t('previewTitle')),node('span','live-badge','LIVE'));panel.append(heading,node('p','preview-description',t('previewDescription')))
+    const tabs = node('div','preview-tabs');tabs.setAttribute('role','group');tabs.setAttribute('aria-label',t('previewSample'))
+    for(const kind of ['contact','group','official']){const button = node('button',`preview-tab${previewScenario === kind ? ' active' : ''}`,t(`preview${kind[0].toUpperCase() + kind.slice(1)}`));button.type = 'button';button.setAttribute('aria-pressed',String(previewScenario === kind));button.addEventListener('click',()=>{previewScenario = kind;renderTemplatePanel();updateTemplatePreviews()});tabs.append(button)}
     panel.append(tabs)
-    const scene=node('div','telegram-scene'),bubble=node('div','message-bubble');bubble.dataset.previewKey='MESSAGE_DISPLAY';scene.append(node('div','preview-chat-name',previewScenario==='group'?t('sampleTopic'):previewScenario==='official'?t('sampleOfficial'):t('sampleName')),bubble,node('div','preview-timestamp',t('previewTime')));panel.append(scene)
-    const fallback=node('label','preview-fallback'),checkbox=node('input');checkbox.type='checkbox';checkbox.checked=previewWithoutAlias;checkbox.addEventListener('change',()=>{previewWithoutAlias=checkbox.checked;renderTemplatePanel();updateTemplatePreviews()});fallback.append(checkbox,node('span','',t('previewFallback')));panel.append(fallback)
-    const sample=previewSample(),details=node('dl','preview-sample')
-    for(const [label,value] of [['previewAlias',sample.alias||'—'],['previewName',sample.name],['previewTopic',sample.topic],['previewBody',sample.body]])details.append(node('dt','',t(label)),node('dd','',value))
+    const scene = node('div','telegram-scene'),bubble = node('div','message-bubble');bubble.dataset.previewKey = 'MESSAGE_DISPLAY';scene.append(node('div','preview-chat-name',previewScenario === 'group' ? t('sampleTopic') : previewScenario === 'official' ? t('sampleOfficial') : t('sampleName')),bubble,node('div','preview-timestamp',t('previewTime')));panel.append(scene)
+    const fallback = node('label','preview-fallback'),checkbox = node('input');checkbox.type = 'checkbox';checkbox.checked = previewWithoutAlias;checkbox.addEventListener('change',()=>{previewWithoutAlias = checkbox.checked;renderTemplatePanel();updateTemplatePreviews()});fallback.append(checkbox,node('span','',t('previewFallback')));panel.append(fallback)
+    const sample = previewSample(),details = node('dl','preview-sample')
+    for(const [label,value] of [['previewAlias',sample.alias || '—'],['previewName',sample.name],['previewMemberName',sample.memberName || sample.name],['previewTopic',sample.topic],['previewBody',sample.body]])details.append(node('dt','',t(label)),node('dd','',value))
     panel.append(details,node('p','preview-note',t('previewNote')))
 }
 function renderField(f){
-    const [label,description]=fieldCopy(f)
-    const disabled=busy||(f.source==='runtime'&&!data.runtimeAvailable)
-    const container=node('div',`field${f.type==='boolean'?' boolean-field':''}${Object.hasOwn(draft,f.key)?' modified':''}${disabled?' disabled':''}${errors[f.key]?' invalid':''}`)
-    const text=node('div','field-content'),top=node('div','field-top'),title=node('label','',label)
-    title.htmlFor=`field-${f.key}`
-    if(f.required){const required=node('span','required','*');required.title=t('requiredLabel');title.append(required)}
+    const [label,description] = fieldCopy(f)
+    const disabled = busy || (f.source === 'runtime' && !data.runtimeAvailable)
+    const container = node('div',`field${f.type === 'boolean' ? ' boolean-field' : ''}${Object.hasOwn(draft,f.key) ? ' modified' : ''}${disabled ? ' disabled' : ''}${errors[f.key] ? ' invalid' : ''}`)
+    const text = node('div','field-content'),top = node('div','field-top'),title = node('label','',label)
+    title.htmlFor = `field-${f.key}`
+    if(f.required){const required = node('span','required','*');required.title = t('requiredLabel');title.append(required)}
     top.append(title,node('span','field-code',f.key));text.append(top)
-    const descriptionNode=node('p','field-description',description);descriptionNode.id=`description-${f.key}`;text.append(descriptionNode)
+    const descriptionNode = node('p','field-description',description);descriptionNode.id = `description-${f.key}`;text.append(descriptionNode)
     container.append(text)
     let input
-    if(f.type==='boolean'){
-        const toggle=node('label','switch');input=node('input');input.type='checkbox';input.checked=Boolean(currentValue(f));input.setAttribute('role','switch');const track=node('span','switch-track');toggle.append(input,track);container.append(toggle)
+    if(f.type === 'boolean'){
+        const toggle = node('label','switch');input = node('input');input.type = 'checkbox';input.checked = Boolean(currentValue(f));input.setAttribute('role','switch');const track = node('span','switch-track');toggle.append(input,track);container.append(toggle)
     }else{
-        const wrap=node('div','input-wrapper')
-        if(f.type==='select'){
-            input=node('select');for(const value of f.options){const option=node('option','',value===''?t('direct'):f.key==='language'?(value==='zh-CN'?'简体中文':'English'):value);option.value=value;input.append(option)}
-        }else if(f.type==='textarea'){input=node('textarea');input.rows=2}
-        else{input=node('input');input.type=f.type==='password'?'password':f.type==='number'?'number':'text';input.autocomplete='off';input.spellcheck=false;if(f.min!==undefined){input.min=f.min;input.max=f.max;input.step=1}}
-        input.value=currentValue(f)??''
-        if(f.type==='password'){
+        const wrap = node('div','input-wrapper')
+        if(f.type === 'select'){
+            input = node('select');for(const value of f.options){const option = node('option','',value === '' ? t('direct') : f.key === 'language' ? (value === 'zh-CN' ? '简体中文' : 'English') : value);option.value = value;input.append(option)}
+        }else if(f.type === 'textarea'){input = node('textarea');input.rows = 2}
+        else{input = node('input');input.type = f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text';input.autocomplete = 'off';input.spellcheck = false;if(f.min !== undefined){input.min = f.min;input.max = f.max;input.step = 1}}
+        input.value = currentValue(f) ?? ''
+        if(f.type === 'password'){
             // Avoid password-manager autofill silently creating configuration changes.
-            input.readOnly=true;input.addEventListener('focus',()=>{input.readOnly=false})
-            input.placeholder=t(data.secrets[f.key]?'secretPlaceholder':'secretNewPlaceholder')
-            const reveal=node('button','reveal');reveal.type='button';reveal.setAttribute('aria-label',t('reveal'));reveal.title=t('reveal');reveal.append(icon('eye'));reveal.disabled=disabled;reveal.addEventListener('click',()=>{input.type=input.type==='password'?'text':'password'});wrap.append(input,reveal)
+            input.readOnly = true;input.addEventListener('focus',()=>{input.readOnly = false})
+            input.placeholder = t(data.secrets[f.key] ? 'secretPlaceholder' : 'secretNewPlaceholder')
+            const reveal = node('button','reveal');reveal.type = 'button';reveal.setAttribute('aria-label',t('reveal'));reveal.title = t('reveal');reveal.append(icon('eye'));reveal.disabled = disabled;reveal.addEventListener('click',()=>{input.type = input.type === 'password' ? 'text' : 'password'});wrap.append(input,reveal)
         }else wrap.append(input)
         text.append(wrap)
-        if(f.type==='password'){
-            const meta=node('div','secret-meta'),hint=node('span','',t(Object.hasOwn(draft,f.key)&&draft[f.key]===''?'secretCleared':data.secrets[f.key]?'secretSet':'secretEmpty'));meta.append(hint)
-            if(data.secrets[f.key]&&!f.required){const clear=node('button','clear-secret',t('clearSecret'));clear.type='button';clear.disabled=disabled;clear.addEventListener('click',()=>{draft[f.key]='';render()});meta.append(clear)}
+        if(f.type === 'password'){
+            const meta = node('div','secret-meta'),hint = node('span','',t(Object.hasOwn(draft,f.key) && draft[f.key] === '' ? 'secretCleared' : data.secrets[f.key] ? 'secretSet' : 'secretEmpty'));meta.append(hint)
+            if(data.secrets[f.key] && !f.required){const clear = node('button','clear-secret',t('clearSecret'));clear.type = 'button';clear.disabled = disabled;clear.addEventListener('click',()=>{draft[f.key] = '';render()});meta.append(clear)}
             text.append(meta)
         }
     }
-    input.id=`field-${f.key}`;input.name=f.key;input.disabled=disabled;input.setAttribute('aria-describedby',descriptionNode.id)
+    input.id = `field-${f.key}`;input.name = f.key;input.disabled = disabled;input.setAttribute('aria-describedby',descriptionNode.id)
     if(f.required)input.setAttribute('aria-required','true')
-    if(errors[f.key]){const error=node('p','field-error',errors[f.key]);error.id=`error-${f.key}`;text.append(error);input.setAttribute('aria-invalid','true');input.setAttribute('aria-describedby',`${descriptionNode.id} ${error.id}`)}
-    input.addEventListener(f.type==='boolean'||f.type==='select'?'change':'input',()=>edit(f,f.type==='boolean'?input.checked:input.value,container))
-    if(f.group==='templates'){
-        const preview=node('div','inline-preview'),caption=node('div','inline-preview-caption',t(f.key.startsWith('CREATE_')?'previewPlain':'previewLabel')),bubble=node('div','message-bubble');bubble.dataset.previewKey=f.key;preview.append(caption,bubble);text.append(preview)
+    if(errors[f.key]){const error = node('p','field-error',errors[f.key]);error.id = `error-${f.key}`;text.append(error);input.setAttribute('aria-invalid','true');input.setAttribute('aria-describedby',`${descriptionNode.id} ${error.id}`)}
+    input.addEventListener(f.type === 'boolean' || f.type === 'select' ? 'change' : 'input',()=>edit(f,f.type === 'boolean' ? input.checked : input.value,container))
+    if(f.group === 'templates'){
+        const preview = node('div','inline-preview'),caption = node('div','inline-preview-caption',t(f.key.startsWith('CREATE_') ? 'previewPlain' : 'previewLabel')),bubble = node('div','message-bubble');bubble.dataset.previewKey = f.key;preview.append(caption,bubble);text.append(preview)
     }
     return container
 }
 function render(){
-    const navigation=$('navigation');navigation.replaceChildren()
-    for(const group of data.groups){const button=node('button',`nav-item${selected===group.id?' active':''}`);button.type='button';button.append(icon(group.icon),node('span','',t(group.id)));if(selected===group.id)button.setAttribute('aria-current','page');button.addEventListener('click',()=>{selected=group.id;$('search').value='';errors={};render()});navigation.append(button)}
-    const group=data.groups.find(g=>g.id===selected)
-    document.querySelector('.main-shell').classList.toggle('messaging',selected==='messages')
-    document.querySelector('.page-heading').classList.toggle('hidden',selected==='messages')
-    document.querySelector('.main-shell').classList.toggle('mcp-config',selected==='mcp')
-    $('search').disabled=selected==='mcp'
-    let inbox=$('message-center-panel')
-    if(!inbox){inbox=node('div','message-center hidden');inbox.id='message-center-panel';document.querySelector('main').append(inbox)}
-    inbox.classList.toggle('hidden',selected!=='messages')
-    document.querySelector('.page-heading h1').textContent=t(selected==='messages'?'messagesHeading':'heading')
-    document.querySelector('.page-heading p').textContent=t(selected==='messages'?'messagesIntro':'intro')
-    $('section-title').textContent=$('breadcrumb-title').textContent=t(selected)
-    $('section-description').textContent=t(`${selected}Caption`)
+    const navigation = $('navigation');navigation.replaceChildren()
+    for(const group of data.groups){const button = node('button',`nav-item${selected === group.id ? ' active' : ''}`);button.type = 'button';button.append(icon(group.icon),node('span','',t(group.id)));if(selected === group.id)button.setAttribute('aria-current','page');button.addEventListener('click',()=>{selected = group.id;$('search').value = '';errors = {};render()});navigation.append(button)}
+    const group = data.groups.find(g=>g.id === selected)
+    document.querySelector('.main-shell').classList.toggle('messaging',selected === 'messages')
+    document.querySelector('.page-heading').classList.toggle('hidden',selected === 'messages')
+    document.querySelector('.main-shell').classList.toggle('mcp-config',selected === 'mcp')
+    $('search').disabled = selected === 'mcp'
+    let inbox = $('message-center-panel')
+    if(!inbox){inbox = node('div','message-center hidden');inbox.id = 'message-center-panel';document.querySelector('main').append(inbox)}
+    inbox.classList.toggle('hidden',selected !== 'messages')
+    document.querySelector('.page-heading h1').textContent = t(selected === 'messages' ? 'messagesHeading' : 'heading')
+    document.querySelector('.page-heading p').textContent = t(selected === 'messages' ? 'messagesIntro' : 'intro')
+    $('section-title').textContent = $('breadcrumb-title').textContent = t(selected)
+    $('section-description').textContent = t(`${selected}Caption`)
     $('section-icon').replaceChildren(icon(group.icon))
-    $('template-help').classList.toggle('hidden',selected!=='templates')
+    $('template-help').classList.toggle('hidden',selected !== 'templates')
     renderTemplatePanel()
-    if(selected==='messages'){
-        if(!messageCenter)messageCenter=MessageCenterUI.create({request:(method,route,body)=>api(method,body,route),transfer:mediaTransfer,t,node,icon,isActive:()=>selected==='messages'&&Boolean(token)&&Boolean(data),notify:toast})
+    if(selected === 'messages'){
+        if(!messageCenter)messageCenter = MessageCenterUI.create({request:(method,route,body)=>api(method,body,route),transfer:mediaTransfer,t,node,icon,isActive:()=>selected === 'messages' && Boolean(token) && Boolean(data),notify:toast})
         messageCenter.show(inbox)
         updateSummary()
         return
     }
-    const query=$('search').value.trim().toLowerCase()
-    const visible=data.fields.filter(f=>query?[f.key,...fieldCopy(f),f.label,f.description].join(' ').toLowerCase().includes(query):f.group===selected)
-    $('field-count').textContent=`${visible.length} ${t('fields')}`
-    $('empty-state').classList.toggle('hidden',visible.length>0)
-    const parent=$('fields');parent.replaceChildren()
-    if(selected==='mcp'){
+    const query = $('search').value.trim().toLowerCase()
+    const visible = data.fields.filter(f=>query ? [f.key,...fieldCopy(f),f.label,f.description].join(' ').toLowerCase().includes(query) : f.group === selected)
+    $('field-count').textContent = `${visible.length} ${t('fields')}`
+    $('empty-state').classList.toggle('hidden',visible.length > 0)
+    const parent = $('fields');parent.replaceChildren()
+    if(selected === 'mcp'){
         $('empty-state').classList.add('hidden')
-        $('field-count').textContent='MCP · 11 tools'
-        MCPSettingsUI.render(parent,{node,request:(method,route,body)=>api(method,body,route),english:language==='en'})
+        $('field-count').textContent = 'MCP · 11 tools'
+        MCPSettingsUI.render(parent,{node,request:(method,route,body)=>api(method,body,route),english:language === 'en'})
         updateSummary();return
     }
     for(const source of ['environment','runtime']){
-        const items=visible.filter(f=>f.source===source);if(!items.length)continue
-        const heading=node('div','source-heading');heading.append(node('span','',t(source)),node('small','',t(`${source}Hint`)));parent.append(heading)
-        if(source==='runtime'&&!data.runtimeAvailable)parent.append(node('p','field field-description',t('runtimeUnavailable')))
-        if(selected==='proxy'&&!query){
+        const items = visible.filter(f=>f.source === source);if(!items.length)continue
+        const heading = node('div','source-heading');heading.append(node('span','',t(source)),node('small','',t(`${source}Hint`)));parent.append(heading)
+        if(source === 'runtime' && !data.runtimeAvailable)parent.append(node('p','field field-description',t('runtimeUnavailable')))
+        if(selected === 'proxy' && !query){
             for(const part of ['telegram','wechat']){
-                const card=node('section',`proxy-section ${part}-proxy`),header=node('div','proxy-section-header'),badge=node('span','proxy-section-icon');badge.append(icon(part==='telegram'?'send':'message'));const title=node('div');title.append(node('h3','',t(`${part}ProxyTitle`)),node('p','',t(`${part}ProxyDescription`)));header.append(badge,title);card.append(header)
-                items.filter(f=>part==='wechat'?f.key.startsWith('WX_'):!f.key.startsWith('WX_')).forEach(f=>card.append(renderField(f)))
+                const card = node('section',`proxy-section ${part}-proxy`),header = node('div','proxy-section-header'),badge = node('span','proxy-section-icon');badge.append(icon(part === 'telegram' ? 'send' : 'message'));const title = node('div');title.append(node('h3','',t(`${part}ProxyTitle`)),node('p','',t(`${part}ProxyDescription`)));header.append(badge,title);card.append(header)
+                items.filter(f=>part === 'wechat' ? f.key.startsWith('WX_') : !f.key.startsWith('WX_')).forEach(f=>card.append(renderField(f)))
                 parent.append(card)
             }
         }else items.forEach(f=>parent.append(renderField(f)))
     }
     updateSummary()
     updateTemplatePreviews()
-    if(selected==='ai'&&!query)AISettingsUI.render(parent,{t,node,request:(method,route,body)=>api(method,body,route),getValues:()=>({url:$('field-AI_API_URL')?.value||'',key:$('field-AI_API_KEY')?.value||'',model:$('field-AI_MODEL')?.value||''}),onModel:value=>{const field=data.fields.find(f=>f.key==='AI_MODEL'),input=$('field-AI_MODEL');input.value=value;edit(field,value,input.closest('.field'))}})
+    if(selected === 'ai' && !query)AISettingsUI.render(parent,{t,node,request:(method,route,body)=>api(method,body,route),getValues:()=>({url:$('field-AI_API_URL')?.value || '',key:$('field-AI_API_KEY')?.value || '',model:$('field-AI_MODEL')?.value || ''}),onModel:value=>{const field = data.fields.find(f=>f.key === 'AI_MODEL'),input = $('field-AI_MODEL');input.value = value;edit(field,value,input.closest('.field'))}})
 }
 function validate(){
-    errors={}
+    errors = {}
     for(const [key,value] of Object.entries(draft)){
-        const f=data.fields.find(f=>f.key===key),text=String(value)
-        if(f.required&&!text.trim())errors[key]=t('required')
-        else if(text.length>4096)errors[key]=t('long')
-        else if(f.type==='number'&&(text!==''||f.source==='runtime')&&(!/^\d+$/.test(text)||Number(text)<f.min||Number(text)>f.max))errors[key]=t('range',{min:f.min,max:f.max})
-        else if(['BASE_API','FILE_API','CALLBACK_API','AI_API_URL'].includes(key)&&text){try{const url=new URL(text),allowed=['http:','https:'];if(!allowed.includes(url.protocol)||url.username||url.password)errors[key]=t('url')}catch{errors[key]=t('url')}}
+        const f = data.fields.find(f=>f.key === key),text = String(value)
+        if(f.required && !text.trim())errors[key] = t('required')
+        else if(text.length > 4096)errors[key] = t('long')
+        else if(f.type === 'number' && (text !== '' || f.source === 'runtime') && (!/^\d+$/.test(text) || Number(text) < f.min || Number(text) > f.max))errors[key] = t('range',{min:f.min,max:f.max})
+        else if(['BASE_API','FILE_API','CALLBACK_API','AI_API_URL'].includes(key) && text){try{const url = new URL(text),allowed = ['http:','https:'];if(!allowed.includes(url.protocol) || url.username || url.password)errors[key] = t('url')}catch{errors[key] = t('url')}}
     }
     return !Object.keys(errors).length
 }
 async function save(){
-    if(busy||!Object.keys(draft).length)return
-    if(!validate()){const first=data.fields.find(f=>errors[f.key]);selected=first.group;$('search').value='';render();$(`field-${first.key}`).focus();toast(t('validation'),true);return}
-    busy=true;render();let savedCount=0
+    if(busy || !Object.keys(draft).length)return
+    if(!validate()){const first = data.fields.find(f=>errors[f.key]);selected = first.group;$('search').value = '';render();$(`field-${first.key}`).focus();toast(t('validation'),true);return}
+    busy = true;render();let savedCount = 0
     try{
         for(const source of ['environment','runtime']){
-            const values=Object.fromEntries(Object.entries(draft).filter(([key])=>data.fields.some(f=>f.key===key&&f.source===source)))
+            const values = Object.fromEntries(Object.entries(draft).filter(([key])=>data.fields.some(f=>f.key === key && f.source === source)))
             if(!Object.keys(values).length)continue
-            const result=await api('PATCH',{source,revision:data.revision,values})
-            Object.keys(values).forEach(key=>delete draft[key]);data={...data,...result};savedCount+=Object.keys(values).length
+            const result = await api('PATCH',{source,revision:data.revision,values})
+            Object.keys(values).forEach(key=>delete draft[key]);data = {...data,...result};savedCount += Object.keys(values).length
         }
-        toast(t(data.restartRequired?'savedRestartToast':'savedToast'))
-    }catch(error){toast(`${savedCount?t('partial')+' ':''}${error.message}`,true)}
-    finally{busy=false;render()}
+        toast(t(data.restartRequired ? 'savedRestartToast' : 'savedToast'))
+    }catch(error){toast(`${savedCount ? t('partial') + ' ' : ''}${error.message}`,true)}
+    finally{busy = false;render()}
 }
 document.querySelectorAll('[data-icon]').forEach(el=>el.append(icon(el.dataset.icon)))
 $('language').addEventListener('click',switchLanguage);$('auth-language').addEventListener('click',switchLanguage)
 async function signIn(candidate){
-    token=candidate.trim();$('auth-error').textContent='';$('auth-submit').disabled=true
-    try{data=await api();saveAuth($('remember-token').checked);draft={};errors={};selected='messages';$('access-token').value='';$('auth-overlay').classList.add('hidden');document.querySelector('.app-shell').inert=false;render();document.querySelector('#message-center-panel input[type="search"]')?.focus()}catch(error){token='';$('auth-error').textContent=error.message}finally{$('auth-submit').disabled=false}
+    token = candidate.trim();$('auth-error').textContent = '';$('auth-submit').disabled = true
+    try{data = await api();saveAuth($('remember-token').checked);draft = {};errors = {};selected = 'messages';$('access-token').value = '';$('auth-overlay').classList.add('hidden');document.querySelector('.app-shell').inert = false;render();document.querySelector('#message-center-panel input[type="search"]')?.focus()}catch(error){token = '';$('auth-error').textContent = error.message}finally{$('auth-submit').disabled = false}
 }
 $('auth-form').addEventListener('submit',async event=>{event.preventDefault();await signIn($('access-token').value)})
-$('logout').addEventListener('click',()=>{if((Object.keys(draft).length||messageCenter?.hasDraft())&&!window.confirm(t('confirmDiscard')))return;forgetAuth();token='';draft={};data=null;messageCenter?.clear();$('fields').replaceChildren();$('navigation').replaceChildren();document.querySelector('.app-shell').inert=true;$('auth-overlay').classList.remove('hidden');$('access-token').focus()})
+$('logout').addEventListener('click',()=>{if((Object.keys(draft).length || messageCenter?.hasDraft()) && !window.confirm(t('confirmDiscard')))return;forgetAuth();token = '';draft = {};data = null;messageCenter?.clear();$('fields').replaceChildren();$('navigation').replaceChildren();document.querySelector('.app-shell').inert = true;$('auth-overlay').classList.remove('hidden');$('access-token').focus()})
 $('search').addEventListener('input',render)
 $('reload').addEventListener('click',async()=>{
-    if(!data||busy)return
-    if(Object.keys(draft).length&&!window.confirm(t('confirmDiscard')))return
-    try{data=await api();draft={};errors={};render()}catch(error){toast(error.message,true)}
+    if(!data || busy)return
+    if(Object.keys(draft).length && !window.confirm(t('confirmDiscard')))return
+    try{data = await api();draft = {};errors = {};render()}catch(error){toast(error.message,true)}
 })
 $('settings-form').addEventListener('submit',event=>{event.preventDefault();save()})
 $('save').addEventListener('click',save)
-$('discard').addEventListener('click',()=>{if(window.confirm(t('confirmDiscard'))){draft={};errors={};render()}})
-window.addEventListener('beforeunload',event=>{if(Object.keys(draft).length||messageCenter?.hasDraft()){event.preventDefault();event.returnValue=''}})
-document.addEventListener('keydown',event=>{if(event.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)&&data){event.preventDefault();$('search').focus()}if((event.ctrlKey||event.metaKey)&&event.key==='s'&&data){event.preventDefault();save()}})
-translate();const restoredToken=restoreAuth();if(restoredToken)void signIn(restoredToken);else $('access-token').focus()
+$('discard').addEventListener('click',()=>{if(window.confirm(t('confirmDiscard'))){draft = {};errors = {};render()}})
+window.addEventListener('beforeunload',event=>{if(Object.keys(draft).length || messageCenter?.hasDraft()){event.preventDefault();event.returnValue = ''}})
+document.addEventListener('keydown',event=>{if(event.key === '/' && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName) && data){event.preventDefault();$('search').focus()}if((event.ctrlKey || event.metaKey) && event.key === 's' && data){event.preventDefault();save()}})
+translate();const restoredToken = restoreAuth();if(restoredToken)void signIn(restoredToken);else $('access-token').focus()

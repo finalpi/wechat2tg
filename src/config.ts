@@ -2,6 +2,7 @@
 // @ts-ignore
 import dotenv from 'dotenv'
 import {loadPersistentEnvironment} from './webui/store'
+import {resolveMessageTemplates} from './util/MessageTemplates'
 
 dotenv.config()
 // WebUI 保存的配置优先于环境变量，并随 storage 挂载持久化。
@@ -19,15 +20,9 @@ export const config = {
     TENCENT_SECRET_ID: process.env.TENCENT_SECRET_ID?.toString() || '',
     TENCENT_SECRET_KEY: process.env.TENCENT_SECRET_KEY?.toString() || '',
     DB_SQLITE_PATH: process.env.DB_SQLITE_PATH?.toString() || 'storage/db/wechat2Tg.db',
-    CONTACT_MESSAGE: process.env.CONTACT_MESSAGE?.toString() || '<b>👤#[alias_first]: </b>',
-    OFFICIAL_MESSAGE: process.env.OFFICIAL_MESSAGE?.toString() || '<b>📣#[name]: </b>',
-    ROOM_MESSAGE: process.env.ROOM_MESSAGE?.toString() || '<i>🌐#[topic]</i> ---- <b>👤#[(alias)] #[name]: </b>',
-    CONTACT_MESSAGE_GROUP: process.env.CONTACT_MESSAGE_GROUP?.toString() || '',
-    OFFICIAL_MESSAGE_GROUP: process.env.OFFICIAL_MESSAGE_GROUP?.toString() || '',
-    ROOM_MESSAGE_GROUP: process.env.ROOM_MESSAGE_GROUP?.toString() || '',
+    ...resolveMessageTemplates(process.env),
     CREATE_ROOM_NAME: process.env.CREATE_ROOM_NAME?.toString() || '#[alias_first]',
     CREATE_CONTACT_NAME: process.env.CREATE_CONTACT_NAME?.toString() || '#[alias]#[[name]]',
-    MESSAGE_DISPLAY: process.env.MESSAGE_DISPLAY?.toString() || '#[identity]#[br]#[body]',
     BASE_API: process.env.BASE_API?.toString(),
     FILE_API: process.env.FILE_API?.toString(),
     CALLBACK_API: process.env.CALLBACK_API?.toString(),

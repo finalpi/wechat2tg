@@ -11,14 +11,14 @@
 
 ## v6 版本与通道
 
-**只维护 `v6` 分支，开发版和稳定版靠 tag 区分，不建立 `v6-dev` 分支。** 当前 Bot 正式版为 `v6.0.19`，使用 puppet 和 wx2tg-server `v6.0.16`。三个组件只需保持 `v6` 大版本一致，可以独立发布；不要与 server v7 混用。
+**只维护 `v6` 分支，开发版和稳定版靠 tag 区分，不建立 `v6-dev` 分支。** 当前 Bot 正式版为 `v6.0.20`，使用 puppet 和 wx2tg-server `v6.0.16`。三个组件只需保持 `v6` 大版本一致，可以独立发布；不要与 server v7 混用。
 
 | 通道 | 完整 Git / Docker 版本 | bot 滚动别名 |
 | --- | --- | --- |
 | 稳定版 | `v6.X.Y`（不带 dev） | `v6` |
 | 开发版 | `v6.X.Y-dev.N` | `v6-dev` |
 
-bot 镜像仓库为 **`finalpi/wechat2tg`**，Docker 版本与完整 Git 标签一致，保留开头的 `v`：开发版为 `finalpi/wechat2tg:v6.0.13-dev.3`，稳定版为 `finalpi/wechat2tg:v6.0.19`。滚动别名限定主版本：稳定版 `v6`、开发版 `v6-dev`；此工作流不会在无版本后缀的仓库发布全局 `latest` 或 `dev`。从 `v6` 手动构建的快照为 `v6-dev-<提交短 SHA>`，不更新滚动别名。旧 `finalpi/wechat2tg-v3` 仓库及其镜像和标签保留，此工作流不会再写入。
+bot 镜像仓库为 **`finalpi/wechat2tg`**，Docker 版本与完整 Git 标签一致，保留开头的 `v`：开发版为 `finalpi/wechat2tg:v6.0.13-dev.3`，稳定版为 `finalpi/wechat2tg:v6.0.20`。滚动别名限定主版本：稳定版 `v6`、开发版 `v6-dev`；此工作流不会在无版本后缀的仓库发布全局 `latest` 或 `dev`。从 `v6` 手动构建的快照为 `v6-dev-<提交短 SHA>`，不更新滚动别名。旧 `finalpi/wechat2tg-v3` 仓库及其镜像和标签保留，此工作流不会再写入。
 
 amd64、arm64 独立构建，分别发布 Docker 版本加 `-amd64` / `-arm64` 的镜像，稳定别名为 `v6-amd64` / `v6-arm64`，开发别名为 `v6-dev-amd64` / `v6-dev-arm64`；手动快照只加架构后缀、不更新别名。amd64 成功后即可使用，不必等 ARM。通用标签在两边完成后合并。历史标签不移动；`v6` 分支的最新源码不等于最新稳定发布。详见 [发行规则](docs/releases.md)。
 
@@ -164,7 +164,7 @@ Docker 将 `./config` 挂载为 `/app/storage`；备份时同时保留 `save-fil
 ## 部署安装
 
 > [!IMPORTANT]
-> 当前 Bot 正式版为 **`v6.0.19`**，修复启动群名/头像同步突发、FloodWait 后继续请求和失败更新误记成功的问题。本次仅更新 Bot，puppet 和 server 保持 `v6.0.16`。详见 [群名/头像限流处理](docs/telegram-group-metadata.md)及[发行规则](docs/releases.md)。
+> 当前 Bot 正式版为 **`v6.0.20`**，新增 `#[member_name]`（成员自己的群昵称）变量，并把默认消息模板改为无装饰 emoji 的简洁格式。本次仅更新 Bot，puppet 和 server 保持 `v6.0.16`。详见 [自定义消息模板](#自定义消息模板)及[发行规则](docs/releases.md)。
 
 全新部署先复制一份 `.env.example` 为 `.env` 文件，然后配置环境变量。已有私有配置（包括用户的 `home_202.env`）绝不能覆盖，所需新增项应手动合并。
 
@@ -176,7 +176,7 @@ Docker 部署使用 Docker Engine 和 Docker Compose v2；本地开发使用 Nod
 
 ### Docker Compose
 
-直接使用仓库的 `docker-compose.yml`，无需再叠加 WebUI 覆盖文件。主配置固定完整版本 `finalpi/wechat2tg:v6.0.19`，不跟随滚动别名。amd64 用户可以改用同版本 `-amd64` 镜像以提前部署，无需等待 ARM。
+直接使用仓库的 `docker-compose.yml`，无需再叠加 WebUI 覆盖文件。主配置固定完整版本 `finalpi/wechat2tg:v6.0.20`，不跟随滚动别名。amd64 用户可以改用同版本 `-amd64` 镜像以提前部署，无需等待 ARM。
 
 以下命令用于初始化全新整套服务。已有部署应保留旧镜像和私有配置，核对本地 Compose 后，仅用 `docker compose pull wechat2tg` 和 `docker compose up -d --no-deps wechat2tg` 更新 bot。本示例的 `wx2tg-server` 镜像、命名空间和版本保持不变；本次 bot 命名修正不能替换或重启已有生产后端。
 
@@ -202,7 +202,7 @@ docker compose restart wechat2tg
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.19
+    image: finalpi/wechat2tg:v6.0.20
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"
@@ -413,7 +413,21 @@ docker compose logs --tail=100 wechat2tg
 
 ### 自定义消息模板
 
-如果你想修改消息发送者的格式，你可以修改 docker 中的环境变量或者 `.env` 文件
+如果你想修改消息发送者的格式，你可以修改 docker 中的环境变量、`.env`，或 WebUI 的「消息样式」。
+
+默认消息模板（不含装饰 emoji；正文里的 emoji 保留）：
+
+```dotenv
+CONTACT_MESSAGE='<b>#[alias_first]: </b>'
+OFFICIAL_MESSAGE='<b>#[name]: </b>'
+ROOM_MESSAGE='<b>#[member_name]: </b>'
+CONTACT_MESSAGE_GROUP='<b>#[alias_first]: </b>'
+OFFICIAL_MESSAGE_GROUP='<b>#[name]: </b>'
+ROOM_MESSAGE_GROUP='<b>#[member_name]: </b>'
+MESSAGE_DISPLAY='#[identity]#[br]#[body]'
+```
+
+未设置、留空或纯空格的模板使用上述默认值。`CREATE_ROOM_NAME` / `CREATE_CONTACT_NAME` 是群名称模板，不受消息模板重置影响。
 
 自定义消息模板占位符:
 
@@ -423,7 +437,22 @@ docker compose logs --tail=100 wechat2tg
 
 `#[topic]`：群聊昵称
 
+`#[member_name]`：成员自己在该群设置的群昵称；没有群昵称时使用其微信昵称。**不读取你给联系人的通讯录备注**，可直接用于 `ROOM_MESSAGE`、`ROOM_MESSAGE_GROUP` 和 `MESSAGE_DISPLAY`。
+
 `#[alias_first]`：备注优先，如果没有备注就显示联系人的昵称
+
+`#[identity]`：身份信息文本
+
+`#[body]`：消息体文本
+
+`#[br]`：换行
+
+说明：
+
+- 群昵称通过微信群成员接口查询，按账号与群缓存 60 秒；查询失败或超过 1.5 秒时不发送昵称查询请求的等待，直接回退到微信昵称，不会阻塞或丢弃消息。失败后同一账号/群会在 60 秒内直接回退。
+- 只有模板里出现 `#[member_name]` 时才查询群成员，自定义模板未使用时不会产生额外请求。
+- 群昵称会做 HTML 转义，管理员自定义的群名不会破坏消息格式。
+- 从旧版本升级时，上述 7 项消息展示模板会**一次性重置为默认值**（包括 `.env` 和环境变量中的旧值）；重置前会把旧值备份到 `webui-config.json.message-templates-v1.json`（仅这 7 项，不含密钥），之后你修改的模板不会被再次覆盖。群名称模板、头像和绑定关系不变。
 
 `#[identity]`：身份信息文本
 

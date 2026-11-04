@@ -8,6 +8,7 @@ import type {MessageCenterAdapter} from './messages'
 import {createAIConnector} from './ai-connector'
 import {createMcpHandler} from '../mcp/http'
 import {McpSettings} from '../mcp/settings'
+import {MESSAGE_TEMPLATE_DEFAULTS, resolveMessageTemplates} from '../util/MessageTemplates'
 
 export interface RuntimeAdapter {
     read(): Promise<Record<string, unknown>>
@@ -39,6 +40,8 @@ export function createWebUIServer(options: Options) {
     const snapshot = async () => {
         const overrides = readOverrides(file)
         const environment = Object.fromEntries(fields.filter(f => f.source === 'environment').map(f => [f.key, overrides[f.key] ?? options.environment[aliases[f.key] || f.key] ?? '']))
+        // Blank or missing message templates always behave like their defaults.
+        Object.assign(environment, resolveMessageTemplates(environment))
         const runtime = options.runtime ? await options.runtime.read() : {}
         const revision = digest(JSON.stringify({environment, runtime})).toString('hex')
         const values = {}
@@ -50,8 +53,14 @@ export function createWebUIServer(options: Options) {
                 secrets[f.key] = Boolean(value)
             } else values[f.key] = f.type === 'boolean' ? value === true || value === 'true' : value ?? ''
         }
-        const restartRequired = Object.entries(overrides).some(([key, value]) => String(options.environment[aliases[key] || key] ?? '') !== value)
-        return {revision, values, secrets, restartRequired, runtimeAvailable: Boolean(options.runtime), startedAt}
+        const startupTemplates = resolveMessageTemplates(options.environment)
+        const savedTemplates = resolveMessageTemplates(environment)
+        // A saved value equal to its effective default does not need a restart.
+        const restartRequired = Object.entries(overrides).some(([key, value]) =>
+            Object.prototype.hasOwnProperty.call(MESSAGE_TEMPLATE_DEFAULTS, key)
+                ? startupTemplates[key] !== savedTemplates[key]
+                : String(options.environment[aliases[key] || key] ?? '') !== value)
+        return {revision, values, secrets, restartRequired, runtimeAvailable: Boolean(options.runtime), startedAt, templateDefaults: MESSAGE_TEMPLATE_DEFAULTS}
     }
     const respond = (res: ServerResponse, status: number, data: unknown) => {
         res.writeHead(status, {'Content-Type': 'application/json; charset=utf-8'})

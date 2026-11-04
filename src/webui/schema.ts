@@ -47,7 +47,7 @@ export const fields: Field[] = [
     runtime('forward', 'emojiPicture', '表情显示为图片链接', '旧模式；开启微信行内自定义表情时不再生成图片链接。'),
     runtime('forward', 'syncWechat', '启动时同步联系人与群组', '下次启动时同步群组名称、头像和联系人信息。'),
     field('forward', 'language', '机器人语言', 'Telegram 机器人菜单和提示使用的语言。', 'select', {source: 'runtime', options: ['zh-CN', 'en-US']}),
-    ...['CONTACT_MESSAGE', 'OFFICIAL_MESSAGE', 'ROOM_MESSAGE', 'CONTACT_MESSAGE_GROUP', 'OFFICIAL_MESSAGE_GROUP', 'ROOM_MESSAGE_GROUP', 'CREATE_ROOM_NAME', 'CREATE_CONTACT_NAME', 'MESSAGE_DISPLAY'].map((key, i) => field('templates', key, ['联系人消息前缀', '公众号消息前缀', '群聊消息前缀', '联系人绑定群前缀', '公众号绑定群前缀', '群聊绑定群前缀', '自动创建微信群名称', '自动创建联系人群名称', '消息正文格式'][i], '支持项目现有的 HTML 格式与 #[…] 占位符。', 'textarea')),
+    ...['CONTACT_MESSAGE', 'OFFICIAL_MESSAGE', 'ROOM_MESSAGE', 'CONTACT_MESSAGE_GROUP', 'OFFICIAL_MESSAGE_GROUP', 'ROOM_MESSAGE_GROUP', 'CREATE_ROOM_NAME', 'CREATE_CONTACT_NAME', 'MESSAGE_DISPLAY'].map((key, i) => field('templates', key, ['联系人消息前缀', '公众号消息前缀', '群聊消息前缀', '联系人绑定群前缀', '公众号绑定群前缀', '群聊绑定群前缀', '自动创建微信群名称', '自动创建联系人群名称', '消息正文格式'][i], key.startsWith('CREATE_') ? '支持项目现有的 HTML 格式与 #[…] 占位符。' : '支持 HTML；#[member_name] 优先显示成员自己的群昵称，没有时用微信昵称，不取通讯录备注。留空使用默认消息格式。', 'textarea')),
     field('proxy', 'PROXY_PROTOCOL', 'Telegram 代理协议', '不使用代理时选择直连。', 'select', {options: ['', 'socks5', 'http', 'https']}),
     field('proxy', 'PROXY_HOST', '代理主机', '填写 IP 或域名，不包含协议和端口。'),
     numeric('proxy', 'PROXY_PORT', '代理端口', '代理服务器监听端口。', 1, 65535),

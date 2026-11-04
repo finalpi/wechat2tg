@@ -2482,7 +2482,7 @@ ${this.i18n.t('help.instructions')}`))
         // 在这里进行格式化，如果格式化失败会抛出异常，在保存数据库之前被捕获
         let chunks: string[]
         try {
-            const formatted = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content)
+            const formatted = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content, message.memberName)
             const html = renderWechatCustomEmojiHtml(formatted, config.WECHAT_CUSTOM_EMOJI_ENABLED)
             chunks = splitTelegramHtml(html, 4096)
             if (!chunks.length) chunks = [html]

@@ -19,7 +19,7 @@ function fixture() {
       if (name === '../base/BaseClient') return {AbstractClient: class {static getSpyClient() {return bot}}}
       if (name === '../config') return {config: {AUTO_CREATE_GROUPS: false, WECHAT_CUSTOM_EMOJI_ENABLED: true}}
       if (name === 'wx2tg-puppet') return require('wx2tg-puppet')
-      if (name === '../util/FormatUtils') return {FormatUtils: {transformTitleStr: () => '<b>Sender</b>'}}
+      if (name === '../util/FormatUtils') return {FormatUtils: {transformTitleStr: () => '<b>Sender</b>', escapeHtml: require('../dist/util/FormatUtils').FormatUtils.escapeHtml}}
       if (name === '../util/EmojiUtils') return {EmojiConverter: class {convert(value) {return value}}}
       if (name === '../webui/message-visibility') return {isControlMessage: () => false}
       if (name === '../util/WechatCallStatus') return require('../dist/util/WechatCallStatus')

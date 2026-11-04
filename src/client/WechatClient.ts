@@ -33,6 +33,7 @@ import {withNativeWechatReceipt} from '../webui/wechat-receipt'
 import {getWechatCallStatus, formatWechatCallStatus} from '../util/WechatCallStatus'
 import {isSameTelegramDestination} from '../util/TelegramTopicUtils'
 import {WechatAccountClassificationService} from '../service/WechatAccountClassificationService'
+import {createGroupMemberNameResolver} from '../service/GroupMemberNameService'
 
 const TELEGRAM_BOT_API_UPLOAD_LIMIT = 50 * 1024 * 1024
 
@@ -49,6 +50,7 @@ export class WeChatClient extends AbstractClient {
     private messageService: MessageService
     private friendshipList = []
     private _wxInfo
+    private groupMemberName?: ReturnType<typeof createGroupMemberNameResolver>
     private telegramOutbox?:TelegramOutbox
     private telegramSendContexts?:WeakMap<BaseMessage,{entry:TelegramOutboxEntry|null;journal?:TelegramOutbox;binding:BindGroup;legacy?:Message}>
     // 登陆时间
@@ -373,11 +375,11 @@ export class WeChatClient extends AbstractClient {
         return `[${MessageTypeUtils.getTypeName(msg.type() + '')}]\n下载失败: ${error.message || error}`
     }
 
-    private async sendTelegramFileNotice(chatId: number, identity: string, fileName: string, threadId?: number): Promise<number | undefined> {
+    private async sendTelegramFileNotice(chatId: number, identity: string, fileName: string, threadId?: number, memberName?: string): Promise<number | undefined> {
         try {
             const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
             const body = `[文件上传中]\n${fileName.replaceAll(/</g, '&lt;').replaceAll(/>/g, '&gt;')}`
-            const text = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, identity, body)
+            const text = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, identity, body, memberName)
             const sent = await tgBotClient.telegram.sendMessage(chatId, text, {
                 parse_mode: 'HTML', message_thread_id: threadId
             })
@@ -619,17 +621,24 @@ export class WeChatClient extends AbstractClient {
         } else {
             identityType = config.ROOM_MESSAGE_GROUP
         }
+        let memberName = fromContact.name() || fromContact._wxid
+        if (room && (identityType?.includes('member_name') || config.MESSAGE_DISPLAY?.includes('member_name'))) {
+            this.groupMemberName ??= createGroupMemberNameResolver(() => this._wxInfo?.wxid || '')
+            memberName = await this.groupMemberName(room.chatroomId, fromContact._wxid, memberName)
+        }
         let identity
         if (wxId && wxId === 'app') {
             identity = FormatUtils.transformTitleStr(config.OFFICIAL_MESSAGE_GROUP, '', '服务通知', topic)
         } else {
-            identity = FormatUtils.transformTitleStr(identityType, fromContact._alias !== fromContact.name() ? fromContact._alias : '', fromContact.name(), topic)
+            identity = FormatUtils.transformTitleStr(identityType, fromContact._alias !== fromContact.name() ? fromContact._alias : '',
+                fromContact.name(), topic, FormatUtils.escapeHtml(memberName))
         }
         const messageParam: BaseMessage = {
             id: msg.newMsgId,
             senderId: contact._wxid,
             wxId: wxId,
             sender: identity,
+            memberName,
             chatId: bindGroup.chatId,
             threadId: bindGroup.threadId,
             conversationWxId: wxId,
@@ -800,7 +809,7 @@ export class WeChatClient extends AbstractClient {
                         const fileName = appmsg.title || '未知文件'
                         const fileSize = Number(attach.totallen || 0)
                         if (fileSize > TELEGRAM_BOT_API_UPLOAD_LIMIT) {
-                            const noticeMessageId = await this.sendTelegramFileNotice(messageParam.chatId, identity, fileName, messageParam.threadId)
+                            const noticeMessageId = await this.sendTelegramFileNotice(messageParam.chatId, identity, fileName, messageParam.threadId, memberName)
                             if (noticeMessageId) {
                                 messageParam.param = {
                                     ...messageParam.param,

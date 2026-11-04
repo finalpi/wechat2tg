@@ -11,14 +11,14 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 
 ## v6 versions and channels
 
-**Use one maintenance branch, `v6`; tags distinguish stable and development releases. There is no `v6-dev` maintenance branch.** The current stable Bot is `v6.0.19`, using puppet and wx2tg-server `v6.0.16`. Components release independently and need only share major version `v6`. Do not mix it with server v7.
+**Use one maintenance branch, `v6`; tags distinguish stable and development releases. There is no `v6-dev` maintenance branch.** The current stable Bot is `v6.0.20`, using puppet and wx2tg-server `v6.0.16`. Components release independently and need only share major version `v6`. Do not mix it with server v7.
 
 | Channel | Full Git / Docker version | Rolling bot alias |
 | --- | --- | --- |
 | Stable | `v6.X.Y` (no dev suffix) | `v6` |
 | Development | `v6.X.Y-dev.N` | `v6-dev` |
 
-Bot images use **`finalpi/wechat2tg`** with the full Git tag, including the leading `v`: `finalpi/wechat2tg:v6.0.13-dev.3` for development or `finalpi/wechat2tg:v6.0.19` for stable. Rolling aliases are major-scoped: `v6` for stable and `v6-dev` for development; this unversioned repository never receives global `latest` or `dev` aliases from this workflow. Manual snapshots from `v6` use `v6-dev-<short SHA>` with no rolling aliases. The old `finalpi/wechat2tg-v3` repository and its existing images/tags are preserved and never updated by this workflow.
+Bot images use **`finalpi/wechat2tg`** with the full Git tag, including the leading `v`: `finalpi/wechat2tg:v6.0.13-dev.3` for development or `finalpi/wechat2tg:v6.0.20` for stable. Rolling aliases are major-scoped: `v6` for stable and `v6-dev` for development; this unversioned repository never receives global `latest` or `dev` aliases from this workflow. Manual snapshots from `v6` use `v6-dev-<short SHA>` with no rolling aliases. The old `finalpi/wechat2tg-v3` repository and its existing images/tags are preserved and never updated by this workflow.
 
 Native amd64 and arm64 builds publish independently as the Docker version plus `-amd64` / `-arm64`, with `v6-amd64` / `v6-arm64` for stable releases and `v6-dev-amd64` / `v6-dev-arm64` for development releases. Manual snapshots only add the architecture suffix, without updating aliases. amd64 is usable as soon as its job succeeds; the combined tag waits for both. Historical tags are never moved. Branch HEAD is not necessarily the latest stable release. See [release rules (Chinese)](docs/releases.md).
 
@@ -164,7 +164,7 @@ Normal startup leaves the WebUI available if Telegram credentials are missing. F
 ## Installation & Deployment
 
 > [!IMPORTANT]
-> The current stable Bot is **`v6.0.19`**, fixing bursty startup group metadata updates, shared FloodWait cooldowns and incorrect success caching. Only the Bot changes; puppet and server stay at `v6.0.16`. See [metadata throttling (Chinese)](docs/telegram-group-metadata.md) and [release rules (Chinese)](docs/releases.md).
+> The current stable Bot is **`v6.0.20`**, adding the `#[member_name]` group-nickname placeholder and undecorated default message templates. Only the Bot changes; puppet and server stay at `v6.0.16`. See [custom message templates](#custom-message-templates) and [release rules (Chinese)](docs/releases.md).
 
 For a new deployment, copy `.env.example` to `.env` and configure the environment variables. Never overwrite existing private configuration, including the user’s `home_202.env`; merge required changes manually.
 
@@ -176,7 +176,7 @@ Use Docker Engine with Docker Compose v2, or Node.js 18+ for local development. 
 
 ### Docker Compose
 
-Use the repository's `docker-compose.yml`; no WebUI override file is required. It pins the full version `finalpi/wechat2tg:v6.0.19` rather than a rolling alias. amd64 users can select the matching `-amd64` image as soon as that build finishes, without waiting for ARM.
+Use the repository's `docker-compose.yml`; no WebUI override file is required. It pins the full version `finalpi/wechat2tg:v6.0.20` rather than a rolling alias. amd64 users can select the matching `-amd64` image as soon as that build finishes, without waiting for ARM.
 
 The commands below initialize a new stack. For an existing deployment, preserve old images and private configuration; update only the bot with `docker compose pull wechat2tg` and `docker compose up -d --no-deps wechat2tg` after reviewing your local Compose. The `wx2tg-server` image, namespace, and version in this example are unchanged; do not replace or restart the existing production backend as part of this bot naming correction.
 
@@ -202,7 +202,7 @@ The default Compose file is:
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.19
+    image: finalpi/wechat2tg:v6.0.20
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"
@@ -402,7 +402,21 @@ Starting with v6.0.15, directories use native Telegram RichMessage: click names 
 
 ## Custom Message Templates
 
-If you want to modify the message sender's format, you can modify the environment variables in docker or the `.env` file
+If you want to modify the message sender's format, edit the Docker environment variables, your `.env` file, or **Message style** in the WebUI.
+
+Default templates (no decorative emoji; emoji inside the message body are preserved):
+
+```dotenv
+CONTACT_MESSAGE='<b>#[alias_first]: </b>'
+OFFICIAL_MESSAGE='<b>#[name]: </b>'
+ROOM_MESSAGE='<b>#[member_name]: </b>'
+CONTACT_MESSAGE_GROUP='<b>#[alias_first]: </b>'
+OFFICIAL_MESSAGE_GROUP='<b>#[name]: </b>'
+ROOM_MESSAGE_GROUP='<b>#[member_name]: </b>'
+MESSAGE_DISPLAY='#[identity]#[br]#[body]'
+```
+
+A template that is unset, empty, or whitespace-only uses its default. `CREATE_ROOM_NAME` / `CREATE_CONTACT_NAME` name groups and are not affected by the message-template reset.
 
 Custom message template placeholders:
 
@@ -412,7 +426,22 @@ Custom message template placeholders:
 
 `#[topic]`: Group chat nickname
 
+`#[member_name]`: The nickname the member set inside that WeChat group; falls back to their WeChat nickname. It **never uses your contact remark** and works in `ROOM_MESSAGE`, `ROOM_MESSAGE_GROUP` and `MESSAGE_DISPLAY`.
+
 `#[alias_first]`: Remarks priority, if no remarks, display contact's nickname
+
+`#[identity]`: Identity information text
+
+`#[body]`: Message body text
+
+`#[br]`: Line break
+
+Notes:
+
+- Group nicknames come from the WeChat group-member API and are cached per account and group for 60 seconds. A failed or slower-than-1.5-second lookup falls back to the WeChat nickname immediately, so forwarding is never blocked or dropped; the same account/group then falls back directly for 60 seconds.
+- Group members are only queried when a template actually contains `#[member_name]`.
+- Group nicknames are HTML-escaped, so an administrator-defined group name cannot break the message format.
+- When upgrading from an older version, those 7 message display templates are **reset to the defaults once** (including old values from `.env` and the environment). The previous values of these 7 templates only are backed up to `webui-config.json.message-templates-v1.json` before the reset, and later customizations are never overwritten again. Group naming templates, avatars and bindings are unchanged.
 
 `#[identity]`: Identity information text
 

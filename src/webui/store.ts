@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {randomBytes} from 'node:crypto'
 import {persistedFields, validatePatch} from './schema'
+import {MESSAGE_TEMPLATE_DEFAULTS, MessageTemplateKey} from '../util/MessageTemplates'
 
 export const settingsPath = () => path.resolve(process.env.WEBUI_CONFIG_PATH || 'storage/webui-config.json')
 
@@ -18,6 +19,10 @@ export function readOverrides(file = settingsPath()): Record<string, string> {
 }
 
 export function writeOverrides(values: Record<string, string>, file = settingsPath()) {
+    writeAtomicJson(values, file)
+}
+
+function writeAtomicJson(values: unknown, file: string) {
     const directory = path.dirname(file)
     fs.mkdirSync(directory, {recursive: true})
     const temporary = `${file}.${randomBytes(6).toString('hex')}.tmp`
@@ -29,8 +34,60 @@ export function writeOverrides(values: Record<string, string>, file = settingsPa
     }
 }
 
+interface MessageTemplateMigration {
+    version: 1
+    completed: boolean
+    backup: Record<MessageTemplateKey, string | null>
+}
+
+// Accept only this version's complete backup; never recover from an ambiguous marker.
+function readMessageTemplateMigration(file: string): MessageTemplateMigration {
+    let marker: MessageTemplateMigration
+    try {
+        marker = JSON.parse(fs.readFileSync(file, 'utf8'))
+    } catch {
+        throw new Error(`Cannot read message template migration marker: ${file}`)
+    }
+    const keys = Object.keys(MESSAGE_TEMPLATE_DEFAULTS)
+    if (!marker || typeof marker !== 'object' || Array.isArray(marker)
+        || Object.keys(marker).sort().join(',') !== 'backup,completed,version'
+        || marker.version !== 1 || typeof marker.completed !== 'boolean'
+        || !marker.backup || typeof marker.backup !== 'object' || Array.isArray(marker.backup)
+        || Object.keys(marker.backup).sort().join(',') !== keys.sort().join(',')
+        || keys.some(key => marker.backup[key] !== null && typeof marker.backup[key] !== 'string')) {
+        throw new Error(`Invalid message template migration marker: ${file}`)
+    }
+    return marker
+}
+
+export function migrateMessageTemplates(
+    overrides: Record<string, string>,
+    file = settingsPath(),
+    environment: Record<string, string | undefined> = process.env,
+): Record<string, string> {
+    const markerFile = `${file}.message-templates-v1.json`
+    let marker: MessageTemplateMigration
+    if (fs.existsSync(markerFile)) {
+        marker = readMessageTemplateMigration(markerFile)
+        if (marker.completed) return overrides
+    } else {
+        const backup = {} as MessageTemplateMigration['backup']
+        for (const key of Object.keys(MESSAGE_TEMPLATE_DEFAULTS) as MessageTemplateKey[]) {
+            backup[key] = overrides[key] ?? environment[key] ?? null
+        }
+        marker = {version: 1, completed: false, backup}
+        // Persist the original effective templates before changing any settings.
+        writeAtomicJson(marker, markerFile)
+    }
+    const migrated = {...overrides, ...MESSAGE_TEMPLATE_DEFAULTS}
+    writeOverrides(migrated, file)
+    writeAtomicJson({...marker, completed: true}, markerFile)
+    return migrated
+}
+
 export function loadPersistentEnvironment() {
-    const overrides = readOverrides()
+    const file = settingsPath()
+    const overrides = migrateMessageTemplates(readOverrides(file), file)
     for (const [key, value] of Object.entries(overrides)) process.env[key] = value
 }
 

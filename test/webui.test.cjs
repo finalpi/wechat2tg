@@ -110,3 +110,41 @@ test('WebUI requires authentication, protects secrets, and saves topic settings 
   assert.equal(fs.readFileSync(envFile, 'utf8'), env)
   assert.equal(fs.statSync(file).mode & 0o777, 0o600)
 })
+
+test('blank message templates save as defaults and never report a spurious restart', async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'wx2tg-webui-templates-'))
+  const file = path.join(directory, 'webui.json')
+  const token = 'synthetic-webui-token-0002'
+  const defaults = require('../dist/util/MessageTemplates').MESSAGE_TEMPLATE_DEFAULTS
+  const server = createWebUIServer({file, token, environment: {ROOM_MESSAGE_GROUP: '<b>old</b>', BOT_TOKEN: 'synthetic'}})
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  t.after(async () => {server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); fs.rmSync(directory, {recursive: true})})
+  const url = `http://127.0.0.1:${server.address().port}/api/config`
+  const headers = {Authorization: `Bearer ${token}`}
+  const current = await (await fetch(url, {headers})).json()
+  assert.deepEqual(current.templateDefaults, defaults)
+  assert.equal(current.values.ROOM_MESSAGE_GROUP, '<b>old</b>')
+  const patch = async (revision, values) => (await fetch(url, {method: 'PATCH', headers: {...headers, 'Content-Type': 'application/json'},
+    body: JSON.stringify({source: 'environment', revision, values})})).json()
+  const reset = await patch(current.revision, {ROOM_MESSAGE_GROUP: '', CONTACT_MESSAGE: '   '})
+  assert.equal(reset.values.ROOM_MESSAGE_GROUP, defaults.ROOM_MESSAGE_GROUP)
+  assert.equal(reset.values.CONTACT_MESSAGE, defaults.CONTACT_MESSAGE)
+  assert.equal(reset.restartRequired, true, 'Replacing a real custom template with its default still changes runtime')
+  const blankServer = createWebUIServer({file: path.join(directory, 'blank.json'), token, environment: {}})
+  blankServer.listen(0, '127.0.0.1')
+  await once(blankServer, 'listening')
+  t.after(async () => {blankServer.closeAllConnections(); await new Promise(resolve => blankServer.close(resolve))})
+  const blankUrl = `http://127.0.0.1:${blankServer.address().port}/api/config`
+  const blank = await (await fetch(blankUrl, {headers})).json()
+  const blankSaved = await (await fetch(blankUrl, {method: 'PATCH', headers: {...headers, 'Content-Type': 'application/json'},
+    body: JSON.stringify({source: 'environment', revision: blank.revision, values: {ROOM_MESSAGE_GROUP: '  ', CONTACT_MESSAGE: ''}})})).json()
+  assert.equal(blankSaved.values.ROOM_MESSAGE_GROUP, defaults.ROOM_MESSAGE_GROUP)
+  assert.equal(blankSaved.restartRequired, false, 'Blank still means the unchanged default')
+  assert.equal(readOverrides(file).ROOM_MESSAGE_GROUP, '')
+  const customized = await (await fetch(url, {headers})).json()
+  const saved = await patch(customized.revision, {ROOM_MESSAGE_GROUP: '<b>#[name]</b>'})
+  assert.equal(saved.values.ROOM_MESSAGE_GROUP, '<b>#[name]</b>')
+  assert.equal(saved.restartRequired, true, 'A real template change still requires a restart')
+  assert.equal(readOverrides(file).ROOM_MESSAGE_GROUP, '<b>#[name]</b>')
+})
