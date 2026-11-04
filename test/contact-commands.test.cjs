@@ -905,6 +905,81 @@ test('read-only contact compatibility buttons retain their details and return ac
   assert.equal(f.bindings.length + f.creations.length, 0)
 })
 
+for (const threadId of [undefined, 1, 77]) {
+  test(`/contacts@bot shows the bound contact directly in group/topic ${threadId}`, async () => {
+    const f = fixture({contacts: people})
+    const context = {type: 'supergroup', threadId}
+    f.hooks.telegramBinding = async (chatId, resolvedThread) => {
+      assert.equal(chatId, -10012345)
+      assert.equal(resolvedThread, threadId)
+      return {type: 0, wxId: 'wxid_5', name: '绑定名称'}
+    }
+    await f.command('/contacts@test_bot', context)
+    assert.equal(f.replies.length, 1, 'No intermediate contact list')
+    const detail = f.replies[0]
+    assert.match(resultText(detail), /微信 ID：wxid_5/)
+    assert.match(resultText(detail), /昵称：用户5/)
+    assert.equal(detail.options.message_thread_id, threadId > 1 ? threadId : undefined)
+    assert.equal(f.events.filter(event => event === 'repository').length, 0, 'Do not load unrelated contacts')
+    assert.equal(f.selected.length + f.bindings.length + f.creations.length, 0)
+    await f.action(button(detail, ':b'), context)
+    const state = f.resolve(dataButtons(f.edits.at(-1))[0].callback_data, context).state
+    assert.equal(state.kind, 'ct')
+    assert.equal(state.query, '')
+    assert.equal(state.page, 1)
+  })
+}
+
+test('an explicit /contacts search overrides the current binding and preserves the full query', async () => {
+  const query = '项目 A（研发）'
+  const f = fixture({contacts: [{userName: 'wx_match', nickName: query, verifyFlag: 0}]})
+  f.hooks.telegramBinding = async () => {throw new Error('Search must not resolve a binding')}
+  await f.command(`/contacts@test_bot ${query}`, 'supergroup')
+  assert.deepEqual(actions(f, f.replies[0], 'supergroup'), ['wx_match'])
+  assert.equal(f.resolve(dataButtons(f.replies[0])[0].callback_data, 'supergroup').state.query, query)
+})
+
+for (const binding of [undefined, {type: 1, wxId: 'room@chatroom'}, {type: 0, wxId: 'room@chatroom'}, {type: 0, wxId: ''}]) {
+  test(`/contacts without an individual binding keeps the contact list (${JSON.stringify(binding)})`, async () => {
+    const f = fixture({contacts: people, topic: binding})
+    await f.command('/contacts@test_bot', {type: 'supergroup', threadId: 77})
+    assert.deepEqual(actions(f, f.replies[0], {type: 'supergroup', threadId: 77}), people.slice(0, 30).map(person => person.userName))
+    assert.equal(f.bindings.length + f.creations.length, 0)
+  })
+}
+
+test('private /contacts still opens the list even if the private chat has a stored destination', async () => {
+  const f = fixture({contacts: people, topic: {type: 0, wxId: 'wxid_5'}})
+  f.hooks.telegramBinding = async () => {throw new Error('Do not resolve private destinations')}
+  await f.command('/contacts@test_bot')
+  assert.deepEqual(actions(f, f.replies[0]), people.slice(0, 30).map(person => person.userName))
+})
+
+test('a missing bound profile is reported rather than silently showing an unrelated contact', async () => {
+  const f = fixture({contacts: people, topic: {type: 0, wxId: 'wx_deleted'}})
+  await f.command('/contacts@test_bot', 'supergroup')
+  assert.equal(resultText(f.replies[0]), zh['pagination.selection_unavailable'])
+  assert(button(f.replies[0], ':b'))
+  assert.equal(f.selected.length + f.bindings.length + f.creations.length, 0)
+})
+
+test('bound contact lookup errors and account changes cannot expose another account profile', async () => {
+  const f = fixture({contacts: people})
+  f.hooks.telegramBinding = async () => {throw new Error('private binding details')}
+  await f.command('/contacts@test_bot', 'supergroup')
+  assert.equal(resultText(f.replies.at(-1)), zh['pagination.unavailable'])
+  f.hooks.telegramBinding = async () => {
+    f.wxClient.wxInfo.wxid = 'another_account'
+    return {type: 0, wxId: 'wxid_5'}
+  }
+  await f.command('/contacts@test_bot', 'supergroup')
+  assert.equal(resultText(f.replies.at(-1)), zh['pagination.expired'])
+  f.hooks.telegramBinding = async () => ({type: 0, wxId: 'wxid_5'})
+  f.hooks.detail = async () => {f.wxClient.wxInfo.wxid = 'third_account'; return people[5]}
+  await f.command('/contacts@test_bot', 'supergroup')
+  assert.equal(resultText(f.replies.at(-1)), zh['pagination.expired'])
+})
+
 const groupMembers = Array.from({length: 63}, (_, i) => ({wxId: `member_${i}`, name: `群名${i}`,
   nickname: `昵称${i}`, displayName: `群名${i}`, hasAvatar: false}))
 

@@ -11,14 +11,14 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 
 ## v6 versions and channels
 
-**Use one maintenance branch, `v6`; tags distinguish stable and development releases. There is no `v6-dev` maintenance branch.** The current stable Bot is `v6.0.17`, using puppet and wx2tg-server `v6.0.16`. Components release independently and need only share major version `v6`. Do not mix it with server v7.
+**Use one maintenance branch, `v6`; tags distinguish stable and development releases. There is no `v6-dev` maintenance branch.** The current stable Bot is `v6.0.18`, using puppet and wx2tg-server `v6.0.16`. Components release independently and need only share major version `v6`. Do not mix it with server v7.
 
 | Channel | Full Git / Docker version | Rolling bot alias |
 | --- | --- | --- |
 | Stable | `v6.X.Y` (no dev suffix) | `v6` |
 | Development | `v6.X.Y-dev.N` | `v6-dev` |
 
-Bot images use **`finalpi/wechat2tg`** with the full Git tag, including the leading `v`: `finalpi/wechat2tg:v6.0.13-dev.3` for development or `finalpi/wechat2tg:v6.0.17` for stable. Rolling aliases are major-scoped: `v6` for stable and `v6-dev` for development; this unversioned repository never receives global `latest` or `dev` aliases from this workflow. Manual snapshots from `v6` use `v6-dev-<short SHA>` with no rolling aliases. The old `finalpi/wechat2tg-v3` repository and its existing images/tags are preserved and never updated by this workflow.
+Bot images use **`finalpi/wechat2tg`** with the full Git tag, including the leading `v`: `finalpi/wechat2tg:v6.0.13-dev.3` for development or `finalpi/wechat2tg:v6.0.18` for stable. Rolling aliases are major-scoped: `v6` for stable and `v6-dev` for development; this unversioned repository never receives global `latest` or `dev` aliases from this workflow. Manual snapshots from `v6` use `v6-dev-<short SHA>` with no rolling aliases. The old `finalpi/wechat2tg-v3` repository and its existing images/tags are preserved and never updated by this workflow.
 
 Native amd64 and arm64 builds publish independently as the Docker version plus `-amd64` / `-arm64`, with `v6-amd64` / `v6-arm64` for stable releases and `v6-dev-amd64` / `v6-dev-arm64` for development releases. Manual snapshots only add the architecture suffix, without updating aliases. amd64 is usable as soon as its job succeeds; the combined tag waits for both. Historical tags are never moved. Branch HEAD is not necessarily the latest stable release. See [release rules (Chinese)](docs/releases.md).
 
@@ -164,7 +164,7 @@ Normal startup leaves the WebUI available if Telegram credentials are missing. F
 ## Installation & Deployment
 
 > [!IMPORTANT]
-> The current stable Bot is **`v6.0.17`**, adding read-only `/contacts` profile details and `/members` group-member browsing with pagination and Back navigation. This release updates only the Bot; puppet and server stay at `v6.0.16`. Components need only share major version `v6`. See [release rules (Chinese)](docs/releases.md).
+> The current stable Bot is **`v6.0.18`**, showing the current contact directly with `/contacts` in a bound group/topic, while preserving read-only contact/member directories, pagination and Back navigation. This release updates only the Bot; puppet and server stay at `v6.0.16`. Components need only share major version `v6`. See [release rules (Chinese)](docs/releases.md).
 
 For a new deployment, copy `.env.example` to `.env` and configure the environment variables. Never overwrite existing private configuration, including the user’s `home_202.env`; merge required changes manually.
 
@@ -176,7 +176,7 @@ Use Docker Engine with Docker Compose v2, or Node.js 18+ for local development. 
 
 ### Docker Compose
 
-Use the repository's `docker-compose.yml`; no WebUI override file is required. It pins the full version `finalpi/wechat2tg:v6.0.17` rather than a rolling alias. amd64 users can select the matching `-amd64` image as soon as that build finishes, without waiting for ARM.
+Use the repository's `docker-compose.yml`; no WebUI override file is required. It pins the full version `finalpi/wechat2tg:v6.0.18` rather than a rolling alias. amd64 users can select the matching `-amd64` image as soon as that build finishes, without waiting for ARM.
 
 The commands below initialize a new stack. For an existing deployment, preserve old images and private configuration; update only the bot with `docker compose pull wechat2tg` and `docker compose up -d --no-deps wechat2tg` after reviewing your local Compose. The `wx2tg-server` image, namespace, and version in this example are unchanged; do not replace or restart the existing production backend as part of this bot naming correction.
 
@@ -202,7 +202,7 @@ The default Compose file is:
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.17
+    image: finalpi/wechat2tg:v6.0.18
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"
@@ -303,7 +303,7 @@ Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot
 
 - `/room`: Get WeChat group list; click the button to create a new group or bind a WeChat group (can search by name or remarks, e.g., `/room takeout` to find WeChat groups containing "takeout")
 
-- `/contacts [name or remark]`: Read-only contact directory. Select a name to view cached WeChat ID, username, remark, region, signature and other available details; pagination and Back preserve your position. Never binds or creates groups.
+- `/contacts [name or remark]`: Read-only contact directory. Select a name to view cached WeChat ID, username, remark, region, signature and other available details; pagination and Back preserve your position. Never binds or creates groups. Without arguments in a Telegram group/topic bound to an individual contact, shows that contact directly (also with `/contacts@your_bot`). An explicit search still opens the list.
 
 - `/members [group name or remark]`: Select a WeChat group, browse its members and open member details. Supports pagination and returning to the original group list. Without arguments in a bound Telegram group or topic, opens the corresponding WeChat group directly. Only known profile fields are displayed.
 

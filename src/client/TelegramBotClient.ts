@@ -1846,7 +1846,36 @@ ${this.i18n.t('help.instructions')}`))
         bot.command('room', ctx => this.showDirectoryPage(ctx, 'ro', ctx.payload.trim(), 1, false))
 
         // Read-only browsing never enters the existing bind/create selection path.
-        bot.command('contacts', ctx => this.showDirectoryPage(ctx, 'ct', ctx.payload.trim(), 1, false))
+        bot.command('contacts', async ctx => {
+            if (!TelegramBotClient.getSpyClient('wxClient')?.hasLogin) {
+                await replyDirectoryText(ctx, this.i18n.t('login.please_login_wx'))
+                return
+            }
+            try {
+                const scope = this.directoryScope(ctx)
+                const query = ctx.payload.trim()
+                const binding = !query && ctx.chat?.type.includes('group')
+                    ? await this.bindGroupService.resolveTelegram(ctx.chat.id, this.currentThread(ctx)) : undefined
+                if (JSON.stringify(scope) !== JSON.stringify(this.directoryScope(ctx))) {
+                    await replyDirectoryText(ctx, this.i18n.t('pagination.expired'))
+                    return
+                }
+                if (binding?.type === 0 && binding.wxId && !binding.wxId.endsWith('@chatroom')) {
+                    // Retain a scoped return route without loading or sending the full directory first.
+                    const view = this.getDirectoryPager().render({
+                        scope, kind: 'ct', query: '', page: 1,
+                        items: [{remark: binding.name || binding.wxId, action: binding.wxId}],
+                        prompt: '', emptyText: ''
+                    }, (key, params) => this.translateDirectory(key, params))
+                    await this.showContactDetails(ctx, view.state, binding.wxId, binding.name)
+                } else {
+                    await this.showDirectoryPage(ctx, 'ct', query, 1, false)
+                }
+            } catch (error) {
+                this.logger?.warn('Contact details unavailable', error?.code || error?.name)
+                await replyDirectoryText(ctx, this.i18n.t('pagination.unavailable'))
+            }
+        })
         bot.command('members', async ctx => {
             if (!TelegramBotClient.getSpyClient('wxClient')?.hasLogin) {
                 await replyDirectoryText(ctx, this.i18n.t('login.please_login_wx'))
