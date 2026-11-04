@@ -641,6 +641,15 @@ export class WeChatClient extends AbstractClient {
         let appLinkList
         const emojiConverter = new EmojiConverter()
         switch (msg.type()) {
+            case WxMessage.Type.Solitaire:
+                // The SDK exposes the complete visible title/list, keeping raw XML
+                // separately. Never leak solitaire_info or silently discard subtype 53.
+                messageParam.source_text = msg._xml || msg._text
+                messageParam.content = emojiConverter.convert(String(msg.text() || '[接龙]')
+                    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'),
+                configuration, config.WECHAT_CUSTOM_EMOJI_ENABLED)
+                await WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                break
             case WxMessage.Type.Text:
                 // 因为是html模式 原始的文本中的<>需要转义
                 messageParam.content = messageParam.content.replaceAll(/</g, '&lt;')

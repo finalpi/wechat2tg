@@ -211,6 +211,10 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
                 const language = (await ConfigurationService.getInstance().getConfig()).language
                 const ownName = (client() as any)?.wxInfo?.nickName || (language === 'en-US' ? 'Me' : '我')
                 const message:BaseMessage = {id:row.remoteId,wxId:row.wxId,conversationWxId:row.wxId,chatId:binding.chatId,threadId:binding.threadId,senderId:row.senderId || (client() as any)?.wxInfo?.wxid || '',sender:`<b>👤${escape(row.direction === 'outgoing' ? ownName : row.senderName)}${row.requestId ? ' · WebUI' : ''}</b>`,content:escape(row.body),type:0,createTime:row.timestamp,toWxid:row.wxId,msgId:String(source?.ClientMsgId || source?.MsgId || row.remoteId)}
+                if (row.type === 'solitaire') {
+                    message.source_type = 'solitaire'
+                    message.source_text = source?.xml || source?.Content
+                }
                 const detail = row.details ? JSON.parse(row.details) : {}
                 if(detail.replyTo){
                     const original = await AppDataSource.getRepository(Message).findOneBy({wxMsgId:detail.replyTo.remoteId,chatId:binding.chatId})
@@ -222,7 +226,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
                     message.type = 1;message.file = {file:prepared.buffer,fileName:prepared.name,duration:prepared.duration,sendType:prepared.sendType};message.sender += row.body ? '\n' + escape(row.body) : ''
                 }else if(source && row.type === 'location'){message.type = 5;message.source_text = source.Content}
                 else if(source && row.type === 'contact'){message.type = 4;message.source_text = source.Content;message.businessCardId = (await detailsFor(row)).wxId}
-                else if(row.type !== 'text'){
+                else if(!['text','solitaire'].includes(row.type)){
                     const details = await detailsFor(row)
                     if(details.articles?.length){
                         message.content = details.articles.map(a=>[(a.url ? `<a href="${escape(a.url).replace(/"/g,'&quot;')}">${escape(a.title || a.url)}</a>` : escape(a.title)),a.description ? `<blockquote>${escape(a.description)}</blockquote>` : ''].filter(Boolean).join('\n')).join('\n\n')
@@ -239,6 +243,12 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
     }
     const detailsFor = async(row:any)=>{
         const saved = row.details ? JSON.parse(row.details) : null
+        if(row.type === 'solitaire'){
+            try {
+                const message = new WxMessage(JSON.parse(row.source || '{}'))
+                return {title: message.type() === WxMessage.Type.Solitaire ? message.text() : row.body || '[接龙]'}
+            } catch { return {title: row.body || '[接龙]'} }
+        }
         if(row.type === 'link'){
             const cached = Array.isArray(saved?.articles)
             const details = readLinkDetails(cached ? undefined : row.source,saved)
@@ -328,9 +338,9 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         for(const row of journal){try { const d = JSON.parse(row.details || '{}');if(d.origin === 'telegram' && d.telegram)covered.add(`${d.telegram.chatId}:${d.telegram.messageId}:${d.telegram.part}`) } catch { /* Malformed optional metadata leaves the existing fallback in place. */ }}
         return rows.filter(m=>m.type !== 6 && !(selfId && m.wxSenderId === selfId && covered.has(`${m.chatId}:${m.tgBotMsgId}:${m.type === 0 ? 'text' : 'media'}`))).map(m=>{
             const outgoing = Boolean(selfId && m.wxSenderId === selfId)
-            const kindMap = {image:'image',voice:'voice',video:'video',emoji:'emoji',file:'file',location:'location',contact:'contact',link:'link',quote:'quote',chat_histroy:'chat_histroy',function_msg:'function_msg',unknown:'unknown',file_start:'file_start',new_monment_timeline:'new_monment_timeline'}
+            const kindMap = {image:'image',voice:'voice',video:'video',emoji:'emoji',file:'file',location:'location',contact:'contact',link:'link',quote:'quote',solitaire:'solitaire',chat_histroy:'chat_histroy',function_msg:'function_msg',unknown:'unknown',file_start:'file_start',new_monment_timeline:'new_monment_timeline'}
             const type = kindMap[m.source_type] || ({3:'image',34:'voice',43:'video',47:'emoji',49:'file',48:'location',42:'contact'}[Number(m.source_type)]) || (m.type === 0 ? 'text' : 'file')
-            const typeCodes = {image:3,voice:34,video:43,emoji:47,file:49,link:49,quote:49,location:48,contact:42,text:1}
+            const typeCodes = {image:3,voice:34,video:43,emoji:47,file:49,link:49,quote:49,solitaire:49,location:48,contact:42,text:1}
             return {wxId,remoteId:m.wxMsgId && m.wxMsgId !== '0' ? m.wxMsgId : `legacy:${m.id}`,senderId:m.wxSenderId || '',senderName:m.sender || '',body:cleanMediaBody(type,String(m.content || (m.type === 0 && type === 'text' ? m.source_text : '') || '').slice(0,8000),m.source_text),direction:outgoing ? 'outgoing' : 'incoming',type,status:outgoing ? 'submitted' : 'received',timestamp:m.createTime || 0,telegramStatus:m.tgBotMsgId > 0 ? 'synced' : 'unverified',bodyFormat:'telegram_html',source:m.source_text ? JSON.stringify({MsgId:String(m.msgId || 0),FromUserName:wxId.endsWith('@chatroom') ? wxId : m.wxSenderId,ToUserName:m.toWxid,NewMsgId:m.wxMsgId,CreateTime:m.createTime,MsgType:Number(m.source_type) || typeCodes[type],Content:m.source_text,xml:m.source_text}) : null}
         })
     }

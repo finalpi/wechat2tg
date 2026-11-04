@@ -5,11 +5,12 @@ const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
 
-function fixture({binding, legacy, autoCreate = false, routeError} = {}) {
+function fixture({binding, legacy, autoCreate = false, routeError, rowPatch = {}} = {}) {
   const sent = [], created = []
   let finished
   const completion = new Promise(resolve => {finished = resolve})
   const row = {id: 1, wxId: 'gh_test', remoteId: '101', status: 'received', telegramStatus: 'pending', direction: 'incoming', senderId: 'gh_test', senderName: 'Publisher', type: 'text', body: 'synthetic', timestamp: 1}
+  Object.assign(row, rowPatch)
   const store = {
     byId: async () => row,
     all: async () => [],
@@ -49,6 +50,18 @@ test('WebUI/MCP mirroring uses the topic even for a previously bound official ac
   assert.equal(f.sent[0].chatId, -100123)
   assert.equal(f.sent[0].threadId, 20)
   assert.equal(f.sent[0].conversationWxId, 'gh_test')
+})
+
+test('solitaire mirroring keeps readable text and the raw source without degrading to a type label', {timeout: 2000}, async () => {
+  const xml = '<msg><appmsg><type>53</type><title>0007 &amp; Test</title></appmsg></msg>'
+  const f = fixture({binding: {chatId: -10, wxId: 'room@chatroom', isReceive: true},
+    rowPatch: {wxId: 'room@chatroom', type: 'solitaire', body: '0007 & Test', source: JSON.stringify({MsgType: 49, Content: xml, xml})}})
+  await f.center.sync(1)
+  assert.equal(await f.completion, 'synced')
+  assert.equal(f.sent[0].content, '0007 &amp; Test')
+  assert.equal(f.sent[0].source_type, 'solitaire')
+  assert.equal(f.sent[0].source_text, xml)
+  assert.equal(f.created.length, 0)
 })
 
 test('WebUI/MCP cannot bypass disabled automatic group creation', {timeout: 2000}, async () => {

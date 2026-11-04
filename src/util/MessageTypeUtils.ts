@@ -23,6 +23,7 @@ enum Type {
     link = '公众号链接',
     add_friend = '添加好友通知',
     quote = '引用',
+    solitaire = '群接龙',
     transfer = '转账',
     red_packet = '红包',
     video_account = '视频号',
