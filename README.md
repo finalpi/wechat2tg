@@ -327,7 +327,7 @@ Contact, official-account, and group searches also support bot mentions in group
 
 Replace `@your_bot` with your bot username. Queries preserve internal spaces and punctuation. List buttons show names or remarks without an added emoji prefix.
 
-These lists use rich-text pages with 30 entries, search-preserving navigation and Back buttons. Confirmed HTML/edit failures have bounded plain-text/new-message fallback; expired menus prompt a fresh command. Available in v6.0.14. See [directory pagination (Chinese)](docs/directory-pagination.md).
+The next release replaces the v6.0.14 HTML-plus-keyboard layout with native Telegram RichMessage: click names and navigation directly inside the message, without duplicate lists or start-link redirects. Pages retain 30 entries, search and Back state. An explicit compatibility mode uses a compact ordinary keyboard, with bounded safe fallback. See [directory pagination (Chinese)](docs/directory-pagination.md).
 
 ## Environment Variables
 

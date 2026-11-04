@@ -330,7 +330,7 @@ docker compose logs --tail=100 wechat2tg
 
 `@your_bot` 替换为自己的机器人用户名。关键词会保留内部空格、括号和标点；列表显示原始名称或备注，不额外添加 emoji 前缀。
 
-自 v6.0.14 起提供每页 30 条的富文本分页，翻页和返回保留搜索条件，明确的 HTML/编辑失败可安全回退，过期菜单提示重新查询。详见 [列表分页说明](docs/directory-pagination.md)。
+下一发行版将 v6.0.14 的 HTML 正文加键盘改为 Telegram 原生 RichMessage：直接点击正文中的名字、翻页和返回，不重复显示名单，也不跳转 Start 链接。仍每页 30 条并保留搜索与返回位置；不支持时使用简洁的兼容键盘和安全回退。详见 [列表分页说明](docs/directory-pagination.md)。
 
 ### 环境变量说明
 

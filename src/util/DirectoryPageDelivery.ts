@@ -1,14 +1,17 @@
-import type {DirectoryMarkup, DirectoryView} from './DirectoryPager'
+import type {Context} from 'telegraf'
+import type {DirectoryMarkup, DirectoryRichMessage, DirectoryRichText, DirectoryView} from './DirectoryPager'
 
 export type DirectoryReplyOptions = {
     parse_mode?: 'HTML';
     reply_markup?: DirectoryMarkup;
     message_thread_id?: number;
 };
-type TopicMessage = {message_id?: number; message_thread_id?: number};
+type TopicMessage = {message_id?: number; message_thread_id?: number; chat?: {id: number}; rich_message?: unknown};
 export type DirectoryDeliveryContext = {
     reply(text: string, extra?: DirectoryReplyOptions): Promise<unknown>;
     editMessageText?(text: string, extra?: Omit<DirectoryReplyOptions, 'message_thread_id'>): Promise<unknown>;
+    telegram?: Pick<Context['telegram'], 'callApi'>;
+    chat?: {id: number};
     message?: TopicMessage;
     callbackQuery?: {message?: TopicMessage};
 };
@@ -16,6 +19,38 @@ export type DirectoryCallbackContext = {
     answerCbQuery(text?: string): Promise<unknown>;
 };
 export type DirectoryDeliveryResult = 'sent' | 'edited' | 'unchanged' | 'failed';
+
+type RichPayload = {chat_id: number; rich_message: DirectoryRichMessage; reply_markup?: DirectoryMarkup};
+type DirectoryApiPayloads = {
+    sendRichMessage: RichPayload & {message_thread_id?: number};
+    sendMessage: {chat_id: number; text: string} & DirectoryReplyOptions;
+    editMessageText: (RichPayload | ({chat_id: number; text: string} & Omit<DirectoryReplyOptions, 'message_thread_id'>)) & {message_id: number};
+};
+
+/**
+ * Telegraf 4's types predate sendRichMessage / editMessageText.rich_message.
+ * Keep the assertion at this raw API boundary; all callers use our typed subset
+ * of the official Bot API schema, not an untyped Context or an SDK upgrade.
+ */
+function callDirectoryApi<M extends keyof DirectoryApiPayloads>(
+    ctx: DirectoryDeliveryContext, method: M, payload: DirectoryApiPayloads[M],
+): Promise<unknown> {
+    if (!ctx.telegram) throw new Error('Telegram API unavailable')
+    // SAFETY: callApi forwards named Bot API methods unchanged. The payload map
+    // above follows the official rich schema missing from Telegraf 4's typings.
+    const callApi = ctx.telegram.callApi as unknown as
+        <K extends keyof DirectoryApiPayloads>(method: K, payload: DirectoryApiPayloads[K]) => Promise<unknown>
+    return callApi.call(ctx.telegram, method, payload)
+}
+
+function sourceMessage(ctx: DirectoryDeliveryContext): TopicMessage | undefined {
+    return ctx.callbackQuery ? ctx.callbackQuery.message : ctx.message
+}
+
+/** Message.rich_message is not yet declared by the installed Telegraf types. */
+export function isRichDirectoryMessage(ctx: DirectoryDeliveryContext): boolean {
+    return sourceMessage(ctx)?.rich_message != null
+}
 
 /** Callback acknowledgement is best-effort, including already-expired queries. */
 export async function answerDirectoryCallback(ctx: DirectoryCallbackContext, text?: string): Promise<void> {
@@ -30,51 +65,105 @@ function topicOptions(threadId?: number): {message_thread_id?: number} {
     return typeof threadId === 'number' && Number.isSafeInteger(threadId) && threadId > 1 ? {message_thread_id: threadId} : {}
 }
 
-/** Only a structured, explicit Bot API 400 is safe to classify for a retry. */
-function badRequestDescription(error: unknown): string | undefined {
+/** Transport errors and nonnumeric status codes are deliberately not classified. */
+function apiRejection(error: unknown): {code: number; description: string} | undefined {
     if (!error || typeof error !== 'object') return undefined
     const candidate = error as {response?: unknown; error_code?: unknown; description?: unknown}
     const response = candidate.response ?? candidate
     if (!response || typeof response !== 'object') return undefined
     const apiError = response as {error_code?: unknown; description?: unknown}
-    return apiError.error_code === 400 && typeof apiError.description === 'string'
-        ? apiError.description : undefined
+    return (apiError.error_code === 400 || apiError.error_code === 404) && typeof apiError.description === 'string'
+        ? {code: apiError.error_code, description: apiError.description} : undefined
+}
+
+function formattingRejected(description: string): boolean {
+    return /can't parse (?:entities|message text)|can't find end of (?:an? )?entity|unsupported (?:start|end) tag/i.test(description)
+}
+
+function richRejected(error: unknown): boolean {
+    const rejection = apiRejection(error)
+    if (!rejection) return false
+    const {code, description} = rejection
+    if (code === 404) {
+        return /^(?:Not Found|(?:Error|Bad Request): Not Found)$/i.test(description)
+            || /(?:method|sendRichMessage).*(?:not found|not available|unavailable|unsupported|unknown)|(?:unknown|unsupported) method/i.test(description)
+    }
+    return formattingRejected(description)
+        // Older Bot API servers can ignore rich_message and demand legacy text.
+        || /(?:message )?text is empty|text (?:is required|must be non-empty)/i.test(description)
+        || (/(?:rich[ _-]?(?:message|text|block)|InputRichMessage)/i.test(description)
+            && /invalid|unsupported|not supported|can't parse|cannot parse|failed to parse|expected|required|not allowed|must be|too (?:long|large)/i.test(description))
 }
 
 /**
- * At most three attempts: HTML edit -> HTML send -> plain send, or HTML -> plain.
- * Never send a new message after an ambiguous transport failure or rate limit.
+ * At most four attempts: native -> HTML -> plain, with at most one transition
+ * from edit to send after an explicit missing/uneditable message rejection.
+ * Never retry an ambiguous transport error, 5xx, 429, or generic 403.
  */
 export async function deliverDirectoryPage(
-    ctx: DirectoryDeliveryContext, view: DirectoryView, edit = false,
+    ctx: DirectoryDeliveryContext, view: DirectoryView, edit = false, compatibility = false,
 ): Promise<DirectoryDeliveryResult> {
+    const message = sourceMessage(ctx)
+    const {chatId, threadId} = view.state.scope
+    // A legacy ctx.reply cannot choose a chat. Fail closed rather than route a
+    // saved view elsewhere; raw calls always address the saved scope explicitly.
+    if ((ctx.chat && ctx.chat.id !== chatId) || (message?.chat && message.chat.id !== chatId)) return 'failed'
+    const raw = typeof ctx.telegram?.callApi === 'function'
     let editing = edit
-    let html = true
-    for (let attempt = 0; attempt < 3; attempt++) {
-        const options: DirectoryReplyOptions = {
-            reply_markup: view.reply_markup,
-            ...(html ? {parse_mode: 'HTML' as const} : {}),
-        }
+    let format: 'rich' | 'html' | 'plain' = !compatibility && raw ? 'rich' : 'html'
+    for (let attempt = 0; attempt < 4; attempt++) {
         try {
-            const text = html ? view.html : view.plain
-            if (editing) {
-                if (!ctx.editMessageText) return 'failed'
-                await ctx.editMessageText(text, options)
+            if (raw) {
+                const payload: RichPayload | DirectoryApiPayloads['sendMessage'] = format === 'rich'
+                    ? {chat_id: chatId, rich_message: view.rich_message, reply_markup: view.rich_reply_markup}
+                    : {
+                        chat_id: chatId, text: format === 'html' ? view.html : view.plain,
+                        reply_markup: view.reply_markup,
+                        ...(format === 'html' ? {parse_mode: 'HTML' as const} : {}),
+                    }
+                if (editing) {
+                    const messageId = message?.message_id
+                    if (messageId === undefined || !Number.isSafeInteger(messageId) || messageId <= 0) return 'failed'
+                    await callDirectoryApi(ctx, 'editMessageText', {...payload, message_id: messageId})
+                } else if ('rich_message' in payload) {
+                    await callDirectoryApi(ctx, 'sendRichMessage', {...payload, ...topicOptions(threadId)})
+                } else {
+                    await callDirectoryApi(ctx, 'sendMessage', {...payload, ...topicOptions(threadId)})
+                }
             } else {
-                await ctx.reply(text, {...options, ...topicOptions(view.state.scope.threadId)})
+                const text = format === 'html' ? view.html : view.plain
+                const options: DirectoryReplyOptions = {
+                    reply_markup: view.reply_markup,
+                    ...(format === 'html' ? {parse_mode: 'HTML' as const} : {}),
+                }
+                if (editing) {
+                    if (!ctx.editMessageText) return 'failed'
+                    await ctx.editMessageText(text, options)
+                } else {
+                    const topic = topicOptions(threadId)
+                    // A legacy reply helper may inherit its source topic. Without
+                    // an explicit saved topic to override it, do not drift there.
+                    if (!topic.message_thread_id && topicOptions(message?.message_thread_id).message_thread_id) return 'failed'
+                    await ctx.reply(text, {...options, ...topic})
+                }
             }
             return editing ? 'edited' : 'sent'
         } catch (error) {
-            const description = badRequestDescription(error)
-            if (!description) return 'failed'
-            if (editing && /message is not modified/i.test(description)) return 'unchanged'
-            if (html && /can't parse (?:entities|message text)|can't find end of (?:an? )?entity|unsupported (?:start|end) tag/i.test(description)) {
-                html = false
+            const rejection = apiRejection(error)
+            if (!rejection) return 'failed'
+            if (rejection.code === 400 && editing) {
+                if (/message is not modified/i.test(rejection.description)) return 'unchanged'
+                if (/message to edit not found|message (?:can't|cannot|can not) be edited|message was deleted|there is no text in the message to edit/i.test(rejection.description)) {
+                    editing = false
+                    continue
+                }
+            }
+            if (format === 'rich' && richRejected(error)) {
+                format = 'html'
                 continue
             }
-            if (editing && /message to edit not found|message (?:can't|cannot|can not) be edited|message was deleted/i.test(description)) {
-                editing = false
-                // If HTML was already rejected, keep using the proven plain fallback.
+            if (format === 'html' && rejection.code === 400 && formattingRejected(rejection.description)) {
+                format = 'plain'
                 continue
             }
             return 'failed'
@@ -83,16 +172,49 @@ export async function deliverDirectoryPage(
     return 'failed'
 }
 
-/** Plain result/error reply; no retries and no rejection leaks. */
+/**
+ * Native result/back links stay inside the rich body. Only an explicit native
+ * rejection permits one plain reply with the original keyboard; no network retry.
+ * Callers without rich source messages or markup retain the plain reply behavior.
+ */
 export async function replyDirectoryText(
     ctx: DirectoryDeliveryContext, text: string, reply_markup?: DirectoryMarkup,
 ): Promise<boolean> {
+    const message = sourceMessage(ctx)
+    const topic = topicOptions(message?.message_thread_id)
+    if (reply_markup && ctx.callbackQuery && isRichDirectoryMessage(ctx) && typeof ctx.telegram?.callApi === 'function') {
+        const chatId = message?.chat?.id ?? ctx.chat?.id
+        if (chatId === undefined || (ctx.chat && ctx.chat.id !== chatId)) return false
+        const content: DirectoryRichText = /^https?:\/\/[^\s<>]+$/i.test(text)
+            ? {type: 'url', text, url: text} : text
+        const rich_message: DirectoryRichMessage = {blocks: [{type: 'paragraph', text: content}], skip_entity_detection: true}
+        for (const row of reply_markup.inline_keyboard) {
+            if (!row.length) continue
+            const links: DirectoryRichText[] = []
+            for (const button of row) {
+                if (links.length) links.push('    ')
+                links.push('url' in button
+                    ? {type: 'url', text: button.text, url: button.url}
+                    : {type: 'button', button: {...button, style: 'link'}})
+            }
+            rich_message.blocks.push({type: 'paragraph', text: links})
+        }
+        try {
+            await callDirectoryApi(ctx, 'sendRichMessage', {chat_id: chatId, rich_message, ...topic})
+            return true
+        } catch (error) {
+            if (!richRejected(error)) return false
+        }
+        try {
+            await callDirectoryApi(ctx, 'sendMessage', {chat_id: chatId, text, reply_markup, ...topic})
+            return true
+        } catch {
+            return false
+        }
+    }
     try {
-        const threadId = ctx.callbackQuery?.message?.message_thread_id ?? ctx.message?.message_thread_id
-        await ctx.reply(text, {
-            ...topicOptions(threadId),
-            ...(reply_markup ? {reply_markup} : {}),
-        })
+        const legacyTopic = topicOptions(ctx.callbackQuery?.message?.message_thread_id ?? ctx.message?.message_thread_id)
+        await ctx.reply(text, {...legacyTopic, ...(reply_markup ? {reply_markup} : {})})
         return true
     } catch {
         return false

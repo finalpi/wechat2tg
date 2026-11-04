@@ -19,8 +19,29 @@ function load(file, dependencies) {
   return exports
 }
 
+// Inspect the real payload produced by DirectoryPager/DirectoryPageDelivery; do not
+// synthesize a second renderer or translate rich callbacks into an external keyboard.
+function richNodes(value, type) {
+  if (!value || typeof value !== 'object') return []
+  return [
+    ...(value.type === type ? [value] : []),
+    ...Object.values(value).flatMap(child => richNodes(child, type)),
+  ]
+}
+function richText(value) {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) return value.map(richText).join('')
+  if (!value || typeof value !== 'object') return ''
+  return value.type === 'button' ? value.button.text : richText(value.text)
+}
+const externalButtons = message => message.options?.reply_markup?.inline_keyboard.flat() || []
+const richButtons = message => richNodes(message.rich_message?.blocks, 'button').map(node => node.button)
+const messageButtons = message => [...richButtons(message), ...externalButtons(message)]
+const resultText = message => message.rich_message ? richText(message.rich_message.blocks[0]) : message.text
+
 function fixture({contacts = [], rooms = [], loggedIn = true, topic, managedForum = false, pagerOptions} = {}) {
-  const replies = [], edits = [], queries = [], menus = [], selected = [], bindings = [], creations = [], events = []
+  const replies = [], edits = [], queries = [], menus = [], selected = [], bindings = [], creations = [], events = [], apiCalls = []
+  const sources = new Map()
   const failures = {reply: [], edit: [], ack: []}
   const hooks = {}
   const i18n = {t: (key, params = {}) => Object.entries(params).reduce((value, [name, replacement]) => value.replaceAll(`{{${name}}}`, replacement), zh[key] || key)}
@@ -89,23 +110,53 @@ function fixture({contacts = [], rooms = [], loggedIn = true, topic, managedForu
   bot.botInfo = {id: 123, is_bot: true, first_name: 'Test', username: 'test_bot'}
   bot.telegram.setMyCommands = async commands => {menus.push(...commands)}
   let messageId = 100
-  const result = async (kind, target, text, options) => {
-    target.push({text, options})
+  const result = async (kind, target, text, options = {}, payload, sourceId) => {
+    const rich_message = payload?.rich_message
+    const record = {
+      text: rich_message ? rich_message.blocks.map(richText).join('\n') : text,
+      options, rich_message, payload,
+      message_id: kind === 'edit' ? sourceId : ++messageId,
+    }
+    target.push(record)
     events.push(kind)
     const failure = failures[kind].shift()
     if (failure) throw failure
-    if (hooks[kind]) await hooks[kind](text)
-    return {message_id: ++messageId}
+    if (hooks[kind]) await hooks[kind](record.text)
+    for (const button of messageButtons(record)) {
+      if (button.callback_data) sources.set(button.callback_data, record)
+    }
+    return {message_id: record.message_id, ...(rich_message ? {rich_message} : {text})}
   }
-  bot.context.reply = (text, options) => result('reply', replies, text, options)
-  bot.context.editMessageText = (text, options) => result('edit', edits, text, options)
+  bot.context.reply = function (text, options) {return result('reply', replies, text, options)}
+  bot.context.editMessageText = function (text, options) {
+    return result('edit', edits, text, options, undefined, this.callbackQuery?.message?.message_id)
+  }
   bot.context.answerCbQuery = async () => {
     events.push('ack')
     if (failures.ack.length) throw failures.ack.shift()
     return true
   }
-  // Each context has its own Telegram instance: stub at the context boundary, never the network.
+  // Telegraf constructs a fresh Telegram instance per Context. Guard both the bot
+  // and each context: an unrecognized method must fail locally, never hit Telegram.
+  bot.telegram.callApi = async method => {throw new Error(`Unexpected bot API call: ${method}`)}
   bot.use(async (ctx, next) => {
+    ctx.telegram.callApi = async (method, payload) => {
+      apiCalls.push({method, payload})
+      assert(['sendRichMessage', 'sendMessage', 'editMessageText'].includes(method), `Unexpected context API call: ${method}`)
+      if (method === 'sendRichMessage' || payload.rich_message) {
+        assert(payload.rich_message?.blocks?.length)
+        assert(!('text' in payload), 'Native payload must omit text')
+        assert(!('parse_mode' in payload), 'Native payload must omit parse_mode')
+      } else {
+        assert.equal(typeof payload.text, 'string')
+      }
+      const options = {...payload}
+      delete options.rich_message
+      delete options.text
+      return method === 'editMessageText'
+        ? result('edit', edits, payload.text, options, payload, payload.message_id)
+        : result('reply', replies, payload.text, options, payload)
+    }
     ctx.telegram.exportChatInviteLink = async () => {
       if (hooks.invite) return hooks.invite()
       return 'https://t.me/+synthetic'
@@ -130,7 +181,7 @@ function fixture({contacts = [], rooms = [], loggedIn = true, topic, managedForu
     return {chatId: chat(value).id, userId: from(value).id, threadId: value.threadId > 1 ? value.threadId : undefined, accountId: wxClient.wxInfo?.wxid || wxClient.wxInfo?.id}
   }
   return {
-    replies, edits, queries, menus, selected, bindings, creations, events, failures, hooks, wxClient, client, scope,
+    replies, edits, queries, menus, selected, bindings, creations, events, apiCalls, failures, hooks, wxClient, client, scope,
     resolve: (callback, context) => client.getDirectoryPager().resolve(scope(context), callback),
     command: (text, context) => {
       const value = options(context)
@@ -141,9 +192,21 @@ function fixture({contacts = [], rooms = [], loggedIn = true, topic, managedForu
     },
     action: (data, context) => {
       const value = options(context)
+      const token = /^dl:[^:]+:/.exec(data)?.[0]
+      const source = value.source || sources.get(data)
+        || (token && [...sources].find(([callback]) => callback.startsWith(token))?.[1])
+      // Explicit native:false models old clients/mock text contexts. Otherwise use
+      // the actual delivered view/result, including a text fallback after rejection.
+      const native = value.native ?? !!source?.rich_message
+      if (native) assert(source?.rich_message, 'Native callback needs a delivered rich source')
       return bot.handleUpdate({update_id: ++updateId, callback_query: {
         id: String(updateId), from: from(value), chat_instance: 'synthetic', data,
-        message: {message_id: value.messageId ?? 100, date: 1, from: bot.botInfo, chat: chat(value), text: 'list', ...thread(value)},
+        message: {
+          message_id: value.messageId ?? source?.message_id ?? 100,
+          date: 1, from: bot.botInfo, chat: chat(value),
+          ...(native ? {rich_message: source.rich_message} : {text: source?.text || 'list'}),
+          ...thread(value),
+        },
       }})
     },
   }
@@ -152,19 +215,29 @@ function fixture({contacts = [], rooms = [], loggedIn = true, topic, managedForu
 const people = Array.from({length: 32}, (_, i) => ({userName: `wxid_${i}`, nickName: `用户${i}`, remark: '', verifyFlag: 0}))
 const official = Array.from({length: 32}, (_, i) => ({userName: `gh_${i}`, nickName: `公众号${i}`, remark: '', verifyFlag: 24}))
 const mixed = people.flatMap((person, i) => [person, official[i]])
-const dataButtons = message => message.options.reply_markup.inline_keyboard.flat().filter(b => /:s:\d+$/.test(b.callback_data))
-const button = (message, suffix) => message.options.reply_markup.inline_keyboard.flat().find(b => b.callback_data?.endsWith(suffix)).callback_data
+const dataButtons = message => messageButtons(message).filter(b => /:s:\d+$/.test(b.callback_data))
+const button = (message, suffix) => {
+  const found = messageButtons(message).find(b => b.callback_data?.endsWith(suffix))
+  assert(found, `Missing clickable ${suffix} in delivered message`)
+  return found.callback_data
+}
 const actions = (f, message, context) => dataButtons(message).map(b => f.resolve(b.callback_data, context).item.action)
 const badRequest = description => ({response: {error_code: 400, description: `Bad Request: ${description}`}})
 const deferred = () => {let resolve; const promise = new Promise(r => {resolve = r}); return {promise, resolve}}
 
 for (const [command, prefix, rows] of [['user', 'us', people], ['official', 'of', official]]) {
-  test(`/${command} has rich metadata, category-only snapshots and normal selection buttons`, async () => {
+  test(`/${command} has native rich metadata, category-only snapshots and directly clickable names`, async () => {
     const f = fixture({contacts: mixed})
     await f.command(`/${command}`)
     const page = f.replies[0]
-    assert.equal(page.options.parse_mode, 'HTML')
-    assert.match(page.text, /<b>/)
+    assert.equal(f.apiCalls[0].method, 'sendRichMessage')
+    assert.equal(page.payload.chat_id, 456)
+    assert.equal(page.options.parse_mode, undefined)
+    assert(richNodes(page.rich_message.blocks, 'bold').length)
+    assert.equal(externalButtons(page).length, 1)
+    assert(externalButtons(page)[0].callback_data.endsWith(':c'))
+    assert(richButtons(page).every(b => b.style === 'link' && typeof b.text === 'string'))
+    assert(!externalButtons(page).some(b => /:s:|:p:|:h$|:a$/.test(b.callback_data)))
     assert(page.text.includes(zh[`pagination.title_${prefix}`]))
     assert(page.text.includes('32'))
     assert.deepEqual(actions(f, page), rows.slice(0, 30).map(c => c.userName))
@@ -172,8 +245,15 @@ for (const [command, prefix, rows] of [['user', 'us', people], ['official', 'of'
     assert(dataButtons(page).every(b => !('icon_custom_emoji_id' in b)))
     await f.action(button(page, ':p:2'))
     assert.deepEqual(actions(f, f.edits[0]), rows.slice(30).map(c => c.userName))
+    assert(f.edits[0].rich_message)
+    assert.equal(f.apiCalls.at(-1).method, 'editMessageText')
+    assert.equal(f.edits[0].payload.message_id, page.message_id)
+    assert(!('text' in f.edits[0].payload))
+    assert(!('parse_mode' in f.edits[0].payload))
     await f.action(`${prefix}:page-2`)
     assert.deepEqual(actions(f, f.edits[1]), rows.slice(30).map(c => c.userName))
+    assert.equal(f.edits[1].rich_message, undefined)
+    assert.equal(f.edits[1].options.parse_mode, 'HTML')
     if (command === 'official') assert(f.menus.some(c => c.command === command && c.description === '查看公众号'))
   })
 }
@@ -203,8 +283,11 @@ for (const [command, kind] of [['user', 'us'], ['official', 'of'], ['room', 'ro'
     const context = {type: 'supergroup', threadId: 77}
     await f.command(`/${command} ${query}`, context)
     assert.equal(dataButtons(f.replies[0]).length, 30)
-    assert.match(f.replies[0].text, /&amp; &lt;QA&gt;/)
-    assert(!f.replies[0].text.includes('<QA>'))
+    assert(f.replies[0].rich_message)
+    assert(f.replies[0].text.includes(query))
+    assert.equal(f.replies[0].payload.message_thread_id, 77)
+    assert.equal(f.replies[0].payload.chat_id, -10012345)
+    assert(richNodes(f.replies[0].rich_message.blocks, 'code').some(node => node.text === query))
     await f.action(button(f.replies[0], ':p:2'), context)
     const second = f.edits.at(-1)
     assert.equal(dataButtons(second).length, 30)
@@ -214,11 +297,15 @@ for (const [command, kind] of [['user', 'us'], ['official', 'of'], ['room', 'ro'
     await f.action(button(second, ':h'), context)
     await f.action(dataButtons(second)[0].callback_data, context)
     const success = f.replies.at(-1)
-    assert.equal(success.text, zh['binding.success'])
+    assert.equal(resultText(success), zh['binding.success'])
+    assert(success.rich_message)
+    assert.equal(success.options.reply_markup, undefined)
+    assert(richButtons(success).some(b => b.callback_data.endsWith(':b') && b.style === 'link'))
     assert.equal(success.options.message_thread_id, 77)
     assert.equal(f.bindings[0].wxId, 'id_30')
     await f.action(button(success, ':b'), context)
     const restored = f.edits.at(-1)
+    assert(restored.rich_message)
     assert.equal(f.resolve(dataButtons(restored)[0].callback_data, context).state.page, 2)
     assert(f.queries.every(call => call.query === query))
     await f.action(button(restored, ':a'), context)
@@ -226,11 +313,139 @@ for (const [command, kind] of [['user', 'us'], ['official', 'of'], ['room', 'ro'
   })
 }
 
-test('HTML metacharacters in names are escaped in body, not normal buttons', async () => {
+test('native names are plain rich-button text, never HTML or duplicated external names', async () => {
   const f = fixture({contacts: [{userName: 'wx_1', nickName: '<A> & "B"', verifyFlag: 0}]})
   await f.command('/user')
-  assert.match(f.replies[0].text, /&lt;A&gt; &amp; &quot;B&quot;/)
-  assert.equal(dataButtons(f.replies[0])[0].text, '<A> & "B"')
+  const page = f.replies[0]
+  assert(page.rich_message)
+  assert.equal(dataButtons(page)[0].text, '<A> & "B"')
+  assert.equal(dataButtons(page)[0].style, 'link')
+  assert.equal(page.text.split('<A> & "B"').length - 1, 1)
+  assert.equal(externalButtons(page).length, 1)
+  assert(!page.text.includes('&lt;A&gt;'))
+})
+
+for (const [command, kind] of [['user', 'us'], ['official', 'of'], ['room', 'ro']]) {
+  test(`${command} compatibility action preserves page/query, selection Back and later navigation mode`, async () => {
+    const query = '项目 & <QA>'
+    const contacts = Array.from({length: 63}, (_, i) => ({userName: `id_${i}`, nickName: `${query} ${i}`, verifyFlag: kind === 'of' ? 8 : 0}))
+    const f = fixture({contacts, rooms: contacts.map(c => ({chatroomId: c.userName, nickName: c.nickName}))})
+    const context = {type: 'supergroup', threadId: 77}
+    await f.command(`/${command} ${query}`, context)
+    await f.action(button(f.replies[0], ':p:2'), context)
+    const nativeSecond = f.edits.at(-1)
+    assert(nativeSecond.rich_message)
+    const compat = button(nativeSecond, ':c')
+    assert.equal(f.resolve(compat, context).type, 'compat')
+    await f.action(compat, context)
+    const compatible = f.edits.at(-1)
+    assert.equal(compatible.rich_message, undefined)
+    assert.equal(compatible.options.parse_mode, 'HTML')
+    assert.match(compatible.text, /项目 &amp; &lt;QA&gt;/)
+    assert(!compatible.text.includes('项目 &amp; &lt;QA&gt; 30'), 'Compatibility body must not duplicate keyboard names')
+    assert.equal(dataButtons(compatible).length, 30)
+    assert.equal(richButtons(compatible).length, 0)
+    const select = dataButtons(compatible)[0].callback_data
+    assert.equal(f.resolve(select, context).state.page, 2)
+    assert.equal(f.resolve(select, context).state.query, query)
+    const nativeCalls = f.apiCalls.filter(call => call.payload.rich_message).length
+    await f.action(select, context)
+    const success = f.replies.at(-1)
+    assert.equal(success.text, zh['binding.success'])
+    assert.equal(success.rich_message, undefined)
+    assert.equal(f.bindings[0].wxId, 'id_30')
+    await f.action(button(success, ':b'), context)
+    const restored = f.edits.at(-1)
+    assert.equal(restored.rich_message, undefined)
+    assert.equal(f.resolve(dataButtons(restored)[0].callback_data, context).state.page, 2)
+    assert.equal(f.resolve(dataButtons(restored)[0].callback_data, context).state.query, query)
+    await f.action(button(restored, ':p:1'), context)
+    await f.action(button(f.edits.at(-1), ':p:2'), context)
+    await f.action(button(f.edits.at(-1), ':h'), context)
+    assert.equal(f.resolve(dataButtons(f.edits.at(-1))[0].callback_data, context).state.page, 1)
+    await f.action(button(f.edits.at(-1), ':a'), context)
+    assert.equal(f.resolve(dataButtons(f.edits.at(-1))[0].callback_data, context).state.query, '')
+    assert.equal(f.apiCalls.filter(call => call.payload.rich_message).length, nativeCalls)
+    await f.command(`/${command} ${query}`, context)
+    assert(f.replies.at(-1).rich_message, 'Fresh commands retry native, not a global compatibility flag')
+  })
+}
+
+for (const failure of [
+  {response: {error_code: 404, description: 'Not Found'}},
+  badRequest('rich_message is not supported'),
+]) {
+  test(`explicit native rejection ${failure.response.description} falls back once and stays compatible`, async () => {
+    const f = fixture({contacts: mixed})
+    const context = {type: 'supergroup', threadId: 77}
+    f.failures.reply.push(failure)
+    await f.command('/user 用户', context)
+    assert.equal(f.replies.length, 2)
+    assert.deepEqual(f.apiCalls.map(call => call.method), ['sendRichMessage', 'sendMessage'])
+    const compatible = f.replies[1]
+    assert.equal(compatible.rich_message, undefined)
+    assert.equal(compatible.options.message_thread_id, 77)
+    assert(!compatible.text.includes('用户0'))
+    assert.deepEqual(actions(f, compatible, context), people.slice(0, 30).map(c => c.userName))
+    await f.action(button(compatible, ':p:2'), context)
+    const second = f.edits.at(-1)
+    assert.equal(second.rich_message, undefined)
+    assert.equal(second.payload.chat_id, -10012345)
+    assert.equal(second.payload.message_id, compatible.message_id)
+    assert.equal(f.resolve(dataButtons(second)[0].callback_data, context).state.query, '用户')
+    await f.action(dataButtons(second)[0].callback_data, context)
+    assert.equal(f.replies.at(-1).rich_message, undefined)
+    await f.action(button(f.replies.at(-1), ':b'), context)
+    assert.equal(f.edits.at(-1).rich_message, undefined)
+    assert.equal(f.resolve(dataButtons(f.edits.at(-1))[0].callback_data, context).state.page, 2)
+    assert.equal(f.apiCalls.filter(call => call.payload.rich_message).length, 1)
+    await f.command('/user 用户', context)
+    assert(f.replies.at(-1).rich_message)
+  })
+}
+
+test('unsupported native edit switches that message to compatibility without an extra send', async () => {
+  const f = fixture({contacts: mixed})
+  await f.command('/user 用户')
+  f.failures.edit.push(badRequest('rich_message is not supported'))
+  await f.action(button(f.replies[0], ':p:2'))
+  assert.equal(f.replies.length, 1)
+  assert.equal(f.edits.length, 2)
+  assert(f.edits[0].rich_message)
+  assert.equal(f.edits[1].rich_message, undefined)
+  assert.equal(f.edits[1].payload.message_id, f.replies[0].message_id)
+  await f.action(button(f.edits[1], ':p:1'))
+  assert.equal(f.edits[2].rich_message, undefined)
+  assert.equal(f.resolve(dataButtons(f.edits[2])[0].callback_data).state.query, '用户')
+})
+
+test('unsupported native selection result falls back with Back without repeating binding', async () => {
+  const f = fixture({contacts: mixed})
+  await f.command('/user 用户', 'supergroup')
+  await f.action(button(f.replies[0], ':p:2'), 'supergroup')
+  f.failures.reply.push(badRequest('rich_message is not supported'))
+  await f.action(dataButtons(f.edits[0])[0].callback_data, 'supergroup')
+  assert.equal(f.bindings.length, 1)
+  assert.equal(f.replies.length, 3)
+  assert(f.replies[1].rich_message)
+  assert.equal(f.replies[2].rich_message, undefined)
+  assert.equal(f.replies[2].text, zh['binding.success'])
+  await f.action(button(f.replies[2], ':b'), 'supergroup')
+  assert.equal(f.edits.at(-1).rich_message, undefined)
+  const restored = f.resolve(dataButtons(f.edits.at(-1))[0].callback_data, 'supergroup').state
+  assert.equal(restored.query, '用户')
+  assert.equal(restored.page, 2)
+})
+
+test('explicit text-source override models old/mock callbacks without disabling native commands', async () => {
+  const f = fixture({contacts: mixed})
+  await f.command('/user')
+  assert(f.replies[0].rich_message)
+  await f.action(button(f.replies[0], ':p:2'), {native: false})
+  assert.equal(f.edits[0].rich_message, undefined)
+  assert.equal(f.edits[0].options.parse_mode, 'HTML')
+  await f.command('/user')
+  assert(f.replies.at(-1).rich_message)
 })
 
 test('empty search pages are safe, filtered and can clear their original query', async () => {
@@ -315,6 +530,9 @@ for (const prefix of ['of', 'us']) {
     assert.equal(button(f.replies[0], ':page-1'), `${prefix}:page-1`)
     await f.command('/official')
     await f.action(dataButtons(f.replies[1])[0].callback_data)
+    assert(f.replies[2].rich_message)
+    assert(richNodes(f.replies[2].rich_message.blocks, 'url').some(node => node.url === 'https://t.me/c/12345/77'))
+    assert.equal(f.replies[2].options.reply_markup, undefined)
     await f.action(button(f.replies[2], ':b'))
     assert.deepEqual(actions(f, f.edits[0]), official.slice(0, 30).map(c => c.userName))
   })
@@ -385,7 +603,8 @@ test('new selection failures return to the original search page and cannot mutat
   await f.action(button(f.replies[0], ':p:2'), 'supergroup')
   f.hooks.find = async () => null
   await f.action(dataButtons(f.edits[0])[0].callback_data, 'supergroup')
-  assert.equal(f.replies[1].text, zh['pagination.selection_unavailable'])
+  assert.equal(resultText(f.replies[1]), zh['pagination.selection_unavailable'])
+  assert(f.replies[1].rich_message)
   await f.action(button(f.replies[1], ':b'), 'supergroup')
   const restored = f.resolve(dataButtons(f.edits[1])[0].callback_data, 'supergroup').state
   assert.equal(restored.query, '用户')
@@ -396,7 +615,7 @@ test('new selection failures return to the original search page and cannot mutat
   }
   await f.action(dataButtons(f.edits[1])[0].callback_data, 'supergroup')
   assert.equal(f.bindings.length, 0)
-  assert.equal(f.replies.at(-1).text, zh['pagination.expired'])
+  assert.equal(resultText(f.replies.at(-1)), zh['pagination.expired'])
 })
 
 test('page numbers clamp after list shrink and legacy finite out-of-range requests', async () => {
@@ -507,7 +726,7 @@ for (const error of [badRequest('message to edit not found'), badRequest('messag
     await f.command('/user')
     f.failures.edit.push(error)
     f.failures.ack.push(new Error('query expired'))
-    await f.action(button(f.replies[0], ':p:2'))
+    await f.action(button(f.replies[0], ':p:2'), error.response.description.includes('parse') ? {native: false} : undefined)
     if (error.response.description.includes('not found')) {
       assert.equal(f.replies.length, 2)
       assert.deepEqual(actions(f, f.replies[1]), ['wxid_30', 'wxid_31'])
@@ -523,18 +742,24 @@ for (const error of [badRequest('message to edit not found'), badRequest('messag
   })
 }
 
-test('deleted-message fallback failure and initial HTML/plain failures never escape', async () => {
+test('deleted-message and native/HTML/plain fallback failures are bounded and never escape', async () => {
   const f = fixture({contacts: mixed})
   await f.command('/user')
   f.failures.edit.push(badRequest('message to edit not found'))
-  f.failures.reply.push(badRequest('can\'t parse entities'), new Error('plain failed'))
+  const unsupported = badRequest('rich_message is not supported')
+  f.failures.reply.push(unsupported, badRequest('can\'t parse entities'), new Error('plain failed'))
   await f.action(button(f.replies[0], ':p:2'))
   assert.equal(f.edits.length, 1)
-  assert.equal(f.replies.length, 3)
-  assert.equal(f.replies[2].options.parse_mode, undefined)
-  f.failures.reply.push(badRequest('can\'t parse entities'), new Error('plain failed'))
+  assert.equal(f.replies.length, 4)
+  assert(f.replies[1].rich_message)
+  assert.equal(f.replies[2].options.parse_mode, 'HTML')
+  assert.equal(f.replies[3].options.parse_mode, undefined)
+  assert.equal(f.replies[3].rich_message, undefined)
+  f.failures.reply.push(unsupported, badRequest('can\'t parse entities'), new Error('plain failed'))
   await f.command('/official')
-  assert.equal(f.replies.length, 5)
+  assert.equal(f.replies.length, 7)
+  assert(f.replies[4].rich_message)
+  assert.equal(f.replies[6].options.parse_mode, undefined)
 })
 
 for (const failure of [new Error('ETIMEDOUT'), {response: {error_code: 500}}, {response: {error_code: 429}}, {response: {error_code: 403}}]) {
@@ -548,6 +773,14 @@ for (const failure of [new Error('ETIMEDOUT'), {response: {error_code: 500}}, {r
     f.failures.reply.push(failure)
     await f.command('/official')
     assert.equal(f.replies.length, 2)
+    // A result-send failure must not repeat creation or send a fallback result.
+    f.failures.reply.push(failure)
+    await f.action(dataButtons(f.replies[0])[0].callback_data)
+    assert.equal(f.creations.length, 1)
+    assert.equal(f.selected.length, 1)
+    assert.equal(f.replies.length, 3)
+    assert(f.replies[2].rich_message)
+    assert.equal(f.replies[2].options.reply_markup, undefined)
   })
 }
 
@@ -576,12 +809,12 @@ test('a temporarily unavailable selection can be retried after completion withou
   const select = dataButtons(f.replies[0])[0].callback_data
   f.hooks.find = async () => null
   await f.action(select, 'supergroup')
-  assert.equal(f.replies.at(-1).text, zh['pagination.selection_unavailable'])
+  assert.equal(resultText(f.replies.at(-1)), zh['pagination.selection_unavailable'])
   delete f.hooks.find
   await f.action(select, 'supergroup')
   assert.equal(f.bindings.length, 1)
   assert.equal(f.bindings[0].wxId, 'wxid_0')
-  assert.equal(f.replies.at(-1).text, zh['binding.success'])
+  assert.equal(resultText(f.replies.at(-1)), zh['binding.success'])
 })
 
 test('creation success keeps URL and token return, duplicate clicks do not create twice', async () => {
@@ -590,8 +823,11 @@ test('creation success keeps URL and token return, duplicate clicks do not creat
   const select = dataButtons(f.replies[0])[0].callback_data
   await Promise.all([f.action(select), f.action(select)])
   assert.equal(f.creations.length, 1)
-  assert.equal(f.replies[1].text, zh['group.create_success'])
-  assert.equal(f.replies[1].options.reply_markup.inline_keyboard[0][0].url, 'https://t.me/+synthetic')
+  assert.equal(resultText(f.replies[1]), zh['group.create_success'])
+  assert(f.replies[1].rich_message)
+  assert(richNodes(f.replies[1].rich_message.blocks, 'url').some(node => node.url === 'https://t.me/+synthetic'))
+  assert.equal(f.replies[1].options.reply_markup, undefined)
+  assert(richButtons(f.replies[1]).every(b => b.style === 'link'))
   await f.action(button(f.replies[1], ':b'))
   assert.equal(f.resolve(dataButtons(f.edits[0])[0].callback_data).state.query, '公众号')
 })

@@ -19,7 +19,17 @@ export type DirectoryState = Readonly<{
 export type DirectoryButton = {text: string; callback_data: string};
 export type DirectoryMarkup = {inline_keyboard: Array<Array<DirectoryButton | {text: string; url: string}>>};
 export type DirectoryTranslate = (key: string, values?: Record<string, string | number>) => string;
+/** The paragraph-only subset of Telegram's InputRichMessage used by directories. */
+export type DirectoryRichText = string | DirectoryRichText[]
+    | {type: 'bold' | 'code'; text: DirectoryRichText}
+    | {type: 'url'; text: DirectoryRichText; url: string}
+    | {type: 'button'; button: {text: string; callback_data: string; style: 'link'}};
+export type DirectoryRichParagraph = {type: 'paragraph'; text: DirectoryRichText};
+export type DirectoryRichMessage = {blocks: DirectoryRichParagraph[]; skip_entity_detection: true};
 export type DirectoryView = {
+    rich_message: DirectoryRichMessage;
+    /** Only the escape hatch for clients that cannot display rich messages. */
+    rich_reply_markup: DirectoryMarkup;
     html: string;
     plain: string;
     reply_markup: DirectoryMarkup;
@@ -30,7 +40,7 @@ export type DirectoryView = {
 export type DirectoryResolution =
     | {type: 'page'; state: DirectoryState; page: number}
     | {type: 'select'; state: DirectoryState; item: DirectoryItem}
-    | {type: 'back' | 'home' | 'all'; state: DirectoryState};
+    | {type: 'back' | 'home' | 'all' | 'compat'; state: DirectoryState};
 export type DirectoryRenderInput = {
     scope: DirectoryScope;
     kind: DirectoryKind;
@@ -121,36 +131,47 @@ export class DirectoryPager {
         ].map(text => truncate(text, 100))
         const plain = [title, ...metadata]
         const html = [`<b>${escapeHtml(title)}</b>`, ...metadata.map(escapeHtml)]
+        const blocks: DirectoryRichParagraph[] = [title, ...metadata]
+            .map(text => ({type: 'paragraph', text: {type: 'bold', text}}))
         if (input.query) {
             const query = truncate(input.query, 200)
             const label = truncate(translate('pagination.search'), 40)
             plain.push(`${label} ${query}`)
             html.push(`${escapeHtml(label)} <code>${escapeHtml(query)}</code>`)
+            blocks.push({type: 'paragraph', text: [label + ' ', {type: 'code', text: query}]})
         }
         for (const text of [input.notice, input.prompt]) {
             if (text) {
                 const display = truncate(text, 200)
                 plain.push(display)
                 html.push(escapeHtml(display))
+                blocks.push({type: 'paragraph', text: display})
             }
         }
         const buttons: DirectoryButton[] = []
-        // Thirty rows still fit Telegram's 4096 UTF-16 budget even with long
-        // Unicode names: shorten display labels, never IDs or pagination slices.
-        const numbering = state.items.reduce((sum, _item, index) => sum + String(start + index + 1).length + 3, 0)
+        // Bound labels, not identities or page slices. Legacy bodies contain only
+        // metadata; names are rendered exactly once in either presentation.
+        const numbering = state.items.reduce((sum, _item, index) => sum + String(start + index + 1).length + 4, 0)
         const labelBudget = Math.max(1, Math.floor((MAX_VISIBLE_LENGTH - plain.join('\n').length - numbering) / Math.max(1, state.items.length)))
         state.items.forEach((item, index) => {
-            const number = start + index + 1
             const label = item.remark || item.action
-            const display = truncateUnits(truncate(label, 140), labelBudget)
-            plain.push(`${number}. ${display}`)
-            html.push(`<b>${number}.</b> ${escapeHtml(display)}`)
-            buttons.push({text: truncate(label, 48), callback_data: `dl:${token}:s:${index}`})
+            const callback_data = `dl:${token}:s:${index}`
+            const name: DirectoryRichText = {type: 'button', button: {
+                text: truncateUnits(truncate(label, 140), labelBudget), callback_data, style: 'link',
+            }}
+            if (index % 2 === 0) {
+                blocks.push({type: 'paragraph', text: [`${start + index + 1}. `, name]})
+            } else {
+                const row = blocks[blocks.length - 1].text as DirectoryRichText[]
+                row.push(`    ${start + index + 1}. `, name)
+            }
+            buttons.push({text: truncate(label, 48), callback_data})
         })
-        if (!state.items.length) {
+        if (!state.items.length && input.emptyText) {
             const empty = truncate(input.emptyText, 200)
             plain.push(empty)
             html.push(escapeHtml(empty))
+            blocks.push({type: 'paragraph', text: empty})
         }
         const rows: DirectoryButton[][] = []
         for (let i = 0; i < buttons.length; i += 2) rows.push(buttons.slice(i, i + 2))
@@ -162,19 +183,35 @@ export class DirectoryPager {
         if (page > 1) shortcuts.push({text: translate('pagination.home'), callback_data: `dl:${token}:h`})
         if (input.query) shortcuts.push({text: translate('pagination.clear_search'), callback_data: `dl:${token}:a`})
         if (shortcuts.length) rows.push(shortcuts)
+        for (const row of [navigation, shortcuts]) {
+            if (!row.length) continue
+            const text: DirectoryRichText[] = []
+            for (const button of row) {
+                if (text.length) text.push('    ')
+                text.push({type: 'button', button: {...button, style: 'link'}})
+            }
+            blocks.push({type: 'paragraph', text})
+        }
         while (this.states.size >= this.maxStates) {
             const oldest = this.states.keys().next().value
             if (oldest === undefined) break
             this.states.delete(oldest)
         }
         this.states.set(token, {state, expiresAt: this.now() + this.ttlMs})
-        return {html: html.join('\n'), plain: plain.join('\n'), reply_markup: {inline_keyboard: rows}, state, pageCount, total}
+        return {
+            rich_message: {blocks, skip_entity_detection: true},
+            rich_reply_markup: {inline_keyboard: [[{
+                text: translate('pagination.compatibility'), callback_data: `dl:${token}:c`,
+            }]]},
+            html: html.join('\n'), plain: plain.join('\n'),
+            reply_markup: {inline_keyboard: rows}, state, pageCount, total,
+        }
     }
 
     resolve(scope: DirectoryScope, callback: string): DirectoryResolution | undefined {
         this.prune()
         if (typeof callback !== 'string' || callback.length > 64) return undefined
-        const match = /^dl:([A-Za-z0-9_-]{1,36}):(?:([ps]):(0|[1-9]\d*)|([bha]))$/.exec(callback)
+        const match = /^dl:([A-Za-z0-9_-]{1,36}):(?:([ps]):(0|[1-9]\d*)|([bhac]))$/.exec(callback)
         if (!match) return undefined
         const state = this.states.get(match[1])?.state
         if (!state || !sameScope(state.scope, scope)) return undefined
@@ -185,7 +222,7 @@ export class DirectoryPager {
             const item = state.items[number]
             return item ? {type: 'select', state, item} : undefined
         }
-        const type = {b: 'back', h: 'home', a: 'all'}[match[4]] as 'back' | 'home' | 'all'
+        const type = {b: 'back', h: 'home', a: 'all', c: 'compat'}[match[4]] as 'back' | 'home' | 'all' | 'compat'
         return {type, state}
     }
 

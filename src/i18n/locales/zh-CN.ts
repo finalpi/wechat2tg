@@ -87,6 +87,7 @@ const zhCN = {
   'pagination.home': '返回首页',
   'pagination.back': '返回列表',
   'pagination.clear_search': '返回完整列表',
+  'pagination.compatibility': '兼容模式',
   'pagination.expired': '这个列表已过期或不属于当前会话，请重新发送 /user、/room 或 /official。',
   'pagination.unavailable': '列表暂时无法更新，请稍后重试，或重新发送对应的列表命令。',
   'pagination.selection_unavailable': '该联系人或群组暂时不可用，请返回列表刷新后重试。',

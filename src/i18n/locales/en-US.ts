@@ -87,6 +87,7 @@ const enUS = {
   'pagination.home': 'First page',
   'pagination.back': 'Back to list',
   'pagination.clear_search': 'Back to full list',
+  'pagination.compatibility': 'Compatibility mode',
   'pagination.expired': 'This list has expired or belongs to another conversation. Send /user, /room or /official again.',
   'pagination.unavailable': 'The list cannot be updated right now. Try again later or resend the list command.',
   'pagination.selection_unavailable': 'This contact or group is unavailable. Return to the list and refresh before retrying.',

@@ -22,14 +22,14 @@ function load(file) {
   return exports
 }
 const {DirectoryPager, backButton} = load('DirectoryPager.ts')
-const {answerDirectoryCallback, deliverDirectoryPage, replyDirectoryText} = load('DirectoryPageDelivery.ts')
+const {answerDirectoryCallback, deliverDirectoryPage, replyDirectoryText, isRichDirectoryMessage} = load('DirectoryPageDelivery.ts')
 const scope = {chatId: -100, userId: 7, threadId: 42, accountId: 'wechat-a'}
 const translations = {
   'pagination.title_us': 'Contacts', 'pagination.title_of': 'Official accounts',
   'pagination.title_ro': 'Rooms', 'pagination.page': 'Page {{page}} / {{pages}}',
   'pagination.total': 'Total {{count}}', 'pagination.search': 'Search:',
   'pagination.previous': 'Previous', 'pagination.next': 'Next', 'pagination.home': 'Home',
-  'pagination.back': 'Back', 'pagination.clear_search': 'Full list',
+  'pagination.back': 'Back', 'pagination.clear_search': 'Full list', 'pagination.compatibility': 'Compatibility mode',
 }
 const translate = (key, values = {}) => {
   assert.ok(Object.hasOwn(translations, key), `Unknown locale key ${key}`)
@@ -43,9 +43,20 @@ const buttons = view => view.reply_markup.inline_keyboard.flat()
 const button = (view, text) => buttons(view).find(value => value.text === text)
 const selection = (view, index = 0) => buttons(view).find(value => value.callback_data.endsWith(`:s:${index}`)).callback_data
 const plain = value => JSON.parse(JSON.stringify(value))
+const richNodes = value => {
+  if (!value || typeof value !== 'object') return []
+  return [...(value.type ? [value] : []), ...Object.values(value).flatMap(richNodes)]
+}
+const richButtons = view => richNodes(view.rich_message).filter(node => node.type === 'button').map(node => node.button)
+const richButton = (view, label) => richButtons(view).find(value => value.text === label)
+const richText = value => typeof value === 'string' ? value
+  : Array.isArray(value) ? value.map(richText).join('')
+    : value.type === 'button' ? value.button.text : richText(value.text)
 const apiError = (description, error_code = 400) => ({response: {error_code, description}})
 const parseError = () => apiError('Bad Request: can\'t parse entities: Unsupported start tag')
 const missingError = () => apiError('Bad Request: message to edit not found')
+const unavailableError = () => apiError('Not Found', 404)
+const unsupportedError = () => apiError('Bad Request: rich_message is not supported')
 function context(outcomes = [], extra = {}) {
   const calls = []
   const invoke = method => async (text, options) => {
@@ -57,7 +68,25 @@ function context(outcomes = [], extra = {}) {
   return {calls, reply: invoke('reply'), editMessageText: invoke('edit'), answerCbQuery: invoke('ack'), ...extra}
 }
 
-test('real rich-text body escapes search, labels and metadata; buttons remain ordinary text', () => {
+function nativeContext(outcomes = [], extra = {}) {
+  const ctx = context([], {
+    chat: {id: scope.chatId},
+    callbackQuery: {message: {message_id: 71, chat: {id: scope.chatId}, message_thread_id: 999, rich_message: {blocks: []}}},
+    ...extra,
+  })
+  ctx.telegram = {async callApi(method, payload) {
+    assert.equal(this, ctx.telegram, 'Raw API retains its receiver')
+    ctx.calls.push({method, payload})
+    if (outcomes.length) {
+      const error = outcomes.shift()
+      if (error !== undefined) throw error
+    }
+    return {message_id: 100, rich_message: payload.rich_message}
+  }}
+  return ctx
+}
+
+test('native JSON preserves literal malicious names/query; compatibility body has metadata only', () => {
   const pager = new DirectoryPager()
   const query = '<b>&"\'🎉</b>' + '😀'.repeat(210)
   const view = render(pager, {
@@ -66,10 +95,18 @@ test('real rich-text body escapes search, labels and metadata; buttons remain or
   assert.equal(view.state.query, query, 'Full query is retained for data reload')
   assert.match(view.html, /<b>Contacts<\/b>/)
   assert.match(view.html, /Search: <code>&lt;b&gt;&amp;&quot;&#39;🎉&lt;\/b&gt;/)
-  assert.match(view.html, /Alice 😀 &amp; &lt;Bob&gt;/)
+  assert.ok(!view.html.includes('Alice'))
+  assert.equal(richButtons(view)[0].text, 'Alice 😀 & <Bob>')
+  const queryNode = richNodes(view.rich_message).find(node => node.type === 'code')
+  assert.equal(queryNode.text, Array.from(query).slice(0, 199).join('') + '…')
+  assert.equal(view.rich_message.skip_entity_detection, true)
+  assert.deepEqual(plain(view.rich_message.blocks[0]), {type: 'paragraph', text: {type: 'bold', text: 'Contacts'}})
+  assert.equal(richNodes(view.rich_message).filter(node => node.type === 'url').length, 0)
   assert.match(view.html, /&lt;notice&gt;/)
   assert.match(view.html, /Choose &amp; go/)
-  assert.match(view.plain, /Alice 😀 & <Bob>/)
+  assert.ok(!view.plain.includes('Alice'))
+  assert.equal(JSON.stringify(view.rich_message).split('Alice').length - 1, 1)
+  assert.equal(JSON.stringify(view.rich_message).includes('secret-id'), false)
   const displayQuery = view.plain.split('\n').find(line => line.startsWith('Search: ')).slice(8)
   assert.equal(Array.from(displayQuery).length, 200)
   assert.ok(displayQuery.endsWith('…'))
@@ -84,7 +121,9 @@ test('plain names and all directory kinds use translated titles', () => {
   for (const kind of ['us', 'of', 'ro']) {
     const view = render(pager, {kind, items: [{remark: 'Plain name', action: 'x'}]})
     assert.equal(view.plain.split('\n')[0], translations[`pagination.title_${kind}`])
-    assert.match(view.html, /<b>1\.<\/b> Plain name/)
+    assert.ok(!view.html.includes('Plain name'))
+    assert.ok(!view.plain.includes('Plain name'))
+    assert.equal(richButtons(view)[0].text, 'Plain name')
   }
 })
 
@@ -99,19 +138,20 @@ test('long names truncate safely, full IDs never enter bounded ASCII callbacks',
   const pager = new DirectoryPager()
   const action = '群@'.repeat(10000)
   const view = render(pager, {query: 'q', page: 2, items: items(75).map(item => ({...item, remark: '😀'.repeat(1000), action}))})
-  for (const value of [...buttons(view), pager.backButton(view.state.token, translate)]) {
+  for (const value of [...buttons(view), ...richButtons(view), ...view.rich_reply_markup.inline_keyboard.flat(), pager.backButton(view.state.token, translate)]) {
     assert.ok(Buffer.byteLength(value.callback_data) <= 64)
-    assert.match(value.callback_data, /^dl:[A-Za-z0-9_-]+:(?:[bha]|[ps]:\d+)$/)
+    assert.match(value.callback_data, /^dl:[A-Za-z0-9_-]+:(?:[bhac]|[ps]:\d+)$/)
     assert.ok(!value.callback_data.includes(action))
   }
   assert.equal(Array.from(buttons(view)[0].text).length, 48)
   assert.ok(buttons(view)[0].text.endsWith('…'))
   assert.equal(pager.resolve(scope, selection(view)).item.action, action)
-  assert.ok(Array.from(view.plain.split('\n').find(line => line.startsWith('31. ')).slice(4)).length <= 140)
+  assert.ok(Array.from(richButtons(view)[0].text).length <= 140)
+  assert.ok(!view.plain.includes('31. '))
   assert.ok(view.plain.length <= 4096)
 })
 
-test('thirty rich rows fit the Telegram limit even with huge Unicode names and metadata', () => {
+test('thirty native names in fifteen paragraphs and legacy metadata fit with huge Unicode labels', () => {
   const pager = new DirectoryPager()
   const rows = items(61).map(item => ({...item, remark: '😀<&>"'.repeat(1000)}))
   const query = '😀<query>&'.repeat(1000)
@@ -121,6 +161,10 @@ test('thirty rich rows fit the Telegram limit even with huge Unicode names and m
   assert.equal(view.state.query, query)
   assert.equal(view.state.items[29].action, 'id-30')
   assert.equal(buttons(view).filter(b => /:s:/.test(b.callback_data)).length, 30)
+  assert.equal(richButtons(view).filter(b => /:s:/.test(b.callback_data)).length, 30)
+  const rowsWithNames = view.rich_message.blocks.filter(block => richNodes(block).some(node => node.type === 'button' && /:s:/.test(node.button.callback_data)))
+  assert.equal(rowsWithNames.length, 15)
+  assert.ok(rowsWithNames.every(row => richNodes(row).filter(node => node.type === 'button').length === 2))
   assert.ok(view.plain.length <= 4096)
   const [text] = HTMLParser.parse(view.html)
   assert.equal(text, view.plain)
@@ -232,6 +276,12 @@ test('TTL is fixed rather than sliding and bounded cache evicts oldest view', ()
   assert.notEqual(render(pager).state.token, first.state.token)
 })
 
+test('unknown-only empty directories do not emit empty native text paragraphs', () => {
+  const view = render(new DirectoryPager(), {items: [], notice: 'Classification pending', emptyText: ''})
+  assert(view.rich_message.blocks.every(block => block.text !== ''))
+  assert.equal(richButtons(view).length, 0)
+})
+
 test('defaults expire after thirty minutes and retain only 512 states', () => {
   let now = 0
   const pager = new DirectoryPager({now: () => now})
@@ -259,7 +309,202 @@ test('invalid callbacks, indices, tokens and malformed page numbers fail closed'
   assert.throws(() => new DirectoryPager({ttlMs: 0}))
 })
 
-test('fresh page sends HTML with its keyboard and saved topic; edit omits topic option', async () => {
+test('native names and all pagination controls resolve the same scoped immutable identities', () => {
+  const pager = new DirectoryPager()
+  const view = render(pager, {page: 2, query: '<Alice> & /start @name https://x.test'})
+  const callbacks = richButtons(view)
+  assert.equal(callbacks.length, 34)
+  assert.deepEqual(plain(callbacks.map(value => value.callback_data)), plain(buttons(view).map(value => value.callback_data)))
+  for (let index = 0; index < 30; index++) {
+    const selected = pager.resolve(scope, callbacks[index].callback_data)
+    assert.equal(selected.type, 'select')
+    assert.equal(selected.item.action, `id-${31 + index}`)
+    assert.equal(callbacks[index].style, 'link')
+  }
+  for (const [label, type, page] of [['Previous', 'page', 1], ['Next', 'page', 3], ['Home', 'home'], ['Full list', 'all']]) {
+    const resolved = pager.resolve(scope, richButton(view, label).callback_data)
+    assert.equal(resolved.type, type)
+    assert.equal(resolved.page, page)
+    assert.equal(resolved.state, view.state)
+  }
+  const escapeHatch = view.rich_reply_markup.inline_keyboard.flat()
+  assert.equal(escapeHatch.length, 1)
+  assert.equal(escapeHatch[0].text, 'Compatibility mode')
+  const compat = pager.resolve(scope, escapeHatch[0].callback_data)
+  assert.equal(compat.type, 'compat')
+  assert.equal(compat.state, view.state)
+  assert.equal(pager.resolve({...scope, userId: 8}, escapeHatch[0].callback_data), undefined)
+  assert.equal(richNodes(view.rich_message).find(node => node.type === 'code').text, view.state.query)
+  const body = view.rich_message.blocks.map(block => richText(block.text)).join('\n')
+  for (const item of view.state.items) assert.equal(body.split(item.remark).length - 1, 1)
+  assert.ok(!view.html.includes('Name '))
+  assert.ok(!view.plain.includes('Name '))
+  assert.ok(view.rich_message.blocks.every(block => block.type === 'paragraph'))
+})
+
+test('rich-message detection prioritizes callback message, without guessing from text or client', () => {
+  assert.equal(isRichDirectoryMessage(nativeContext()), true)
+  assert.equal(isRichDirectoryMessage(context([], {message: {rich_message: {blocks: []}}})), true)
+  assert.equal(isRichDirectoryMessage(context([], {message: {text: 'rich_message'}})), false)
+  assert.equal(isRichDirectoryMessage(context([], {message: {rich_message: {}}, callbackQuery: {message: {text: 'old'}}})), false)
+  assert.equal(isRichDirectoryMessage(context([], {message: {rich_message: {}}, callbackQuery: {}})), false)
+  assert.equal(isRichDirectoryMessage(context([], {message: {rich_message: null}})), false)
+})
+
+test('new pages send native blocks only; rich edits omit text, parse mode and topic', async () => {
+  const view = render(new DirectoryPager())
+  const ctx = nativeContext()
+  assert.equal(await deliverDirectoryPage(ctx, view), 'sent')
+  assert.equal(ctx.calls.length, 1)
+  assert.deepEqual(plain(ctx.calls[0]), {method: 'sendRichMessage', payload: plain({
+    chat_id: scope.chatId, rich_message: view.rich_message, message_thread_id: 42, reply_markup: view.rich_reply_markup,
+  })})
+  assert.equal(await deliverDirectoryPage(ctx, view, true), 'edited')
+  assert.equal(ctx.calls.length, 2)
+  assert.deepEqual(plain(ctx.calls[1]), {method: 'editMessageText', payload: plain({
+    chat_id: scope.chatId, message_id: 71, rich_message: view.rich_message, reply_markup: view.rich_reply_markup,
+  })})
+  const fromCommand = nativeContext([], {callbackQuery: undefined, message: {message_id: 72}})
+  assert.equal(await deliverDirectoryPage(fromCommand, view, true), 'edited')
+  assert.equal(fromCommand.calls[0].payload.message_id, 72)
+})
+
+test('raw page delivery fails closed for mismatched chat or missing edit ID', async () => {
+  const view = render(new DirectoryPager())
+  for (const extra of [
+    {chat: {id: 123}},
+    {callbackQuery: {message: {message_id: 4, chat: {id: 123}}}},
+    {callbackQuery: {}},
+    {callbackQuery: {message: {message_id: 0}}},
+  ]) {
+    const ctx = nativeContext([], extra)
+    assert.equal(await deliverDirectoryPage(ctx, view, true), 'failed')
+    assert.equal(ctx.calls.length, 0)
+  }
+  const legacy = context([], {chat: {id: 123}})
+  assert.equal(await deliverDirectoryPage(legacy, view), 'failed')
+  assert.equal(legacy.calls.length, 0)
+})
+
+test('explicit compatibility mode uses only HTML metadata and original name/navigation keyboard', async () => {
+  const view = render(new DirectoryPager(), {page: 2, query: 'q'})
+  for (const edit of [false, true]) {
+    const ctx = nativeContext()
+    assert.equal(await deliverDirectoryPage(ctx, view, edit, true), edit ? 'edited' : 'sent')
+    assert.equal(ctx.calls.length, 1)
+    const {method, payload} = ctx.calls[0]
+    assert.equal(method, edit ? 'editMessageText' : 'sendMessage')
+    assert.equal(payload.text, view.html)
+    assert.equal(payload.reply_markup, view.reply_markup)
+    assert.equal(payload.parse_mode, 'HTML')
+    assert.equal(payload.chat_id, scope.chatId)
+    assert.equal(payload.message_thread_id, edit ? undefined : 42)
+    assert.equal(Object.hasOwn(payload, 'rich_message'), false)
+    assert.ok(!payload.text.includes('Name '))
+  }
+})
+
+for (const edit of [false, true]) {
+  test(`explicit rich rejection falls back with original callbacks (${edit ? 'edit' : 'send'})`, async () => {
+    for (const error of [
+      unavailableError(), unsupportedError(), parseError(),
+      apiError('Unknown method sendRichMessage', 404),
+      apiError('Bad Request: can\'t parse rich_message JSON object'),
+      apiError('Bad Request: invalid rich text block'),
+      apiError('Bad Request: message text is empty'),
+    ]) {
+      const view = render(new DirectoryPager(), {page: 2, query: 'q'})
+      const ctx = nativeContext([error])
+      assert.equal(await deliverDirectoryPage(ctx, view, edit), edit ? 'edited' : 'sent')
+      assert.equal(ctx.calls.length, 2)
+      assert.equal(ctx.calls[1].method, edit ? 'editMessageText' : 'sendMessage')
+      assert.equal(ctx.calls[1].payload.text, view.html)
+      assert.equal(ctx.calls[1].payload.reply_markup, view.reply_markup)
+      assert.equal(Object.hasOwn(ctx.calls[1].payload, 'rich_message'), false)
+      assert.deepEqual(plain(richButtons(view).map(b => b.callback_data)), plain(buttons(view).map(b => b.callback_data)))
+    }
+  })
+}
+
+test('deleted rich edits send a NEW native page before considering compatibility', async () => {
+  const view = render(new DirectoryPager())
+  for (const description of ['message to edit not found', 'message can\'t be edited', 'message cannot be edited', 'message can not be edited', 'message was deleted']) {
+    const ctx = nativeContext([apiError(`Bad Request: ${description}`)])
+    assert.equal(await deliverDirectoryPage(ctx, view, true), 'sent')
+    assert.deepEqual(ctx.calls.map(c => c.method), ['editMessageText', 'sendRichMessage'])
+    assert.equal(ctx.calls[1].payload.rich_message, view.rich_message)
+    assert.equal(ctx.calls[1].payload.message_thread_id, scope.threadId)
+    assert.equal(ctx.calls[1].payload.chat_id, scope.chatId)
+  }
+})
+
+test('native message-not-modified returns unchanged with no fallback', async () => {
+  const ctx = nativeContext([apiError('Bad Request: message is not modified')])
+  assert.equal(await deliverDirectoryPage(ctx, render(new DirectoryPager()), true), 'unchanged')
+  assert.equal(ctx.calls.length, 1)
+})
+
+test('native/HTML failures end in plain with at most four attempts and no scope drift', async () => {
+  const view = render(new DirectoryPager())
+  for (const errors of [
+    [missingError(), unsupportedError(), parseError()],
+    [unsupportedError(), missingError(), parseError()],
+    [unsupportedError(), parseError(), missingError()],
+  ]) {
+    const ctx = nativeContext(errors)
+    assert.equal(await deliverDirectoryPage(ctx, view, true), 'sent')
+    assert.equal(ctx.calls.length, 4)
+    const last = ctx.calls[3]
+    assert.equal(last.method, 'sendMessage')
+    assert.equal(last.payload.text, view.plain)
+    assert.equal(Object.hasOwn(last.payload, 'parse_mode'), false)
+    assert.equal(last.payload.reply_markup, view.reply_markup)
+    assert.equal(last.payload.chat_id, scope.chatId)
+    assert.equal(last.payload.message_thread_id, 42)
+  }
+  const failed = nativeContext([missingError(), unsupportedError(), parseError(), parseError()])
+  assert.equal(await deliverDirectoryPage(failed, view, true), 'failed')
+  assert.equal(failed.calls.length, 4)
+  const htmlFailure = nativeContext([unsupportedError(), apiError('unknown error')])
+  assert.equal(await deliverDirectoryPage(htmlFailure, view), 'failed')
+  assert.equal(htmlFailure.calls.length, 2)
+})
+
+test('native and compatibility attempts never retry uncertain or unrelated failures', async () => {
+  const errors = [
+    new Error('ETIMEDOUT'), new Error('404 Not Found'), {}, null,
+    apiError('rich_message not supported', 500), apiError('message to edit not found', 502),
+    apiError('Too Many Requests', 429), apiError('Forbidden: rich_message not supported', 403),
+    apiError('Bad Request: chat not found'), apiError('chat not found', 404),
+    apiError('Bad Request: unknown error'),
+    {response: {error_code: '400', description: 'rich_message not supported'}},
+  ]
+  for (const error of errors) {
+    for (const edit of [false, true]) {
+      for (const prefix of [[], [unsupportedError()], [missingError()]]) {
+        if (!edit && prefix.length && prefix[0].response.description.includes('edit')) continue
+        const count = prefix.length + 1
+        const ctx = nativeContext([...prefix, error])
+        assert.equal(await deliverDirectoryPage(ctx, render(new DirectoryPager()), edit), 'failed')
+        assert.equal(ctx.calls.length, count)
+      }
+    }
+  }
+})
+
+test('native sends use saved topic only, and omit General/invalid thread IDs', async () => {
+  for (const threadId of [undefined, 1, 0, NaN]) {
+    const view = render(new DirectoryPager(), {scope: {...scope, threadId}})
+    const ctx = nativeContext([unsupportedError()])
+    assert.equal(await deliverDirectoryPage(ctx, view), 'sent')
+    for (const call of ctx.calls) {
+      assert.equal(Object.hasOwn(call.payload, 'message_thread_id'), false)
+      assert.equal(call.payload.chat_id, scope.chatId)
+    }
+  }
+})
+
+test('legacy contexts without raw API safely send HTML and keyboard; edits omit topic option', async () => {
   const view = render(new DirectoryPager())
   const ctx = context()
   assert.equal(await deliverDirectoryPage(ctx, view), 'sent')
@@ -269,6 +514,18 @@ test('fresh page sends HTML with its keyboard and saved topic; edit omits topic 
   assert.equal(ctx.calls[0].options.reply_markup, view.reply_markup)
   assert.equal(ctx.calls[0].options.message_thread_id, 42)
   assert.equal(Object.hasOwn(ctx.calls[1].options, 'message_thread_id'), false)
+})
+
+test('legacy fallback cannot inherit a different thread when the saved scope has no topic', async () => {
+  for (const threadId of [undefined, 1]) {
+    const view = render(new DirectoryPager(), {scope: {...scope, threadId}})
+    const ctx = context([], {message: {message_thread_id: 42}})
+    assert.equal(await deliverDirectoryPage(ctx, view), 'failed')
+    assert.equal(ctx.calls.length, 0)
+    const deleted = context([missingError()], {callbackQuery: {message: {message_thread_id: 42}}})
+    assert.equal(await deliverDirectoryPage(deleted, view, true), 'failed')
+    assert.deepEqual(deleted.calls.map(c => c.method), ['edit'])
+  }
 })
 
 test('explicit message-not-modified is success with no new reply', async () => {
@@ -356,6 +613,123 @@ test('ambiguous network/unknown errors, 5xx, 429 and 403 never duplicate a messa
       assert.equal(calls.length, 1)
     }
   }
+})
+
+test('converting rich messages to compatibility sends new text after explicit no-text rejection', async () => {
+  const view = render(new DirectoryPager(), {page: 2, query: 'q'})
+  const ctx = nativeContext([apiError('Bad Request: there is no text in the message to edit')])
+  assert.equal(await deliverDirectoryPage(ctx, view, true, true), 'sent')
+  assert.deepEqual(ctx.calls.map(c => c.method), ['editMessageText', 'sendMessage'])
+  assert.equal(ctx.calls[1].payload.text, view.html)
+  assert.equal(ctx.calls[1].payload.message_thread_id, scope.threadId)
+  assert.equal(ctx.calls[1].payload.reply_markup, view.reply_markup)
+})
+
+test('URL-only topic results remain clickable with automatic entity detection disabled', async () => {
+  const ctx = nativeContext()
+  const markup = {inline_keyboard: [[backButton('token', translate)]]}
+  const url = 'https://t.me/c/12345/77'
+  assert.equal(await replyDirectoryText(ctx, url, markup), true)
+  assert.deepEqual(plain(ctx.calls[0].payload.rich_message.blocks[0]), {
+    type: 'paragraph', text: {type: 'url', text: url, url},
+  })
+  assert.equal(ctx.calls[0].payload.rich_message.skip_entity_detection, true)
+})
+
+test('rich result/back and URL links stay inline in native paragraphs, not an external keyboard', async () => {
+  const pager = new DirectoryPager()
+  const view = render(pager, {page: 2, query: 'q'})
+  const back = backButton(view.state.token, translate)
+  const markup = {inline_keyboard: [[{text: 'Open <room>', url: 'https://t.me/example'}], [back]]}
+  const ctx = nativeContext()
+  assert.equal(await replyDirectoryText(ctx, '<result & text>', markup), true)
+  assert.equal(ctx.calls.length, 1)
+  const {method, payload} = ctx.calls[0]
+  assert.equal(method, 'sendRichMessage')
+  assert.equal(payload.chat_id, scope.chatId)
+  assert.equal(payload.message_thread_id, 999, 'Results follow the source callback topic')
+  assert.equal(Object.hasOwn(payload, 'reply_markup'), false)
+  assert.equal(Object.hasOwn(payload, 'text'), false)
+  assert.equal(Object.hasOwn(payload, 'parse_mode'), false)
+  assert.equal(payload.rich_message.skip_entity_detection, true)
+  assert.deepEqual(plain(payload.rich_message.blocks), [
+    {type: 'paragraph', text: '<result & text>'},
+    {type: 'paragraph', text: [{type: 'url', text: 'Open <room>', url: 'https://t.me/example'}]},
+    {type: 'paragraph', text: [{type: 'button', button: {...back, style: 'link'}}]},
+  ])
+  const resolved = pager.resolve(scope, richButtons(payload)[0].callback_data)
+  assert.equal(resolved.type, 'back')
+  assert.equal(resolved.state.query, 'q')
+  assert.equal(resolved.state.page, 2)
+  assert.deepEqual(plain(markup.inline_keyboard[1][0]), plain(back), 'Input markup is not mutated')
+})
+
+test('unsupported native result falls back to plain with original markup exactly once', async () => {
+  const markup = {inline_keyboard: [[{text: 'Open', url: 'https://t.me/example'}, backButton('token', translate)]]}
+  for (const error of [unavailableError(), unsupportedError(), parseError()]) {
+    const ctx = nativeContext([error])
+    assert.equal(await replyDirectoryText(ctx, '<result>', markup), true)
+    assert.equal(ctx.calls.length, 2)
+    assert.deepEqual(plain(ctx.calls[1]), {method: 'sendMessage', payload: plain({
+      chat_id: scope.chatId, text: '<result>', reply_markup: markup, message_thread_id: 999,
+    })})
+  }
+  for (const error of [new Error('ETIMEDOUT'), apiError('rich_message invalid', 500), apiError('Forbidden', 403), apiError('Too Many Requests', 429)]) {
+    const ctx = nativeContext([error])
+    assert.equal(await replyDirectoryText(ctx, 'result', markup), false)
+    assert.equal(ctx.calls.length, 1)
+  }
+  const failedFallback = nativeContext([unsupportedError(), new Error('network')])
+  assert.equal(await replyDirectoryText(failedFallback, 'result', markup), false)
+  assert.equal(failedFallback.calls.length, 2)
+})
+
+test('result helper preserves non-rich, markup-absent and legacy behavior', async () => {
+  const markup = {inline_keyboard: [[backButton('token', translate)]]}
+  const noMarkup = nativeContext()
+  assert.equal(await replyDirectoryText(noMarkup, 'text'), true)
+  assert.equal(noMarkup.calls[0].method, 'reply')
+  const plainSource = nativeContext([], {callbackQuery: {message: {message_thread_id: 42, text: 'plain'}}})
+  assert.equal(await replyDirectoryText(plainSource, 'text', markup), true)
+  assert.equal(plainSource.calls[0].method, 'reply')
+  const noRaw = context([], {callbackQuery: {message: {message_thread_id: 42, rich_message: {blocks: []}}}})
+  assert.equal(await replyDirectoryText(noRaw, 'text', markup), true)
+  assert.equal(noRaw.calls[0].method, 'reply')
+  const missingScope = nativeContext([], {chat: undefined, callbackQuery: {message: {rich_message: {blocks: []}}}})
+  assert.equal(await replyDirectoryText(missingScope, 'text', markup), false)
+  assert.equal(missingScope.calls.length, 0)
+})
+
+test('actual Telegraf Context satisfies delivery helpers under strict TypeScript', () => {
+  const filename = path.join(__dirname, '__directory-context-typecheck__.ts')
+  const source = `
+    import type {Context} from 'telegraf';
+    import type {DirectoryDeliveryContext} from '../src/util/DirectoryPageDelivery';
+    import type {DirectoryView} from '../src/util/DirectoryPager';
+    import {answerDirectoryCallback, deliverDirectoryPage, replyDirectoryText, isRichDirectoryMessage} from '../src/util/DirectoryPageDelivery';
+    declare const ctx: Context;
+    declare const view: DirectoryView;
+    const bridge: DirectoryDeliveryContext = ctx;
+    deliverDirectoryPage(ctx, view, true, false);
+    replyDirectoryText(ctx, 'result', view.reply_markup);
+    answerDirectoryCallback(ctx);
+    isRichDirectoryMessage(ctx);
+  `
+  const options = {
+    strict: true, noEmit: true, skipLibCheck: true, esModuleInterop: true,
+    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2021,
+    moduleResolution: ts.ModuleResolutionKind.Node10,
+  }
+  const host = ts.createCompilerHost(options)
+  const getSourceFile = host.getSourceFile.bind(host)
+  host.getSourceFile = (file, languageVersion, onError, shouldCreateNewSourceFile) => file === filename
+    ? ts.createSourceFile(file, source, languageVersion, true)
+    : getSourceFile(file, languageVersion, onError, shouldCreateNewSourceFile)
+  const program = ts.createProgram([filename], options, host)
+  const diagnostics = ts.getPreEmitDiagnostics(program)
+  assert.equal(diagnostics.length, 0, ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+    getCanonicalFileName: file => file, getCurrentDirectory: () => __dirname, getNewLine: () => '\n',
+  }))
 })
 
 test('plain result/error replies retain callback or message topic, omit General 1, and consume errors', async () => {

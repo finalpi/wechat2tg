@@ -27,7 +27,7 @@ import TgCommandHelper from '../service/TelegramCommandHelper'
 import {TelegramGroupOperateService} from '../service/TelegramGroupOperateService'
 import {WxContactRepository} from '../repository/WxContactRepository'
 import {DirectoryKind, DirectoryPager, DirectoryScope} from '../util/DirectoryPager'
-import {answerDirectoryCallback, deliverDirectoryPage, replyDirectoryText} from '../util/DirectoryPageDelivery'
+import {answerDirectoryCallback, deliverDirectoryPage, isRichDirectoryMessage, replyDirectoryText} from '../util/DirectoryPageDelivery'
 import {BindGroup} from '../entity/BindGroup'
 import {WxRoomRepository} from '../repository/WxRoomRepository'
 import {WeChatClient} from './WechatClient'
@@ -1399,8 +1399,9 @@ export class TelegramBotClient extends AbstractClient {
                 } else {
                     let page = state.page
                     if (resolved.type === 'page') page = resolved.page
-                    else if (resolved.type !== 'back') page = 1
-                    await this.showDirectoryPage(ctx, state.kind, resolved.type === 'all' ? '' : state.query, page, true)
+                    else if (resolved.type !== 'back' && resolved.type !== 'compat') page = 1
+                    const compatibility = resolved.type === 'compat' || !isRichDirectoryMessage(ctx)
+                    await this.showDirectoryPage(ctx, state.kind, resolved.type === 'all' ? '' : state.query, page, true, compatibility)
                 }
                 return
             }
@@ -1417,7 +1418,7 @@ export class TelegramBotClient extends AbstractClient {
                     await replyDirectoryText(ctx, this.i18n.t('pagination.expired'))
                     return
                 }
-                await this.showDirectoryPage(ctx, kind, '', Math.max(1, page), true)
+                await this.showDirectoryPage(ctx, kind, '', Math.max(1, page), true, true)
             } else if (/^[^:\s]+$/.test(legacy[2])) {
                 await this.selectDirectoryItem(ctx, kind, legacy[2])
             } else {
@@ -1447,7 +1448,7 @@ export class TelegramBotClient extends AbstractClient {
         await this.showDirectoryPage(ctx, official ? 'of' : 'us', query, 1, false)
     }
 
-    private async showDirectoryPage(ctx: Context, kind: DirectoryKind, query: string, page: number, edit: boolean) {
+    private async showDirectoryPage(ctx: Context, kind: DirectoryKind, query: string, page: number, edit: boolean, compatibility = false) {
         if (!TelegramBotClient.getSpyClient('wxClient')?.hasLogin) {
             await replyDirectoryText(ctx, this.i18n.t('login.please_login_wx'))
             return
@@ -1481,7 +1482,7 @@ export class TelegramBotClient extends AbstractClient {
                 notice: unknown ? this.i18n.t('contact.classification_pending', {count: String(unknown)}) : undefined,
                 emptyText: unknown ? '' : this.i18n.t(labels.empty)
             }, (key, params) => this.translateDirectory(key, params))
-            await deliverDirectoryPage(ctx, view, edit)
+            await deliverDirectoryPage(ctx, view, edit, compatibility)
         } catch (error) {
             this.logger?.warn('Directory unavailable', error?.code || error?.name)
             await replyDirectoryText(ctx, this.i18n.t('pagination.unavailable'))
