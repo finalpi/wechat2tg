@@ -1,6 +1,6 @@
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.14
+    image: finalpi/wechat2tg:v6.0.15
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"
@@ -19,7 +19,7 @@ services:
 
   wx2tg-server:
     # v6 分支配套 server v6；v7 分支部署时使用对应的 v7 镜像。
-    image: finalpi/wx2tg-server:v6.0.14
+    image: finalpi/wx2tg-server:v6.0.15
     container_name: wx2tg-server
     ports:
       - "8058:8058"
