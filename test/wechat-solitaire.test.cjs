@@ -123,3 +123,26 @@ test('a one-to-one solitaire also offers the join button targeting that contact'
   assert.equal(target.toWxid, 'sender', 'one-to-one targets the counterpart WeChat id')
   assert.equal(target.newMsgId, message.newMsgId)
 })
+test('an own solitaire update is forwarded even when self messages are disabled', async () => {
+  const {client, message, sent} = fixture()
+  client.configurationService.getConfig = async () => ({selfMessage: false, receivePublicAccount: true, chatId: 456})
+  message.self = () => true
+  message.to = async () => ({_wxid: 'room@chatroom', alias: async () => '', name: () => 'Room'})
+  await client.onMessage(message)
+  assert.equal(sent.length, 1, 'the updated list must keep flowing so joining can continue')
+  assert.equal(sent[0].source_type, 'solitaire')
+  assert.equal(sent[0].param.inline_keyboard.length, 2)
+})
+
+test('ordinary own messages stay filtered when self messages are disabled', async () => {
+  const {client, sent} = fixture()
+  client.configurationService.getConfig = async () => ({selfMessage: false, receivePublicAccount: true, chatId: 456})
+  const text = new WxMessage({MsgType: 1, Content: 'hi', MsgId: '9', NewMsgId: '9000000000000000099',
+    FromUserName: 'self', ToUserName: 'room@chatroom', CreateTime: 3, RoomId: 'room@chatroom'})
+  text.self = () => true
+  text.room = async () => ({chatroomId: 'room@chatroom', name: 'Room'})
+  text.from = async () => ({_wxid: 'self', _alias: '', alias: async () => '', name: () => 'Me'})
+  text.to = async () => ({_wxid: 'room@chatroom', alias: async () => '', name: () => 'Room'})
+  await client.onMessage(text)
+  assert.equal(sent.length, 0)
+})

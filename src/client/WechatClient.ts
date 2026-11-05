@@ -498,8 +498,10 @@ export class WeChatClient extends AbstractClient {
         let contact = await msg.from()
         const configuration = await this.configurationService.getConfig()
         if (msg.self()) {
-            // 过滤自己发送的消息
-            if (!configuration.selfMessage) {
+            // A solitaire changed by our own account is state, not chatter: without it
+            // the forwarded list never updates and joining cannot continue.
+            const isOwnSolitaire = msg.type() === WxMessage.Type.Solitaire
+            if (!configuration.selfMessage && !isOwnSolitaire) {
                 if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(String(msg.newMsgId),'excluded')
                 return
             }

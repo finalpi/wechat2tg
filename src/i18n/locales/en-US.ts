@@ -109,7 +109,7 @@ const enUS = {
   'solitaire.expired': 'This join button expired. Trigger the solitaire message again or join from WeChat.',
   'solitaire.owner_only': 'Only the bot owner can join solitaires.',
   'solitaire.custom_button': 'Custom entry',
-  'solitaire.custom_prompt': 'Reply to this message with the entry text (it replaces the nickname entirely).',
+  'solitaire.custom_prompt': 'Type the entry here and send to submit (it replaces the nickname entirely).',
   'solitaire.custom_empty': 'The entry text cannot be empty.',
   'solitaire.create_usage': 'Usage: /solitaire title | first entry | footer (footer optional)',
   'solitaire.create_group_only': 'Starting a solitaire requires a Telegram group or topic bound to a WeChat group.',

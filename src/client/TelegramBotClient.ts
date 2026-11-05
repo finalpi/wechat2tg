@@ -2615,6 +2615,12 @@ ${this.i18n.t('help.instructions')}`))
             const target = solitaireJoins.takePending(ownerId, ctx.chat?.id, this.currentThread(ctx))
             if (target) {
                 await this.submitSolitaireContent(ctx, target, text)
+                // Keep the chat tidy: the reply acts as a form submission.
+                try {
+                    await ctx.deleteMessage()
+                } catch (error) {
+                    this.logger?.debug?.('Solitaire entry cleanup skipped', error?.code || error?.name)
+                }
                 return true
             }
         }

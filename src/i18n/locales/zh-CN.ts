@@ -109,7 +109,7 @@ const zhCN = {
   'solitaire.expired': '这个接龙按钮已过期，请重新触发该接龙消息或直接在微信接龙。',
   'solitaire.owner_only': '只有机器人主人可以接龙。',
   'solitaire.custom_button': '自定义参与',
-  'solitaire.custom_prompt': '回复这条消息填写接龙内容（完全替换，不拼接昵称）。',
+  'solitaire.custom_prompt': '在这里输入接龙内容后直接发送即可提交（完全替换，不拼接昵称）。',
   'solitaire.custom_empty': '接龙内容不能为空。',
   'solitaire.create_usage': '用法：/solitaire 标题 | 首条内容 | 尾注（尾注可省略）',
   'solitaire.create_group_only': '发起接龙只能在已绑定微信群的 Telegram 群或 Topic 中使用。',
