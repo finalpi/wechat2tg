@@ -1,14 +1,14 @@
 # v6：单分支、双发行通道
 
-## 当前 Bot 正式版：v6.0.20
+## 当前 Bot 正式版：v6.0.21
 
-本版新增 `#[member_name]`：显示微信群里成员自己设置的群昵称，没有群昵称时用其微信昵称，且不读取通讯录备注（`#[alias]`）。同时把 7 项消息展示模板的默认值改为无装饰 emoji 的简洁格式（`ROOM_MESSAGE` / `ROOM_MESSAGE_GROUP` 直接使用 `#[member_name]`），留空或纯空格等同默认值。升级时这 7 项模板一次性重置为默认值，旧值仅备份到 `webui-config.json.message-templates-v1.json`（不含密钥），此后的自定义不会被再次覆盖；群名称模板、头像与绑定关系不变。群昵称查询按账号/群缓存 60 秒，失败或超过 1.5 秒立即回退微信昵称，不会阻塞或丢弃消息，且只在模板实际使用 `#[member_name]` 时才查询。延续 `v6.0.19` 的群元数据限流保护。仅发布 Bot，puppet 和 server 继续使用 `v6.0.16`，不部署或重启任何服务。
+本版新增群接龙「我要接龙」按钮：转发群接龙时附带仅机器人主人可用的按钮，点击后取该群群昵称（回退微信昵称）调用服务端 `POST /Msg/SendSolitaire` 参与模式，由服务端按 `MsgID`/`NewMsgID` 查找已保存的接龙消息并拼 XML；客户端不传 XML/Title/Tail。结果分为成功、服务端明确拒绝（含原因）、结果不确定（提示到微信确认且不自动重发）；按钮 30 分钟过期、限 256 个。单聊接龙不加按钮，普通回复仍不会追加到名单，且本版不重放历史接龙。此前版本新增 `#[member_name]`：显示微信群里成员自己设置的群昵称，没有群昵称时用其微信昵称，且不读取通讯录备注（`#[alias]`）。同时把 7 项消息展示模板的默认值改为无装饰 emoji 的简洁格式（`ROOM_MESSAGE` / `ROOM_MESSAGE_GROUP` 直接使用 `#[member_name]`），留空或纯空格等同默认值。升级时这 7 项模板一次性重置为默认值，旧值仅备份到 `webui-config.json.message-templates-v1.json`（不含密钥），此后的自定义不会被再次覆盖；群名称模板、头像与绑定关系不变。群昵称查询按账号/群缓存 60 秒，失败或超过 1.5 秒立即回退微信昵称，不会阻塞或丢弃消息，且只在模板实际使用 `#[member_name]` 时才查询。延续 `v6.0.19` 的群元数据限流保护。仅发布 Bot，puppet 和 server 继续使用 `v6.0.16`，不部署或重启任何服务。
 
 **三个仓库只使用 `v6` 维护分支。`dev` 是 tag / 制品通道，不是另一个分支。** 分支最新提交可能仍在开发，不能把分支 HEAD 当成已验收稳定版。
 
 | 仓库 | 分支 | 使用的 Git 标签 | 配套制品 |
 | --- | --- | --- | --- |
-| `wechat2tg` | `v6` | `v6.0.20`（本次发布） | 包版本 `6.0.20`；`finalpi/wechat2tg:v6.0.20` |
+| `wechat2tg` | `v6` | `v6.0.21`（本次发布） | 包版本 `6.0.21`；`finalpi/wechat2tg:v6.0.21` |
 | `wx2tg-puppet` | `v6` | `v6.0.16` | `wx2tg-puppet@6.0.16` 的 npm 格式打包文件 |
 | `fk-zhang` / wx2tg-server | `v6` | `v6.0.16` | `finalpi/wx2tg-server:v6.0.16`（amd64） |
 
@@ -36,12 +36,12 @@
 
 bot 工作流先验证版本并运行测试，再并行执行两个互不等待的原生构建：
 
-- `Build amd64`：`ubuntu-24.04`，发布 `v6.0.20-amd64`。
-- `Build arm64`：`ubuntu-24.04-arm`，发布 `v6.0.20-arm64`。
+- `Build amd64`：`ubuntu-24.04`，发布 `v6.0.21-amd64`。
+- `Build arm64`：`ubuntu-24.04-arm`，发布 `v6.0.21-arm64`。
 - 两种架构分别使用 GHA 构建缓存；`fail-fast=false`，ARM 失败不会取消已成功的 amd64。
-- 两边都成功后，才合并通用多架构标签 `v6.0.20` 和对应通道别名。
+- 两边都成功后，才合并通用多架构标签 `v6.0.21` 和对应通道别名。
 
-想尽早部署 amd64 时，使用 `finalpi/wechat2tg:v6.0.20-amd64`，或稳定滚动别名 `v6-amd64`。ARM 对应 `v6.0.20-arm64` / `v6-arm64`。正式 Git tag `v6.0.20` 发布 Docker `v6.0.20`、`v6.0.20-amd64` 和 `v6.0.20-arm64`，稳定别名为 `v6-amd64` / `v6-arm64`，合并后更新 `v6`。手动快照只发布 `v6-dev-<短 SHA>-amd64` / `v6-dev-<短 SHA>-arm64` 和合并的 `v6-dev-<短 SHA>`，不更新任何滚动别名。
+想尽早部署 amd64 时，使用 `finalpi/wechat2tg:v6.0.21-amd64`，或稳定滚动别名 `v6-amd64`。ARM 对应 `v6.0.21-arm64` / `v6-arm64`。正式 Git tag `v6.0.21` 发布 Docker `v6.0.21`、`v6.0.21-amd64` 和 `v6.0.21-arm64`，稳定别名为 `v6-amd64` / `v6-arm64`，合并后更新 `v6`。手动快照只发布 `v6-dev-<短 SHA>-amd64` / `v6-dev-<短 SHA>-arm64` 和合并的 `v6-dev-<短 SHA>`，不更新任何滚动别名。
 
 因此不必等整个工作流结束才能更新 amd64；部署端应核对目标提交和 **`Build amd64` 成功**。通用标签仍等待 ARM，保留正确的多架构内容，不会先用 amd64 覆盖掉 ARM。具体耗时受原生依赖编译、缓存和 runner 排队影响，不承诺固定 30 分钟。server 有原生库限制，仍只构建 amd64，不伪装支持 ARM。
 
@@ -77,7 +77,7 @@ npm test
 2. bot / puppet 运行 `npm run check:version`、`npm test`；server 运行 `bash scripts/check-release-version.sh`、`go test ./buildinfo`。
 3. 同时验证稳定 / dev 版本格式、错 tag 拒绝、开发构建不能覆盖稳定通道。
 4. 完成 merge、检查 diff，提交本次文件；不要把 server 工作区原有测试修改、样本消息或私有配置带进提交。
-5. 明确授权后仅推送本次需要发布的仓库的 `v6` 分支和指定完整 tag。Bot/server 各自的 tag 会触发自己的镜像构建；只有 server tag 才创建其 Release，只有 puppet tag 才上传 SDK artifact 并发布 npm。本次仅推送 Bot `v6.0.20`。
+5. 明确授权后仅推送本次需要发布的仓库的 `v6` 分支和指定完整 tag。Bot/server 各自的 tag 会触发自己的镜像构建；只有 server tag 才创建其 Release，只有 puppet tag 才上传 SDK artifact 并发布 npm。本次仅推送 Bot `v6.0.21`。
 6. 部署前备份 SQLite、会话和 Compose，保留旧镜像；不覆盖用户现有 `.env`、`home_202.env` 等私有配置，不把示例文件覆盖到部署目录。已有微信服务的部署与新 bot 更新分开处理：此次命名修正不更改 `wx2tg-server` 镜像/命名空间/版本，也不更新或重启用户现有生产后端。
 7. 先验证 amd64 制品、服务健康、旧绑定和配置校验值，再做真实双向消息验收。离线测试不等于真实微信 / Telegram 全链路已验收。
 

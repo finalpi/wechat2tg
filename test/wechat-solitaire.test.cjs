@@ -25,6 +25,9 @@ function fixture() {
       if (name === '../util/WechatCallStatus') return require('../dist/util/WechatCallStatus')
       if (name === '../util/MessageTypeUtils') return require('../dist/util/MessageTypeUtils')
       if (name === '../util/TelegramTopicUtils') return require('../dist/util/TelegramTopicUtils')
+      if (name === '../service/SolitaireService') return require('../dist/service/SolitaireService')
+      if (name === '../i18n') return {getInstance: () => ({t: key => key === 'solitaire.join_button' ? '我要接龙' : key})}
+      if (name === '../service/WechatAccountClassificationService') return {WechatAccountClassificationService: {getInstance: () => ({isOfficialAccount: async () => false})}}
       return {}
     },
   })
@@ -34,7 +37,7 @@ function fixture() {
   client._wxInfo = {wxid: 'self'}
   client.logger = {debug: () => undefined, info: () => undefined, warn: () => undefined, error: () => undefined}
   client.messageService = {getByWxMsgId: async () => null}
-  client.configurationService = {getConfig: async () => ({selfMessage: true, receivePublicAccount: true})}
+  client.configurationService = {getConfig: async () => ({selfMessage: true, receivePublicAccount: true, chatId: 456})}
   client.bindGroupService = {resolveWechat: async () => ({chatId: -100123, wxId: 'room@chatroom', type: 1, isReceive: true})}
   client.groupOperate = {createGroup: async () => {throw Error('Must preserve existing group')}}
   const message = new WxMessage({MsgType: 49, Content: xml, xml, MsgId: '1', NewMsgId: '9007199254740993123', FromUserName: 'sender', ToUserName: 'self', CreateTime: 2, RoomId: 'room@chatroom'})
@@ -81,4 +84,29 @@ test('real SDK appmsg 53 reaches the normal group forwarding path with visible s
   assert.equal(sent[0].content, title.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'))
   assert.equal(message._xml, xml, 'raw protocol source remains unchanged')
   assert(!sent[0].content.includes('<appmsg>'))
+})
+test('group solitaire attaches an owner-scoped join button resolving to the real message ids', async () => {
+  const {solitaireJoins} = require('../dist/service/SolitaireService')
+  const {client, message, sent} = fixture()
+  await client.onMessage(message)
+  const buttons = sent[0].param.inline_keyboard.flat()
+  assert.equal(buttons.length, 1)
+  assert.equal(buttons[0].text, '我要接龙')
+  assert.match(buttons[0].callback_data, /^sl:[a-z0-9]+$/)
+  assert(buttons[0].callback_data.length <= 64)
+  const target = solitaireJoins.resolve(buttons[0].callback_data.slice(3), 456)
+  assert.equal(target.toWxid, 'room@chatroom')
+  assert.equal(target.selfId, 'self')
+  assert.equal(target.msgId, '1')
+  assert.equal(target.newMsgId, message.newMsgId)
+  assert.equal(solitaireJoins.resolve(buttons[0].callback_data.slice(3), 999), undefined)
+})
+
+test('a one-to-one solitaire keeps forwarding without a join button', async () => {
+  const {client, message, sent} = fixture()
+  client.bindGroupService.resolveWechat = async () => ({chatId: -100124, wxId: 'wxid_friend', type: 0, isReceive: true})
+  message.room = async () => null
+  await client.onMessage(message)
+  assert.equal(sent.length, 1)
+  assert.equal(sent[0].param, undefined)
 })

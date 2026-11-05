@@ -34,6 +34,7 @@ import {getWechatCallStatus, formatWechatCallStatus} from '../util/WechatCallSta
 import {isSameTelegramDestination} from '../util/TelegramTopicUtils'
 import {WechatAccountClassificationService} from '../service/WechatAccountClassificationService'
 import {createGroupMemberNameResolver} from '../service/GroupMemberNameService'
+import {solitaireJoins} from '../service/SolitaireService'
 
 const TELEGRAM_BOT_API_UPLOAD_LIMIT = 50 * 1024 * 1024
 
@@ -664,6 +665,26 @@ export class WeChatClient extends AbstractClient {
                 messageParam.content = emojiConverter.convert(String(msg.text() || '[接龙]')
                     .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'),
                 configuration, config.WECHAT_CUSTOM_EMOJI_ENABLED)
+                // Joining goes through the server-side API, which looks the message up
+                // by ID; the token keeps the callback payload short.
+                if (room && this._wxInfo?.wxid && solitaireJoins) {
+                    try {
+                        const token = solitaireJoins.add({
+                            ownerId: configuration.chatId,
+                            toWxid: room.chatroomId,
+                            selfId: this._wxInfo.wxid,
+                            msgId: msg._msgId ? String(msg._msgId) : undefined,
+                            newMsgId: msg.newMsgId ? String(msg.newMsgId) : undefined,
+                        })
+                        messageParam.param = {
+                            ...(messageParam.param || {}),
+                            inline_keyboard: [[{text: I18n.getInstance().t('solitaire.join_button'), callback_data: `sl:${token}`}]],
+                        }
+                    } catch (e) {
+                        // A missing solitaire id only loses the button, never the message.
+                        this.logger.warn('接龙按钮创建失败:', e?.message)
+                    }
+                }
                 await WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.Text:

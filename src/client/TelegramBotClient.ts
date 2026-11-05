@@ -53,6 +53,8 @@ import {telegramDeliveryUncertain} from '../webui/delivery'
 import {Api} from 'telegram'
 import {getTelegramThreadId, isSameTelegramDestination} from '../util/TelegramTopicUtils'
 import {WechatAccountClassificationService} from '../service/WechatAccountClassificationService'
+import {createGroupMemberNameResolver} from '../service/GroupMemberNameService'
+import {sendSolitaireJoin, solitaireJoinBody, solitaireJoins} from '../service/SolitaireService'
 
 interface LargeFileProgressEditor {
     update(text: string, force?: boolean, inlineKeyboard?: Array<{ text: string, callback_data: string }>): Promise<void>
@@ -758,9 +760,56 @@ export class TelegramBotClient extends AbstractClient {
         return this.belongsToContext(stored, ctx) ? {replyMessageId: replyId} : undefined
     }
 
+    /** Owner-only: the group nickname is what WeChat shows in the solitaire list. */
+    private async handleSolitaireJoin(ctx: Context, callback: string): Promise<void> {
+        try {
+            await ctx.answerCbQuery()
+        } catch (error) {
+            this.logger?.debug?.('Solitaire callback acknowledge failed', error?.code || error?.name)
+        }
+        const ownerId = ctx.from?.id
+        const config = await this.configurationService.getConfig()
+        if (!ownerId || ownerId !== config.chatId) {
+            await replyDirectoryText(ctx, this.i18n.t('solitaire.owner_only'))
+            return
+        }
+        const token = callback.slice(3)
+        const target = solitaireJoins.resolve(token, ownerId)
+        if (!target) {
+            await replyDirectoryText(ctx, this.i18n.t('solitaire.expired'))
+            return
+        }
+        const wxClient = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
+        if (!wxClient?.hasLogin) {
+            await replyDirectoryText(ctx, this.i18n.t('login.please_login_wx'))
+            return
+        }
+        try {
+            this.groupMemberNames ??= createGroupMemberNameResolver(() => wxClient.wxInfo?.wxid || '')
+            const fallback = wxClient.wxInfo?.nickName || target.selfId
+            const name = await this.groupMemberNames(target.toWxid, target.selfId, fallback)
+            const body = solitaireJoinBody({
+                wxid: target.selfId, toWxid: target.toWxid, content: name,
+                msgId: target.msgId, newMsgId: target.newMsgId,
+            })
+            const outcome = await sendSolitaireJoin(body)
+            if (outcome.status === 'joined') {
+                await replyDirectoryText(ctx, this.i18n.t('solitaire.joined', {name}))
+            } else if (outcome.status === 'rejected') {
+                await replyDirectoryText(ctx, this.i18n.t('solitaire.rejected', {reason: outcome.reason}))
+            } else {
+                await replyDirectoryText(ctx, this.i18n.t('solitaire.unknown'))
+            }
+        } catch (error) {
+            this.logger?.warn('Solitaire join unavailable', error?.message || error?.name)
+            await replyDirectoryText(ctx, this.i18n.t('solitaire.unknown'))
+        }
+    }
+
     private onBotAction(bot: Telegraf) {
         bot.action(/^dl:/, ctx => this.handleDirectoryCallback(ctx, ctx.match.input))
         bot.action(/^(?:us|of|ro):/, ctx => this.handleDirectoryCallback(ctx, ctx.match.input))
+        bot.action(/^sl:/, ctx => this.handleSolitaireJoin(ctx, ctx.match.input))
 
         // 数字键盘点击
         bot.action(/num-(.+)/, ctx => {
@@ -1341,6 +1390,7 @@ export class TelegramBotClient extends AbstractClient {
     private directoryCallbacks?: Map<string, Promise<void>>
     private directoryPendingCallbacks?: Map<string, Promise<void>>
     private directoryMembers?: ReturnType<typeof createGroupMentionService>
+    private groupMemberNames?: ReturnType<typeof createGroupMemberNameResolver>
 
     private getDirectoryMembers() {
         return this.directoryMembers ??= createGroupMentionService(() => {
