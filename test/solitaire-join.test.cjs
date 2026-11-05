@@ -191,7 +191,7 @@ test('expired or unknown tokens fail closed without sending', async () => {
 test('server rejection is reported with its reason and never retried', async () => {
   const f = fixture({result: {status: 'rejected', reason: '未找到接龙消息'}})
   await f.client.handleSolitaireJoin(f.ctx(456), `sl:${tokenFor()}`)
-  assert.deepEqual(f.replies, ['微信拒绝了接龙请求：未找到接龙消息'])
+  assert.deepEqual(f.replies, ['微信没有接受：未找到接龙消息'])
   assert.equal(f.bodies.length, 1)
 })
 
