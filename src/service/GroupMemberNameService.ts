@@ -4,11 +4,9 @@ import {createGroupMentionService} from '../webui/mentions'
 export function createGroupMemberNameResolver(getSelf: () => string) {
     const groups = createGroupMentionService(getSelf)
     const failures = new Map<string, number>()
-    const clean = (value: unknown): string => {
-        const text = typeof value === 'string' ? value.trim() : ''
-        // Placeholder text from a missing field must never become a WeChat name.
-        return !text || text === 'undefined' || text === 'null' ? '' : text
-    }
+    // Only real absence is discarded: a WeChat nickname may literally be
+    // "undefined" and must still be usable as a solitaire entry.
+    const clean = (value: unknown): string => typeof value === 'string' ? value.trim() : ''
     return async (roomId: string, senderId: string, fallback: string): Promise<string> => {
         const safeFallback = clean(fallback)
         const self = getSelf()

@@ -40,9 +40,14 @@ test('one-to-one conversations are accepted as join targets', () => {
     '{"Wxid":"a","ToWxid":"wxid_friend","Content":"我的名字","NewMsgID":7}')
 })
 
-for (const bad of ['undefined', 'null', 'undefined ']) {
-  test(`join body refuses placeholder content ${JSON.stringify(bad)}`, () => {
-    assert.throws(() => solitaireJoinBody({wxid: 'a', toWxid: 'r@chatroom', content: bad, newMsgId: '1'}))
+test('a nickname that literally reads "undefined" is sent verbatim', () => {
+  assert.equal(solitaireJoinBody({wxid: 'a', toWxid: 'r@chatroom', content: 'undefined', newMsgId: '1'}),
+    '{"Wxid":"a","ToWxid":"r@chatroom","Content":"undefined","NewMsgID":1}')
+})
+
+for (const blank of ['', '   ', '\n']) {
+  test(`join body still refuses blank content ${JSON.stringify(blank)}`, () => {
+    assert.throws(() => solitaireJoinBody({wxid: 'a', toWxid: 'r@chatroom', content: blank, newMsgId: '1'}))
   })
 }
 
@@ -118,11 +123,18 @@ test('owner taps the button: group nickname goes through the server join API', a
     ['{"Wxid":"wxid_self","ToWxid":"room@chatroom","Content":"我的群昵称","NewMsgID":9007199254740993123}'])
 })
 
-test('a placeholder name is never written into the WeChat list', async () => {
+test('a nickname that reads "undefined" is a real name and joins normally', async () => {
   const f = fixture({groupName: 'undefined'})
   await f.client.handleSolitaireJoin(f.ctx(456), `sl:${tokenFor()}`)
+  assert.deepEqual(f.replies, ['已加入接龙名单：undefined'])
+  assert.equal(JSON.parse(f.bodies[0]).Content, 'undefined')
+})
+
+test('a genuinely empty name is refused instead of sending anything', async () => {
+  const f = fixture({groupName: '   '})
+  await f.client.handleSolitaireJoin(f.ctx(456), `sl:${tokenFor()}`)
   assert.deepEqual(f.replies, [zh['solitaire.no_name']])
-  assert.equal(f.bodies.length, 0, 'nothing is sent when the name is unusable')
+  assert.equal(f.bodies.length, 0)
 })
 
 test('non-owner taps the button: nothing is sent to WeChat', async () => {

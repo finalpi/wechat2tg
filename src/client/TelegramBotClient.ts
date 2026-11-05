@@ -788,8 +788,9 @@ export class TelegramBotClient extends AbstractClient {
             this.groupMemberNames ??= createGroupMemberNameResolver(() => wxClient.wxInfo?.wxid || '')
             const fallback = wxClient.wxInfo?.nickName || target.selfId
             const name = await this.groupMemberNames(target.toWxid, target.selfId, fallback)
-            if (typeof name !== 'string' || !name.trim() || name === 'undefined' || name === 'null') {
-                // A placeholder here would be written into the WeChat list permanently.
+            if (typeof name !== 'string' || !name.trim()) {
+                // Only a genuinely missing name is refused; a nickname that reads
+                // "undefined" is real data and must stay joinable.
                 this.logger?.warn('Solitaire join skipped: no usable WeChat name')
                 await replyDirectoryText(ctx, this.i18n.t('solitaire.no_name'))
                 return
