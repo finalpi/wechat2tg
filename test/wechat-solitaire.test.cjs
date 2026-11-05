@@ -26,7 +26,7 @@ function fixture() {
       if (name === '../util/MessageTypeUtils') return require('../dist/util/MessageTypeUtils')
       if (name === '../util/TelegramTopicUtils') return require('../dist/util/TelegramTopicUtils')
       if (name === '../service/SolitaireService') return require('../dist/service/SolitaireService')
-      if (name === '../i18n') return {getInstance: () => ({t: key => key === 'solitaire.join_button' ? '我要接龙' : key})}
+      if (name === '../i18n') return {getInstance: () => ({t: key => key === 'solitaire.join_button' ? '参与接龙' : key})}
       if (name === '../service/WechatAccountClassificationService') return {WechatAccountClassificationService: {getInstance: () => ({isOfficialAccount: async () => false})}}
       return {}
     },
@@ -91,7 +91,7 @@ test('group solitaire attaches an owner-scoped join button resolving to the real
   await client.onMessage(message)
   const buttons = sent[0].param.inline_keyboard.flat()
   assert.equal(buttons.length, 1)
-  assert.equal(buttons[0].text, '我要接龙')
+  assert.equal(buttons[0].text, '参与接龙')
   assert.match(buttons[0].callback_data, /^sl:[a-z0-9]+$/)
   assert(buttons[0].callback_data.length <= 64)
   const target = solitaireJoins.resolve(buttons[0].callback_data.slice(3), 456)
@@ -102,11 +102,16 @@ test('group solitaire attaches an owner-scoped join button resolving to the real
   assert.equal(solitaireJoins.resolve(buttons[0].callback_data.slice(3), 999), undefined)
 })
 
-test('a one-to-one solitaire keeps forwarding without a join button', async () => {
+test('a one-to-one solitaire also offers the join button targeting that contact', async () => {
+  const {solitaireJoins} = require('../dist/service/SolitaireService')
   const {client, message, sent} = fixture()
   client.bindGroupService.resolveWechat = async () => ({chatId: -100124, wxId: 'wxid_friend', type: 0, isReceive: true})
   message.room = async () => null
   await client.onMessage(message)
   assert.equal(sent.length, 1)
-  assert.equal(sent[0].param, undefined)
+  const buttons = sent[0].param.inline_keyboard.flat()
+  assert.equal(buttons[0].text, '参与接龙')
+  const target = solitaireJoins.resolve(buttons[0].callback_data.slice(3), 456)
+  assert.equal(target.toWxid, 'sender', 'one-to-one targets the counterpart WeChat id')
+  assert.equal(target.newMsgId, message.newMsgId)
 })

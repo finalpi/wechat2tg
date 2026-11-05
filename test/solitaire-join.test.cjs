@@ -25,7 +25,6 @@ test('join body carries no Title/Tail and keeps uint64 IDs as raw JSON digits', 
 
 for (const input of [
   {wxid: '', toWxid: 'r@chatroom', content: 'x', newMsgId: '1'},
-  {wxid: 'a', toWxid: 'wxid_person', content: 'x', newMsgId: '1'},
   {wxid: 'a', toWxid: 'r@chatroom', content: '   ', newMsgId: '1'},
   {wxid: 'a', toWxid: 'r@chatroom', content: 'x', newMsgId: '0'},
   {wxid: 'a', toWxid: 'r@chatroom', content: 'x', newMsgId: '1e5'},
@@ -35,6 +34,11 @@ for (const input of [
     assert.throws(() => solitaireJoinBody(input))
   })
 }
+
+test('one-to-one conversations are accepted as join targets', () => {
+  assert.equal(solitaireJoinBody({wxid: 'a', toWxid: 'wxid_friend', content: '我的名字', newMsgId: '7'}),
+    '{"Wxid":"a","ToWxid":"wxid_friend","Content":"我的名字","NewMsgID":7}')
+})
 
 test('only an explicit success counts as joined; -8 is a rejection; anything else is uncertain', () => {
   assert.deepEqual(classifySolitaireResponse({Success: true, Code: 0, Data: {}}), {status: 'joined'})

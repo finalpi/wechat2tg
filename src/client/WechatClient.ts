@@ -658,7 +658,7 @@ export class WeChatClient extends AbstractClient {
         let appLinkList
         const emojiConverter = new EmojiConverter()
         switch (msg.type()) {
-            case WxMessage.Type.Solitaire:
+            case WxMessage.Type.Solitaire: {
                 // The SDK exposes the complete visible title/list, keeping raw XML
                 // separately. Never leak solitaire_info or silently discard subtype 53.
                 messageParam.source_text = msg._xml || msg._text
@@ -667,11 +667,12 @@ export class WeChatClient extends AbstractClient {
                 configuration, config.WECHAT_CUSTOM_EMOJI_ENABLED)
                 // Joining goes through the server-side API, which looks the message up
                 // by ID; the token keeps the callback payload short.
-                if (room && this._wxInfo?.wxid && solitaireJoins) {
+                const solitaireWxId = room ? room.chatroomId : wxId
+                if (solitaireWxId && this._wxInfo?.wxid && solitaireJoins) {
                     try {
                         const token = solitaireJoins.add({
                             ownerId: configuration.chatId,
-                            toWxid: room.chatroomId,
+                            toWxid: solitaireWxId,
                             selfId: this._wxInfo.wxid,
                             msgId: msg._msgId ? String(msg._msgId) : undefined,
                             newMsgId: msg.newMsgId ? String(msg.newMsgId) : undefined,
@@ -687,6 +688,7 @@ export class WeChatClient extends AbstractClient {
                 }
                 await WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
+            }
             case WxMessage.Type.Text:
                 // 因为是html模式 原始的文本中的<>需要转义
                 messageParam.content = messageParam.content.replaceAll(/</g, '&lt;')
