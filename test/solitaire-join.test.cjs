@@ -40,6 +40,12 @@ test('one-to-one conversations are accepted as join targets', () => {
     '{"Wxid":"a","ToWxid":"wxid_friend","Content":"我的名字","NewMsgID":7}')
 })
 
+for (const bad of ['undefined', 'null', 'undefined ']) {
+  test(`join body refuses placeholder content ${JSON.stringify(bad)}`, () => {
+    assert.throws(() => solitaireJoinBody({wxid: 'a', toWxid: 'r@chatroom', content: bad, newMsgId: '1'}))
+  })
+}
+
 test('only an explicit success counts as joined; -8 is a rejection; anything else is uncertain', () => {
   assert.deepEqual(classifySolitaireResponse({Success: true, Code: 0, Data: {}}), {status: 'joined'})
   assert.deepEqual(classifySolitaireResponse({Success: false, Code: -8, Message: ' 未找到接龙消息 '}),
@@ -110,6 +116,13 @@ test('owner taps the button: group nickname goes through the server join API', a
   assert.deepEqual(f.names, [{roomId: 'room@chatroom', senderId: 'wxid_self', fallback: '微信昵称'}])
   assert.deepEqual(f.bodies,
     ['{"Wxid":"wxid_self","ToWxid":"room@chatroom","Content":"我的群昵称","NewMsgID":9007199254740993123}'])
+})
+
+test('a placeholder name is never written into the WeChat list', async () => {
+  const f = fixture({groupName: 'undefined'})
+  await f.client.handleSolitaireJoin(f.ctx(456), `sl:${tokenFor()}`)
+  assert.deepEqual(f.replies, [zh['solitaire.no_name']])
+  assert.equal(f.bodies.length, 0, 'nothing is sent when the name is unusable')
 })
 
 test('non-owner taps the button: nothing is sent to WeChat', async () => {

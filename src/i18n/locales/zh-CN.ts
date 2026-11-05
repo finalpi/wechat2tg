@@ -108,6 +108,7 @@ const zhCN = {
   'solitaire.unknown': '接龙结果不确定，请到微信确认；不会自动重发，避免重复报名。',
   'solitaire.expired': '这个接龙按钮已过期，请重新触发该接龙消息或直接在微信接龙。',
   'solitaire.owner_only': '只有机器人主人可以接龙。',
+  'solitaire.no_name': '没有取到可用的微信昵称，已取消发送，避免在接龙名单里写入 undefined。请确认微信昵称或群昵称后再试。',
   'pagination.page': '第 {{page}} / {{pages}} 页',
   'pagination.total': '共 {{count}} 条',
   'pagination.search': '搜索：',

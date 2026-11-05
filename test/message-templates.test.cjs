@@ -66,6 +66,19 @@ test('real member parsing/cache prefers each group DisplayName, then NickName, n
   assert.equal(calls.at(-1).Wxid, 'account-b')
 })
 
+test('placeholder nicknames never leak out of the resolver', async t => {
+  t.mock.method(groupApi, 'GetChatRoomMemberDetail', async () => result([member('blank', ''), member('literal', 'undefined'), member('empty', '', '')]))
+  let self = 'account-a'
+  const resolve = createGroupMemberNameResolver(() => self)
+  assert.equal(await resolve('a@chatroom', 'missing', 'undefined'), '', 'a placeholder fallback is discarded, not returned')
+  assert.equal(await resolve('a@chatroom', 'missing', 'null'), '')
+  assert.equal(await resolve('a@chatroom', 'blank', '微信昵称'), '微信昵称', 'a blank display name falls back to the nickname')
+  assert.equal(await resolve('a@chatroom', 'empty', ''), '', 'no nickname and no fallback yields an empty name')
+  assert.equal(await resolve('wxid_person', 'missing', 'undefined'), '', 'one-to-one without a nickname cannot join either')
+  self = ''
+  assert.equal(await resolve('a@chatroom', 'missing', 'undefined'), '')
+})
+
 test('failed and hanging member enrichment falls back quickly with a per-account/group backoff', async () => {
   let now = 1000, calls = 0, self = 'account-a', mode = 'hang'
   const timers = new Map(), exports = {}

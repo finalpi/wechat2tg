@@ -27,7 +27,7 @@ export function solitaireJoinBody(input: SolitaireJoinInput): string {
     const content = String(input.content ?? '').replace(/\r\n?/g, '\n').trim()
     if (!wxid) throw new Error('Invalid solitaire account')
     // Group and one-to-one conversations are both valid targets.
-    if (!content) throw new Error('Invalid solitaire content')
+    if (!content || content === 'undefined' || content === 'null') throw new Error('Invalid solitaire content')
     const fields = [`"Wxid":${JSON.stringify(wxid)}`, `"ToWxid":${JSON.stringify(toWxid)}`, `"Content":${JSON.stringify(content)}`]
     if (input.newMsgId) fields.push(`"NewMsgID":${uint(input.newMsgId, 'message id')}`)
     else fields.push(`"MsgID":${uint(input.msgId, 'message id')}`)

@@ -108,6 +108,7 @@ const enUS = {
   'solitaire.unknown': 'The solitaire result is uncertain. Check WeChat; it is never retried automatically to avoid duplicate entries.',
   'solitaire.expired': 'This join button expired. Trigger the solitaire message again or join from WeChat.',
   'solitaire.owner_only': 'Only the bot owner can join solitaires.',
+  'solitaire.no_name': 'No usable WeChat name was found, so nothing was sent. Add a WeChat or group nickname and try again.',
   'pagination.page': 'Page {{page}} / {{pages}}',
   'pagination.total': '{{count}} entries',
   'pagination.search': 'Search:',
