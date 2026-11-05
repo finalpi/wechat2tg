@@ -830,7 +830,7 @@ export class TelegramBotClient extends AbstractClient {
             })
             const outcome = await sendSolitaireJoin(body)
             if (outcome.status === 'joined') {
-                this.logger?.info?.('Solitaire join submitted')
+                await this.sendSolitaireUpdate(ctx, target, outcome.title, outcome.newMsgId)
             } else if (outcome.status === 'rejected') {
                 await replyDirectoryText(ctx, this.i18n.t('solitaire.rejected', {reason: outcome.reason}))
             } else {
@@ -839,6 +839,28 @@ export class TelegramBotClient extends AbstractClient {
         } catch (error) {
             this.logger?.warn('Solitaire join unavailable', error?.message || error?.name)
             await replyDirectoryText(ctx, this.i18n.t('solitaire.unknown'))
+        }
+    }
+
+    /** Sends the updated list as a fresh message with both join buttons. */
+    private async sendSolitaireUpdate(ctx: Context, target: {toWxid: string, selfId: string}, title?: string, newMsgId?: string): Promise<void> {
+        if (!title) return
+        const ownerId = ctx.from?.id
+        if (!ownerId) return
+        try {
+            const {joinToken, customToken} = solitaireJoins.register(ownerId, target.toWxid, target.selfId, newMsgId)
+            const html = title.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+            const threadId = this.currentThread(ctx)
+            await ctx.reply(html, {
+                parse_mode: 'HTML',
+                reply_markup: {inline_keyboard: [[
+                    {text: this.i18n.t('solitaire.join_button'), callback_data: `sl:${joinToken}`},
+                    {text: this.i18n.t('solitaire.custom_button'), callback_data: `slc:${customToken}`},
+                ]]},
+                ...(threadId ? {message_thread_id: threadId} : {}),
+            })
+        } catch (error) {
+            this.logger?.warn('Solitaire update send failed', error?.code || error?.name)
         }
     }
 
@@ -898,7 +920,7 @@ export class TelegramBotClient extends AbstractClient {
             } else if (outcome.status === 'unknown') {
                 await replyDirectoryText(ctx, this.i18n.t('solitaire.unknown'))
             } else {
-                this.logger?.info?.('Solitaire custom join submitted')
+                await this.sendSolitaireUpdate(ctx, target, outcome.title, outcome.newMsgId)
             }
         } catch (error) {
             this.logger?.warn('Solitaire custom join unavailable', error?.message || error?.name)
@@ -2019,6 +2041,8 @@ ${this.i18n.t('help.instructions')}`))
                     await replyDirectoryText(ctx, this.i18n.t('solitaire.rejected', {reason: outcome.reason}))
                 } else if (outcome.status === 'unknown') {
                     await replyDirectoryText(ctx, this.i18n.t('solitaire.unknown'))
+                } else {
+                    await this.sendSolitaireUpdate(ctx, {toWxid: binding.wxId, selfId: wxClient.wxInfo?.wxid || ''}, outcome.title, outcome.newMsgId)
                 }
             } catch (error) {
                 this.logger?.warn('Solitaire create unavailable', error?.message || error?.name)

@@ -80,6 +80,14 @@ test('only an explicit success counts as joined; -8 is a rejection; anything els
   }
 })
 
+test('a real server response yields the list and the next message id', () => {
+  const xml = '<appmsg><title><![CDATA[#接龙\n\n周五聚餐\n\n1. 报名]]></title><type>53</type></appmsg>'
+  const data = {Success: true, Code: 0, Data: {Xml: xml, SendResult: {newMsgId: '9007199254740994000', msgId: 42}}}
+  assert.deepEqual(classifySolitaireResponse(data), {status: 'joined', title: '#接龙\n\n周五聚餐\n\n1. 报名', newMsgId: '9007199254740994000'})
+  assert.deepEqual(classifySolitaireResponse({Success: true, Code: 0, Data: {Xml: '<appmsg></appmsg>', SendResult: {msgId: 7}}}),
+    {status: 'joined', newMsgId: '7'})
+})
+
 test('callback tokens are owner scoped, expire, and stay bounded', () => {
   let now = 1000
   const registry = new SolitaireJoinRegistry(100, 3, () => now)
@@ -268,19 +276,32 @@ test('/solitaire without a bound WeChat group is refused with usage', async () =
 })
 
 test('the typed entry message is kept, not deleted', async () => {
-  const f = fixture({result: {status: 'joined', title: '#接龙\n\n1. 2 份'}})
+  const f = fixture({result: {status: 'joined', title: '#接龙\n\n1. 2 份', newMsgId: '7'}})
   solitaireJoins.remember({token: 't', ownerId: 456, toWxid: 'room@chatroom', selfId: 'wxid_self', newMsgId: '7', expiresAt: Date.now() + 60000})
   const token = solitaireJoins.add({ownerId: 456, toWxid: 'room@chatroom', selfId: 'wxid_self', newMsgId: '7'})
   await f.client.handleSolitaireCustom(f.ctx(456), `slc:${token}`)
-  await f.client.dealWithCommand({from: {id: 456}, chat: {id: -100123, type: 'supergroup'}}, '2 份')
+  await f.client.dealWithCommand(f.ctx(456), '2 份')
   assert.deepEqual(f.deleted, [], 'the user entry stays in the chat')
   assert.equal(JSON.parse(f.bodies[0]).Content, '2 份')
+  assert.equal(f.replies.at(-1), '#接龙\n\n1. 2 份', 'the updated list is posted as a new message')
 })
 
-test('a successful join is silent and never edits the source message', async () => {
-  const f = fixture()
+test('a successful join sends a fresh list message with both buttons', async () => {
+  const list = '#接龙\n\n周五聚餐\n\n1. 报名\n2. 我'
+  const f = fixture({result: {status: 'joined', title: list, newMsgId: '9007199254740994000'}})
   await f.client.handleSolitaireJoin(f.ctx(456), `sl:${tokenFor()}`)
-  assert.deepEqual(f.replies, [], 'no extra bot message')
-  assert.deepEqual(f.edits, [], 'the solitaire message is never edited')
-  assert.equal(f.bodies.length, 1, 'exactly one server request was sent')
+  assert.deepEqual(f.edits, [], 'never edit the source message')
+  assert.equal(f.bodies.length, 1, 'exactly one server request')
+  // the reply carries the list; buttons are on the reply markup (options ignored by fixture)
+  assert.equal(f.replies[0], list.replaceAll('<', '&lt;').replaceAll('>', '&gt;'))
+  const next = solitaireJoins.latest(456, 'room@chatroom')
+  assert.equal(next.newMsgId, '9007199254740994000', 'buttons chain to the newest message id')
+})
+
+test('a successful /solitaire create also posts the new list', async () => {
+  const list = '#接龙\n\n周五聚餐\n\n1. 报名'
+  const f = fixture({createResult: {status: 'joined', title: list, newMsgId: '42'}})
+  await f.command('solitaire', {payload: '周五聚餐 | 报名'})
+  assert.equal(f.replies[0], list)
+  assert.equal(solitaireJoins.latest(456, 'room@chatroom').newMsgId, '42')
 })
