@@ -35,13 +35,41 @@ export function solitaireJoinBody(input: SolitaireJoinInput): string {
 }
 
 export type SolitaireJoinOutcome =
-    | {status: 'joined'}
+    | {status: 'joined'; title?: string}
     | {status: 'rejected'; reason: string}
     | {status: 'unknown'}
 
+const NAMED_ENTITIES: Record<string, string> = {amp: '&', lt: '<', gt: '>', quot: '"', apos: '\''}
+
+function decodeXmlText(value: string): string {
+    return value.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (match, entity: string) => {
+        if (NAMED_ENTITIES[entity]) return NAMED_ENTITIES[entity]
+        const code = entity.startsWith('#x') ? parseInt(entity.slice(2), 16)
+            : entity.startsWith('#') ? Number(entity.slice(1)) : NaN
+        return Number.isFinite(code) && code > 0 ? String.fromCodePoint(code) : match
+    })
+}
+
+/** The server returns the appmsg XML it actually sent; its title is the updated list. */
+export function solitaireTitleFromXml(xml: unknown): string | undefined {
+    if (typeof xml !== 'string' || !xml) return undefined
+    const match = /<title>([\s\S]*?)<\/title>/.exec(xml)
+    if (!match) return undefined
+    const cdata = /^<!\[CDATA\[([\s\S]*)\]\]>$/.exec(match[1])
+    const title = decodeXmlText(cdata ? cdata[1] : match[1]).trim()
+    return title || undefined
+}
+
+function updatedSolitaireTitle(data: any): string | undefined {
+    return solitaireTitleFromXml(data?.Data?.Xml) ?? solitaireTitleFromXml(data?.Data?.SendResult?.Xml)
+}
+
 export function classifySolitaireResponse(data: any): SolitaireJoinOutcome {
     if (!data || typeof data !== 'object') return {status: 'unknown'}
-    if (data.Success === true && Number(data.Code) === 0) return {status: 'joined'}
+    if (data.Success === true && Number(data.Code) === 0) {
+        const title = updatedSolitaireTitle(data)
+        return title ? {status: 'joined', title} : {status: 'joined'}
+    }
     // -8 is the server's explicit validation/prepare rejection; other failures
     // may happen after the request reached WeChat, so they stay uncertain.
     if (Number(data.Code) === -8) {

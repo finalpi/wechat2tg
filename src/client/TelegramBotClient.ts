@@ -830,9 +830,7 @@ export class TelegramBotClient extends AbstractClient {
             })
             const outcome = await sendSolitaireJoin(body)
             if (outcome.status === 'joined') {
-                // WeChat publishes the updated solitaire as a normal message, so the
-                // forwarded result is the confirmation; no extra bot chatter.
-                this.logger?.info?.('Solitaire join submitted')
+                await this.revealSolitaire(ctx, outcome.title)
             } else if (outcome.status === 'rejected') {
                 await replyDirectoryText(ctx, this.i18n.t('solitaire.rejected', {reason: outcome.reason}))
             } else {
@@ -877,6 +875,23 @@ export class TelegramBotClient extends AbstractClient {
         })
     }
 
+    /** Shows the updated solitaire list; the source message keeps its buttons. */
+    private async revealSolitaire(ctx: Context, title?: string): Promise<void> {
+        if (!title) return
+        const html = FormatUtils.escapeHtml(title)
+        const source = ctx.callbackQuery?.message
+        if (source) {
+            try {
+                await ctx.editMessageText(html, {parse_mode: 'HTML'})
+                return
+            } catch (error) {
+                // "message is not modified" and stale messages both fall through.
+                this.logger?.debug?.('Solitaire list edit skipped', error?.code || error?.name)
+            }
+        }
+        await replyDirectoryText(ctx, title)
+    }
+
     /** Shared by the custom prompt and /join; content replaces the nickname entirely. */
     private async submitSolitaireContent(ctx: Context, target: {toWxid: string, selfId: string, msgId?: string, newMsgId?: string}, content: string): Promise<void> {
         const text = String(content ?? '').replace(/\r\n?/g, '\n').trim()
@@ -900,7 +915,7 @@ export class TelegramBotClient extends AbstractClient {
             } else if (outcome.status === 'unknown') {
                 await replyDirectoryText(ctx, this.i18n.t('solitaire.unknown'))
             } else {
-                this.logger?.info?.('Solitaire custom join submitted')
+                await this.revealSolitaire(ctx, outcome.title)
             }
         } catch (error) {
             this.logger?.warn('Solitaire custom join unavailable', error?.message || error?.name)
@@ -2644,12 +2659,6 @@ ${this.i18n.t('help.instructions')}`))
             const target = solitaireJoins.takePending(ownerId, ctx.chat?.id, this.currentThread(ctx))
             if (target) {
                 await this.submitSolitaireContent(ctx, target, text)
-                // Keep the chat tidy: the reply acts as a form submission.
-                try {
-                    await ctx.deleteMessage()
-                } catch (error) {
-                    this.logger?.debug?.('Solitaire entry cleanup skipped', error?.code || error?.name)
-                }
                 return true
             }
         }

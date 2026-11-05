@@ -100,7 +100,7 @@ const serviceApi = require('../dist/service/SolitaireService')
 
 function fixture({loggedIn = true, groupName = '我的群昵称', result = {status: 'joined'}, createResult = {status: 'joined'}, binding = {chatId: -100123, wxId: 'room@chatroom', type: 1}} = {}) {
   solitaireJoins.clear()
-  const replies = [], names = [], bodies = []
+  const replies = [], names = [], bodies = [], edits = [], deleted = []
   const i18n = {t: (key, params = {}) => Object.entries(params).reduce((value, [name, replacement]) => value.replaceAll(`{{${name}}}`, replacement), zh[key] || key)}
   const wxClient = {hasLogin: loggedIn, wxInfo: {wxid: 'wxid_self', nickName: '微信昵称'}}
   const exports = {}
@@ -120,6 +120,7 @@ function fixture({loggedIn = true, groupName = '我的群昵称', result = {stat
       // __importDefault wraps this object, so expose the methods directly.
       '../service/TelegramCommandHelper': {setCommand: noop, setSimpleCommandHandler: noop},
       '../util/TelegramTopicUtils': require('../dist/util/TelegramTopicUtils'),
+      '../util/FormatUtils': require('../dist/util/FormatUtils'),
     }[name] || {}),
   })
   const client = Object.create(exports.TelegramBotClient.prototype)
@@ -136,7 +137,9 @@ function fixture({loggedIn = true, groupName = '我的群昵称', result = {stat
     action: noop, use: noop, on: noop, hears: noop})
   const reply = async text => {replies.push(text); return {message_id: 2}}
   const ctx = fromId => ({from: {id: fromId}, chat: {id: -100123, type: 'supergroup'},
-    callbackQuery: {message: {message_id: 1}}, answerCbQuery: async () => true, reply})
+    callbackQuery: {message: {message_id: 1}}, answerCbQuery: async () => true, reply,
+    editMessageText: async (text, options) => {edits.push({text, options}); return {message_id: 1}},
+    deleteMessage: async () => {deleted.push(1)}})
   const command = (name, {payload = '', fromId = 456, type = 'supergroup'} = {}) => {
     const record = {payload, replies}
     const context = {from: {id: fromId}, chat: {id: -100123, type}, payload,
@@ -144,7 +147,7 @@ function fixture({loggedIn = true, groupName = '我的群昵称', result = {stat
       telegram: {}}
     return commands.get(name)(context).then(() => record)
   }
-  return {client, ctx, replies, names, bodies, command, setPendingConsume: text => client.dealWithCommand(ctx(456), text)}
+  return {client, ctx, replies, names, bodies, edits, deleted, command}
 }
 
 function tokenFor(ownerId = 456) {
@@ -154,7 +157,7 @@ function tokenFor(ownerId = 456) {
 test('owner taps the button: group nickname goes through the server join API', async () => {
   const f = fixture()
   await f.client.handleSolitaireJoin(f.ctx(456), `sl:${tokenFor()}`)
-  assert.deepEqual(f.replies, [], 'a successful join stays silent: WeChat forwards the updated solitaire')
+  assert.deepEqual(f.replies, [], 'the source message is edited, not duplicated')
   assert.deepEqual(f.names, [{roomId: 'room@chatroom', senderId: 'wxid_self', fallback: '微信昵称'}])
   assert.deepEqual(f.bodies,
     ['{"Wxid":"wxid_self","ToWxid":"room@chatroom","Content":"我的群昵称","NewMsgID":9007199254740993123}'])
@@ -163,8 +166,8 @@ test('owner taps the button: group nickname goes through the server join API', a
 test('a nickname that reads "undefined" is a real name and joins normally', async () => {
   const f = fixture({groupName: 'undefined'})
   await f.client.handleSolitaireJoin(f.ctx(456), `sl:${tokenFor()}`)
-  assert.deepEqual(f.replies, [])
   assert.equal(JSON.parse(f.bodies[0]).Content, 'undefined')
+  assert.deepEqual(f.edits, [], 'no list to show when the server returns no title')
 })
 
 test('a genuinely empty name is refused instead of sending anything', async () => {
@@ -213,7 +216,6 @@ test('/join sends the typed text verbatim, replacing the nickname', async () => 
   const f = fixture()
   solitaireJoins.remember({token: 't', ownerId: 456, toWxid: 'room@chatroom', selfId: 'wxid_self', newMsgId: '9007199254740993123', expiresAt: Date.now() + 60000})
   await f.command('join', {payload: '  2 份  '})
-  assert.deepEqual(f.replies, [])
   assert.equal(JSON.parse(f.bodies[0]).Content, '2 份')
   assert.equal(JSON.parse(f.bodies[0]).NewMsgID, 9007199254740993000)
 })
@@ -263,4 +265,53 @@ test('/solitaire without a bound WeChat group is refused with usage', async () =
   await bad.command('solitaire', {payload: '只有标题'})
   assert.deepEqual(bad.replies, [zh['solitaire.create_usage']])
   assert.equal(bad.bodies.length, 0)
+})
+
+test('the server title is parsed from CDATA and escaped XML', () => {
+  const {solitaireTitleFromXml} = require('../dist/service/SolitaireService')
+  const list = '#接龙\n\n周五聚餐\n\n1. 报名\n2. 123\n3.'
+  assert.equal(solitaireTitleFromXml('<?xml version="1.0"?><msg><appmsg><title><![CDATA[' + list + ']]></title></appmsg></msg>'), list)
+  assert.equal(solitaireTitleFromXml('<msg><appmsg><title>#接龙 &amp; &lt;测试&gt;</title></appmsg></msg>'), '#接龙 & <测试>')
+  assert.equal(solitaireTitleFromXml('<msg><appmsg><title>#接龙 &#x4e2d;</title></appmsg></msg>'), '#接龙 中')
+  assert.equal(solitaireTitleFromXml('<msg></msg>'), undefined)
+  assert.equal(solitaireTitleFromXml(''), undefined)
+  assert.equal(solitaireTitleFromXml(undefined), undefined)
+})
+
+test('a successful join shows the updated list on the solitaire message itself', async () => {
+  const list = '#接龙\n\n周五聚餐\n\n1. 报名\n2. 我 <2 份>'
+  const f = fixture({result: {status: 'joined', title: list}})
+  await f.client.handleSolitaireJoin(f.ctx(456), `sl:${tokenFor()}`)
+  assert.deepEqual(f.replies, [], 'nothing extra is posted')
+  assert.equal(f.edits.length, 1)
+  assert.equal(f.edits[0].text, '#接龙\n\n周五聚餐\n\n1. 报名\n2. 我 &lt;2 份&gt;', 'the list is HTML-escaped')
+  assert.equal(f.edits[0].options.parse_mode, 'HTML')
+})
+
+test('/join without a callback message replies with the updated list', async () => {
+  const list = '#接龙\n\n周五聚餐\n\n1. 报名\n2. 2 份'
+  const f = fixture({result: {status: 'joined', title: list}})
+  solitaireJoins.remember({token: 't', ownerId: 456, toWxid: 'room@chatroom', selfId: 'wxid_self', newMsgId: '7', expiresAt: Date.now() + 60000})
+  await f.command('join', {payload: '2 份'})
+  assert.deepEqual(f.replies, [list])
+  assert.equal(f.edits.length, 0)
+})
+
+test('the typed entry message is kept, not deleted', async () => {
+  const f = fixture({result: {status: 'joined', title: '#接龙\n\n1. 2 份'}})
+  solitaireJoins.remember({token: 't', ownerId: 456, toWxid: 'room@chatroom', selfId: 'wxid_self', newMsgId: '7', expiresAt: Date.now() + 60000})
+  const token = solitaireJoins.add({ownerId: 456, toWxid: 'room@chatroom', selfId: 'wxid_self', newMsgId: '7'})
+  await f.client.handleSolitaireCustom(f.ctx(456), `slc:${token}`)
+  await f.client.dealWithCommand({from: {id: 456}, chat: {id: -100123, type: 'supergroup'}}, '2 份')
+  assert.deepEqual(f.deleted, [], 'the user entry stays in the chat')
+  assert.equal(JSON.parse(f.bodies[0]).Content, '2 份')
+})
+
+test('an edit failure falls back to replying with the list', async () => {
+  const list = '#接龙\n\n1. A'
+  const f = fixture({result: {status: 'joined', title: list}})
+  const ctx = f.ctx(456)
+  ctx.editMessageText = async () => {throw new Error('message is not modified')}
+  await f.client.handleSolitaireJoin(ctx, `sl:${tokenFor()}`)
+  assert.deepEqual(f.replies, [list])
 })
