@@ -180,7 +180,16 @@ export class TelegramBotClient extends AbstractClient {
 
     private enqueueTelegramMessage(item: QueuedTelegramMessage): void {
         this.telegramMessageQueue.push(item)
-        void this.processTelegramMessageQueue()
+        // Each chat owns a serial lane, so one slow conversion cannot hold others.
+        const chatKey = String(item.message.chatId ?? 0)
+        const previous = this.chatLanes.get(chatKey) ?? Promise.resolve()
+        const lane = previous.then(() => this.runQueuedTelegramItem(item)).catch(() => undefined)
+        this.chatLanes.set(chatKey, lane)
+        void lane.finally(() => {
+            const index = this.telegramMessageQueue.indexOf(item)
+            if (index >= 0) this.telegramMessageQueue.splice(index, 1)
+            if (this.chatLanes.get(chatKey) === lane) this.chatLanes.delete(chatKey)
+        })
     }
     public mirrorWebUI(message:BaseMessage):Promise<TelegramSendResult> {
         return new Promise(resolve=>this.enqueueTelegramMessage({message,messageId:`webui:${message.id}`,isRetry:true,webui:true,resolve}))
@@ -195,57 +204,39 @@ export class TelegramBotClient extends AbstractClient {
         })
     }
 
-    private async processTelegramMessageQueue(): Promise<void> {
-        if (this.isProcessingQueue) {
+    /** Sends one queued item; the caller's chat lane keeps per-chat order. */
+    private async runQueuedTelegramItem(item: QueuedTelegramMessage): Promise<void> {
+        this.currentRetryAfterMs = undefined
+        this.currentDeliveryUncertain = false
+        this.activeWebUISync.add(item.message.id)
+        if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(item.message.id,'syncing').catch(() => undefined)
+        let result: TelegramSendResult
+        try {
+            result = await this.sendBufferedMessage(item.message)
+        } catch (error) {
+            this.logger.error(`Telegram 队列发送失败: ${item.message.id}`, error)
+            result = {success: false}
+        }
+
+        const retryAfterMs = Math.max(result.retryAfterMs || 0, this.currentRetryAfterMs || 0) || undefined
+        this.activeWebUISync.delete(item.message.id)
+        if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(item.message.id,result.success ? 'synced' : this.currentDeliveryUncertain || result.skipRetry || result.deliveryUncertain ? 'unknown' : 'failed').catch(() => undefined)
+        result = {...result,retryAfterMs,deliveryUncertain:this.currentDeliveryUncertain || result.skipRetry || result.deliveryUncertain}
+
+        if (item.isRetry) {
+            item.resolve?.(item.webui ? result : result.skipRetry ? {...result, success: true} : result)
             return
         }
 
-        this.isProcessingQueue = true
-        try {
-            while (this.telegramMessageQueue.length > 0) {
-                const item = this.telegramMessageQueue.shift()
-                if (!item) {
-                    continue
-                }
-
-                this.currentRetryAfterMs = undefined
-                this.currentDeliveryUncertain = false
-                this.activeWebUISync.add(item.message.id)
-                if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(item.message.id,'syncing').catch(() => undefined)
-                let result: TelegramSendResult
-                try {
-                    result = await this.sendBufferedMessage(item.message)
-                } catch (error) {
-                    this.logger.error(`Telegram 队列发送失败: ${item.message.id}`, error)
-                    result = {success: false}
-                }
-
-                const retryAfterMs = Math.max(result.retryAfterMs || 0, this.currentRetryAfterMs || 0) || undefined
-                this.activeWebUISync.delete(item.message.id)
-                if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(item.message.id,result.success ? 'synced' : this.currentDeliveryUncertain || result.skipRetry || result.deliveryUncertain ? 'unknown' : 'failed').catch(() => undefined)
-                result = {...result,retryAfterMs,deliveryUncertain:this.currentDeliveryUncertain || result.skipRetry || result.deliveryUncertain}
-
-                if (item.isRetry) {
-                    item.resolve?.(item.webui ? result : result.skipRetry ? {...result, success: true} : result)
-                    continue
-                }
-
-                if (result.success || result.skipRetry) {
-                    this.messageBufferService.markMessageAsSent(item.messageId)
-                } else {
-                    this.messageBufferService.markMessageAsFailed(
-                        item.messageId,
-                        message => this.enqueueTelegramRetry(message, item.messageId),
-                        false,
-                        retryAfterMs
-                    )
-                }
-            }
-        } finally {
-            this.isProcessingQueue = false
-            if (this.telegramMessageQueue.length > 0) {
-                void this.processTelegramMessageQueue()
-            }
+        if (result.success || result.skipRetry) {
+            this.messageBufferService.markMessageAsSent(item.messageId)
+        } else {
+            this.messageBufferService.markMessageAsFailed(
+                item.messageId,
+                message => this.enqueueTelegramRetry(message, item.messageId),
+                false,
+                retryAfterMs
+            )
         }
     }
 
@@ -357,15 +348,10 @@ export class TelegramBotClient extends AbstractClient {
     private async sendFileMessage(message: BaseMessage, messageEntity: Message): Promise<FileSendResult> {
         try {
             const configuration = await this.configurationService.getConfig()
-            if (message.file.sendType === 'voice' && config.TENCENT_SECRET_ID && config.TENCENT_SECRET_KEY && configuration.autoTranscript) {
-                try {
-                    const audioTranscript = await SpeechService.getInstance().getTranscript(message.file.file)
-                    this.logger.info('语音转文字转换成功文本内容：', audioTranscript)
-                    message.sender = `${message.sender}\n${audioTranscript}`
-                } catch (e) {
-                    this.logger.error('语音转文字失败:', e)
-                }
-            }
+            // Transcription is network-bound: send the audio first and append the text
+            // by editing the caption, so a slow ASR call cannot hold the chat lane.
+            const shouldTranscribe = message.file.sendType === 'voice'
+                && Boolean(config.TENCENT_SECRET_ID && config.TENCENT_SECRET_KEY && configuration.autoTranscript)
 
             const shouldUseTelegramApiForLargeFile = message.file.sendType === 'document' && message.file.file.length > TELEGRAM_BOT_API_UPLOAD_LIMIT
             const msgRes = shouldUseTelegramApiForLargeFile
@@ -383,6 +369,7 @@ export class TelegramBotClient extends AbstractClient {
 
             messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
             await this.messageService.createOrUpdate(messageEntity)
+            if (shouldTranscribe) void this.appendTranscript(message, messageEntity.tgBotMsgId)
             return {success: true}
         } catch (e) {
             await this.dealException(e, message)
@@ -390,6 +377,18 @@ export class TelegramBotClient extends AbstractClient {
                 return {success: false, skipRetry: true}
             }
             return {success: false}
+        }
+    }
+
+    /** Runs after the audio is delivered; failure only leaves the caption unchanged. */
+    private async appendTranscript(message: BaseMessage, messageId: number): Promise<void> {
+        try {
+            const text = await SpeechService.getInstance().getTranscript(message.file.file)
+            if (!text) return
+            this.logger.info('语音转文字转换成功文本内容：', text)
+            await this.messageSender.editAudio(message.chatId, messageId, `${message.sender}\n${text}`)
+        } catch (error) {
+            this.logger.error('语音转文字失败:', error)
         }
     }
 
@@ -627,6 +626,8 @@ export class TelegramBotClient extends AbstractClient {
     private processingMessages = new Set<string>()
     // 所有转发消息和重试共用同一发送队列
     private telegramMessageQueue: QueuedTelegramMessage[] = []
+    /** Per-chat serial lanes; a slow chat never delays another chat. */
+    private chatLanes = new Map<string, Promise<void>>()
     private activeWebUISync = new Set<string>()
     private isProcessingQueue = false
     private telegramQueueBlockedUntil = 0
