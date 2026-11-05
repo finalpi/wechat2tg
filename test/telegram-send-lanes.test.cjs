@@ -147,3 +147,61 @@ test('non-voice files never trigger transcription', async () => {
   await settle()
   assert.deepEqual(calls.map(call => call.method), ['sendFile'])
 })
+function mediaFixture(Client, calls, {failUpload = false} = {}) {
+  const client = Object.create(Client.prototype)
+  Object.assign(client, {
+    i18n: {t: key => key === 'send.media_preparing' ? '处理中…' : key},
+    logger: {info: noop, warn: noop, error: noop, debug: noop},
+    configurationService: {getConfig: async () => ({autoTranscript: false})},
+    messageService: {createOrUpdate: async () => undefined},
+    currentDeliveryUncertain: false,
+    sendTelegramRequest: async (_chatId, request) => request(),
+    messageSender: {
+      sendText: async (...args) => {calls.push({method: 'sendText', args}); return {message_id: 77}},
+      sendFile: async (...args) => {
+        calls.push({method: 'sendFile', args})
+        if (failUpload) throw new Error('upload rejected')
+        return {message_id: 78}
+      },
+      deleteMessage: async (...args) => {calls.push({method: 'deleteMessage', args})},
+    },
+    dealException: noop,
+  })
+  return client
+}
+
+test('media reserves its slot with a placeholder, replies to it, then clears it', async () => {
+  const calls = []
+  const Client = loadClient({calls})
+  const client = mediaFixture(Client, calls)
+  const message = {id: 'm1', chatId: -5, threadId: 9, sender: 'cap', type: 1,
+    file: {fileName: 'a.gif', file: Buffer.from('a'), sendType: 'animation'}}
+  const entity = {}
+  await client.sendFileMessage(message, entity)
+  assert.deepEqual(calls.map(call => call.method), ['sendText', 'sendFile', 'deleteMessage'])
+  assert.equal(calls[0].args[2].message_thread_id, 9, 'placeholder goes into the same topic')
+  assert.equal(calls[1].args[2].reply_id, 77, 'the upload attaches to the placeholder')
+  assert.deepEqual(calls[2].args, [-5, 77])
+  assert.equal(entity.tgBotMsgId, 78)
+})
+
+test('a failed upload clears its placeholder instead of leaving it stuck', async () => {
+  const calls = []
+  const Client = loadClient({calls})
+  const client = mediaFixture(Client, calls, {failUpload: true})
+  const message = {id: 'm2', chatId: -5, sender: 'cap', type: 1,
+    file: {fileName: 'a.gif', file: Buffer.from('a'), sendType: 'animation'}}
+  assert.equal((await client.sendFileMessage(message, {})).success, false)
+  assert.deepEqual(calls.map(call => call.method), ['sendText', 'sendFile', 'deleteMessage'])
+})
+
+test('large documents keep their existing progress message instead of a placeholder', async () => {
+  const calls = []
+  const Client = loadClient({calls})
+  const client = mediaFixture(Client, calls)
+  client.sendLargeDocumentViaTelegramApi = async () => {calls.push({method: 'largeUpload'}); return {message_id: 80}}
+  const message = {id: 'm3', chatId: -5, sender: 'cap', type: 1,
+    file: {fileName: 'big.zip', file: {length: 60 * 1024 * 1024}, sendType: 'document'}}
+  await client.sendFileMessage(message, {})
+  assert.deepEqual(calls.map(call => call.method), ['largeUpload'])
+})

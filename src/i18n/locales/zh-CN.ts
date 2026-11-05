@@ -68,6 +68,7 @@ const zhCN = {
   'binding.success': '绑定成功',
   'group.create_success': '创建群组成功',
   'group.open': '打开群组 🚀',
+  'send.media_preparing': '处理中…',
   'send.failed': '发送失败',
   'send.sticker_convert_failed': '表情转换失败',
   'auth.phone_number': '请先登录 Telegram 客户端，请输入你的 Telegram 账户的手机号码（需要带国家区号，例如：+8613355558888）',
