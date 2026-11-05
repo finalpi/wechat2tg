@@ -89,7 +89,8 @@ test('group solitaire attaches an owner-scoped join button resolving to the real
   const {solitaireJoins} = require('../dist/service/SolitaireService')
   const {client, message, sent} = fixture()
   await client.onMessage(message)
-  const buttons = sent[0].param.inline_keyboard.flat()
+  assert.equal(Array.isArray(sent[0].param.inline_keyboard[0]), false)
+  const buttons = sent[0].param.inline_keyboard
   assert.equal(buttons.length, 1)
   assert.equal(buttons[0].text, '参与接龙')
   assert.match(buttons[0].callback_data, /^sl:[a-z0-9]+$/)
@@ -109,7 +110,8 @@ test('a one-to-one solitaire also offers the join button targeting that contact'
   message.room = async () => null
   await client.onMessage(message)
   assert.equal(sent.length, 1)
-  const buttons = sent[0].param.inline_keyboard.flat()
+  assert.equal(Array.isArray(sent[0].param.inline_keyboard[0]), false)
+  const buttons = sent[0].param.inline_keyboard
   assert.equal(buttons[0].text, '参与接龙')
   const target = solitaireJoins.resolve(buttons[0].callback_data.slice(3), 456)
   assert.equal(target.toWxid, 'sender', 'one-to-one targets the counterpart WeChat id')

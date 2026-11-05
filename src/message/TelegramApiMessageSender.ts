@@ -33,12 +33,16 @@ export class TelegramApiMessageSender extends MessageSender {
                     sendParam.parseMode = option.parse_mode.toLowerCase()
                 }
                 if (option.inline_keyboard) {
-                    sendParam.buttons = [
-                        option.inline_keyboard.map(button => new Api.KeyboardButtonCallback({
+                    // Same normalisation as the Bot API sender: never emit an empty button.
+                    const rows = option.inline_keyboard as any[]
+                    const buttons = (Array.isArray(rows[0]) ? rows.flat() : rows)
+                        .filter(button => button && typeof button.text === 'string' && button.text.trim()
+                            && (button.callback_data || button.query))
+                        .map(button => new Api.KeyboardButtonCallback({
                             text: button.text,
-                            data: Buffer.from(button.callback_data || button.query || '')
+                            data: Buffer.from(button.callback_data || button.query)
                         }))
-                    ]
+                    if (buttons.length) sendParam.buttons = [buttons]
                 }
             }
             if (file.buff && file.fileType === 'photo' && file.buff.length > 5 * 1024 * 1024) {

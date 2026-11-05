@@ -74,12 +74,14 @@ export class TelegramBotApiMessageSender extends MessageSender {
                     sendParam.parse_mode = option.parse_mode
                 }
                 if (option.inline_keyboard) {
-                    sendParam.reply_markup = {
-                        inline_keyboard: [option.inline_keyboard.map(button => ({
-                            text: button.text,
-                            callback_data: button.callback_data || button.query
-                        }))]
-                    }
+                    // Accept a flat button list or nested rows; drop entries Telegram
+                    // would reject so a bad keyboard never fails the whole message.
+                    const rows = option.inline_keyboard as any[]
+                    const buttons = (Array.isArray(rows[0]) ? rows.flat() : rows)
+                        .filter(button => button && typeof button.text === 'string' && button.text.trim()
+                            && (button.callback_data || button.query))
+                        .map(button => ({text: button.text, callback_data: button.callback_data || button.query}))
+                    if (buttons.length) sendParam.reply_markup = {inline_keyboard: [buttons]}
                 }
             }
 

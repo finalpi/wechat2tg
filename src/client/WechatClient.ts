@@ -679,7 +679,7 @@ export class WeChatClient extends AbstractClient {
                         })
                         messageParam.param = {
                             ...(messageParam.param || {}),
-                            inline_keyboard: [[{text: I18n.getInstance().t('solitaire.join_button'), callback_data: `sl:${token}`}]],
+                            inline_keyboard: [{text: I18n.getInstance().t('solitaire.join_button'), callback_data: `sl:${token}`}],
                         }
                     } catch (e) {
                         // A missing solitaire id only loses the button, never the message.
