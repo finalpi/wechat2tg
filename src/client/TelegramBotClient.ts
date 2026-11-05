@@ -830,7 +830,7 @@ export class TelegramBotClient extends AbstractClient {
             })
             const outcome = await sendSolitaireJoin(body)
             if (outcome.status === 'joined') {
-                await this.revealSolitaire(ctx, outcome.title)
+                this.logger?.info?.('Solitaire join submitted')
             } else if (outcome.status === 'rejected') {
                 await replyDirectoryText(ctx, this.i18n.t('solitaire.rejected', {reason: outcome.reason}))
             } else {
@@ -875,23 +875,6 @@ export class TelegramBotClient extends AbstractClient {
         })
     }
 
-    /** Shows the updated solitaire list; the source message keeps its buttons. */
-    private async revealSolitaire(ctx: Context, title?: string): Promise<void> {
-        if (!title) return
-        const html = FormatUtils.escapeHtml(title)
-        const source = ctx.callbackQuery?.message
-        if (source) {
-            try {
-                await ctx.editMessageText(html, {parse_mode: 'HTML'})
-                return
-            } catch (error) {
-                // "message is not modified" and stale messages both fall through.
-                this.logger?.debug?.('Solitaire list edit skipped', error?.code || error?.name)
-            }
-        }
-        await replyDirectoryText(ctx, title)
-    }
-
     /** Shared by the custom prompt and /join; content replaces the nickname entirely. */
     private async submitSolitaireContent(ctx: Context, target: {toWxid: string, selfId: string, msgId?: string, newMsgId?: string}, content: string): Promise<void> {
         const text = String(content ?? '').replace(/\r\n?/g, '\n').trim()
@@ -915,7 +898,7 @@ export class TelegramBotClient extends AbstractClient {
             } else if (outcome.status === 'unknown') {
                 await replyDirectoryText(ctx, this.i18n.t('solitaire.unknown'))
             } else {
-                await this.revealSolitaire(ctx, outcome.title)
+                this.logger?.info?.('Solitaire custom join submitted')
             }
         } catch (error) {
             this.logger?.warn('Solitaire custom join unavailable', error?.message || error?.name)

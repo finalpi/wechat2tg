@@ -267,36 +267,6 @@ test('/solitaire without a bound WeChat group is refused with usage', async () =
   assert.equal(bad.bodies.length, 0)
 })
 
-test('the server title is parsed from CDATA and escaped XML', () => {
-  const {solitaireTitleFromXml} = require('../dist/service/SolitaireService')
-  const list = '#接龙\n\n周五聚餐\n\n1. 报名\n2. 123\n3.'
-  assert.equal(solitaireTitleFromXml('<?xml version="1.0"?><msg><appmsg><title><![CDATA[' + list + ']]></title></appmsg></msg>'), list)
-  assert.equal(solitaireTitleFromXml('<msg><appmsg><title>#接龙 &amp; &lt;测试&gt;</title></appmsg></msg>'), '#接龙 & <测试>')
-  assert.equal(solitaireTitleFromXml('<msg><appmsg><title>#接龙 &#x4e2d;</title></appmsg></msg>'), '#接龙 中')
-  assert.equal(solitaireTitleFromXml('<msg></msg>'), undefined)
-  assert.equal(solitaireTitleFromXml(''), undefined)
-  assert.equal(solitaireTitleFromXml(undefined), undefined)
-})
-
-test('a successful join shows the updated list on the solitaire message itself', async () => {
-  const list = '#接龙\n\n周五聚餐\n\n1. 报名\n2. 我 <2 份>'
-  const f = fixture({result: {status: 'joined', title: list}})
-  await f.client.handleSolitaireJoin(f.ctx(456), `sl:${tokenFor()}`)
-  assert.deepEqual(f.replies, [], 'nothing extra is posted')
-  assert.equal(f.edits.length, 1)
-  assert.equal(f.edits[0].text, '#接龙\n\n周五聚餐\n\n1. 报名\n2. 我 &lt;2 份&gt;', 'the list is HTML-escaped')
-  assert.equal(f.edits[0].options.parse_mode, 'HTML')
-})
-
-test('/join without a callback message replies with the updated list', async () => {
-  const list = '#接龙\n\n周五聚餐\n\n1. 报名\n2. 2 份'
-  const f = fixture({result: {status: 'joined', title: list}})
-  solitaireJoins.remember({token: 't', ownerId: 456, toWxid: 'room@chatroom', selfId: 'wxid_self', newMsgId: '7', expiresAt: Date.now() + 60000})
-  await f.command('join', {payload: '2 份'})
-  assert.deepEqual(f.replies, [list])
-  assert.equal(f.edits.length, 0)
-})
-
 test('the typed entry message is kept, not deleted', async () => {
   const f = fixture({result: {status: 'joined', title: '#接龙\n\n1. 2 份'}})
   solitaireJoins.remember({token: 't', ownerId: 456, toWxid: 'room@chatroom', selfId: 'wxid_self', newMsgId: '7', expiresAt: Date.now() + 60000})
@@ -307,11 +277,10 @@ test('the typed entry message is kept, not deleted', async () => {
   assert.equal(JSON.parse(f.bodies[0]).Content, '2 份')
 })
 
-test('an edit failure falls back to replying with the list', async () => {
-  const list = '#接龙\n\n1. A'
-  const f = fixture({result: {status: 'joined', title: list}})
-  const ctx = f.ctx(456)
-  ctx.editMessageText = async () => {throw new Error('message is not modified')}
-  await f.client.handleSolitaireJoin(ctx, `sl:${tokenFor()}`)
-  assert.deepEqual(f.replies, [list])
+test('a successful join is silent and never edits the source message', async () => {
+  const f = fixture()
+  await f.client.handleSolitaireJoin(f.ctx(456), `sl:${tokenFor()}`)
+  assert.deepEqual(f.replies, [], 'no extra bot message')
+  assert.deepEqual(f.edits, [], 'the solitaire message is never edited')
+  assert.equal(f.bodies.length, 1, 'exactly one server request was sent')
 })
