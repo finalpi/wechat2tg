@@ -54,7 +54,7 @@ import {Api} from 'telegram'
 import {getTelegramThreadId, isSameTelegramDestination} from '../util/TelegramTopicUtils'
 import {WechatAccountClassificationService} from '../service/WechatAccountClassificationService'
 import {createGroupMemberNameResolver} from '../service/GroupMemberNameService'
-import {sendSolitaireJoin, solitaireJoinBody, solitaireJoins} from '../service/SolitaireService'
+import {sendSolitaireCreate, sendSolitaireJoin, solitaireCreateBody, solitaireJoinBody, solitaireJoins} from '../service/SolitaireService'
 
 interface LargeFileProgressEditor {
     update(text: string, force?: boolean, inlineKeyboard?: Array<{ text: string, callback_data: string }>): Promise<void>
@@ -801,7 +801,9 @@ export class TelegramBotClient extends AbstractClient {
             })
             const outcome = await sendSolitaireJoin(body)
             if (outcome.status === 'joined') {
-                await replyDirectoryText(ctx, this.i18n.t('solitaire.joined', {name}))
+                // WeChat publishes the updated solitaire as a normal message, so the
+                // forwarded result is the confirmation; no extra bot chatter.
+                this.logger?.info?.('Solitaire join submitted')
             } else if (outcome.status === 'rejected') {
                 await replyDirectoryText(ctx, this.i18n.t('solitaire.rejected', {reason: outcome.reason}))
             } else {
@@ -813,10 +815,75 @@ export class TelegramBotClient extends AbstractClient {
         }
     }
 
+    /** Resolves the newest solitaire for the bound WeChat conversation. */
+    private async latestSolitaireTarget(ctx: Context, ownerId: number) {
+        if (!ctx.chat?.type.includes('group')) return undefined
+        const binding = await this.bindGroupService.resolveTelegram(ctx.chat.id, this.currentThread(ctx))
+        if (!binding?.wxId) return undefined
+        return solitaireJoins.latest(ownerId, binding.wxId) || solitaireJoins.latest(ownerId, binding.wxId)
+    }
+
+    /** Asks for the entry text; the reply is the plain-text fallback for rich input. */
+    private async handleSolitaireCustom(ctx: Context, callback: string): Promise<void> {
+        try {
+            await ctx.answerCbQuery()
+        } catch (error) {
+            this.logger?.debug?.('Solitaire custom acknowledge failed', error?.code || error?.name)
+        }
+        const ownerId = ctx.from?.id
+        const config = await this.configurationService.getConfig()
+        if (!ownerId || ownerId !== config.chatId) {
+            await replyDirectoryText(ctx, this.i18n.t('solitaire.owner_only'))
+            return
+        }
+        const target = solitaireJoins.resolve(callback.slice(4), ownerId)
+        if (!target) {
+            await replyDirectoryText(ctx, this.i18n.t('solitaire.expired'))
+            return
+        }
+        solitaireJoins.setPending(ownerId, ctx.chat?.id, this.currentThread(ctx), target)
+        await ctx.reply(this.i18n.t('solitaire.custom_prompt'), {
+            reply_markup: {force_reply: true, selective: true},
+            reply_parameters: ctx.callbackQuery?.message ? {message_id: ctx.callbackQuery.message.message_id} : undefined,
+        })
+    }
+
+    /** Shared by the custom prompt and /join; content replaces the nickname entirely. */
+    private async submitSolitaireContent(ctx: Context, target: {toWxid: string, selfId: string, msgId?: string, newMsgId?: string}, content: string): Promise<void> {
+        const text = String(content ?? '').replace(/\r\n?/g, '\n').trim()
+        if (!text) {
+            await replyDirectoryText(ctx, this.i18n.t('solitaire.custom_empty'))
+            return
+        }
+        const ownerId = ctx.from?.id
+        if (!ownerId) return
+        const config = await this.configurationService.getConfig()
+        if (ownerId !== config.chatId) {
+            await replyDirectoryText(ctx, this.i18n.t('solitaire.owner_only'))
+            return
+        }
+        try {
+            const body = solitaireJoinBody({wxid: target.selfId, toWxid: target.toWxid, content: text,
+                msgId: target.msgId, newMsgId: target.newMsgId})
+            const outcome = await sendSolitaireJoin(body)
+            if (outcome.status === 'rejected') {
+                await replyDirectoryText(ctx, this.i18n.t('solitaire.rejected', {reason: outcome.reason}))
+            } else if (outcome.status === 'unknown') {
+                await replyDirectoryText(ctx, this.i18n.t('solitaire.unknown'))
+            } else {
+                this.logger?.info?.('Solitaire custom join submitted')
+            }
+        } catch (error) {
+            this.logger?.warn('Solitaire custom join unavailable', error?.message || error?.name)
+            await replyDirectoryText(ctx, this.i18n.t('solitaire.unknown'))
+        }
+    }
+
     private onBotAction(bot: Telegraf) {
         bot.action(/^dl:/, ctx => this.handleDirectoryCallback(ctx, ctx.match.input))
         bot.action(/^(?:us|of|ro):/, ctx => this.handleDirectoryCallback(ctx, ctx.match.input))
         bot.action(/^sl:/, ctx => this.handleSolitaireJoin(ctx, ctx.match.input))
+        bot.action(/^slc:/, ctx => this.handleSolitaireCustom(ctx, ctx.match.input))
 
         // 数字键盘点击
         bot.action(/num-(.+)/, ctx => {
@@ -1896,6 +1963,66 @@ ${this.i18n.t('help.instructions')}`))
             }
         })
 
+        // Initiate a solitaire in the bound WeChat group: /solitaire 标题 | 首条 | 尾注
+        bot.command('solitaire', async ctx => {
+            if (!TelegramBotClient.getSpyClient('wxClient')?.hasLogin) {
+                await replyDirectoryText(ctx, this.i18n.t('login.please_login_wx'))
+                return
+            }
+            const payload = ctx.payload.trim()
+            const [title, first, ...rest] = payload.split('|').map(part => part.trim())
+            if (!title || !first) {
+                await replyDirectoryText(ctx, this.i18n.t('solitaire.create_usage'))
+                return
+            }
+            const binding = ctx.chat?.type.includes('group')
+                ? await this.bindGroupService.resolveTelegram(ctx.chat.id, this.currentThread(ctx)) : undefined
+            if (!binding || binding.type !== 1 || !binding.wxId?.endsWith('@chatroom')) {
+                await replyDirectoryText(ctx, this.i18n.t('solitaire.create_group_only'))
+                return
+            }
+            const wxClient = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
+            try {
+                const body = solitaireCreateBody({
+                    wxid: wxClient.wxInfo?.wxid || '', toWxid: binding.wxId,
+                    title, content: first, tail: rest.join(' | ') || undefined,
+                })
+                const outcome = await sendSolitaireCreate(body)
+                if (outcome.status === 'rejected') {
+                    await replyDirectoryText(ctx, this.i18n.t('solitaire.rejected', {reason: outcome.reason}))
+                } else if (outcome.status === 'unknown') {
+                    await replyDirectoryText(ctx, this.i18n.t('solitaire.unknown'))
+                }
+            } catch (error) {
+                this.logger?.warn('Solitaire create unavailable', error?.message || error?.name)
+                await replyDirectoryText(ctx, this.i18n.t('solitaire.create_usage'))
+            }
+        })
+
+        // Join with custom text: /join 2 份  (replaces the nickname entirely)
+        bot.command('join', async ctx => {
+            const ownerId = ctx.from?.id
+            const config = await this.configurationService.getConfig()
+            if (!ownerId || ownerId !== config.chatId) {
+                await replyDirectoryText(ctx, this.i18n.t('solitaire.owner_only'))
+                return
+            }
+            const content = ctx.payload.trim()
+            const threadId = this.currentThread(ctx)
+            const target = solitaireJoins.takePending(ownerId, ctx.chat?.id, threadId)
+                || await this.latestSolitaireTarget(ctx, ownerId)
+            if (!target) {
+                await replyDirectoryText(ctx, this.i18n.t('solitaire.no_target'))
+                return
+            }
+            if (!content) {
+                solitaireJoins.setPending(ownerId, ctx.chat?.id, threadId, target)
+                await replyDirectoryText(ctx, this.i18n.t('solitaire.custom_prompt'))
+                return
+            }
+            await this.submitSolitaireContent(ctx, target, content)
+        })
+
         // Telegraf's payload already excludes /command@bot and preserves the full query.
         bot.command('user', ctx => this.showContactList(ctx, ctx.payload.trim(), false))
         bot.command('official', ctx => this.showContactList(ctx, ctx.payload.trim(), true))
@@ -2482,6 +2609,15 @@ ${this.i18n.t('help.instructions')}`))
     }
 
     private async dealWithCommand(ctx: Context, text: string) {
+        // A pending custom-solitaire entry consumes the next plain text from the owner.
+        const ownerId = ctx.from?.id
+        if (ownerId && typeof text === 'string' && text.trim() && !text.trimStart().startsWith('/')) {
+            const target = solitaireJoins.takePending(ownerId, ctx.chat?.id, this.currentThread(ctx))
+            if (target) {
+                await this.submitSolitaireContent(ctx, target, text)
+                return true
+            }
+        }
         if (this.waitInputCommand === 'phoneNumber') {
             this.waitInputCommand = undefined
             // 等待输入手机号

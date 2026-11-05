@@ -26,7 +26,9 @@ function fixture() {
       if (name === '../util/MessageTypeUtils') return require('../dist/util/MessageTypeUtils')
       if (name === '../util/TelegramTopicUtils') return require('../dist/util/TelegramTopicUtils')
       if (name === '../service/SolitaireService') return require('../dist/service/SolitaireService')
-      if (name === '../i18n') return {getInstance: () => ({t: key => key === 'solitaire.join_button' ? '参与接龙' : key})}
+      if (name === '../i18n') return {getInstance: () => ({t: key => ({
+        'solitaire.join_button': '参与接龙', 'solitaire.custom_button': '自定义参与',
+      }[key] || key)})}
       if (name === '../service/WechatAccountClassificationService') return {WechatAccountClassificationService: {getInstance: () => ({isOfficialAccount: async () => false})}}
       return {}
     },
@@ -91,11 +93,15 @@ test('group solitaire attaches an owner-scoped join button resolving to the real
   await client.onMessage(message)
   assert.equal(Array.isArray(sent[0].param.inline_keyboard[0]), false)
   const buttons = sent[0].param.inline_keyboard
-  assert.equal(buttons.length, 1)
-  assert.equal(buttons[0].text, '参与接龙')
+  assert.equal(buttons.length, 2)
+  assert.deepEqual(JSON.parse(JSON.stringify(buttons.map(button => button.text))), ['参与接龙', '自定义参与'])
+  assert(buttons[1].callback_data.startsWith('slc:'))
   assert.match(buttons[0].callback_data, /^sl:[a-z0-9]+$/)
   assert(buttons[0].callback_data.length <= 64)
   const target = solitaireJoins.resolve(buttons[0].callback_data.slice(3), 456)
+  const remembered = solitaireJoins.latest(456, 'room@chatroom')
+  assert.equal(remembered.newMsgId, target.newMsgId, 'the newest solitaire is remembered for /join')
+  assert.equal(remembered.toWxid, target.toWxid)
   assert.equal(target.toWxid, 'room@chatroom')
   assert.equal(target.selfId, 'self')
   assert.equal(target.msgId, '1')

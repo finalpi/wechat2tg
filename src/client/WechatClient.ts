@@ -677,9 +677,19 @@ export class WeChatClient extends AbstractClient {
                             msgId: msg._msgId ? String(msg._msgId) : undefined,
                             newMsgId: msg.newMsgId ? String(msg.newMsgId) : undefined,
                         })
+                        solitaireJoins.remember({
+                            token, ownerId: configuration.chatId, toWxid: solitaireWxId, selfId: this._wxInfo.wxid,
+                            msgId: msg._msgId ? String(msg._msgId) : undefined,
+                            newMsgId: msg.newMsgId ? String(msg.newMsgId) : undefined,
+                            expiresAt: Date.now() + 30 * 60 * 1000,
+                        })
+                        const i18n = I18n.getInstance()
                         messageParam.param = {
                             ...(messageParam.param || {}),
-                            inline_keyboard: [{text: I18n.getInstance().t('solitaire.join_button'), callback_data: `sl:${token}`}],
+                            inline_keyboard: [
+                                {text: i18n.t('solitaire.join_button'), callback_data: `sl:${token}`},
+                                {text: i18n.t('solitaire.custom_button'), callback_data: `slc:${token}`},
+                            ],
                         }
                     } catch (e) {
                         // A missing solitaire id only loses the button, never the message.
