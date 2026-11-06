@@ -87,15 +87,16 @@ export function createWebUIServer(options: Options) {
                 }catch(error){respond(res,error?.code==='ENOENT'?404:500,{error:error?.code==='ENOENT'?'notFound':'assetsUnavailable'})}
                 return
             }
-            const assets = {'/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/mention-compose.js':['mention-compose.js','text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/wechat-emoji.js':['wechat-emoji.js','text/javascript'], '/chat-content.js': ['chat-content.js','text/javascript'], '/mcp-settings.js':['mcp-settings.js','text/javascript'], '/ai-settings.js':['ai-settings.js','text/javascript'], '/template-preview.js': ['template-preview.js', 'text/javascript'], '/style.css': ['style.css', 'text/css']}
-            assets['/message-center.css']=['message-center.css','text/css']
-            if (!assets[route] || !['GET', 'HEAD'].includes(req.method)) return respond(res, 404, {error: 'notFound'})
+            if (!['GET', 'HEAD'].includes(req.method)) return respond(res, 404, {error: 'notFound'})
+            // Static files: the React SPA bundle plus the emoji image directory.
+            const relative = route === '/' ? 'index.html' : route.replace(/^\/+/, '')
+            if (relative.includes('..') || relative.includes('\0')) return respond(res, 404, {error: 'notFound'})
+            const mime = {'.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.svg':'image/svg+xml', '.png':'image/png', '.webp':'image/webp', '.ico':'image/x-icon', '.woff':'font/woff', '.woff2':'font/woff2', '.json':'application/json'}[path.extname(relative)] || 'application/octet-stream'
             try {
-                const [name, mime] = assets[route]
-                const content = fs.readFileSync(path.join(assetDirectory, name))
-                res.writeHead(200, {'Content-Type': `${mime}; charset=utf-8`})
+                const content = fs.readFileSync(path.join(assetDirectory, relative))
+                res.writeHead(200, {'Content-Type': mime, 'Content-Length': content.length})
                 res.end(req.method === 'HEAD' ? undefined : content)
-            } catch { respond(res, 500, {error: 'assetsUnavailable'}) }
+            } catch { respond(res, 404, {error: 'notFound'}) }
             return
         }
         // Reject cross-origin requests and require the credential in a header, never in a URL.
