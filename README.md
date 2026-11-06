@@ -13,6 +13,24 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 
 **Use one maintenance branch, `v6`; tags distinguish stable and development releases. There is no `v6-dev` maintenance branch.** The current stable Bot is `v6.0.34`, using puppet and wx2tg-server `v6.0.16`. Components release independently and need only share major version `v6`. Do not mix it with server v7.
 
+### Which WeChat version does each server release emulate?
+
+**`v6`, `v7`, and `v51` are this project's release versions, not WeChat 6.x, 7.x, or 5.1.** The table describes the **iPad / iPhone WeChat client protocol emulated by the server**, not a required WeChat version for your phone.
+
+| Server release / family | Origin | iPad / iPhone WeChat version | Selection for this Bot |
+| --- | --- | --- | --- |
+| **`finalpi/wx2tg-server:v6.0.16`** (`v6` family) | `875` → `v6` | **8.0.75.33** (`0x18004b21`) | **Used by the current Bot `v6.0.34`**; the server image supports `linux/amd64` only |
+| Historical `875` / server `v51.0.0`–`v51.0.13` | `875` protocol family | **8.0.75.33** | Historical releases; `v51` does not mean WeChat 5.1 |
+| Server Git tag **`v7`** | `878` protocol family | **8.0.78.34** (WeChat release 8.0.78, `0x18004e22`) | A separate release family, **not part of this deployment; do not mix it with or directly replace the existing v6 server** |
+
+- These versions apply to the iPad / iPhone main protocol only. **Windows, Mac, Car, and Android Pad have separate parameters**; this does not mean every protocol was upgraded to WeChat 8.0.75 / 8.0.78. The Bot's `pad` means Android Pad, not `ipad`.
+- The `v7` target client parameters and offline tests have been checked, but **real WeChat login and complete business compatibility have not thereby been verified**.
+- Historical Bot/SDK names such as `wx2tg-v3` and `860-v3` do not determine the WeChat version. The old `860` source also has a mismatch between an active value and its comment. See [fixed-tag evidence and historical limitations](docs/server-wechat-versions.md).
+
+Current Bot changes: [v6.0.34 Release](https://github.com/finalpi/wechat2tg/releases/tag/v6.0.34).
+
+### Release channels
+
 | Channel | Full Git / Docker version | Rolling bot alias |
 | --- | --- | --- |
 | Stable | `v6.X.Y` (no dev suffix) | `v6` |
