@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from 'react'
+import {useCallback, useEffect, useMemo, useState} from 'react'
 import {Button} from '@/components/ui/button'
 import {Input} from '@/components/ui/input'
 import {Textarea} from '@/components/ui/textarea'
@@ -7,13 +7,15 @@ import {Switch} from '@/components/ui/switch'
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card'
 import {Badge} from '@/components/ui/badge'
 import {Alert, AlertDescription} from '@/components/ui/alert'
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select'
+import {Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select'
 import {Spinner} from '@/components/ui/spinner'
 import {api, ApiError, type ConfigSnapshot, type Field} from '@/lib/api'
 import {cn} from '@/lib/utils'
 import {McpPanel} from '@/features/mcp-panel'
 import {AITools} from '@/features/ai-tools'
 import {TemplatePreview} from '@/features/template-preview'
+import {MessagesPanel} from '@/features/messages-panel'
+import type {ComposerDraft} from '@/features/message-composer'
 import {ArrowLeftRight, Globe, Link2, LogOut, MessageSquare, Moon, Send, SlidersHorizontal, Sparkles, Sun, Type} from 'lucide-react'
 
 type FieldValue = string | number | boolean
@@ -84,37 +86,37 @@ function FieldControl({field, value, onChange, disabled}: {
   disabled: boolean
 }) {
   if (field.type === 'boolean') {
-    return <Switch checked={Boolean(value)} disabled={disabled} onCheckedChange={onChange} />
+    return <Switch id={field.key} checked={value === true || value === 'true'} disabled={disabled} onCheckedChange={onChange} />
   }
   if (field.type === 'textarea') {
-    return <Textarea value={String(value ?? '')} disabled={disabled} onChange={e => onChange(e.target.value)} />
+    return <Textarea id={field.key} value={String(value ?? '')} disabled={disabled} onChange={e => onChange(e.target.value)} />
   }
   if (field.type === 'select') {
     return (
-      <Select value={String(value ?? '')} disabled={disabled} onValueChange={onChange}>
-        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-        <SelectContent>
+      <Select value={String(value ?? '') || '__direct__'} disabled={disabled} onValueChange={value => onChange(value === '__direct__' ? '' : value)}>
+        <SelectTrigger id={field.key} className="w-full"><SelectValue /></SelectTrigger>
+        <SelectContent><SelectGroup>
           {(field.options || []).map(option => (
-            <SelectItem key={option} value={option}>{option || '直连'}</SelectItem>
+            <SelectItem key={option} value={option || '__direct__'}>{option || '直连'}</SelectItem>
           ))}
-        </SelectContent>
+        </SelectGroup></SelectContent>
       </Select>
     )
   }
   if (field.type === 'password') {
     return (
-      <Input type="password" value={String(value ?? '')} disabled={disabled} autoComplete="off"
+      <Input id={field.key} type="password" value={String(value ?? '')} disabled={disabled} autoComplete="off"
         placeholder={field.required ? '必填' : '留空保持不变'}
         onChange={e => onChange(e.target.value)} />
     )
   }
   if (field.type === 'number') {
     return (
-      <Input type="number" value={String(value ?? '')} disabled={disabled} min={field.min} max={field.max}
+      <Input id={field.key} type="number" value={String(value ?? '')} disabled={disabled} min={field.min} max={field.max}
         onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))} />
     )
   }
-  return <Input value={String(value ?? '')} disabled={disabled} onChange={e => onChange(e.target.value)} />
+  return <Input id={field.key} value={String(value ?? '')} disabled={disabled} onChange={e => onChange(e.target.value)} />
 }
 
 function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
@@ -125,10 +127,19 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
 }) {
   const [snapshot, setSnapshot] = useState<ConfigSnapshot | null>(null)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
-  const [active, setActive] = useState('connection')
+  const [active, setActive] = useState('messages')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
+  const [messageDrafts] = useState(() => new Map<string, ComposerDraft>())
+
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if ([...messageDrafts.values()].some(draft => draft.body?.trim() || draft.file || draft.attempt || draft.inFlight || draft.quote)) {event.preventDefault(); event.returnValue = ''}
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [messageDrafts])
 
   useEffect(() => {
     api.getConfig(token).then(setSnapshot).catch(e => {
@@ -139,13 +150,13 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
 
   const groups = useMemo(() => {
     if (!snapshot) return []
-    const wanted = ['connection', 'forward', 'templates', 'proxy', 'ai', 'mcp', 'advanced']
+    const wanted = ['messages', 'connection', 'forward', 'templates', 'proxy', 'ai', 'mcp', 'advanced']
     return snapshot.groups.filter(group => wanted.includes(group.id))
   }, [snapshot])
 
   const currentValue = (field: Field): FieldValue => {
     const raw = Object.prototype.hasOwnProperty.call(draft, field.key) ? draft[field.key] : snapshot?.values[field.key]
-    return raw === undefined || raw === null ? '' : String(raw)
+    return typeof raw === 'boolean' || typeof raw === 'number' ? raw : raw === undefined || raw === null ? '' : String(raw)
   }
 
   const setField = (field: Field, value: FieldValue) => {
@@ -205,8 +216,8 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="flex h-14 items-center justify-between border-b px-4">
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
+      <header className="flex h-14 shrink-0 items-center justify-between border-b px-4">
         <div className="flex items-center gap-3">
           <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <ArrowLeftRight className="size-4" />
@@ -222,9 +233,9 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
         </div>
       </header>
 
-      <div className="flex flex-1">
-        <aside className="w-48 shrink-0 border-r p-2">
-          <nav className="flex flex-col gap-1">
+      <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+        <aside className="shrink-0 overflow-x-auto border-b p-2 sm:w-44 sm:overflow-y-auto sm:border-b-0 sm:border-r">
+          <nav className="flex gap-1 sm:flex-col" aria-label="主导航">
             {groups.map(group => {
               const Icon = GROUP_ICONS[group.icon] || MessageSquare
               return (
@@ -237,8 +248,8 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
           </nav>
         </aside>
 
-        <main className="flex-1 overflow-y-auto p-6">
-          {active === 'mcp' ? (
+        <main className={cn('min-h-0 min-w-0 flex-1', active === 'messages' ? 'overflow-hidden p-2 md:p-4' : 'overflow-y-auto p-4 md:p-6')}>
+          {active === 'messages' ? <MessagesPanel token={token} drafts={messageDrafts} onLogout={onLogout} /> : active === 'mcp' ? (
             <McpPanel token={token} />
           ) : (
             <Card>
@@ -263,7 +274,7 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
         </main>
       </div>
 
-      <footer className="flex h-16 items-center justify-between border-t px-4">
+      {active !== 'messages' && <footer className="flex h-16 shrink-0 items-center justify-between border-t px-4">
         <div className="flex flex-col">
           {snapshot.restartRequired && <span className="text-sm text-amber-600">保存后需重启应用生效</span>}
           {error && <span className="text-sm text-destructive">{error}</span>}
@@ -275,7 +286,7 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
             {busy && <Spinner />} 保存
           </Button>
         </div>
-      </footer>
+      </footer>}
     </div>
   )
 }
@@ -315,13 +326,15 @@ export default function App() {
     localStorage.setItem(THEME_KEY, theme)
   }, [theme])
 
+  const logout = useCallback(() => {localStorage.removeItem(TOKEN_KEY); setToken('')}, [])
+
   if (!token) return <Auth onAuthed={setToken} />
   return (
     <ConfigPanel
       token={token}
       theme={theme}
       onToggleTheme={() => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))}
-      onLogout={() => { localStorage.removeItem(TOKEN_KEY); setToken('') }}
+      onLogout={logout}
     />
   )
 }

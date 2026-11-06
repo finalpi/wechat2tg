@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-export default {
+module.exports = {
   darkMode: ['class'],
   content: ['./webui/index.html', './webui/src/**/*.{ts,tsx}'],
   theme: {

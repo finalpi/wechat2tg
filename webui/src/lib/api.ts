@@ -43,7 +43,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, token: string, init?: RequestInit): Promise<T> {
   let response: Response
   try {
     response = await fetch(path, {

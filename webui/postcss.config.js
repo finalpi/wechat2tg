@@ -1,1 +1,1 @@
-export default {plugins: {tailwindcss: {config: './webui/tailwind.config.js'}, autoprefixer: {}}}
+module.exports = {plugins: {tailwindcss: {config: './webui/tailwind.config.js'}, autoprefixer: {}}}
