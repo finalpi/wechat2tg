@@ -137,7 +137,7 @@ export function MessageComposer({token, contact, online, quote, draft, onClearQu
     setError(''); setFile(candidate)
   }
 
-  return <div className="flex shrink-0 flex-col gap-3 border-t bg-background p-4">
+  return <div className="flex shrink-0 flex-col gap-2 border-t bg-background p-2 md:gap-3 md:p-4">
     {!online && <Alert><AlertDescription>微信未连接，暂时无法发送。</AlertDescription></Alert>}
     {quote && <div className="flex min-w-0 items-center gap-2">
       <Badge variant="secondary">引用</Badge><span className="min-w-0 flex-1 truncate text-sm">{quote.body || `[${quote.type}]`}</span>
@@ -168,7 +168,7 @@ export function MessageComposer({token, contact, online, quote, draft, onClearQu
     </Attachment>}
     <FieldGroup className="gap-2"><Field>
       <FieldLabel htmlFor="message-body" className="sr-only">消息内容</FieldLabel>
-      <Textarea id="message-body" placeholder="输入消息，Ctrl / ⌘ + Enter 发送" maxLength={4000} rows={3} value={body} disabled={locked || !online}
+      <Textarea id="message-body" className="h-10 min-h-10 resize-y md:h-20 md:min-h-20" placeholder="输入消息，Ctrl / ⌘ + Enter 发送" maxLength={4000} rows={1} value={body} disabled={locked || !online}
         onChange={e => setBody(e.target.value)} onPaste={e => {const pasted = e.clipboardData.files[0]; if (pasted && !locked) {e.preventDefault(); chooseFile(pasted)}}}
         onKeyDown={e => {if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !e.nativeEvent.isComposing) {e.preventDefault(); void submit()}}} />
     </Field></FieldGroup>

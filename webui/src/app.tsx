@@ -262,25 +262,34 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout, miniApp = false}: {
 
   return (
     <div className={cn('flex min-h-0 flex-col overflow-hidden', miniApp ? 'mini-app-shell' : 'h-dvh')}>
-      <header className="flex h-14 shrink-0 items-center justify-between border-b px-4">
-        <div className="flex items-center gap-3">
+      <header className="flex h-11 shrink-0 items-center justify-between gap-2 border-b px-2 md:h-14 md:px-4">
+        <div className="hidden items-center gap-3 md:flex">
           <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <ArrowLeftRight className="size-4" />
           </div>
           <span className="font-semibold">wechat2tg</span>
           {snapshot.runtimeAvailable ? <Badge variant="secondary">运行中</Badge> : <Badge variant="outline">离线</Badge>}
         </div>
+        <div className="min-w-0 flex-1 md:hidden">
+          <Select value={active} onValueChange={setActive}>
+            <SelectTrigger aria-label="切换页面" className="w-44"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectGroup>{groups.map(group => {
+              const Icon = GROUP_ICONS[group.icon] || MessageSquare
+              return <SelectItem key={group.id} value={group.id}><span className="flex items-center gap-2"><Icon className="size-4" />{group.label}</span></SelectItem>
+            })}</SelectGroup></SelectContent>
+          </Select>
+        </div>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" aria-label="切换主题" onClick={onToggleTheme}>
             {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </Button>
-          <Button variant="ghost" size="sm" onClick={onLogout}><LogOut className="size-4" /> 退出</Button>
+          <Button variant="ghost" size="sm" aria-label="退出" onClick={onLogout}><LogOut data-icon="inline-start" /><span className="hidden md:inline">退出</span></Button>
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
-        <aside className="shrink-0 overflow-x-auto border-b p-2 sm:w-44 sm:overflow-y-auto sm:border-b-0 sm:border-r">
-          <nav className="flex gap-1 sm:flex-col" aria-label="主导航">
+      <div className="flex min-h-0 flex-1">
+        <aside className="hidden w-44 shrink-0 overflow-y-auto border-r p-2 md:block">
+          <nav className="flex flex-col gap-1" aria-label="主导航">
             {groups.map(group => {
               const Icon = GROUP_ICONS[group.icon] || MessageSquare
               return (
@@ -293,7 +302,7 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout, miniApp = false}: {
           </nav>
         </aside>
 
-        <main className={cn('min-h-0 min-w-0 flex-1', active === 'messages' ? 'overflow-hidden p-2 md:p-4' : 'overflow-y-auto p-4 md:p-6')}>
+        <main className={cn('min-h-0 min-w-0 flex-1', active === 'messages' ? 'overflow-hidden md:p-4' : 'overflow-y-auto p-4 md:p-6')}>
           {active === 'messages' ? <MessagesPanel token={token} drafts={messageDrafts} onLogout={onLogout} /> : active === 'mcp' ? (
             <McpPanel token={token} />
           ) : (

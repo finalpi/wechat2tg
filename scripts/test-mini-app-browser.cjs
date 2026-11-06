@@ -19,9 +19,17 @@ async function main() {
     return new URLSearchParams({...data, hash}).toString()
   }
   const events = createMessageEvents()
+  const contacts = Array.from({length: 20}, (_, i) => ({wxId: `contact-${i}`, name: `测试会话 ${i + 1}`, nickname: '消息摘要', kind: 'contact', hasAvatar: false, lastActivity: 0, lastSequence: 0, lastBody: '点击查看聊天记录', unsyncedCount: 0}))
+  const message = {id: 1, wxId: 'contact-0', body: '聊天内容应占据主要空间。', direction: 'incoming', type: 'text', status: 'received', telegramStatus: 'synced', timestamp: Math.floor(Date.now() / 1000)}
   const server = createWebUIServer({environment: {BOT_TOKEN: botToken, WEBUI_MINI_APP_URL: 'https://wechat.example.test/'}, token: browserToken,
     file: path.join(directory, 'config.json'), runtime: {read: async () => ({chatId: owner}), save: async () => undefined},
-    messages: {subscribe: events.subscribe, status: async () => ({available: false, wechatOnline: false, directoryAvailable: false})},
+    messages: {
+      subscribe: events.subscribe,
+      status: async () => ({available: true, wechatOnline: true, telegramOnline: true, directoryAvailable: true}),
+      contacts: async q => ({contacts: contacts.filter(item => item.name.includes(q)), hasMore: false, offset: 60, directoryAvailable: true}),
+      history: async () => ({messages: [message], before: 1, hasMore: false, serverTime: Math.floor(Date.now() / 1000)}),
+      updates: async () => ({messages: [message], serverTime: Math.floor(Date.now() / 1000)}),
+    },
     mcpTokens: {write: 'w'.repeat(32), read: 'r'.repeat(32)},
   })
   server.listen(0, '127.0.0.1'); await once(server, 'listening')
@@ -55,8 +63,8 @@ async function main() {
     assert.equal(apiRequests.filter(request => request.url.endsWith('/api/config')).length, 0)
     await page.goto('about:blank')
     await page.goto(launch(123))
-    await page.getByRole('button', {name: 'AI 与语音'}).waitFor()
-    await page.getByText('实时连接', {exact: true}).waitFor()
+    await page.getByLabel('会话列表').waitFor()
+    await page.getByText('实时连接', {exact: true}).first().waitFor()
     assert(apiRequests.filter(request => request.url.endsWith('/api/config')).every(request => request.authorization?.startsWith('Bearer miniapp_')))
     assert(apiRequests.every(request => !new URL(request.url).searchParams.has('token')))
     assert.equal(await page.evaluate(() => localStorage.getItem('webui-access-token')), browserToken)
@@ -64,13 +72,46 @@ async function main() {
     assert.equal(await page.evaluate(() => new URLSearchParams(window.location.hash.slice(1)).has('tgWebAppData')), false)
     assert(await page.locator('html').evaluate(element => element.classList.contains('dark')))
     assert.equal(await page.locator('.mini-app-shell').evaluate(element => Math.round(element.getBoundingClientRect().height)), 720)
-    await page.getByRole('button', {name: 'AI 与语音'}).click()
+    const listSize = await page.getByLabel('会话列表').boundingBox()
+    const shellSize = await page.locator('.mini-app-shell').boundingBox()
+    console.log(`Mini App conversation list: ${Math.round(listSize.height)}/${Math.round(shellSize.height)}px`)
+    assert(listSize.height / shellSize.height >= 0.75, 'The conversation list must use at least 75% of the Mini App viewport')
+    const captures = process.env.MINI_APP_SCREENSHOT_DIR
+    if (captures) fs.mkdirSync(captures, {recursive: true})
+    for (const [width, height] of [[425, 650], [390, 720], [320, 600]]) {
+      await page.setViewportSize({width, height})
+      await page.evaluate(height => {
+        window.Telegram.WebApp.viewportStableHeight = height
+        window.__telegramCallbacks.viewportChanged()
+      }, height)
+      const list = await page.getByLabel('会话列表').boundingBox()
+      assert(list.height / height >= 0.75, `${width}x${height}: conversation list must occupy at least 75%`)
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'no horizontal overflow')
+      await page.getByRole('button', {name: '连接状态', exact: true}).click()
+      await page.getByRole('dialog').getByText('微信在线', {exact: true}).waitFor()
+      await page.keyboard.press('Escape')
+      if (captures && width === 425) await page.screenshot({path: path.join(captures, 'home.png')})
+      await page.getByLabel('会话列表').getByRole('button', {name: /测试会话 1 点击查看聊天记录/}).click()
+      await page.getByText('聊天内容应占据主要空间。', {exact: true}).waitFor()
+      const history = await page.locator('[data-slot="message-scroller-viewport"]').boundingBox()
+      assert(history.height / height >= 0.60, `${width}x${height}: chat history must occupy at least 60%`)
+      assert(await page.getByLabel('搜索消息', {exact: true}).isHidden(), 'mobile history search starts collapsed')
+      await page.getByRole('button', {name: '展开消息搜索'}).click()
+      assert(await page.getByLabel('搜索消息', {exact: true}).isVisible())
+      await page.getByRole('button', {name: '展开消息搜索'}).click()
+      const input = await page.getByLabel('消息内容').boundingBox()
+      assert(input.y + input.height <= height, 'composer stays inside the viewport')
+      if (captures && width === 425) await page.screenshot({path: path.join(captures, 'chat.png')})
+      await page.getByRole('button', {name: '返回会话列表'}).click()
+    }
+    await page.getByRole('combobox', {name: '切换页面'}).click()
+    await page.getByRole('option', {name: 'AI 与语音'}).click()
     assert.equal(await page.evaluate(() => window.__backVisible), true)
     await page.evaluate(() => {window.Telegram.WebApp.colorScheme = 'light'; window.__telegramCallbacks.themeChanged()})
     await page.waitForFunction(() => !document.documentElement.classList.contains('dark'))
     await page.evaluate(() => window.__backClick())
-    await page.getByText('消息服务未连接', {exact: true}).waitFor()
-    await page.getByText('实时连接', {exact: true}).waitFor()
+    await page.getByLabel('会话列表').waitFor()
+    await page.getByText('实时连接', {exact: true}).first().waitFor()
     // Changed owner invalidates an already-open stream and cannot fall back to stored token.
     owner = 999
     events.publish({type: 'status'})

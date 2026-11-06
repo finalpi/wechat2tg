@@ -1,11 +1,12 @@
 import {useCallback, useEffect, useRef, useState} from 'react'
-import {ArrowLeft, RefreshCw, Search, MessageSquare, Reply, Undo2} from 'lucide-react'
+import {ArrowLeft, RefreshCw, Search, MessageSquare, Reply, Undo2, Wifi, WifiOff} from 'lucide-react'
 import {ApiError} from '@/lib/api'
 import {messagesApi, mergeMessages, messageError, type Contact, type ChatMessage, type MessageStatus, type MessageUpdates} from '@/lib/messages-api'
 import {cn} from '@/lib/utils'
 import {fillMessageGap} from '@/lib/message-history'
 import {createMessageEventHub, createRefreshQueue, startMessageEvents, type MessageEventHub, type MessageConnectionState} from '@/lib/message-events'
 import {Button} from '@/components/ui/button'
+import {Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger} from '@/components/ui/dialog'
 import {Input} from '@/components/ui/input'
 import {Badge} from '@/components/ui/badge'
 import {Alert, AlertDescription} from '@/components/ui/alert'
@@ -33,6 +34,22 @@ function ConnectionBadge({state, className}: {state: MessageConnectionState; cla
   return <Badge variant="outline" role="status" className={className}>{{connected: '实时连接', connecting: '连接中', reconnecting: '重连中', disconnected: '连接已断开'}[state]}</Badge>
 }
 
+function ConnectionDetails({state, status}: {state: MessageConnectionState; status: MessageStatus}) {
+  const healthy = state === 'connected' && status.wechatOnline && status.telegramOnline
+  return <Dialog><DialogTrigger asChild>
+    <Button variant="ghost" size="sm" aria-label="连接状态">
+      {healthy ? <Wifi data-icon="inline-start" /> : <WifiOff data-icon="inline-start" />}
+      {healthy ? '实时连接' : state === 'connected' ? '服务离线' : state === 'connecting' ? '连接中' : state === 'disconnected' ? '已断开' : '重连中'}
+    </Button>
+  </DialogTrigger><DialogContent>
+    <DialogHeader><DialogTitle>连接状态</DialogTitle><DialogDescription>消息更新与服务连接</DialogDescription></DialogHeader>
+    <div className="flex flex-wrap gap-2"><ConnectionBadge state={state} />
+      <Badge variant={status.wechatOnline ? 'secondary' : 'outline'}>{status.wechatOnline ? '微信在线' : '微信离线'}</Badge>
+      <Badge variant={status.telegramOnline ? 'secondary' : 'outline'}>{status.telegramOnline ? 'Telegram 在线' : 'Telegram 离线'}</Badge>
+    </div>
+  </DialogContent></Dialog>
+}
+
 function JumpToMessage({targetId}: {targetId: number | null}) {
   const {scrollToMessage} = useMessageScroller()
   useEffect(() => {if (targetId) scrollToMessage(String(targetId), {align: 'center'})}, [targetId, scrollToMessage])
@@ -43,6 +60,7 @@ function Conversation({token, contact, online, draft, events, connection, onBack
   token: string; contact: Contact; online: boolean; draft: ComposerDraft; events: MessageEventHub; connection: MessageConnectionState; onBack: () => void; onAuthError: (error: unknown) => void
 }) {
   const [query, setQuery] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
   const [rows, setRows] = useState<ChatMessage[]>([])
   const [hasMore, setHasMore] = useState(false)
   const [before, setBefore] = useState(0)
@@ -225,14 +243,15 @@ function Conversation({token, contact, online, draft, events, connection, onBack
   const clearQuote = useCallback(() => setQuote(null), [])
 
   return <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col" aria-label={`与 ${contact.name} 的会话`}>
-    <header className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background p-4">
+    <header className="flex shrink-0 items-center gap-2 border-b bg-background px-2 py-2 md:gap-3 md:p-4">
       <Button variant="ghost" size="icon" className="md:hidden" aria-label="返回会话列表" onClick={onBack}><ArrowLeft /></Button>
       <ContactAvatar token={token} wxId={contact.wxId} name={contact.name} available={contact.hasAvatar} group={contact.kind === 'group'} />
-      <div className="min-w-0 flex-1"><h2 className="truncate font-semibold">{contact.name || contact.wxId}</h2><p className="truncate text-xs text-muted-foreground">{contact.wxId}</p></div>
-      <ConnectionBadge state={connection} className="md:hidden" />
+      <div className="min-w-0 flex-1"><h2 className="truncate font-semibold">{contact.name || contact.wxId}</h2><p className="hidden truncate text-xs text-muted-foreground md:block">{contact.wxId}</p></div>
+      {connection !== 'connected' && <ConnectionBadge state={connection} className="md:hidden" />}
+      <Button variant="ghost" size="icon" className="md:hidden" aria-label="展开消息搜索" aria-expanded={showSearch || Boolean(query) || located} onClick={() => setShowSearch(value => !value)}><Search /></Button>
       <Button variant="ghost" size="icon" aria-label="刷新消息" onClick={() => refreshHistory.current()}><RefreshCw /></Button>
     </header>
-    <div className="flex shrink-0 items-center gap-2 border-b p-3">
+    <div className={cn('shrink-0 items-center gap-2 border-b p-2 md:p-3', showSearch || query || located ? 'flex' : 'hidden md:flex')}>
       <Search className="size-4 shrink-0 text-muted-foreground" /><Input aria-label="搜索消息" placeholder="搜索此会话的消息" maxLength={100} value={query} onChange={e => setQuery(e.target.value)} />
       {(located || query) && <Button variant="outline" size="sm" onClick={() => {setQuery(''); setReload(value => value + 1)}}>返回最新</Button>}
     </div>
@@ -386,17 +405,22 @@ export function MessagesPanel({token, drafts, onLogout}: {token: string; drafts:
   if (!status && !error) return <div className="flex h-full flex-col items-center justify-center gap-3">{liveBadge}<Spinner /></div>
   if (!status?.available) return <div className="flex h-full flex-col gap-4 p-4"><div>{liveBadge}</div>{error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}<Placeholder title="消息服务未连接" detail="机器人启动后可查看和发送消息。" /><Button variant="outline" onClick={() => setReload(value => value + 1)}><RefreshCw /> 刷新</Button></div>
 
-  return <div className="flex h-full min-h-0 min-w-0 overflow-hidden rounded-xl border bg-card shadow-sm">
+  return <div className="flex h-full min-h-0 min-w-0 overflow-hidden bg-card md:rounded-xl md:border md:shadow-sm">
     <aside className={cn('flex w-full shrink-0 flex-col border-r md:w-72 xl:w-80', active && 'hidden md:flex')}>
-      <div className="flex flex-col gap-3 border-b p-4">
-        <div className="flex items-center justify-between gap-2"><h1 className="font-semibold">消息</h1>{liveBadge}<Button variant="ghost" size="icon" aria-label="刷新会话" onClick={() => setReload(value => value + 1)}><RefreshCw /></Button></div>
-        <div className="flex items-center gap-2"><Badge variant={status.wechatOnline ? 'secondary' : 'outline'}>{status.wechatOnline ? '微信在线' : '微信离线'}</Badge><Badge variant={status.telegramOnline ? 'secondary' : 'outline'}>{status.telegramOnline ? 'Telegram 在线' : 'Telegram 离线'}</Badge></div>
-        <Input aria-label="搜索会话" placeholder="搜索联系人、群聊" maxLength={100} value={query} onChange={e => setQuery(e.target.value)} />
-        <Tabs value={kind} onValueChange={setKind}><TabsList className="w-full"><TabsTrigger value="all" className="flex-1">最近</TabsTrigger><TabsTrigger value="contact" className="flex-1">联系人</TabsTrigger><TabsTrigger value="group" className="flex-1">群聊</TabsTrigger></TabsList></Tabs>
+      <div className="flex shrink-0 flex-col gap-2 border-b p-2 md:p-3">
+        <h1 className="sr-only">消息</h1>
+        <div className="flex items-center gap-2">
+          <Input aria-label="搜索会话" placeholder="搜索联系人、群聊" maxLength={100} value={query} onChange={e => setQuery(e.target.value)} />
+          <Button variant="ghost" size="icon" className="shrink-0" aria-label="刷新会话" onClick={() => setReload(value => value + 1)}><RefreshCw /></Button>
+        </div>
+        <div className="flex items-center gap-1">
+          <Tabs value={kind} onValueChange={setKind} className="min-w-0 flex-1"><TabsList className="w-full"><TabsTrigger value="all" className="flex-1">最近</TabsTrigger><TabsTrigger value="contact" className="flex-1">联系人</TabsTrigger><TabsTrigger value="group" className="flex-1">群聊</TabsTrigger></TabsList></Tabs>
+          <ConnectionDetails state={connection} status={status} />
+        </div>
       </div>
       {error && <Alert variant="destructive" className="rounded-none border-x-0"><AlertDescription>{error}</AlertDescription></Alert>}
       <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2" aria-label="会话列表">
-        {loading ? <div className="flex justify-center p-6"><Spinner /></div> : !contacts.length ? <Placeholder title="未找到会话" detail={status.directoryAvailable ? undefined : '联系人目录尚未加载。'} /> : contacts.map(contact => <Button key={contact.wxId} variant={active?.wxId === contact.wxId ? 'secondary' : 'ghost'} aria-pressed={active?.wxId === contact.wxId} className="h-auto w-full justify-start gap-3 whitespace-normal px-3 py-3 text-left" onClick={() => setActive(contact)}>
+        {loading ? <div className="flex justify-center p-6"><Spinner /></div> : !contacts.length ? <Placeholder title="未找到会话" detail={status.directoryAvailable ? undefined : '联系人目录尚未加载。'} /> : contacts.map(contact => <Button key={contact.wxId} variant={active?.wxId === contact.wxId ? 'secondary' : 'ghost'} aria-pressed={active?.wxId === contact.wxId} className="h-auto w-full justify-start gap-3 whitespace-normal px-3 py-2 text-left md:py-3" onClick={() => setActive(contact)}>
           <ContactAvatar token={token} wxId={contact.wxId} name={contact.name} available={contact.hasAvatar} group={contact.kind === 'group'} />
           <span className="flex min-w-0 flex-1 flex-col gap-1"><span className="flex items-center justify-between gap-2"><span className="truncate">{contact.name || contact.wxId}</span>{contact.lastActivity > 0 && <span className="shrink-0 text-xs text-muted-foreground">{time(contact.lastActivity)}</span>}</span><span className="truncate text-xs text-muted-foreground">{contact.lastBody || contact.nickname || contact.wxId}</span>{contact.unsyncedCount > 0 && <span className="text-xs text-muted-foreground">{contact.unsyncedCount} 条待同步</span>}</span>
         </Button>)}
