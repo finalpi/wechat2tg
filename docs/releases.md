@@ -1,6 +1,26 @@
 # v6：单分支、双发行通道
 
-## 当前 Bot 正式版：v6.0.34
+## 当前 Bot 正式版：v6.0.35
+
+### 新增功能
+
+- Telegram Mini App：从机器人主人私聊的「控制台」菜单进入，与浏览器共用同一套配置页和消息中心。后端校验 Telegram 签名和主人身份；非主人无法进入，不回退使用浏览器保存的 Token。
+- 消息实时更新：使用 SSE 长连接，有新消息或状态变化时才更新，不再每 5 秒轮询消息、联系人和在线状态；支持断线重连与历史补齐。
+- Mini App 适配 Telegram 主题、窗口高度、安全区域与返回按钮。配置 HTTPS 根地址后启用；普通浏览器 Token 登录继续保留。
+
+### 问题修复
+
+- 修复 AI / WebUI 配置保存成功后页面仍保留旧版本号、再次保存报 conflict 的问题。
+- 修复无关登录信息变化导致配置冲突；真实冲突时可重新加载最新配置并保留未保存输入，分批保存失败不会重复提交已保存部分。
+- 修复长连接场景下迟到消息、旧消息状态更新和断线期间消息补齐；处理提前断开造成的订阅泄漏。
+
+配套 SDK / server 仍为 v6.0.16，iPad/iPhone 主协议为微信 8.0.75.33。Mini App 需要设置 `WEBUI_MINI_APP_URL=https://你的域名/` 并在重启 Bot 后生效；反向代理须允许 SSE 长连接且关闭缓冲，见 [Mini App 配置](telegram-mini-app.md)。
+
+验证：462 项测试、三组本地浏览器回归通过，Node 18 容器内构建通过。Telegram SDK 使用模拟数据验证，尚未完成真实 Telegram WebView 验收。
+
+从 v3.3.1 升级的累计功能说明见 [v6 累计 Release](https://github.com/finalpi/wechat2tg/releases/tag/v6.0.34)；本版在该基础上增加以上功能及修复。
+
+### v6.0.34：WebUI 重写与媒体发送改进
 
 - WebUI 与消息页迁移到 React + shadcn：靛蓝主题、深浅色切换和网站图标，保留会话搜索、历史、引用、附件、群成员选择、撤回和 Telegram 同步操作。
 - 移除无意义的「处理中…」占位及删除流程。同会话媒体与文字分开排队，慢上传不再阻塞后续文字；语音发送真实音频后编辑原消息字幕。没有可用预览的表情仍在文件就绪后直接发送，不伪造占位保序。
@@ -29,7 +49,7 @@
 
 | 仓库 | 分支 | 使用的 Git 标签 | 配套制品 |
 | --- | --- | --- | --- |
-| `wechat2tg` | `v6` | `v6.0.34`（本次发布） | 包版本 `6.0.34`；`finalpi/wechat2tg:v6.0.34` |
+| `wechat2tg` | `v6` | `v6.0.35`（本次发布） | 包版本 `6.0.35`；`finalpi/wechat2tg:v6.0.35` |
 | `wx2tg-puppet` | `v6` | `v6.0.16` | `wx2tg-puppet@6.0.16` 的 npm 格式打包文件 |
 | `fk-zhang` / wx2tg-server | `v6` | `v6.0.16` | `finalpi/wx2tg-server:v6.0.16`（amd64） |
 
@@ -55,12 +75,12 @@
 
 bot 工作流先验证版本并运行测试，再并行执行两个互不等待的原生构建：
 
-- `Build amd64`：`ubuntu-24.04`，发布 `v6.0.34-amd64`。
-- `Build arm64`：`ubuntu-24.04-arm`，发布 `v6.0.34-arm64`。
+- `Build amd64`：`ubuntu-24.04`，发布 `v6.0.35-amd64`。
+- `Build arm64`：`ubuntu-24.04-arm`，发布 `v6.0.35-arm64`。
 - 两种架构分别使用 GHA 构建缓存；`fail-fast=false`，ARM 失败不会取消已成功的 amd64。
-- 两边都成功后，才合并通用多架构标签 `v6.0.34` 和对应通道别名。
+- 两边都成功后，才合并通用多架构标签 `v6.0.35` 和对应通道别名。
 
-想尽早部署 amd64 时，使用 `finalpi/wechat2tg:v6.0.34-amd64`，或稳定滚动别名 `v6-amd64`。ARM 对应 `v6.0.34-arm64` / `v6-arm64`。正式 Git tag `v6.0.34` 发布 Docker `v6.0.34`、`v6.0.34-amd64` 和 `v6.0.34-arm64`，稳定别名为 `v6-amd64` / `v6-arm64`，合并后更新 `v6`。手动快照只发布 `v6-dev-<短 SHA>-amd64` / `v6-dev-<短 SHA>-arm64` 和合并的 `v6-dev-<短 SHA>`，不更新任何滚动别名。
+想尽早部署 amd64 时，使用 `finalpi/wechat2tg:v6.0.35-amd64`，或稳定滚动别名 `v6-amd64`。ARM 对应 `v6.0.35-arm64` / `v6-arm64`。正式 Git tag `v6.0.35` 发布 Docker `v6.0.35`、`v6.0.35-amd64` 和 `v6.0.35-arm64`，稳定别名为 `v6-amd64` / `v6-arm64`，合并后更新 `v6`。手动快照只发布 `v6-dev-<短 SHA>-amd64` / `v6-dev-<短 SHA>-arm64` 和合并的 `v6-dev-<短 SHA>`，不更新任何滚动别名。
 
 因此不必等整个工作流结束才能更新 amd64；部署端应核对目标提交和 **`Build amd64` 成功**。通用标签仍等待 ARM，保留正确的多架构内容，不会先用 amd64 覆盖掉 ARM。具体耗时受原生依赖编译、缓存和 runner 排队影响，不承诺固定 30 分钟。server 有原生库限制，仍只构建 amd64，不伪装支持 ARM。
 
@@ -96,7 +116,7 @@ npm test
 2. bot / puppet 运行 `npm run check:version`、`npm test`；server 运行 `bash scripts/check-release-version.sh`、`go test ./buildinfo`。
 3. 同时验证稳定 / dev 版本格式、错 tag 拒绝、开发构建不能覆盖稳定通道。
 4. 完成 merge、检查 diff，提交本次文件；不要把 server 工作区原有测试修改、样本消息或私有配置带进提交。
-5. 明确授权后仅推送本次需要发布的仓库的 `v6` 分支和指定完整 tag。Bot/server 各自的 tag 会触发自己的镜像构建；只有 server tag 才创建其 Release，只有 puppet tag 才上传 SDK artifact 并发布 npm。本次仅推送 Bot `v6.0.34`。
+5. 明确授权后仅推送本次需要发布的仓库的 `v6` 分支和指定完整 tag。Bot/server 各自的 tag 会触发自己的镜像构建；只有 server tag 才创建其 Release，只有 puppet tag 才上传 SDK artifact 并发布 npm。本次仅推送 Bot `v6.0.35`。
 6. 部署前备份 SQLite、会话和 Compose，保留旧镜像；不覆盖用户现有 `.env`、`home_202.env` 等私有配置，不把示例文件覆盖到部署目录。已有微信服务的部署与新 bot 更新分开处理：此次命名修正不更改 `wx2tg-server` 镜像/命名空间/版本，也不更新或重启用户现有生产后端。
 7. 先验证 amd64 制品、服务健康、旧绑定和配置校验值，再做真实双向消息验收。离线测试不等于真实微信 / Telegram 全链路已验收。
 

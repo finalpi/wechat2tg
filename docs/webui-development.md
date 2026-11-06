@@ -29,7 +29,7 @@ HTML is rendered through a small React allowlist, not `dangerouslySetInnerHTML`.
 
 ## Telegram Mini App
 
-The same React application supports owner-only Telegram login through signed initData and an in-memory session, without using the browser’s saved token. See [Mini App setup and SSE proxy configuration](telegram-mini-app.md). This source feature is not included in the existing v6.0.34 image.
+The same React application supports owner-only Telegram login through signed initData and an in-memory session, without using the browser’s saved token. See [Mini App setup and SSE proxy configuration](telegram-mini-app.md). Available starting with v6.0.35.
 
 ## Configuration conflict recovery
 
