@@ -150,27 +150,24 @@ test('non-voice files never trigger transcription', async () => {
 function mediaFixture(Client, calls, {failUpload = false} = {}) {
   const client = Object.create(Client.prototype)
   Object.assign(client, {
-    i18n: {t: key => key === 'send.media_preparing' ? '处理中…' : key},
     logger: {info: noop, warn: noop, error: noop, debug: noop},
     configurationService: {getConfig: async () => ({autoTranscript: false})},
     messageService: {createOrUpdate: async () => undefined},
     currentDeliveryUncertain: false,
     sendTelegramRequest: async (_chatId, request) => request(),
     messageSender: {
-      sendText: async (...args) => {calls.push({method: 'sendText', args}); return {message_id: 77}},
       sendFile: async (...args) => {
         calls.push({method: 'sendFile', args})
         if (failUpload) throw new Error('upload rejected')
         return {message_id: 78}
       },
-      deleteMessage: async (...args) => {calls.push({method: 'deleteMessage', args})},
     },
     dealException: noop,
   })
   return client
 }
 
-test('media reserves its slot with a placeholder, replies to it, then clears it', async () => {
+test('media is sent directly after conversion, without a placeholder', async () => {
   const calls = []
   const Client = loadClient({calls})
   const client = mediaFixture(Client, calls)
@@ -178,24 +175,23 @@ test('media reserves its slot with a placeholder, replies to it, then clears it'
     file: {fileName: 'a.gif', file: Buffer.from('a'), sendType: 'animation'}}
   const entity = {}
   await client.sendFileMessage(message, entity)
-  assert.deepEqual(calls.map(call => call.method), ['sendText', 'sendFile', 'deleteMessage'])
-  assert.equal(calls[0].args[2].message_thread_id, 9, 'placeholder goes into the same topic')
-  assert.equal(calls[1].args[2].reply_id, 77, 'the upload attaches to the placeholder')
-  assert.deepEqual(calls[2].args, [-5, 77])
+  assert.deepEqual(calls.map(call => call.method), ['sendFile'])
+  assert.equal(calls[0].args[2].message_thread_id, 9, 'media goes into the same topic')
+  assert.equal(calls[0].args[2].reply_id, undefined, 'no placeholder reply is attached')
   assert.equal(entity.tgBotMsgId, 78)
 })
 
-test('a failed upload clears its placeholder instead of leaving it stuck', async () => {
+test('a failed upload fails without any leftover placeholder', async () => {
   const calls = []
   const Client = loadClient({calls})
   const client = mediaFixture(Client, calls, {failUpload: true})
   const message = {id: 'm2', chatId: -5, sender: 'cap', type: 1,
     file: {fileName: 'a.gif', file: Buffer.from('a'), sendType: 'animation'}}
   assert.equal((await client.sendFileMessage(message, {})).success, false)
-  assert.deepEqual(calls.map(call => call.method), ['sendText', 'sendFile', 'deleteMessage'])
+  assert.deepEqual(calls.map(call => call.method), ['sendFile'])
 })
 
-test('large documents keep their existing progress message instead of a placeholder', async () => {
+test('large documents use the MTProto upload path directly', async () => {
   const calls = []
   const Client = loadClient({calls})
   const client = mediaFixture(Client, calls)

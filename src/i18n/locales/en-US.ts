@@ -68,7 +68,6 @@ const enUS = {
   'binding.success': 'Binding successful',
   'group.create_success': 'Group created successfully',
   'group.open': 'Open group 🚀',
-  'send.media_preparing': 'Preparing…',
   'send.failed': 'Send failed',
   'send.sticker_convert_failed': 'Sticker conversion failed',
   'auth.phone_number': 'Please log in to the Telegram client first, please enter your Telegram account phone number (need to include country code, for example: +8613355558888)',

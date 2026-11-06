@@ -346,7 +346,6 @@ export class TelegramBotClient extends AbstractClient {
     }
 
     private async sendFileMessage(message: BaseMessage, messageEntity: Message): Promise<FileSendResult> {
-        let placeholderId: number | undefined
         try {
             const configuration = await this.configurationService.getConfig()
             // Transcription is network-bound: send the audio first and append the text
@@ -355,9 +354,6 @@ export class TelegramBotClient extends AbstractClient {
                 && Boolean(config.TENCENT_SECRET_ID && config.TENCENT_SECRET_KEY && configuration.autoTranscript)
 
             const shouldUseTelegramApiForLargeFile = message.file.sendType === 'document' && message.file.file.length > TELEGRAM_BOT_API_UPLOAD_LIMIT
-            // Hold the chat's place immediately: the upload then attaches to this
-            // placeholder, so slower conversions never delay the messages behind it.
-            placeholderId = shouldUseTelegramApiForLargeFile ? undefined : await this.sendMediaPlaceholder(message)
             const msgRes = shouldUseTelegramApiForLargeFile
                 ? await this.sendLargeDocumentViaTelegramApi(message)
                 : await this.sendTelegramRequest(message.chatId, () => this.messageSender.sendFile(message.chatId, {
@@ -368,43 +364,19 @@ export class TelegramBotClient extends AbstractClient {
                 }, {
                     parse_mode: 'HTML',
                     message_thread_id: message.threadId,
-                    reply_id: message.param?.reply_id ?? placeholderId
+                    reply_id: message.param?.reply_id
                 }))
-            await this.clearMediaPlaceholder(message, placeholderId)
 
             messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
             await this.messageService.createOrUpdate(messageEntity)
             if (shouldTranscribe) void this.appendTranscript(message, messageEntity.tgBotMsgId)
             return {success: true}
         } catch (e) {
-            await this.clearMediaPlaceholder(message, placeholderId)
             await this.dealException(e, message)
             if (e instanceof TelegramUploadResultUnknownError || e?.skipRetry) {
                 return {success: false, skipRetry: true}
             }
             return {success: false}
-        }
-    }
-
-    /** Short-lived text that reserves this chat's slot before a slow upload. */
-    private async sendMediaPlaceholder(message: BaseMessage): Promise<number | undefined> {
-        try {
-            const sent = await this.sendTelegramRequest(message.chatId, () => this.messageSender.sendText(message.chatId,
-                this.i18n.t('send.media_preparing'), {message_thread_id: message.threadId}))
-            return Number(sent?.message_id) || undefined
-        } catch (error) {
-            // A missing placeholder must never block the real message.
-            this.logger?.debug?.('Media placeholder skipped', error?.code || error?.name)
-            return undefined
-        }
-    }
-
-    private async clearMediaPlaceholder(message: BaseMessage, placeholderId?: number): Promise<void> {
-        if (!placeholderId) return
-        try {
-            await this.messageSender.deleteMessage(message.chatId, placeholderId)
-        } catch (error) {
-            this.logger?.debug?.('Media placeholder cleanup skipped', error?.code || error?.name)
         }
     }
 
