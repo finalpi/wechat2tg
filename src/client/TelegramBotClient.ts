@@ -4,6 +4,7 @@ import {config, useProxy} from '../config'
 import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from 'https-proxy-agent'
 import * as fs from 'node:fs'
+import {AsyncLocalStorage} from 'node:async_hooks'
 import {ConfigurationService} from '../service/ConfigurationService'
 import {UserAuthParams} from 'telegram/client/auth'
 import {message} from 'telegraf/filters'
@@ -76,6 +77,11 @@ type FileSendResult = {
 type TelegramSendResult = MessageRetryResult & {
     deliveryUncertain?:boolean
     skipRetry?: boolean
+}
+
+interface TelegramSendAttempt {
+    retryAfterMs?: number
+    deliveryUncertain: boolean
 }
 
 interface QueuedTelegramMessage {
@@ -167,7 +173,7 @@ export class TelegramBotClient extends AbstractClient {
         try {
             const messageId = this.messageBufferService.addMessage(message)
 
-            // 所有转发消息共用一个队列，避免媒体和重试绕过文本发送顺序。
+            // 媒体与非媒体分别保持顺序，上传不会阻塞同一聊天的后续文本。
             this.enqueueTelegramMessage({message, messageId, isRetry: false})
             setTimeout(() => this.processingMessages.delete(existingMessageId), 30000)
             return true
@@ -180,8 +186,8 @@ export class TelegramBotClient extends AbstractClient {
 
     private enqueueTelegramMessage(item: QueuedTelegramMessage): void {
         this.telegramMessageQueue.push(item)
-        // Each chat owns a serial lane, so one slow conversion cannot hold others.
-        const chatKey = String(item.message.chatId ?? 0)
+        // Media stays ordered without holding up later text in the same chat.
+        const chatKey = `${item.message.chatId ?? 0}:${item.message.type === 1 ? 'media' : 'message'}`
         const previous = this.chatLanes.get(chatKey) ?? Promise.resolve()
         const lane = previous.then(() => this.runQueuedTelegramItem(item)).catch(() => undefined)
         this.chatLanes.set(chatKey, lane)
@@ -204,40 +210,46 @@ export class TelegramBotClient extends AbstractClient {
         })
     }
 
-    /** Sends one queued item; the caller's chat lane keeps per-chat order. */
+    /** Sends one queued item with state isolated from all other active lanes. */
     private async runQueuedTelegramItem(item: QueuedTelegramMessage): Promise<void> {
-        this.currentRetryAfterMs = undefined
-        this.currentDeliveryUncertain = false
-        this.activeWebUISync.add(item.message.id)
-        if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(item.message.id,'syncing').catch(() => undefined)
-        let result: TelegramSendResult
-        try {
-            result = await this.sendBufferedMessage(item.message)
-        } catch (error) {
-            this.logger.error(`Telegram 队列发送失败: ${item.message.id}`, error)
-            result = {success: false}
-        }
+        // Lazy initialization also supports clients created from the prototype in tests.
+        this.telegramSendAttempt ??= new AsyncLocalStorage<TelegramSendAttempt>()
+        const attempt: TelegramSendAttempt = {deliveryUncertain: false}
+        await this.telegramSendAttempt.run(attempt, async () => {
+            this.activeWebUISync.add(item.message.id)
+            if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(item.message.id,'syncing').catch(() => undefined)
+            let result: TelegramSendResult
+            try {
+                result = await this.sendBufferedMessage(item.message)
+            } catch (error) {
+                this.logger.error(`Telegram 队列发送失败: ${item.message.id}`, error)
+                result = {success: false}
+            }
 
-        const retryAfterMs = Math.max(result.retryAfterMs || 0, this.currentRetryAfterMs || 0) || undefined
-        this.activeWebUISync.delete(item.message.id)
-        if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(item.message.id,result.success ? 'synced' : this.currentDeliveryUncertain || result.skipRetry || result.deliveryUncertain ? 'unknown' : 'failed').catch(() => undefined)
-        result = {...result,retryAfterMs,deliveryUncertain:this.currentDeliveryUncertain || result.skipRetry || result.deliveryUncertain}
+            const retryAfterMs = Math.max(result.retryAfterMs || 0, attempt.retryAfterMs || 0) || undefined
+            const deliveryUncertain = Boolean(attempt.deliveryUncertain || result.skipRetry || result.deliveryUncertain)
+            this.activeWebUISync.delete(item.message.id)
+            if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(item.message.id,deliveryUncertain ? 'unknown' : result.success ? 'synced' : 'failed').catch(() => undefined)
+            result = {...result, retryAfterMs, deliveryUncertain}
 
-        if (item.isRetry) {
-            item.resolve?.(item.webui ? result : result.skipRetry ? {...result, success: true} : result)
-            return
-        }
+            if (item.isRetry) {
+                // The buffer only understands success/failure: terminal uncertainty must
+                // stop its retry chain, while WebUI still receives the actual outcome.
+                item.resolve?.(item.webui ? result : result.skipRetry || deliveryUncertain ? {...result, success: true} : result)
+                return
+            }
 
-        if (result.success || result.skipRetry) {
-            this.messageBufferService.markMessageAsSent(item.messageId)
-        } else {
-            this.messageBufferService.markMessageAsFailed(
-                item.messageId,
-                message => this.enqueueTelegramRetry(message, item.messageId),
-                false,
-                retryAfterMs
-            )
-        }
+            if (result.success || result.skipRetry || deliveryUncertain) {
+                this.messageBufferService.markMessageAsSent(item.messageId)
+            } else {
+                this.messageBufferService.markMessageAsFailed(
+                    item.messageId,
+                    message => this.enqueueTelegramRetry(message, item.messageId),
+                    false,
+                    retryAfterMs
+                )
+            }
+        })
     }
 
     private async sendBufferedMessage(message: BaseMessage): Promise<TelegramSendResult> {
@@ -294,7 +306,8 @@ export class TelegramBotClient extends AbstractClient {
             ? Math.ceil(retryAfterValue)
             : 20
         const waitMs = seconds * 1000 + TELEGRAM_RETRY_AFTER_MARGIN_MS
-        this.currentRetryAfterMs = Math.max(this.currentRetryAfterMs || 0, waitMs)
+        const attempt = this.telegramSendAttempt?.getStore()
+        if (attempt) attempt.retryAfterMs = Math.max(attempt.retryAfterMs || 0, waitMs)
         this.telegramQueueBlockedUntil = Math.max(this.telegramQueueBlockedUntil, Date.now() + waitMs)
         return {seconds, waitMs}
     }
@@ -369,7 +382,11 @@ export class TelegramBotClient extends AbstractClient {
 
             messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
             await this.messageService.createOrUpdate(messageEntity)
-            if (shouldTranscribe) void this.appendTranscript(message, messageEntity.tgBotMsgId)
+            if (shouldTranscribe) {
+                // Detached edits are not part of the delivered audio's retry attempt.
+                const append = () => this.appendTranscript(message, messageEntity.tgBotMsgId)
+                void (this.telegramSendAttempt ? this.telegramSendAttempt.exit(append) : append())
+            }
             return {success: true}
         } catch (e) {
             await this.dealException(e, message)
@@ -386,7 +403,7 @@ export class TelegramBotClient extends AbstractClient {
             const text = await SpeechService.getInstance().getTranscript(message.file.file)
             if (!text) return
             this.logger.info('语音转文字转换成功文本内容：', text)
-            await this.messageSender.editAudio(message.chatId, messageId, `${message.sender}\n${text}`)
+            await this.sendTelegramRequest(message.chatId, () => this.messageSender.editAudio(message.chatId, messageId, `${message.sender}\n${text}`))
         } catch (error) {
             this.logger.error('语音转文字失败:', error)
         }
@@ -626,15 +643,25 @@ export class TelegramBotClient extends AbstractClient {
     private processingMessages = new Set<string>()
     // 所有转发消息和重试共用同一发送队列
     private telegramMessageQueue: QueuedTelegramMessage[] = []
-    /** Per-chat serial lanes; a slow chat never delays another chat. */
+    /** Per-chat media/non-media serial lanes, sharing the same rate limiter. */
     private chatLanes = new Map<string, Promise<void>>()
     private activeWebUISync = new Set<string>()
     private isProcessingQueue = false
     private telegramQueueBlockedUntil = 0
     private telegramNextGlobalSendAt = 0
     private telegramNextSendAtByChat = new Map<string, number>()
-    private currentRetryAfterMs: number | undefined
-    private currentDeliveryUncertain = false
+    private telegramSendAttempt?: AsyncLocalStorage<TelegramSendAttempt>
+    // Standalone callers/tests can send without a queued attempt. Queued sends
+    // always read/write their async-local state, never this compatibility fallback.
+    private standaloneDeliveryUncertain = false
+    private get currentDeliveryUncertain(): boolean {
+        return this.telegramSendAttempt?.getStore()?.deliveryUncertain ?? this.standaloneDeliveryUncertain ?? false
+    }
+    private set currentDeliveryUncertain(value: boolean) {
+        const attempt = this.telegramSendAttempt?.getStore()
+        if (attempt) attempt.deliveryUncertain = value
+        else this.standaloneDeliveryUncertain = value
+    }
     // i18n实例
     private i18n = I18n.getInstance()
     // Telegram Bot 连接状态管理
