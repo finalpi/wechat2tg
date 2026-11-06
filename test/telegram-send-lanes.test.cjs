@@ -118,6 +118,21 @@ test('same-chat media uploads remain serial while text passes them', async () =>
   assert.deepEqual(q.finished, ['text', 'slow', 'next-media'])
 })
 
+test('recalls follow earlier media or text without blocking later text', async () => {
+  for (const type of [0, 1]) {
+    const q = queueFixture(loadClient())
+    q.client.enqueueTelegramMessage(q.item('slow', -1, type))
+    q.client.enqueueTelegramMessage(q.item('recall', -1, 6))
+    q.client.enqueueTelegramMessage(q.item('later-text', -1))
+    await settle()
+    assert(!q.started.includes('recall'), 'a recall must not overtake the original delivery')
+    if (type === 1) assert.deepEqual(q.finished, ['later-text'], 'waiting recall must not hold later text')
+    q.release()
+    await Promise.all(q.client.chatLanes.values())
+    assert(q.finished.indexOf('recall') > q.finished.indexOf('slow'))
+  }
+})
+
 test('parallel lanes isolate uncertainty and FloodWait while sharing the flood deadline', async () => {
   const statuses = []
   const q = queueFixture(loadClient({statuses}))

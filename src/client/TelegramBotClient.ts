@@ -187,8 +187,13 @@ export class TelegramBotClient extends AbstractClient {
     private enqueueTelegramMessage(item: QueuedTelegramMessage): void {
         this.telegramMessageQueue.push(item)
         // Media stays ordered without holding up later text in the same chat.
-        const chatKey = `${item.message.chatId ?? 0}:${item.message.type === 1 ? 'media' : 'message'}`
-        const previous = this.chatLanes.get(chatKey) ?? Promise.resolve()
+        const chat = item.message.chatId ?? 0
+        const kind = item.message.type === 1 ? 'media' : item.message.type === 6 ? 'recall' : 'message'
+        const chatKey = `${chat}:${kind}`
+        // A recall must follow earlier deliveries, but must not hold later text.
+        const previous = kind === 'recall'
+            ? Promise.all(['media', 'message', 'recall'].map(lane => this.chatLanes.get(`${chat}:${lane}`))).then(() => undefined)
+            : this.chatLanes.get(chatKey) ?? Promise.resolve()
         const lane = previous.then(() => this.runQueuedTelegramItem(item)).catch(() => undefined)
         this.chatLanes.set(chatKey, lane)
         void lane.finally(() => {

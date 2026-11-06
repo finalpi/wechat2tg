@@ -4,6 +4,8 @@
 
 Each Telegram chat has two serial lanes: media (`BaseMessage.type === 1`) and non-media. Uploading a file does not hold later text in that chat. Text/text and media/media keep their enqueue order. All lanes still obey the same global/per-chat rate limits and FloodWait deadline.
 
+Recall notices wait for earlier media and text deliveries before attaching to the original message; that wait uses a separate dependent lane and does not hold later text.
+
 Slow media can arrive after later text. There is no temporary “处理中…” message, empty preview, reply-to-placeholder or placeholder deletion.
 
 WeChat GIF download and voice preparation currently happen before Telegram enqueueing. There is no independently available GIF preview in the existing SDK path. The bot sends the actual media once ready; it does not claim to preserve an earlier Telegram position by editing a fabricated placeholder.
