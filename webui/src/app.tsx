@@ -14,10 +14,21 @@ import {cn} from '@/lib/utils'
 import {McpPanel} from '@/features/mcp-panel'
 import {AITools} from '@/features/ai-tools'
 import {TemplatePreview} from '@/features/template-preview'
+import {ArrowLeftRight, Globe, Link2, LogOut, MessageSquare, Moon, Send, SlidersHorizontal, Sparkles, Sun, Type} from 'lucide-react'
 
 type FieldValue = string | number | boolean
 
 const TOKEN_KEY = 'webui-access-token'
+const THEME_KEY = 'webui-theme'
+const GROUP_ICONS: Record<string, typeof MessageSquare> = {
+  message: MessageSquare,
+  link: Link2,
+  send: Send,
+  type: Type,
+  globe: Globe,
+  spark: Sparkles,
+  sliders: SlidersHorizontal,
+}
 const TEMPLATE_KEYS = ['CONTACT_MESSAGE', 'OFFICIAL_MESSAGE', 'ROOM_MESSAGE', 'CONTACT_MESSAGE_GROUP', 'OFFICIAL_MESSAGE_GROUP', 'ROOM_MESSAGE_GROUP', 'CREATE_ROOM_NAME', 'CREATE_CONTACT_NAME', 'MESSAGE_DISPLAY']
 
 function Auth({onAuthed}: {onAuthed: (token: string) => void}) {
@@ -106,7 +117,12 @@ function FieldControl({field, value, onChange, disabled}: {
   return <Input value={String(value ?? '')} disabled={disabled} onChange={e => onChange(e.target.value)} />
 }
 
-function ConfigPanel({token, onLogout}: {token: string; onLogout: () => void}) {
+function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
+  token: string
+  theme: 'light' | 'dark'
+  onToggleTheme: () => void
+  onLogout: () => void
+}) {
   const [snapshot, setSnapshot] = useState<ConfigSnapshot | null>(null)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
   const [active, setActive] = useState('connection')
@@ -191,22 +207,33 @@ function ConfigPanel({token, onLogout}: {token: string; onLogout: () => void}) {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex h-14 items-center justify-between border-b px-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <ArrowLeftRight className="size-4" />
+          </div>
           <span className="font-semibold">wechat2tg</span>
           {snapshot.runtimeAvailable ? <Badge variant="secondary">运行中</Badge> : <Badge variant="outline">离线</Badge>}
         </div>
-        <Button variant="ghost" size="sm" onClick={onLogout}>退出</Button>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" aria-label="切换主题" onClick={onToggleTheme}>
+            {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onLogout}><LogOut className="size-4" /> 退出</Button>
+        </div>
       </header>
 
       <div className="flex flex-1">
         <aside className="w-48 shrink-0 border-r p-2">
           <nav className="flex flex-col gap-1">
-            {groups.map(group => (
-              <Button key={group.id} variant={group.id === active ? 'secondary' : 'ghost'} size="sm"
-                className="justify-start" onClick={() => setActive(group.id)}>
-                {group.label}
-              </Button>
-            ))}
+            {groups.map(group => {
+              const Icon = GROUP_ICONS[group.icon] || MessageSquare
+              return (
+                <Button key={group.id} variant={group.id === active ? 'secondary' : 'ghost'} size="sm"
+                  className="justify-start" onClick={() => setActive(group.id)}>
+                  <Icon className="size-4" /> {group.label}
+                </Button>
+              )
+            })}
           </nav>
         </aside>
 
@@ -281,11 +308,19 @@ function Section({title, fields, currentValue, setField, busy}: {
 
 export default function App() {
   const [token, setToken] = useState<string>(() => localStorage.getItem(TOKEN_KEY) || '')
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light'))
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    localStorage.setItem(THEME_KEY, theme)
+  }, [theme])
 
   if (!token) return <Auth onAuthed={setToken} />
   return (
     <ConfigPanel
       token={token}
+      theme={theme}
+      onToggleTheme={() => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))}
       onLogout={() => { localStorage.removeItem(TOKEN_KEY); setToken('') }}
     />
   )
