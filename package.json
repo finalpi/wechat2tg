@@ -15,7 +15,7 @@
     "test:mcp": "npm run build && node --test test/mcp.test.cjs",
     "mcp": "node scripts/wechat-mcp.cjs",
     "build:webui": "vite build --config webui/vite.config.ts",
-    "dev:webui": "vite --config webui/vite.config.ts"
+    "dev:webui": "node scripts/dev-webui.cjs"
   },
   "keywords": [],
   "author": "",
