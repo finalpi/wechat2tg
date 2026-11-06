@@ -4,6 +4,7 @@ import path from 'node:path'
 import {isControlMessage,isNoiseMessage} from './message-visibility'
 import {getWechatCallStatus} from '../util/WechatCallStatus'
 import {cleanMediaBody} from './message-body'
+import {createMessageEvents,MessageChange} from './message-events'
 
 export interface InboxMessage {
     id?: number
@@ -29,6 +30,8 @@ export class WebMessageStore {
     private static instance: WebMessageStore
     private db: sqlite3.Database
     private ready: Promise<void>
+    private changes = createMessageEvents()
+    private writes:Promise<void> = Promise.resolve()
     private pendingSends = new Map<string, Set<{promise:Promise<void>;origin:string}>>()
     private managedReceipts = new Map<string,number>()
     private recallBackfills = new Map<string,Promise<void>>()
@@ -62,7 +65,7 @@ export class WebMessageStore {
                             const sql = Object.entries(additions).filter(([name])=>!columns.some(c=>c.name === name)).map(([name,type])=>`ALTER TABLE inbox ADD COLUMN ${name} ${type};`).join('')
                             const migration = !columns.some(c=>c.name === 'telegramTracked') ? 'UPDATE inbox SET telegramTracked=1 WHERE requestId IS NOT NULL AND status=\'submitted\'; UPDATE inbox SET telegramStatus=\'unverified\' WHERE telegramTracked=0 AND telegramStatus IN (\'none\',\'pending\',\'failed\',\'unknown\',\'syncing\');' : ''
                             const hide = 'UPDATE inbox SET hidden=1,telegramStatus=\'excluded\',telegramTracked=0 WHERE (type NOT IN (\'text\',\'0\',\'1\') AND (COALESCE(source,\'\') LIKE \'%<name>HandOffMaster</name>%\' OR COALESCE(source,\'\') LIKE \'%<handofflist%\' OR (type=\'unknown\' AND COALESCE(source,\'\') LIKE \'%<op id=%\'))) OR type IN (\'file_start\',\'new_monment_timeline\') OR (type IN (\'unknown\',\'text\',\'0\') AND trim(body)=\'\' AND COALESCE(source,\'\')=\'\' AND attachmentId IS NULL AND details IS NULL);'
-                            this.db.exec(sql + migration + hide + 'UPDATE inbox SET hidden=1 WHERE type=\'revoke\' OR source LIKE \'%<revokemsg>%\' OR source LIKE \'%<revokemsg %\';' + 'CREATE UNIQUE INDEX IF NOT EXISTS inbox_revoke_request ON inbox(revokeRequestId); UPDATE inbox SET telegramStatus=\'unknown\' WHERE telegramStatus=\'syncing\'; UPDATE inbox SET revokeStatus=\'unknown\' WHERE revokeStatus=\'revoking\'; UPDATE inbox SET revokeTelegramStatus=\'unknown\' WHERE revokeTelegramStatus=\'syncing\';',e=>e ? reject(e) : this.hideStoredControls().then(resolve,reject))
+                            this.db.exec(sql + migration + hide + 'UPDATE inbox SET hidden=1 WHERE type=\'revoke\' OR source LIKE \'%<revokemsg>%\' OR source LIKE \'%<revokemsg %\';' + 'CREATE UNIQUE INDEX IF NOT EXISTS inbox_revoke_request ON inbox(revokeRequestId); UPDATE inbox SET telegramStatus=\'unknown\' WHERE telegramStatus=\'syncing\'; UPDATE inbox SET revokeStatus=\'unknown\' WHERE revokeStatus=\'revoking\'; UPDATE inbox SET revokeTelegramStatus=\'unknown\' WHERE revokeTelegramStatus=\'syncing\';',e=>e ? reject(e) : this.hideStoredControls().then(()=>this.installChangeTracking()).then(resolve,reject))
                         })
                     })
             })
@@ -78,13 +81,73 @@ export class WebMessageStore {
             await new Promise<void>((resolve,reject)=>this.db.run(`UPDATE inbox SET hidden=1,telegramStatus='excluded',telegramTracked=0 WHERE id IN (${batch.map(()=>'?').join(',')})`,batch,error=>error ? reject(error) : resolve()))
         }
     }
+    subscribe(listener:(event:MessageChange)=>void):()=>void {return this.changes.subscribe(listener)}
+    private async installChangeTracking() {
+        // TEMP triggers belong to this connection, not the database file. Their
+        // journal rolls back with a failed statement. Compare actual values:
+        // importHistory/reconcile/read-time enrichment often issue no-op UPDATEs.
+        const columns = ['id','wxId','requestId','remoteId','senderId','senderName','body','direction','type','status','timestamp','attachmentId','telegramStatus','source','details','telegramTracked','bodyFormat','hidden','revokeStatus','revokeRequestId','revokedAt','revokeTelegramStatus']
+        const record = (ref:string)=>`INSERT OR IGNORE INTO message_changes(wxId,id) SELECT ${ref}.wxId,${ref}.id WHERE ${ref}.hidden=0 AND (SELECT COUNT(*) FROM message_changes)<257;`
+        const recall = (ref:string)=>{
+            // Keys may include a Telegram topic prefix. Match an exact suffix,
+            // never parse/publish the key (which contains Telegram identifiers).
+            const match = `i.hidden=0 AND i.remoteId IS NOT NULL AND substr(${ref}.key,-length(':'||i.wxId||':'||i.remoteId))=':'||i.wxId||':'||i.remoteId`
+            return `INSERT OR IGNORE INTO message_changes(wxId,id) SELECT i.wxId,i.id FROM inbox i WHERE ${match} LIMIT MAX(0,257-(SELECT COUNT(*) FROM message_changes));
+                INSERT OR IGNORE INTO message_changes(wxId,id) SELECT '',0 WHERE NOT EXISTS(SELECT 1 FROM inbox i WHERE ${match}) AND (SELECT COUNT(*) FROM message_changes)<257;`
+        }
+        await new Promise<void>((resolve,reject)=>this.db.exec(`
+            PRAGMA recursive_triggers=ON;
+            CREATE TEMP TABLE message_changes(wxId TEXT NOT NULL,id INTEGER NOT NULL,PRIMARY KEY(wxId,id)) WITHOUT ROWID;
+            CREATE TEMP TRIGGER inbox_changed_insert AFTER INSERT ON main.inbox WHEN NEW.hidden=0 BEGIN ${record('NEW')} END;
+            CREATE TEMP TRIGGER inbox_changed_delete AFTER DELETE ON main.inbox WHEN OLD.hidden=0 BEGIN ${record('OLD')} END;
+            CREATE TEMP TRIGGER inbox_changed_update AFTER UPDATE ON main.inbox
+                WHEN (OLD.hidden=0 OR NEW.hidden=0) AND (${columns.map(column=>`OLD.${column} IS NOT NEW.${column}`).join(' OR ')})
+                BEGIN ${record('OLD')} ${record('NEW')} END;
+            CREATE TEMP TRIGGER recall_changed_insert AFTER INSERT ON main.telegram_recalls BEGIN ${recall('NEW')} END;
+            CREATE TEMP TRIGGER recall_changed_delete AFTER DELETE ON main.telegram_recalls BEGIN ${recall('OLD')} END;
+            CREATE TEMP TRIGGER recall_changed_update AFTER UPDATE ON main.telegram_recalls
+                WHEN OLD.key IS NOT NEW.key OR OLD.status IS NOT NEW.status BEGIN ${recall('OLD')} ${recall('NEW')} END;
+        `,error=>error ? reject(error) : resolve()))
+    }
+    private async flushChanges() {
+        const rows:{wxId:string;id:number}[] = await new Promise((resolve,reject)=>this.db.all<{wxId:string;id:number}>('SELECT wxId,id FROM message_changes', (error,rows)=>error ? reject(error) : resolve(rows)))
+        if(!rows.length)return
+        await new Promise<void>((resolve,reject)=>this.db.run('DELETE FROM message_changes',error=>error ? reject(error) : resolve()))
+        // Bound both the SQLite journal and event payloads. Overflow/unmatched
+        // recall keys need a broad refresh; normal status changes retain IDs.
+        if(rows.length >= 257 || rows.some(row=>row.id === 0)){this.changes.publish({type:'messages'});return}
+        const conversations = new Map<string,number[]>()
+        for(const row of rows){
+            if(!conversations.has(row.wxId))conversations.set(row.wxId,[])
+            conversations.get(row.wxId).push(row.id)
+        }
+        for(const [wxId,ids] of conversations)for(let start = 0;start < ids.length;start += 100)this.changes.publish({type:'messages',wxId,ids:ids.slice(start,start + 100)})
+    }
+    private async execute(sql:string,params:unknown[] = []):Promise<{lastID:number;changes:number}> {
+        await this.ready
+        // All application writes are single autocommit statements. Serialize
+        // statement + drain so overlapping claims cannot consume each other's
+        // hints, and publish only after SQLite reports successful completion.
+        const operation = this.writes.then(async()=>{
+            let result:{lastID:number;changes:number}
+            try{
+                result = await new Promise((resolve,reject)=>this.db.run(sql,params,function(error){error ? reject(error) : resolve({lastID:this.lastID,changes:this.changes})}))
+            }catch(error){
+                await new Promise<void>((resolve,reject)=>this.db.run('DELETE FROM message_changes',e=>e ? reject(e) : resolve()))
+                throw error
+            }
+            await this.flushChanges()
+            return result
+        })
+        this.writes = operation.then(()=>undefined,()=>undefined)
+        return operation
+    }
     async all(sql: string, params: unknown[] = []): Promise<any[]> {
         await this.ready
         return new Promise((resolve, reject) => this.db.all(sql, params, (error, rows) => error ? reject(error) : resolve(rows)))
     }
     async run(sql: string, params: unknown[] = []): Promise<number> {
-        await this.ready
-        return new Promise((resolve, reject) => this.db.run(sql, params, function (error) {error ? reject(error) : resolve(this.lastID)}))
+        return (await this.execute(sql,params)).lastID
     }
     async insert(message: InboxMessage) {
         const keys = ['requestId', 'wxId', 'remoteId', 'senderId', 'senderName', 'body', 'direction', 'type', 'status', 'timestamp','attachmentId','telegramStatus','source','details','telegramTracked','bodyFormat']
@@ -179,16 +242,14 @@ export class WebMessageStore {
     }
     async byId(id:number) {return (await this.all('SELECT * FROM inbox WHERE id=?',[id]))[0]}
     async claimSync(id:number) {
-        await this.ready
-        return new Promise<boolean>((resolve,reject)=>this.db.run('UPDATE inbox SET telegramStatus=\'syncing\',telegramTracked=1 WHERE id=? AND hidden=0 AND telegramStatus NOT IN (\'synced\',\'syncing\',\'excluded\')',[id],function(error){error ? reject(error) : resolve(this.changes === 1)}))
+        return (await this.execute('UPDATE inbox SET telegramStatus=\'syncing\',telegramTracked=1 WHERE id=? AND hidden=0 AND telegramStatus NOT IN (\'synced\',\'syncing\',\'excluded\')',[id])).changes === 1
     }
     async claimRevoke(id:number,requestId:string){
-        await this.ready
-        return new Promise<boolean>((resolve,reject)=>this.db.run('UPDATE inbox SET revokeStatus=\'revoking\',revokeRequestId=? WHERE id=? AND revokeStatus NOT IN (\'revoked\',\'revoking\')',[requestId,id],function(error){error ? reject(error) : resolve(this.changes === 1)}))
+        return (await this.execute('UPDATE inbox SET revokeStatus=\'revoking\',revokeRequestId=? WHERE id=? AND revokeStatus NOT IN (\'revoked\',\'revoking\')',[requestId,id])).changes === 1
     }
     async claimRecallNotice(key:string,confirm = false){
         await this.run('INSERT OR IGNORE INTO telegram_recalls(key,status) VALUES(?,\'none\')',[key])
-        return new Promise<boolean>((resolve,reject)=>this.db.run('UPDATE telegram_recalls SET status=\'syncing\' WHERE key=? AND (status IN (\'none\',\'failed\') OR (?=1 AND status=\'unknown\'))',[key,confirm ? 1 : 0],function(e){e ? reject(e) : resolve(this.changes === 1)}))
+        return (await this.execute('UPDATE telegram_recalls SET status=\'syncing\' WHERE key=? AND (status IN (\'none\',\'failed\') OR (?=1 AND status=\'unknown\'))',[key,confirm ? 1 : 0])).changes === 1
     }
     async observeRevoke(wxId:string,remoteId:string,options:{timestamp?:number;senderId?:string;direction?:'incoming'|'outgoing'} = {}){
         if(!wxId || !remoteId || remoteId.startsWith('revoke:'))return
@@ -271,5 +332,5 @@ export class WebMessageStore {
         const row = await this.byRemoteId(peer,String(msg.newMsgId))
         return Boolean(row?.requestId)
     }
-    async close() {await this.ready; return new Promise<void>((resolve, reject) => this.db.close(error => error ? reject(error) : resolve()))}
+    async close() {await this.ready; await this.writes; return new Promise<void>((resolve, reject) => this.db.close(error => error ? reject(error) : resolve()))}
 }

@@ -2,6 +2,7 @@ import BaseMessage from './BaseMessage'
 import {Logger} from 'log4js'
 import {LogUtils} from '../util/LogUtil'
 import {botType} from './BaseFactory'
+import {messageEvents} from '../webui/message-events'
 
 
 export abstract class AbstractClient implements IClient {
@@ -9,7 +10,13 @@ export abstract class AbstractClient implements IClient {
     client: Client
     logger: Logger
     hasReady = false
-    hasLogin = false
+    private loggedIn = false
+    get hasLogin(): boolean {return this.loggedIn}
+    set hasLogin(value: boolean) {
+        if (value === this.loggedIn) return
+        this.loggedIn = value
+        messageEvents?.publish({type: 'status'})
+    }
 
     protected constructor() {
         // 日志级别统一从 LOG_LEVEL 环境变量读取
@@ -28,11 +35,13 @@ export abstract class AbstractClient implements IClient {
 
     static addSpyClient(client: SpyClient): void {
         AbstractClient.spyClientMap.set(client.interfaceId, client.client)
+        messageEvents?.publish({type: 'status'})
     }
 
     static popSpyClient(id: botType): IClient {
         const iClient = AbstractClient.spyClientMap.get(id)
         AbstractClient.spyClientMap.delete(id)
+        messageEvents?.publish({type: 'status'})
         return iClient
     }
 

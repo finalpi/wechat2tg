@@ -1,4 +1,5 @@
 import {annotateTelegramRecall} from '../webui/telegram-recall'
+import {installMiniAppMenu} from '../webui/mini-app-menu'
 import {Context, Markup, session, Telegraf} from 'telegraf'
 import {config, useProxy} from '../config'
 import {SocksProxyAgent} from 'socks-proxy-agent'
@@ -1830,12 +1831,20 @@ export class TelegramBotClient extends AbstractClient {
         }
     }
 
+    private async configureMiniAppMenu(ownerId: number) {
+        if (!config.WEBUI_MINI_APP_URL || process.env.WEBUI_ENABLED === 'false') return
+        try {await installMiniAppMenu(this.client.telegram, ownerId, config.WEBUI_MINI_APP_URL)}
+        catch {this.logger.warn('Mini App 菜单设置失败，请检查 HTTPS 地址和 Telegram 连接')}
+    }
+
     private onBotCommand(bot: Telegraf) {
         TgCommandHelper.setCommand(bot)
         TgCommandHelper.setSimpleCommandHandler(bot)
 
-        bot.start(ctx => {
-            ctx.reply(this.i18n.t('login.welcome'), Markup.removeKeyboard())
+        bot.start(async ctx => {
+            await ctx.reply(this.i18n.t('login.welcome'), Markup.removeKeyboard())
+            const settings = await this.configurationService.getConfig()
+            if (ctx.chat?.type === 'private' && ctx.from?.id === settings.chatId) await this.configureMiniAppMenu(settings.chatId)
         })
 
         bot.help((ctx) => ctx.replyWithMarkdownV2(`${this.i18n.t('help.title')}
@@ -1859,6 +1868,7 @@ ${this.i18n.t('help.instructions')}`))
                 this.chatId = ctx.chat.id
                 await this.configurationService.saveConfig(config)
             }
+            await this.configureMiniAppMenu(config.chatId)
             // todo 先判断是否登录 TG user client
             const userClient = TelegramBotClient.getSpyClient('userMTPClient')
 
@@ -2484,6 +2494,7 @@ ${this.i18n.t('help.instructions')}`))
                         }
                         this.hasLogin = true
                         if (config.chatId > 0) {
+                            void this.configureMiniAppMenu(config.chatId)
                             this.loginUserClient()
                             // 登录 botMTP 客户端
                             this.loginMTPClient()
@@ -2496,6 +2507,7 @@ ${this.i18n.t('help.instructions')}`))
             }
 
             this.isConnected = false
+            this.hasLogin = false
             retryCount++
 
             const delay = Math.min(

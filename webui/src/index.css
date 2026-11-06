@@ -48,4 +48,11 @@
   }
   * { @apply border-border; }
   body { @apply bg-background text-foreground; }
+  .mini-app-shell {
+    height: var(--mini-app-height, 100dvh);
+    padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
+    padding-bottom: calc(var(--tg-safe-area-inset-bottom, 0px) + var(--tg-content-safe-area-inset-bottom, 0px));
+    padding-left: var(--tg-safe-area-inset-left, 0px);
+    padding-right: var(--tg-safe-area-inset-right, 0px);
+  }
 }

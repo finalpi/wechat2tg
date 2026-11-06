@@ -9,6 +9,8 @@ import {createAIConnector} from './ai-connector'
 import {createMcpHandler} from '../mcp/http'
 import {McpSettings} from '../mcp/settings'
 import {MESSAGE_TEMPLATE_DEFAULTS, resolveMessageTemplates} from '../util/MessageTemplates'
+import {createMiniAppAuth, normalizeMiniAppUrl} from './mini-app-auth'
+import {createMessageStreamHandler} from './message-stream'
 
 export interface RuntimeAdapter {
     read(): Promise<Record<string, unknown>>
@@ -31,6 +33,12 @@ export function createWebUIServer(options: Options) {
     const file = options.file || settingsPath()
     const assetDirectory = options.publicDirectory || path.join(__dirname, 'public')
     const startedAt = new Date().toISOString()
+    const miniAppUrl = normalizeMiniAppUrl(options.environment.WEBUI_MINI_APP_URL || process.env.WEBUI_MINI_APP_URL)
+    const miniAppAuth = createMiniAppAuth({
+        botToken: String(options.environment.BOT_TOKEN || ''),
+        ownerId: async () => (await options.runtime?.read())?.chatId,
+    })
+    const stream = createMessageStreamHandler()
     const mcpSettings=new McpSettings(path.join(path.dirname(file),'mcp-settings.json'),options.mcpTokens)
     const mcp=options.messages?createMcpHandler(options.messages,undefined,mcpSettings):undefined
     const ai=createAIConnector(()=>{const saved=readOverrides(file);return {url:saved.AI_API_URL??String(options.environment.AI_API_URL||''),key:saved.AI_API_KEY??String(options.environment.AI_API_KEY||''),model:saved.AI_MODEL??String(options.environment.AI_MODEL||'')}})
@@ -74,7 +82,7 @@ export function createWebUIServer(options: Options) {
         res.setHeader('Cache-Control', 'no-store')
         res.setHeader('X-Content-Type-Options', 'nosniff')
         res.setHeader('Referrer-Policy', 'no-referrer')
-        res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+        res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self'${miniAppUrl ? ' https://telegram.org' : ''}; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors ${miniAppUrl ? 'https://web.telegram.org https://*.web.telegram.org' : '\'none\''}; base-uri 'none'; form-action 'self'`)
         const route = req.url?.split('?')[0]
         if(route==='/mcp'||route?.startsWith('/mcp/')){
             if(!mcp)return respond(res,503,{error:'messagesUnavailable'})
@@ -109,8 +117,32 @@ export function createWebUIServer(options: Options) {
         const now = Date.now()
         for (const [address, entry] of attempts) if (entry.until < now) attempts.delete(address)
         if ((attempts.get(ip)?.count || 0) >= 20) return respond(res, 429, {error: 'rateLimited'})
+        if (route === '/api/auth/telegram') {
+            if (req.method !== 'POST') return respond(res, 405, {error: 'invalidRequest'})
+            if (!miniAppUrl) return respond(res, 503, {error: 'miniAppUnavailable'})
+            if (!req.headers['content-type']?.startsWith('application/json')) return respond(res, 415, {error: 'jsonRequired'})
+            try {
+                let raw = '', bytes = 0
+                for await (const chunk of req) {
+                    bytes += chunk.length
+                    if (bytes > 20000) return respond(res, 413, {error: 'tooLarge'})
+                    raw += chunk.toString()
+                }
+                const body = JSON.parse(raw)
+                const session = await miniAppAuth.exchange(body?.initData)
+                attempts.delete(ip)
+                return respond(res, 200, session)
+            } catch (error) {
+                const entry = attempts.get(ip) || {count: 0, until: now + 60000}
+                entry.count++; attempts.set(ip, entry)
+                const status = [401, 403, 503].includes(error?.status) ? error.status : 401
+                return respond(res, status, {error: status === 503 ? 'miniAppUnavailable' : status === 403 ? 'miniAppForbidden' : 'miniAppUnauthorized'})
+            }
+        }
         const supplied = req.headers.authorization?.replace(/^Bearer /, '') || ''
-        if (!timingSafeEqual(digest(supplied), digest(token))) {
+        const authorized = async () => timingSafeEqual(digest(supplied), digest(token))
+            || Boolean(miniAppUrl && await miniAppAuth.authorize(supplied))
+        if (!await authorized()) {
             const entry = attempts.get(ip) || {count: 0, until: now + 60000}
             entry.count++
             attempts.set(ip, entry)
@@ -118,6 +150,23 @@ export function createWebUIServer(options: Options) {
         }
         attempts.delete(ip)
         try {
+            if (route === '/api/auth/logout') {
+                if (req.method !== 'POST') return respond(res, 405, {error: 'invalidRequest'})
+                miniAppAuth.revoke(supplied)
+                return respond(res, 200, {ok: true})
+            }
+            if (route === '/api/messages/events') {
+                if (req.method !== 'GET') return respond(res, 405, {error: 'invalidRequest'})
+                return stream(req, res, options.messages?.subscribe?.bind(options.messages), authorized)
+            }
+            if (route === '/api/messages/updates') {
+                if (req.method !== 'GET') return respond(res, 405, {error: 'invalidRequest'})
+                if (!options.messages?.updates) return respond(res, 503, {error: 'messagesUnavailable'})
+                const params = new URL(req.url, 'http://localhost').searchParams
+                const wxId = params.get('wxId') || '', query = params.get('q') || '', rawIds = (params.get('ids') || '').split(',')
+                if (!wxId || wxId.length > 256 || query.length > 100 || rawIds.length > 100 || rawIds.some(id => !/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id)))) return respond(res, 400, {error: 'invalidRequest'})
+                return respond(res, 200, await options.messages.updates(wxId, [...new Set(rawIds.map(Number))], query))
+            }
             if(route==='/api/mcp/settings'||route==='/api/mcp/token'){
                 if(route==='/api/mcp/settings'&&req.method==='GET')return respond(res,200,{...mcpSettings.metadata(),available:Boolean(options.messages)})
                 if(req.method!==(route==='/api/mcp/settings'?'PATCH':'POST'))return respond(res,405,{error:'invalidRequest'})
@@ -153,6 +202,7 @@ export function createWebUIServer(options: Options) {
             if(attachmentRoute) {
                 if(req.method!=='GET'||!options.messages?.attachment)return respond(res,405,{error:'messagesUnavailable'})
                 const {path,...file}=await options.messages.attachment(Number(attachmentRoute[1]))
+                void path // Filesystem paths are private; return metadata only.
                 return respond(res,200,file)
             }
             const transcriptRoute=route?.match(/^\/api\/media\/transcript\/(\d+)$/)
@@ -161,6 +211,7 @@ export function createWebUIServer(options: Options) {
                 const query=new URL(req.url,'http://localhost').searchParams,path=query.get('path')||'root',id=query.get('id')||''
                 if(!/^(root|[a-zA-Z0-9_.-]{1,80})$/.test(path)||!/^\d{1,10}$/.test(id))return respond(res,400,{error:'invalidRequest'})
                 const {path:ignored,...file}=await options.messages.transcriptAttachment(Number(transcriptRoute[1]),path,id)
+                void ignored // Filesystem paths are private; return metadata only.
                 return respond(res,200,file)
             }
             const binaryRoute=route?.match(/^\/api\/media\/([a-f0-9-]{36})$/)

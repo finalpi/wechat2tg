@@ -9,6 +9,7 @@ dotenv.config()
 loadPersistentEnvironment()
 
 export const config = {
+    WEBUI_MINI_APP_URL: process.env.WEBUI_MINI_APP_URL?.trim() || '',
     BOT_TOKEN: process.env.BOT_TOKEN?.toString() || '', // tg bot father 申请的 bot token
     PROTOCOL: process.env.PROXY_PROTOCOL?.toString() || '', // 协议:socks5/http/https
     HOST: process.env.PROXY_HOST?.toString() || '', // 代理服务器地址

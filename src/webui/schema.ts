@@ -1,3 +1,5 @@
+import {normalizeMiniAppUrl} from './mini-app-auth'
+
 export interface Field {
     key: string
     label: string
@@ -72,6 +74,7 @@ export const fields: Field[] = [
     field('advanced', 'AUTO_DELETE_OLD_MESSAGES', '自动清理历史消息', '自动清理历史消息。', 'boolean'),
     numeric('advanced', 'MESSAGE_RETENTION_DAYS', '消息保留天数', '超过此期限的记录将被清理。', 1, 3650),
     field('advanced', 'LOG_LEVEL', '日志级别', '日志级别。', 'select', {options: ['trace', 'debug', 'info', 'warn', 'error', 'fatal']}),
+    field('advanced', 'WEBUI_MINI_APP_URL', 'Telegram Mini App 地址', '根路径 HTTPS 地址；仅主人可用，保存后重启。'),
     field('advanced', 'DEBUG_MODE', '调试模式', '调试模式。', 'boolean'),
 ]
 fields.find(f => f.key === 'API_ID').required = true
@@ -101,6 +104,9 @@ export function validatePatch(source: Field['source'], patch: unknown, persisted
             throw new Error(`${definition.label}格式不正确`)
         }
         const text = String(value)
+        if (key === 'WEBUI_MINI_APP_URL') {
+            try {normalizeMiniAppUrl(text)} catch {throw new Error('Mini App 地址必须是无参数的根路径 HTTPS URL')}
+        }
         if (text.length > 4096 || text.includes('\0')) throw new Error(`${definition.label}内容过长或包含非法字符`)
         if (definition.required && !text.trim()) throw new Error(`请填写${definition.label}`)
         if (definition.type === 'number' && (text !== '' || source === 'runtime')) {

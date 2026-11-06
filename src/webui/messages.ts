@@ -5,6 +5,7 @@ import {WxContact} from '../entity/WxContact'
 import {WxRoom} from '../entity/WxRoom'
 import {Message} from '../entity/Message'
 import {WebMessageStore} from './message-store'
+import {messageEvents,MessageChange} from './message-events'
 import {WebMediaStore,MediaFile} from './media'
 import {Message as WxMessage} from 'wx2tg-puppet'
 import {TelegramGroupOperateService} from '../service/TelegramGroupOperateService'
@@ -26,6 +27,8 @@ import {conversationMessages, originalTelegramMessage, telegramConversationRecen
 import {isSameTelegramDestination} from '../util/TelegramTopicUtils'
 
 export interface MessageCenterAdapter {
+    subscribe?(listener:(event:MessageChange)=>void):()=>void
+    updates?(wxId:string,ids:number[],query?:string):Promise<unknown>
     status(): Promise<unknown>
     contacts(query: string, kind: string, offset: number): Promise<unknown>
     history(wxId: string, before: number, query: string): Promise<unknown>
@@ -402,6 +405,23 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         return {...result,serverTime:Math.floor(Date.now() / 1000)}
     }
     return {
+        subscribe:listener=>{
+            const unsubscribeStore = store.subscribe(listener),unsubscribeShared = messageEvents.subscribe(listener)
+            return ()=>{unsubscribeStore();unsubscribeShared()}
+        },
+        updates:async(wxId,ids,query = '')=>{
+            if(!wxId || wxId.length > 256 || !Array.isArray(ids) || !ids.length || ids.length > 100 || ids.some(id=>!Number.isSafeInteger(id) || id < 1))throw new MessageCenterError('invalidRequest')
+            if(typeof query !== 'string' || query.length > 100)throw new MessageCenterError('invalidRequest')
+            await recipient(wxId)
+            const rows = await store.all(`SELECT * FROM inbox WHERE hidden=0 AND wxId=? AND id IN (${ids.map(()=>'?').join(',')}) AND body LIKE ? ORDER BY timestamp,id`,[wxId,...ids,`%${query}%`])
+            const messages = rows.map(({source,details,...message})=>{
+                void source // Private protocol source must never cross the HTTP boundary.
+                let parsed = null
+                try {parsed = details ? JSON.parse(details) : null} catch { /* Preserve message visibility if legacy display metadata is malformed. */ }
+                return {...message,details:parsed}
+            })
+            return enrichHistory({messages})
+        },
         status: async () => {await repairOwnership();return {available:true,wechatOnline:Boolean(client()?.hasLogin),telegramOnline:Boolean(AbstractClient.getSpyClient('botClient')?.hasLogin),directoryAvailable:getGeWeChatDataSource().isInitialized}},
         upload:(name,preference,stream)=>media.save(name,preference,stream),
         media:id=>media.get(id),attachment,

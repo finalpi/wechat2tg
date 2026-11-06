@@ -17,6 +17,7 @@ import {MessageService} from '../service/MessageService'
 import {Message} from '../entity/Message'
 import {FileUtils} from '../util/FileUtils'
 import {getGeWeChatDataSource} from '../data-sourse'
+import {messageEvents} from '../webui/message-events'
 import {ConverterHelper} from '../util/FfmpegUtils'
 import {MessageTypeUtils} from '../util/MessageTypeUtils'
 import {EmojiConverter} from '../util/EmojiUtils'
@@ -192,6 +193,8 @@ export class WeChatClient extends AbstractClient {
         this.client.start().then(async () => {
             getGeWeChatDataSource().initialize().then(() => {
                 this.logger.info('DataSource initialized')
+                messageEvents?.publish({type: 'status'})
+                messageEvents?.publish({type: 'contacts'})
             }).catch((e) => {
                 this.logger.error('DataSource initialize failed', e)
             })
@@ -467,7 +470,13 @@ export class WeChatClient extends AbstractClient {
             })().catch(()=>this.logger.error('Wechat message handling failed'))
         })
 
+        this.client.on('logout', () => {
+            this.hasLogin = false
+            this.loginReady = undefined
+        })
+
         this.client.on('login', () => {
+            messageEvents?.publish({type: 'contacts'})
             this.loginReady = undefined
             void this.waitForLogin().then(() => this.loginSuccess())
                 .catch(error => this.logger.error('初始化微信登录状态失败:', error))

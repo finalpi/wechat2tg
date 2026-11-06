@@ -9,12 +9,13 @@ import {Badge} from '@/components/ui/badge'
 import {Alert, AlertDescription} from '@/components/ui/alert'
 import {Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select'
 import {Spinner} from '@/components/ui/spinner'
-import {api, ApiError, type ConfigSnapshot, type Field} from '@/lib/api'
+import {api, request, ApiError, type ConfigSnapshot, type Field} from '@/lib/api'
 import {cn} from '@/lib/utils'
 import {McpPanel} from '@/features/mcp-panel'
 import {AITools} from '@/features/ai-tools'
 import {TemplatePreview} from '@/features/template-preview'
 import {MessagesPanel} from '@/features/messages-panel'
+import {telegramLaunch, loadTelegramSDK, connectTelegramAppearance} from '@/lib/telegram-mini-app'
 import type {ComposerDraft} from '@/features/message-composer'
 import {ArrowLeftRight, Globe, Link2, LogOut, MessageSquare, Moon, Send, SlidersHorizontal, Sparkles, Sun, Type} from 'lucide-react'
 
@@ -22,6 +23,7 @@ type FieldValue = string | number | boolean
 
 const TOKEN_KEY = 'webui-access-token'
 const THEME_KEY = 'webui-theme'
+const launch = telegramLaunch()
 const GROUP_ICONS: Record<string, typeof MessageSquare> = {
   message: MessageSquare,
   link: Link2,
@@ -119,11 +121,12 @@ function FieldControl({field, value, onChange, disabled}: {
   return <Input id={field.key} value={String(value ?? '')} disabled={disabled} onChange={e => onChange(e.target.value)} />
 }
 
-function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
+function ConfigPanel({token, theme, onToggleTheme, onLogout, miniApp = false}: {
   token: string
   theme: 'light' | 'dark'
   onToggleTheme: () => void
   onLogout: () => void
+  miniApp?: boolean
 }) {
   const [snapshot, setSnapshot] = useState<ConfigSnapshot | null>(null)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
@@ -133,6 +136,16 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
   const [toast, setToast] = useState('')
   const [conflict, setConflict] = useState(false)
   const [messageDrafts] = useState(() => new Map<string, ComposerDraft>())
+
+  useEffect(() => {
+    if (!miniApp) return
+    const back = window.Telegram?.WebApp?.BackButton
+    const onBack = () => setActive('messages')
+    if (active === 'messages') back?.hide()
+    else back?.show()
+    back?.onClick(onBack)
+    return () => {back?.offClick(onBack); back?.hide()}
+  }, [miniApp, active])
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -248,7 +261,7 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
   }
 
   return (
-    <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
+    <div className={cn('flex min-h-0 flex-col overflow-hidden', miniApp ? 'mini-app-shell' : 'h-dvh')}>
       <header className="flex h-14 shrink-0 items-center justify-between border-b px-4">
         <div className="flex items-center gap-3">
           <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
@@ -350,20 +363,68 @@ function Section({title, fields, currentValue, setField, busy}: {
   )
 }
 
+function MiniAppLogin({blocked, onAuthed}: {blocked: boolean; onAuthed: (token: string, expiresAt: number) => void}) {
+  const [error, setError] = useState('')
+  useEffect(() => {
+    if (blocked) return
+    const controller = new AbortController()
+    if (!launch.initData) {setError('请从 Telegram 机器人菜单重新打开控制台。'); return}
+    request<{token: string; expiresAt: number}>('/api/auth/telegram', '', {
+      method: 'POST', body: JSON.stringify({initData: launch.initData}), signal: controller.signal,
+    }).then(session => {if (!controller.signal.aborted) onAuthed(session.token, session.expiresAt)})
+      .catch(e => {if (!controller.signal.aborted) setError(e instanceof ApiError && e.status === 403
+        ? '仅机器人主人可访问。' : e instanceof ApiError && e.status === 503
+          ? 'Mini App 未启用或尚未设置机器人主人，请先完成配置。'
+          : 'Telegram 登录校验失败，请关闭后从机器人菜单重新打开。')})
+    return () => controller.abort()
+  }, [blocked, onAuthed])
+  return <div className="mini-app-shell flex items-center justify-center p-4"><Card className="w-full max-w-sm">
+    <CardHeader><CardTitle>wechat2tg 控制台</CardTitle></CardHeader>
+    <CardContent>{blocked || error
+      ? <Alert><AlertDescription>{blocked ? '已退出或登录已失效，请关闭后从机器人菜单重新打开。' : error}</AlertDescription></Alert>
+      : <div className="flex items-center gap-2"><Spinner /> 正在验证 Telegram 身份</div>}
+    </CardContent>
+  </Card></div>
+}
+
 export default function App() {
-  const [token, setToken] = useState<string>(() => localStorage.getItem(TOKEN_KEY) || '')
+  // Never fall back to a saved browser admin token inside Telegram.
+  const [token, setToken] = useState<string>(() => launch.isMiniApp ? '' : localStorage.getItem(TOKEN_KEY) || '')
+  const [miniBlocked, setMiniBlocked] = useState(false)
+  const [expiresAt, setExpiresAt] = useState(0)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light'))
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
-    localStorage.setItem(THEME_KEY, theme)
+    if (!launch.isMiniApp) localStorage.setItem(THEME_KEY, theme)
   }, [theme])
 
-  const logout = useCallback(() => {localStorage.removeItem(TOKEN_KEY); setToken('')}, [])
+  useEffect(() => {
+    if (!launch.isMiniApp) return
+    let disposed = false
+    let cleanup: (() => void) | undefined
+    loadTelegramSDK().then(app => {if (!disposed) cleanup = connectTelegramAppearance(app, setTheme)}).catch(() => undefined)
+    return () => {disposed = true; cleanup?.()}
+  }, [])
 
-  if (!token) return <Auth onAuthed={setToken} />
+  const logout = useCallback(() => {
+    if (launch.isMiniApp) {
+      setMiniBlocked(true)
+      if (token) void request('/api/auth/logout', token, {method: 'POST', body: '{}'}).catch(() => undefined)
+    } else localStorage.removeItem(TOKEN_KEY)
+    setToken('')
+  }, [token])
+  const miniAuthed = useCallback((value: string, expiry: number) => {setExpiresAt(expiry); setToken(value)}, [])
+  useEffect(() => {
+    if (!launch.isMiniApp || !token || !expiresAt) return
+    const timer = window.setTimeout(logout, Math.max(0, expiresAt - Date.now()))
+    return () => window.clearTimeout(timer)
+  }, [token, expiresAt, logout])
+
+  if (!token) return launch.isMiniApp ? <MiniAppLogin blocked={miniBlocked} onAuthed={miniAuthed} /> : <Auth onAuthed={setToken} />
   return (
     <ConfigPanel
+      miniApp={launch.isMiniApp}
       token={token}
       theme={theme}
       onToggleTheme={() => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))}

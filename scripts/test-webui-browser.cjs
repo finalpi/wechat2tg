@@ -8,6 +8,7 @@ const path = require('node:path')
 const {once} = require('node:events')
 const {chromium} = require('playwright-core')
 const {createWebUIServer} = require('../dist/webui/server')
+const {createMessageEvents} = require('../dist/webui/message-events')
 
 async function main() {
   const executablePath = process.env.BROWSER_EXECUTABLE_PATH || [
@@ -37,6 +38,10 @@ async function main() {
   ]
   const sends = [], syncs = [], recalls = [], uploads = [], histories = [], locates = []
   const accepted = new Map()
+  const events = createMessageEvents()
+  const sockets = new Set()
+  let connections = 0, statusRequests = 0, contactRequests = 0
+  const older = {...rows[0], id: 90, body: '更早的消息', timestamp: stamp - 100}
   let online = true
   let available = true
   let failLocate = false
@@ -44,12 +49,14 @@ async function main() {
   const history = (wxId, before = 0, q = '') => {
     histories.push({wxId, before, q})
     const source = wxId === group ? rows : []
-    const messages = before ? [{...rows[0], id: 0, body: '更早的消息', timestamp: stamp - 100}] : source.filter(row => !q || row.body.includes(q))
+    const messages = before ? [older] : source.filter(row => !q || row.body.includes(q)).slice(-50)
     return {messages, before: messages[0]?.id || 0, hasMore: !before && !q && wxId === group, serverTime: Math.floor(Date.now() / 1000)}
   }
   const adapter = {
-    status: async () => ({available, wechatOnline: online, telegramOnline: online, directoryAvailable: true}),
-    contacts: async (q, kind, offset) => ({contacts: offset ? [] : contacts.filter(row => (kind === 'all' || row.kind === kind) && (!q || row.name.includes(q))), hasMore: false, offset: offset + 60, directoryAvailable: true}),
+    subscribe: events.subscribe,
+    updates: async (wxId, ids) => ({messages: [...rows, older].filter(row => row.wxId === wxId && ids.includes(row.id)), serverTime: Math.floor(Date.now() / 1000)}),
+    status: async () => {statusRequests++; return {available, wechatOnline: online, telegramOnline: online, directoryAvailable: true}},
+    contacts: async (q, kind, offset) => {contactRequests++; return {contacts: offset ? [] : contacts.filter(row => (kind === 'all' || row.kind === kind) && (!q || row.name.includes(q))), hasMore: false, offset: offset + 60, directoryAvailable: true}},
     history: async (...args) => history(...args),
     locate: async (wxId, id, remoteId) => {locates.push({wxId, id, remoteId}); if (failLocate) throw Object.assign(new Error(), {status: 404, code: 'messageMissing'}); return {...history(wxId), targetId: 1, hasNewer: false}},
     groupMembers: async (_wxId, q, offset) => ({wxId: group, members: offset || q && !'小王'.includes(q) ? [] : [{wxId: 'member', name: '小王', nickname: '王', displayName: '小王', hasAvatar: false}], total: 1, hasMore: false, offset: offset + 100}),
@@ -66,6 +73,7 @@ async function main() {
     revoke: async (id, requestId, confirmUncertain) => {const revokeStatus = revokeOutcomes.shift() || 'revoked'; recalls.push({id, requestId, confirmUncertain}); Object.assign(rows.find(row => row.id === id), {revokeStatus, canRevoke: revokeStatus !== 'revoked'}); return {id, revokeStatus, revokeTelegramStatus: 'synced'}},
   }
   const server = createWebUIServer({environment: {}, token, file: path.join(directory, 'settings.json'), runtime: {read: async () => ({autoTranscript: false}), save: async () => undefined}, messages: adapter, mcpTokens: {write: 'w'.repeat(32), read: 'r'.repeat(32)}})
+  server.on('request', (req, res) => {if (req.url === '/api/messages/events') {connections++; sockets.add(res); res.on('close', () => sockets.delete(res))}})
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
   const origin = `http://127.0.0.1:${server.address().port}`
@@ -96,6 +104,20 @@ async function main() {
     await page.getByRole('button', {name: '加载更早消息'}).click()
     await page.getByText('更早的消息').waitFor()
     assert(histories.some(request => request.before === 1))
+    older.body = '更早的消息已更新'
+    events.publish({type: 'messages', wxId: group, ids: [90]})
+    await page.getByText('更早的消息已更新', {exact: true}).waitFor()
+    await page.getByText('实时连接', {exact: true}).first().waitFor()
+    // Deliberately idle longer than the removed polling interval: no HTTP churn.
+    await page.waitForTimeout(400)
+    const idleCounts = [histories.length, statusRequests, contactRequests, connections]
+    await page.waitForTimeout(5500)
+    assert.deepEqual([histories.length, statusRequests, contactRequests, connections], idleCounts)
+    assert.equal(sockets.size, 1, 'one long connection per message page')
+    sockets.forEach(res => res.end())
+    rows.push({...rows[0], id: 91, body: '重连期间的新消息', timestamp: stamp + 1, bodyFormat: 'plain'})
+    await page.getByText('重连期间的新消息', {exact: true}).waitFor()
+    assert(connections > idleCounts[3], 'stream reconnected and refreshed without polling')
     await page.getByLabel('搜索消息').fill('不存在')
     await page.getByText('未找到消息', {exact: true}).waitFor()
     await page.getByRole('button', {name: '返回最新'}).click()
@@ -130,6 +152,7 @@ async function main() {
     await page.getByRole('button', {name: /小王.*查看原文/}).click()
     await page.getByText('操作失败（messageMissing）。', {exact: true}).waitFor()
     rows.push({...rows[0], id: 100, timestamp: stamp + 1, body: '定位失败后继续更新', bodyFormat: 'plain'})
+    events.publish({type: 'messages', wxId: group, ids: [100]})
     await page.getByText('定位失败后继续更新', {exact: true}).waitFor()
     failLocate = false
     await page.getByLabel('消息内容').fill('保留草稿')
@@ -198,15 +221,26 @@ async function main() {
     await page.getByRole('button', {name: '返回会话列表'}).click()
     await pickGroup()
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+    await page.getByRole('button', {name: '加载更早消息'}).click()
+    await page.getByText('更早的消息已更新', {exact: true}).waitFor()
+    for (let i = 0; i < 60; i++) rows.push({...rows[0], id: 1000 + i, timestamp: stamp + 500 + i, body: `补齐消息 ${i}`, bodyFormat: 'plain'})
+    events.publish({type: 'messages', wxId: group})
+    await page.getByText('补齐消息 59', {exact: true}).waitFor()
+    const delayed = {...rows[0], id: 9999, timestamp: stamp - 50, body: '迟到的历史消息', bodyFormat: 'plain'}
+    // Keep this row outside the latest-50 response, as a real backdated insertion would be.
+    rows.unshift(delayed)
+    events.publish({type: 'messages', wxId: group, ids: [9999]})
+    await page.getByText('迟到的历史消息', {exact: true}).waitFor()
+    rows.splice(rows.indexOf(delayed), 1)
+    events.publish({type: 'messages', wxId: group, ids: [9999]})
+    await page.getByText('迟到的历史消息', {exact: true}).waitFor({state: 'hidden'})
     online = false
-    await page.getByRole('button', {name: '返回会话列表'}).click()
-    await page.getByRole('button', {name: '刷新会话'}).click()
-    await pickGroup()
+    events.publish({type: 'status'})
     await page.getByText('微信未连接，暂时无法发送。', {exact: true}).waitFor()
     assert(await page.getByRole('button', {name: '发送', exact: true}).isDisabled())
     available = false
+    events.publish({type: 'status'})
     await page.setViewportSize({width: 1440, height: 1000})
-    await page.getByRole('button', {name: '刷新会话'}).click()
     await page.getByText('消息服务未连接', {exact: true}).waitFor()
     assert.deepEqual(errors, [], 'No browser runtime errors')
     console.log('WebUI browser checks passed: auth, chat layout, paging/search, quote lookup, sync/revoke, media preview, drafts, mentions, attachment split, idempotent retry, theme, proxy, mobile, offline states.')

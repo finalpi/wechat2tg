@@ -22,10 +22,14 @@ The standalone server supports configuration editing. It has no live message ada
 - Header-authenticated avatar/media requests, Blob previews/downloads, image zoom/rotation, audio/video players and nested chat records.
 - Idempotency keys survive uncertain HTTP responses. Text plus attachment uses separate requests; an accepted part is not submitted again. Unknown WeChat delivery is never automatically resent.
 - Drafts survive conversation switches while the message page remains open. Drafts are memory-only, not persisted across page reloads/logout. An in-flight send continues even if another conversation is selected.
-- Five-second visible-page polling, preserved older history, and no latest-history polling while viewing located quote context.
+- One authenticated SSE connection, event-driven refreshes, preserved older history, and no jump to latest while viewing located quote context. No periodic message/contact/status HTTP polling.
 - Theme-aware bubbles and a single-column conversation view on small screens.
 
 HTML is rendered through a small React allowlist, not `dangerouslySetInnerHTML`. Only HTTP(S) links and local, allowlisted custom-emoji image paths are rendered. Tokens are never placed in media URLs.
+
+## Telegram Mini App
+
+The same React application supports owner-only Telegram login through signed initData and an in-memory session, without using the browser’s saved token. See [Mini App setup and SSE proxy configuration](telegram-mini-app.md). This source feature is not included in the existing v6.0.34 image.
 
 ## Configuration conflict recovery
 
@@ -44,5 +48,7 @@ npm run test:webui:browser     # Chromium integration checks against local fixtu
 ```
 
 Browser tests use `playwright-core` with an installed Chrome/Chromium. Set `BROWSER_EXECUTABLE_PATH` if it is not installed at a common system path. They start a temporary local WebUI server and fake message adapter; they do not send to WeChat/Telegram or use account credentials.
+
+The Mini App suite mocks only Telegram launch/SDK behavior while exercising the real local HTTP auth and SSE endpoints. It checks owner enforcement, theme/viewport/back button, session revocation and saved-token bypass protection. The message suite asserts zero recurring requests during an idle interval, long-connection reconnect, backdated updates and older-message status changes.
 
 The browser suite exercises login, layout, history/search, original-message lookup, confirmed sync/recall, media preview, drafts, member selection, text/file splitting, lost-response retries, theme/proxy controls, mobile layout and unavailable/offline states. Live account receipt handling still requires real integration testing.

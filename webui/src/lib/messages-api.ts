@@ -54,7 +54,8 @@ export interface ChatMessage {
   transcript?: Transcript
   transcriptAttachments?: TranscriptAttachment[]
 }
-export interface HistoryPage {messages: ChatMessage[]; hasMore: boolean; before: number; serverTime: number}
+export interface MessageUpdates {messages: ChatMessage[]; serverTime: number}
+export interface HistoryPage extends MessageUpdates {hasMore: boolean; before: number}
 export interface ContactsPage {contacts: Contact[]; hasMore: boolean; offset: number; directoryAvailable: boolean}
 export interface MessageStatus {available: boolean; wechatOnline: boolean; telegramOnline?: boolean; directoryAvailable: boolean}
 export interface Member {wxId: string; name: string; nickname: string; displayName: string; hasAvatar: boolean}
@@ -75,8 +76,13 @@ export const messagesApi = {
     request<ContactsPage>(`/api/contacts?${query({q, kind, offset})}`, token, {signal}),
   history: (token: string, wxId: string, q = '', before = 0, signal?: AbortSignal) =>
     request<HistoryPage>(`/api/messages?${query({wxId, q, before})}`, token, {signal}),
-  locate: (token: string, wxId: string, target: {id?: number; remoteId?: string}) =>
-    request<HistoryPage & {targetId: number; hasNewer: boolean}>(`/api/messages/locate?${query({wxId, ...(target.id ? {id: target.id} : {}), ...(target.remoteId ? {remoteId: target.remoteId} : {})})}`, token),
+  updates: (token: string, wxId: string, ids: number[], signal?: AbortSignal, q = '') => {
+    const valid = [...new Set(ids.filter(id => Number.isSafeInteger(id) && id > 0))]
+    if (!valid.length || valid.length > 100) throw new Error('消息更新每次需要 1–100 个有效 ID。')
+    return request<MessageUpdates>(`/api/messages/updates?${query({wxId, ids: valid.join(','), q})}`, token, {signal})
+  },
+  locate: (token: string, wxId: string, target: {id?: number; remoteId?: string}, signal?: AbortSignal) =>
+    request<HistoryPage & {targetId: number; hasNewer: boolean}>(`/api/messages/locate?${query({wxId, ...(target.id ? {id: target.id} : {}), ...(target.remoteId ? {remoteId: target.remoteId} : {})})}`, token, {signal}),
   members: (token: string, wxId: string, q = '', offset = 0, refresh = false, signal?: AbortSignal) =>
     request<MembersPage>(`/api/groups/members?${query({wxId, q, offset, refresh})}`, token, {signal}),
   send: (token: string, body: SendMessage) => request<ChatMessage>('/api/messages', token, {method: 'POST', body: JSON.stringify(body)}),
