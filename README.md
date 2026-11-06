@@ -11,7 +11,7 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 
 ## v6 versions and channels
 
-**Use one maintenance branch, `v6`; tags distinguish stable and development releases. There is no `v6-dev` maintenance branch.** The current stable Bot is `v6.0.35`, using puppet and wx2tg-server `v6.0.16`. Components release independently and need only share major version `v6`. Do not mix it with server v7.
+**Use one maintenance branch, `v6`; tags distinguish stable and development releases. There is no `v6-dev` maintenance branch.** The current stable Bot is `v6.0.36`, using puppet and wx2tg-server `v6.0.16`. Components release independently and need only share major version `v6`. Do not mix it with server v7.
 
 ### Which WeChat version does each server release emulate?
 
@@ -19,7 +19,7 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 
 | Server release / family | Origin | iPad / iPhone WeChat version | Selection for this Bot |
 | --- | --- | --- | --- |
-| **`finalpi/wx2tg-server:v6.0.16`** (`v6` family) | `875` → `v6` | **8.0.75.33** (`0x18004b21`) | **Used by the current Bot `v6.0.35`**; the server image supports `linux/amd64` only |
+| **`finalpi/wx2tg-server:v6.0.16`** (`v6` family) | `875` → `v6` | **8.0.75.33** (`0x18004b21`) | **Used by the current Bot `v6.0.36`**; the server image supports `linux/amd64` only |
 | Historical `875` / server `v51.0.0`–`v51.0.13` | `875` protocol family | **8.0.75.33** | Historical releases; `v51` does not mean WeChat 5.1 |
 | Server Git tag **`v7`** | `878` protocol family | **8.0.78.34** (WeChat release 8.0.78, `0x18004e22`) | A separate release family, **not part of this deployment; do not mix it with or directly replace the existing v6 server** |
 
@@ -27,7 +27,7 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 - The `v7` target client parameters and offline tests have been checked, but **real WeChat login and complete business compatibility have not thereby been verified**.
 - Historical Bot/SDK names such as `wx2tg-v3` and `860-v3` do not determine the WeChat version. The old `860` source also has a mismatch between an active value and its comment. See [fixed-tag evidence and historical limitations](docs/server-wechat-versions.md).
 
-Current Bot changes: [v6.0.35 Release](https://github.com/finalpi/wechat2tg/releases/tag/v6.0.35).
+Current Bot changes: [v6.0.36 Release](https://github.com/finalpi/wechat2tg/releases/tag/v6.0.36).
 
 ### Release channels
 
@@ -36,7 +36,7 @@ Current Bot changes: [v6.0.35 Release](https://github.com/finalpi/wechat2tg/rele
 | Stable | `v6.X.Y` (no dev suffix) | `v6` |
 | Development | `v6.X.Y-dev.N` | `v6-dev` |
 
-Bot images use **`finalpi/wechat2tg`** with the full Git tag, including the leading `v`: `finalpi/wechat2tg:v6.0.13-dev.3` for development or `finalpi/wechat2tg:v6.0.35` for stable. Rolling aliases are major-scoped: `v6` for stable and `v6-dev` for development; this unversioned repository never receives global `latest` or `dev` aliases from this workflow. Manual snapshots from `v6` use `v6-dev-<short SHA>` with no rolling aliases. The old `finalpi/wechat2tg-v3` repository and its existing images/tags are preserved and never updated by this workflow.
+Bot images use **`finalpi/wechat2tg`** with the full Git tag, including the leading `v`: `finalpi/wechat2tg:v6.0.13-dev.3` for development or `finalpi/wechat2tg:v6.0.36` for stable. Rolling aliases are major-scoped: `v6` for stable and `v6-dev` for development; this unversioned repository never receives global `latest` or `dev` aliases from this workflow. Manual snapshots from `v6` use `v6-dev-<short SHA>` with no rolling aliases. The old `finalpi/wechat2tg-v3` repository and its existing images/tags are preserved and never updated by this workflow.
 
 Native amd64 and arm64 builds publish independently as the Docker version plus `-amd64` / `-arm64`, with `v6-amd64` / `v6-arm64` for stable releases and `v6-dev-amd64` / `v6-dev-arm64` for development releases. Manual snapshots only add the architecture suffix, without updating aliases. amd64 is usable as soon as its job succeeds; the combined tag waits for both. Historical tags are never moved. Branch HEAD is not necessarily the latest stable release. See [release rules (Chinese)](docs/releases.md).
 
@@ -68,7 +68,7 @@ The Chinese / English WebUI starts with the application. Docker Compose exposes 
 
 ### Telegram Mini App and live messages
 
-The same WebUI can open from the owner’s private-chat **控制台** menu. Configure `WEBUI_MINI_APP_URL=https://your-domain/` and restart the Bot: the backend verifies Telegram signatures and permits **only the existing bot owner**, without entering a WebUI token. Ordinary browser login remains available. The message page uses SSE change notifications instead of five-second polling. A reachable HTTPS root URL and an SSE-compatible reverse proxy are required; see [setup and security boundaries](docs/telegram-mini-app.md). Available starting with **v6.0.35**.
+The same WebUI can open from the owner’s private-chat **控制台** menu. Configure `WEBUI_MINI_APP_URL=https://your-domain/` and restart the Bot: the backend verifies Telegram signatures and permits **only the existing bot owner**, without entering a WebUI token. Ordinary browser login remains available. The message page uses SSE change notifications instead of five-second polling. A reachable HTTPS root URL and an SSE-compatible reverse proxy are required; see [setup and security boundaries](docs/telegram-mini-app.md). Available since v6.0.35; use **v6.0.36 or later** for the private-chat menu fix.
 
 ### Configuration console
 
@@ -186,7 +186,7 @@ Normal startup leaves the WebUI available if Telegram credentials are missing. F
 ## Installation & Deployment
 
 > [!IMPORTANT]
-> The current stable Bot is **`v6.0.35`**: owner-only Telegram Mini App access using the same WebUI, SSE live message updates, and configuration-save conflict fixes. Only the Bot changes; puppet and server stay at `v6.0.16`. See [Mini App setup](docs/telegram-mini-app.md) and [release rules](docs/releases.md).
+> The current stable Bot is **`v6.0.36`**, fixing the Mini App menu not changing after configuration. Owner-only access, the shared WebUI, SSE live messages, and configuration-save fixes are retained. SDK/server remain at `v6.0.16`. See [Mini App setup](docs/telegram-mini-app.md).
 
 For a new deployment, copy `.env.example` to `.env` and configure the environment variables. Never overwrite existing private configuration, including the user’s `home_202.env`; merge required changes manually.
 
@@ -198,7 +198,7 @@ Use Docker Engine with Docker Compose v2, or Node.js 18+ for local development. 
 
 ### Docker Compose
 
-Use the repository's `docker-compose.yml`; no WebUI override file is required. It pins the full version `finalpi/wechat2tg:v6.0.35` rather than a rolling alias. amd64 users can select the matching `-amd64` image as soon as that build finishes, without waiting for ARM.
+Use the repository's `docker-compose.yml`; no WebUI override file is required. It pins the full version `finalpi/wechat2tg:v6.0.36` rather than a rolling alias. amd64 users can select the matching `-amd64` image as soon as that build finishes, without waiting for ARM.
 
 The commands below initialize a new stack. For an existing deployment, preserve old images and private configuration; update only the bot with `docker compose pull wechat2tg` and `docker compose up -d --no-deps wechat2tg` after reviewing your local Compose. The `wx2tg-server` image, namespace, and version in this example are unchanged; do not replace or restart the existing production backend as part of this bot naming correction.
 
@@ -224,7 +224,7 @@ The default Compose file is:
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.35
+    image: finalpi/wechat2tg:v6.0.36
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"

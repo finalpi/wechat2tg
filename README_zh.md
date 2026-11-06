@@ -11,7 +11,7 @@
 
 ## v6 版本与通道
 
-**只维护 `v6` 分支，开发版和稳定版靠 tag 区分，不建立 `v6-dev` 分支。** 当前 Bot 正式版为 `v6.0.35`，使用 puppet 和 wx2tg-server `v6.0.16`。三个组件只需保持 `v6` 大版本一致，可以独立发布；不要与 server v7 混用。
+**只维护 `v6` 分支，开发版和稳定版靠 tag 区分，不建立 `v6-dev` 分支。** 当前 Bot 正式版为 `v6.0.36`，使用 puppet 和 wx2tg-server `v6.0.16`。三个组件只需保持 `v6` 大版本一致，可以独立发布；不要与 server v7 混用。
 
 ### 服务端版本对应哪个微信版本？
 
@@ -19,7 +19,7 @@
 
 | 服务端发行版本 / 系列 | 来源 | iPad / iPhone 微信版本 | 本仓库的配套选择 |
 | --- | --- | --- | --- |
-| **`finalpi/wx2tg-server:v6.0.16`**（`v6` 系列） | `875` → `v6` | **8.0.75.33**（`0x18004b21`） | **当前 Bot `v6.0.35` 使用此版本**；server 镜像仅支持 `linux/amd64` |
+| **`finalpi/wx2tg-server:v6.0.16`**（`v6` 系列） | `875` → `v6` | **8.0.75.33**（`0x18004b21`） | **当前 Bot `v6.0.36` 使用此版本**；server 镜像仅支持 `linux/amd64` |
 | 历史 `875` / server `v51.0.0`—`v51.0.13` | `875` 协议系列 | **8.0.75.33** | 历史版本；不要把 `v51` 当作微信 5.1 |
 | server Git 标签 **`v7`** | `878` 协议系列 | **8.0.78.34**（微信发布版本 8.0.78，`0x18004e22`） | 另一发行系列，**不属于当前配套部署，不要混用或直接替换现有 v6 server** |
 
@@ -27,7 +27,7 @@
 - `v7` 已核对目标客户端参数并通过离线测试，但**不等于真实微信登录和完整业务兼容性已验收**。
 - 旧 Bot/SDK 名称 `wx2tg-v3`、`860-v3` 不能单独用来判断微信版本；旧 `860` 源码还有活动值与注释不一致的情况。固定标签、源码证据和历史限制见[服务端与微信版本对照](docs/server-wechat-versions.md)。
 
-本次 Bot 更新说明：[v6.0.35 Release](https://github.com/finalpi/wechat2tg/releases/tag/v6.0.35)。
+本次 Bot 更新说明：[v6.0.36 Release](https://github.com/finalpi/wechat2tg/releases/tag/v6.0.36)。
 
 ### 发行通道
 
@@ -36,7 +36,7 @@
 | 稳定版 | `v6.X.Y`（不带 dev） | `v6` |
 | 开发版 | `v6.X.Y-dev.N` | `v6-dev` |
 
-bot 镜像仓库为 **`finalpi/wechat2tg`**，Docker 版本与完整 Git 标签一致，保留开头的 `v`：开发版为 `finalpi/wechat2tg:v6.0.13-dev.3`，稳定版为 `finalpi/wechat2tg:v6.0.35`。滚动别名限定主版本：稳定版 `v6`、开发版 `v6-dev`；此工作流不会在无版本后缀的仓库发布全局 `latest` 或 `dev`。从 `v6` 手动构建的快照为 `v6-dev-<提交短 SHA>`，不更新滚动别名。旧 `finalpi/wechat2tg-v3` 仓库及其镜像和标签保留，此工作流不会再写入。
+bot 镜像仓库为 **`finalpi/wechat2tg`**，Docker 版本与完整 Git 标签一致，保留开头的 `v`：开发版为 `finalpi/wechat2tg:v6.0.13-dev.3`，稳定版为 `finalpi/wechat2tg:v6.0.36`。滚动别名限定主版本：稳定版 `v6`、开发版 `v6-dev`；此工作流不会在无版本后缀的仓库发布全局 `latest` 或 `dev`。从 `v6` 手动构建的快照为 `v6-dev-<提交短 SHA>`，不更新滚动别名。旧 `finalpi/wechat2tg-v3` 仓库及其镜像和标签保留，此工作流不会再写入。
 
 amd64、arm64 独立构建，分别发布 Docker 版本加 `-amd64` / `-arm64` 的镜像，稳定别名为 `v6-amd64` / `v6-arm64`，开发别名为 `v6-dev-amd64` / `v6-dev-arm64`；手动快照只加架构后缀、不更新别名。amd64 成功后即可使用，不必等 ARM。通用标签在两边完成后合并。历史标签不移动；`v6` 分支的最新源码不等于最新稳定发布。详见 [发行规则](docs/releases.md)。
 
@@ -68,7 +68,7 @@ WebUI 随应用启动，支持中文 / English。Docker Compose **默认对外�
 
 ### Telegram Mini App 与实时消息
 
-同一套 WebUI 可从 Telegram 私聊「控制台」菜单打开。配置 `WEBUI_MINI_APP_URL=https://你的域名/` 并重启 Bot 后，后端校验 Telegram 签名且**仅允许现有机器人主人访问**，不需要输入 WebUI Token；普通浏览器入口继续保留。消息页改用 SSE 长连接通知，不再每 5 秒轮询。需要可访问的 HTTPS 根域名和支持 SSE 的反向代理，详见[配置说明与安全边界](docs/telegram-mini-app.md)。**自 v6.0.35 起提供。**
+同一套 WebUI 可从 Telegram 私聊「控制台」菜单打开。配置 `WEBUI_MINI_APP_URL=https://你的域名/` 并重启 Bot 后，后端校验 Telegram 签名且**仅允许现有机器人主人访问**，不需要输入 WebUI Token；普通浏览器入口继续保留。消息页改用 SSE 长连接通知，不再每 5 秒轮询。需要可访问的 HTTPS 根域名和支持 SSE 的反向代理，详见[配置说明与安全边界](docs/telegram-mini-app.md)。自 v6.0.35 起提供；**请使用 v6.0.36 或更新版本，以包含私聊菜单修复。**
 
 ### 配置控制台
 
@@ -186,7 +186,7 @@ Docker 将 `./config` 挂载为 `/app/storage`；备份时同时保留 `save-fil
 ## 部署安装
 
 > [!IMPORTANT]
-> 当前 Bot 正式版为 **`v6.0.35`**：新增仅主人可用的 Telegram Mini App，共用原 WebUI；消息页改用 SSE 长连接；修复 AI 配置保存冲突。本次仅更新 Bot，puppet 和 server 保持 `v6.0.16`。详见 [Mini App 配置](docs/telegram-mini-app.md)及[发行规则](docs/releases.md)。
+> 当前 Bot 正式版为 **`v6.0.36`**：修复配置 Mini App 地址后，机器人私聊菜单未变为「控制台」的问题。保留仅主人访问、共用 WebUI、SSE 长连接及配置保存修复；SDK/server 仍为 `v6.0.16`。详见 [Mini App 配置](docs/telegram-mini-app.md)。
 
 全新部署先复制一份 `.env.example` 为 `.env` 文件，然后配置环境变量。已有私有配置（包括用户的 `home_202.env`）绝不能覆盖，所需新增项应手动合并。
 
@@ -198,7 +198,7 @@ Docker 部署使用 Docker Engine 和 Docker Compose v2；本地开发使用 Nod
 
 ### Docker Compose
 
-直接使用仓库的 `docker-compose.yml`，无需再叠加 WebUI 覆盖文件。主配置固定完整版本 `finalpi/wechat2tg:v6.0.35`，不跟随滚动别名。amd64 用户可以改用同版本 `-amd64` 镜像以提前部署，无需等待 ARM。
+直接使用仓库的 `docker-compose.yml`，无需再叠加 WebUI 覆盖文件。主配置固定完整版本 `finalpi/wechat2tg:v6.0.36`，不跟随滚动别名。amd64 用户可以改用同版本 `-amd64` 镜像以提前部署，无需等待 ARM。
 
 以下命令用于初始化全新整套服务。已有部署应保留旧镜像和私有配置，核对本地 Compose 后，仅用 `docker compose pull wechat2tg` 和 `docker compose up -d --no-deps wechat2tg` 更新 bot。本示例的 `wx2tg-server` 镜像、命名空间和版本保持不变；本次 bot 命名修正不能替换或重启已有生产后端。
 
@@ -224,7 +224,7 @@ docker compose restart wechat2tg
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.35
+    image: finalpi/wechat2tg:v6.0.36
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"

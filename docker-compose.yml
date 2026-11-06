@@ -1,6 +1,6 @@
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.35
+    image: finalpi/wechat2tg:v6.0.36
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"
