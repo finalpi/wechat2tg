@@ -651,7 +651,6 @@ export class TelegramBotClient extends AbstractClient {
     /** Per-chat media/non-media serial lanes, sharing the same rate limiter. */
     private chatLanes = new Map<string, Promise<void>>()
     private activeWebUISync = new Set<string>()
-    private isProcessingQueue = false
     private telegramQueueBlockedUntil = 0
     private telegramNextGlobalSendAt = 0
     private telegramNextSendAtByChat = new Map<string, number>()
