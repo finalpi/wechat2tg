@@ -33,6 +33,9 @@ export interface ConfigSnapshot {
   groups: Group[]
 }
 
+// PATCH returns the values/revision only; GET additionally provides the form schema.
+export type ConfigUpdate = Omit<ConfigSnapshot, 'fields' | 'groups'>
+
 export class ApiError extends Error {
   code: string
   status: number
@@ -67,7 +70,7 @@ export async function request<T>(path: string, token: string, init?: RequestInit
 export const api = {
   getConfig: (token: string) => request<ConfigSnapshot>('/api/config', token),
   patchConfig: (token: string, source: FieldSource, revision: string, values: Record<string, unknown>) =>
-    request<ConfigSnapshot>('/api/config', token, {method: 'PATCH', body: JSON.stringify({source, revision, values})}),
+    request<ConfigUpdate>('/api/config', token, {method: 'PATCH', body: JSON.stringify({source, revision, values})}),
   mcpSettings: (token: string) => request<McpMetadata>('/api/mcp/settings', token),
   mcpUpdate: (token: string, body: Record<string, unknown>) =>
     request<McpMetadata>('/api/mcp/settings', token, {method: 'PATCH', body: JSON.stringify(body)}),

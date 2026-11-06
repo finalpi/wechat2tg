@@ -43,7 +43,11 @@ export function createWebUIServer(options: Options) {
         // Blank or missing message templates always behave like their defaults.
         Object.assign(environment, resolveMessageTemplates(environment))
         const runtime = options.runtime ? await options.runtime.read() : {}
-        const revision = digest(JSON.stringify({environment, runtime})).toString('hex')
+        // Only editable preferences belong to the WebUI revision. Login/account
+        // metadata (chatId, botId, etc.) can change without changing this form.
+        const preferences = Object.fromEntries(fields.filter(f => f.source === 'runtime').map(f =>
+            [f.key, f.type === 'boolean' ? runtime[f.key] === true || runtime[f.key] === 'true' : runtime[f.key] ?? '']))
+        const revision = digest(JSON.stringify({environment, runtime: preferences})).toString('hex')
         const values = {}
         const secrets = {}
         for (const f of fields) {

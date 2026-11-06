@@ -131,6 +131,7 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
+  const [conflict, setConflict] = useState(false)
   const [messageDrafts] = useState(() => new Map<string, ComposerDraft>())
 
   useEffect(() => {
@@ -160,6 +161,7 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
   }
 
   const setField = (field: Field, value: FieldValue) => {
+    if (busy) return
     const saved = snapshot?.values[field.key]
     const next = {...draft}
     if (String(value) === String(saved) && field.type !== 'password') delete next[field.key]
@@ -168,25 +170,55 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
     setDraft(next)
   }
 
+  const reloadConfig = async () => {
+    if (busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const latest = await api.getConfig(token)
+      setSnapshot(latest)
+      setConflict(false)
+      setToast('已加载最新配置，保留了未保存的输入。请核对后再次保存。')
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) onLogout()
+      setError('重新加载失败，输入已保留，请重试。')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const save = async () => {
-    if (!snapshot || busy || !Object.keys(draft).length) return
+    if (!snapshot || busy || conflict || !Object.keys(draft).length) return
     setBusy(true)
     setError('')
     setToast('')
     let data = snapshot
+    const remaining = {...draft}
+    let savedParts = 0
     try {
       for (const source of ['environment', 'runtime'] as const) {
         const values = Object.fromEntries(
-          Object.entries(draft).filter(([key]) => data.fields.some(f => f.key === key && f.source === source)),
+          Object.entries(remaining).filter(([key]) => data.fields.some(f => f.key === key && f.source === source)),
         )
         if (!Object.keys(values).length) continue
-        data = await api.patchConfig(token, source, data.revision, values)
+        // PATCH has no fields/groups. Preserve the GET schema and immediately
+        // advance the revision so a later failure cannot replay a saved batch.
+        data = {...data, ...await api.patchConfig(token, source, data.revision, values)}
+        for (const key of Object.keys(values)) delete remaining[key]
+        savedParts++
+        setSnapshot(data)
+        setDraft({...remaining})
       }
-      setSnapshot(data)
-      setDraft({})
+      setConflict(false)
       setToast(data.restartRequired ? '已保存，重启后生效。' : '已保存。')
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : '保存失败，请重试。')
+      if (e instanceof ApiError && e.status === 401) onLogout()
+      const isConflict = e instanceof ApiError && e.code === 'conflict'
+      setConflict(isConflict)
+      if (savedParts) setToast('部分配置已保存，其余输入已保留。')
+      setError(isConflict
+        ? '配置已更新，请重新加载配置后核对并保存。未保存的输入已保留。'
+        : e instanceof ApiError ? `保存失败（${e.message}），未保存的输入已保留。` : '保存失败，未保存的输入已保留，请重试。')
     } finally {
       setBusy(false)
     }
@@ -274,15 +306,16 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout}: {
         </main>
       </div>
 
-      {active !== 'messages' && <footer className="flex h-16 shrink-0 items-center justify-between border-t px-4">
+      {active !== 'messages' && <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
         <div className="flex flex-col">
           {snapshot.restartRequired && <span className="text-sm text-amber-600">保存后需重启应用生效</span>}
           {error && <span className="text-sm text-destructive">{error}</span>}
           {toast && <span className="text-sm text-muted-foreground">{toast}</span>}
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" disabled={busy || !Object.keys(draft).length} onClick={() => setDraft({})}>放弃</Button>
-          <Button disabled={busy || !Object.keys(draft).length} onClick={save}>
+          {conflict && <Button variant="outline" disabled={busy} onClick={reloadConfig}>重新加载配置</Button>}
+          <Button variant="outline" disabled={busy || !Object.keys(draft).length} onClick={() => {setDraft({}); setToast('')}}>放弃</Button>
+          <Button disabled={busy || conflict || !Object.keys(draft).length} onClick={save}>
             {busy && <Spinner />} 保存
           </Button>
         </div>

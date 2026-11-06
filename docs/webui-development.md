@@ -27,6 +27,14 @@ The standalone server supports configuration editing. It has no live message ada
 
 HTML is rendered through a small React allowlist, not `dangerouslySetInnerHTML`. Only HTTP(S) links and local, allowlisted custom-emoji image paths are rendered. Tokens are never placed in media URLs.
 
+## Configuration conflict recovery
+
+Configuration GET includes the form schema; PATCH returns only the updated snapshot. Preserve the schema when applying a PATCH, and advance the saved revision after each successful environment/runtime batch. If a later batch fails, retain only unsaved draft fields.
+
+A 409 `conflict` means the editable configuration changed since it was loaded, not an AI provider error. Keep the draft, offer **重新加载配置**, then require the user to review and save again. Do not automatically overwrite concurrent changes. Login identity fields such as `chatId` / `botId` are excluded from the revision; editable preferences and secret values remain covered.
+
+The configuration browser regression covers conflict/reload failure recovery, preserving AI inputs, repeated saves, mixed environment/runtime saves and partial failures against the real local HTTP handler. Its AI URL is a reserved test domain and no AI requests are sent.
+
 ## Checks
 
 ```sh
