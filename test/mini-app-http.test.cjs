@@ -6,6 +6,7 @@ const {once} = require('node:events')
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path')
 const {createWebUIServer} = require('../dist/webui/server')
 const {installMiniAppMenu} = require('../dist/webui/mini-app-menu')
+const {Telegram} = require('telegraf')
 
 const botToken = '12345:test-bot-secret'
 function initData(id) {
@@ -66,12 +67,18 @@ test('Mini App is disabled without URL/owner and only allows Telegram web frames
   assert.equal((await enabled.exchange(initData(123))).status, 503)
 })
 
-test('Mini App menu is scoped to owner private chat, never globally or for unknown owner', async () => {
+test('Mini App menu uses the real Telegraf wrapper and sends an owner-scoped web_app payload', async () => {
   const calls = []
-  const telegram = {setChatMenuButton: async input => calls.push(input)}
+  const telegram = new Telegram('12345:synthetic-menu-test')
+  // Keep the real wrapper; intercept only the transport so no Telegram calls are made.
+  telegram.callApi = async (method, payload) => {calls.push({method, payload}); return true}
   for (const id of [0, -123, undefined, NaN]) assert.equal(await installMiniAppMenu(telegram, id, 'https://wechat.example.test'), false)
   assert.equal(await installMiniAppMenu(telegram, 123, ''), false)
+  await assert.rejects(installMiniAppMenu(telegram, 123, 'http://wechat.example.test'))
   assert.deepEqual(calls, [])
   await installMiniAppMenu(telegram, 123, 'https://wechat.example.test')
-  assert.deepEqual(calls, [{chat_id: 123, menu_button: {type: 'web_app', text: '控制台', web_app: {url: 'https://wechat.example.test/'}}}])
+  assert.deepEqual(calls, [{method: 'setChatMenuButton', payload: {chat_id: 123, menu_button: {type: 'web_app', text: '控制台', web_app: {url: 'https://wechat.example.test/'}}}}])
+  await installMiniAppMenu(telegram, 123, 'https://new-wechat.example.test/')
+  assert.equal(calls[1].payload.chat_id, 123, 'changing the URL must still target only the owner')
+  assert.equal(calls[1].payload.menu_button.web_app.url, 'https://new-wechat.example.test/')
 })
