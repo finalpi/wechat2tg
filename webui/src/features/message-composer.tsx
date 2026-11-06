@@ -1,4 +1,5 @@
 import {useEffect, useRef, useState} from 'react'
+import {createRequestId} from '@/lib/request-id'
 import {AtSign, Paperclip, Send, X} from 'lucide-react'
 import {Button} from '@/components/ui/button'
 import {Input} from '@/components/ui/input'
@@ -90,8 +91,8 @@ export function MessageComposer({token, contact, online, quote, draft, onClearQu
     busyRef.current = true; draft.inFlight = true; setBusy(true); setError('')
     try {
       if (!attempt.current) {
+        const id = createRequestId()
         const attachment = file ? await messagesApi.upload(token, file, voice) : undefined
-        const id = crypto.randomUUID()
         const parts: SendMessage[] = []
         if (body.trim()) parts.push({wxId: contact.wxId, body, requestId: `${id}-text`,
           ...(quote ? {replyToId: quote.id} : {}),

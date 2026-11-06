@@ -82,6 +82,8 @@ async function main() {
     browser = await chromium.launch({executablePath, headless: true})
     const page = await browser.newPage({viewport: {width: 1440, height: 1000}})
     page.setDefaultTimeout(10000)
+    // HTTP origins / older WebViews may expose getRandomValues but no randomUUID.
+    await page.addInitScript(() => Object.defineProperty(window.crypto, 'randomUUID', {value: undefined, configurable: true}))
     const errors = []
     page.on('pageerror', error => errors.push(error.message))
     page.on('dialog', dialog => dialog.accept())
@@ -101,6 +103,12 @@ async function main() {
     const bubbleColor = await page.locator('[data-slot="bubble"][data-align="end"] [data-slot="bubble-content"]').evaluate(element => getComputedStyle(element).backgroundColor)
     assert.notEqual(bubbleColor, 'rgba(0, 0, 0, 0)', 'Outgoing bubbles must use the configured theme.')
     assert(await page.locator('[data-slot="message-scroller-viewport"]').evaluate(element => element.clientHeight > 100))
+    await page.getByLabel('消息内容').fill('缺少 randomUUID 时也能发送')
+    await page.getByRole('button', {name: '发送', exact: true}).click()
+    await page.waitForFunction(() => document.querySelector('#message-body').value === '' || document.querySelector('[role="alert"]'))
+    assert.equal(await page.locator('[role="alert"]').count(), 0, await page.locator('[role="alert"]').allTextContents())
+    assert.equal(sends.at(-1).body, '缺少 randomUUID 时也能发送')
+    assert.match(sends.at(-1).requestId, /^[a-zA-Z0-9-]{16,80}$/)
     await page.getByRole('button', {name: '加载更早消息'}).click()
     await page.getByText('更早的消息').waitFor()
     assert(histories.some(request => request.before === 1))

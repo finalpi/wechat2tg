@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react'
+import {createRequestId} from '@/lib/request-id'
 import {ArrowLeft, RefreshCw, Search, MessageSquare, Reply, Undo2, Wifi, WifiOff} from 'lucide-react'
 import {ApiError} from '@/lib/api'
 import {messagesApi, mergeMessages, messageError, type Contact, type ChatMessage, type MessageStatus, type MessageUpdates} from '@/lib/messages-api'
@@ -215,7 +216,7 @@ function Conversation({token, contact, online, draft, events, connection, onBack
     actionIds.current.add(row.id); setBusyIds(new Set(actionIds.current)); setError('')
     try {
       if (kind === 'revoke') {
-        const requestId = revokeRequests.current.get(row.id) || crypto.randomUUID()
+        const requestId = revokeRequests.current.get(row.id) || createRequestId()
         revokeRequests.current.set(row.id, requestId)
         const result = await messagesApi.revoke(token, row.id, requestId, uncertainRecall)
         if (result.revokeStatus !== 'revoking') revokeRequests.current.delete(row.id)
