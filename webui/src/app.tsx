@@ -11,10 +11,14 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/c
 import {Spinner} from '@/components/ui/spinner'
 import {api, ApiError, type ConfigSnapshot, type Field} from '@/lib/api'
 import {cn} from '@/lib/utils'
+import {McpPanel} from '@/features/mcp-panel'
+import {AITools} from '@/features/ai-tools'
+import {TemplatePreview} from '@/features/template-preview'
 
 type FieldValue = string | number | boolean
 
 const TOKEN_KEY = 'webui-access-token'
+const TEMPLATE_KEYS = ['CONTACT_MESSAGE', 'OFFICIAL_MESSAGE', 'ROOM_MESSAGE', 'CONTACT_MESSAGE_GROUP', 'OFFICIAL_MESSAGE_GROUP', 'ROOM_MESSAGE_GROUP', 'CREATE_ROOM_NAME', 'CREATE_CONTACT_NAME', 'MESSAGE_DISPLAY']
 
 function Auth({onAuthed}: {onAuthed: (token: string) => void}) {
   const [token, setToken] = useState('')
@@ -119,7 +123,7 @@ function ConfigPanel({token, onLogout}: {token: string; onLogout: () => void}) {
 
   const groups = useMemo(() => {
     if (!snapshot) return []
-    const wanted = ['connection', 'forward', 'templates', 'proxy', 'ai', 'advanced']
+    const wanted = ['connection', 'forward', 'templates', 'proxy', 'ai', 'mcp', 'advanced']
     return snapshot.groups.filter(group => wanted.includes(group.id))
   }, [snapshot])
 
@@ -174,6 +178,15 @@ function ConfigPanel({token, onLogout}: {token: string; onLogout: () => void}) {
   const fields = snapshot.fields.filter(field => field.group === active)
   const environment = fields.filter(field => field.source === 'environment')
   const runtime = fields.filter(field => field.source === 'runtime')
+  const aiUrlField = snapshot.fields.find(field => field.key === 'AI_API_URL')
+  const aiModelField = snapshot.fields.find(field => field.key === 'AI_MODEL')
+  const aiUrl = aiUrlField ? String(currentValue(aiUrlField) ?? '') : ''
+  const aiModel = aiModelField ? String(currentValue(aiModelField) ?? '') : ''
+  const templateValues: Record<string, string> = {}
+  for (const key of TEMPLATE_KEYS) {
+    const raw = Object.prototype.hasOwnProperty.call(draft, key) ? draft[key] : snapshot.values[key]
+    templateValues[key] = typeof raw === 'string' && raw.trim() ? raw : snapshot.templateDefaults?.[key] || ''
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -198,20 +211,28 @@ function ConfigPanel({token, onLogout}: {token: string; onLogout: () => void}) {
         </aside>
 
         <main className="flex-1 overflow-y-auto p-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>{activeGroup?.label}</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-6">
-              {environment.length > 0 && (
-                <Section title="环境配置" fields={environment} currentValue={currentValue} setField={setField} busy={busy} />
-              )}
-              {runtime.length > 0 && (
-                <Section title="机器人偏好" fields={runtime} currentValue={currentValue} setField={setField} busy={busy} />
-              )}
-              {fields.length === 0 && <p className="text-sm text-muted-foreground">暂无设置。</p>}
-            </CardContent>
-          </Card>
+          {active === 'mcp' ? (
+            <McpPanel token={token} />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>{activeGroup?.label}</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-6">
+                {environment.length > 0 && (
+                  <Section title="环境配置" fields={environment} currentValue={currentValue} setField={setField} busy={busy} />
+                )}
+                {runtime.length > 0 && (
+                  <Section title="机器人偏好" fields={runtime} currentValue={currentValue} setField={setField} busy={busy} />
+                )}
+                {active === 'ai' && aiModelField && (
+                  <AITools token={token} url={aiUrl} model={aiModel} onModel={model => setField(aiModelField, model)} />
+                )}
+                {active === 'templates' && <TemplatePreview values={templateValues} />}
+                {fields.length === 0 && active !== 'mcp' && <p className="text-sm text-muted-foreground">暂无设置。</p>}
+              </CardContent>
+            </Card>
+          )}
         </main>
       </div>
 

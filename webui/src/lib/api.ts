@@ -68,4 +68,41 @@ export const api = {
   getConfig: (token: string) => request<ConfigSnapshot>('/api/config', token),
   patchConfig: (token: string, source: FieldSource, revision: string, values: Record<string, unknown>) =>
     request<ConfigSnapshot>('/api/config', token, {method: 'PATCH', body: JSON.stringify({source, revision, values})}),
+  mcpSettings: (token: string) => request<McpMetadata>('/api/mcp/settings', token),
+  mcpUpdate: (token: string, body: Record<string, unknown>) =>
+    request<McpMetadata>('/api/mcp/settings', token, {method: 'PATCH', body: JSON.stringify(body)}),
+  mcpToken: (token: string, body: Record<string, unknown>) =>
+    request<McpTokenResult>('/api/mcp/token', token, {method: 'POST', body: JSON.stringify(body)}),
+  aiModels: (token: string, body: Record<string, unknown>) =>
+    request<AiModelsResult>('/api/ai/models', token, {method: 'POST', body: JSON.stringify(body)}),
+  aiTest: (token: string, body: Record<string, unknown>) =>
+    request<AiTestResult>('/api/ai/test', token, {method: 'POST', body: JSON.stringify(body)}),
+}
+
+export interface McpMetadata {
+  enabled: boolean
+  endpoint: string
+  scriptPath: string
+  revision: string
+  writeConfigured: boolean
+  readConfigured: boolean
+  available: boolean
+}
+
+export interface McpTokenResult extends McpMetadata {
+  role: 'read' | 'write'
+  token: string
+}
+
+export interface AiModelsResult {
+  models: string[]
+  elapsedMs: number
+}
+
+export interface AiTestResult {
+  ok: boolean
+  model: string
+  elapsedMs: number
+  reply: string
+  emptyReply: boolean
 }
