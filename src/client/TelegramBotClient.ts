@@ -1,4 +1,5 @@
 import {annotateTelegramRecall} from '../webui/telegram-recall'
+import {emitTelegramAutomation} from '../automation/events'
 import {installMiniAppMenu} from '../webui/mini-app-menu'
 import {Context, Markup, session, Telegraf} from 'telegraf'
 import {config, useProxy} from '../config'
@@ -115,6 +116,9 @@ export class TelegramBotClient extends AbstractClient {
         const config = await this.configurationService.getConfig()
         const bot: Telegraf = this.client
         bot.use(session())
+        // Automation reads only owner-configured group scopes. This observer does
+        // not bypass the existing command/forwarding authorization middleware.
+        bot.use((ctx,next) => {emitTelegramAutomation?.(ctx);return next()})
         // 此方法需要放在所有监听方法之前,先拦截命令做处理鉴权
         bot.use(async (ctx, next) => {
             const chatId = config.chatId

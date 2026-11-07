@@ -12,6 +12,7 @@ import {MESSAGE_TEMPLATE_DEFAULTS, resolveMessageTemplates} from '../util/Messag
 import {createMiniAppAuth, normalizeMiniAppUrl} from './mini-app-auth'
 import {createMessageStreamHandler} from './message-stream'
 import {safeErrorDetails} from '../util/SafeError'
+import {AutomationEngine} from '../automation/engine'
 
 export interface RuntimeAdapter {
     read(): Promise<Record<string, unknown>>
@@ -25,6 +26,7 @@ interface Options {
     publicDirectory?: string
     messages?: MessageCenterAdapter
     mcpTokens?: {write:string,read:string}
+    automation?: AutomationEngine
 }
 
 const aliases = {PROXY_PROTOCOL: 'PROTOCOL', PROXY_HOST: 'HOST', PROXY_PORT: 'PORT', PROXY_USERNAME: 'USERNAME', PROXY_PASSWORD: 'PASSWORD'}
@@ -40,9 +42,11 @@ export function createWebUIServer(options: Options) {
         ownerId: async () => (await options.runtime?.read())?.chatId,
     })
     const stream = createMessageStreamHandler()
-    const mcpSettings=new McpSettings(path.join(path.dirname(file),'mcp-settings.json'),options.mcpTokens)
-    const mcp=options.messages?createMcpHandler(options.messages,undefined,mcpSettings):undefined
-    const ai=createAIConnector(()=>{const saved=readOverrides(file);return {url:saved.AI_API_URL??String(options.environment.AI_API_URL||''),key:saved.AI_API_KEY??String(options.environment.AI_API_KEY||''),model:saved.AI_MODEL??String(options.environment.AI_MODEL||'')}})
+    const mcpSettings = new McpSettings(path.join(path.dirname(file),'mcp-settings.json'),options.mcpTokens)
+    const mcp = options.messages ? createMcpHandler(options.messages,undefined,mcpSettings) : undefined
+    const ai = createAIConnector(()=>{const saved = readOverrides(file);return {url:saved.AI_API_URL ?? String(options.environment.AI_API_URL || ''),key:saved.AI_API_KEY ?? String(options.environment.AI_API_KEY || ''),model:saved.AI_MODEL ?? String(options.environment.AI_MODEL || '')}})
+    let automation = options.automation
+    const automationService = () => automation || (automation = new AutomationEngine(path.join(path.dirname(file),'automations.json')))
     let queue = Promise.resolve()
     const attempts = new Map<string, {count: number, until: number}>()
     const digest = (value: string) => createHash('sha256').update(value).digest()
@@ -85,19 +89,19 @@ export function createWebUIServer(options: Options) {
         res.setHeader('Referrer-Policy', 'no-referrer')
         res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self'${miniAppUrl ? ' https://telegram.org' : ''}; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors ${miniAppUrl ? 'https://web.telegram.org https://*.web.telegram.org' : '\'none\''}; base-uri 'none'; form-action 'self'`)
         const route = req.url?.split('?')[0]
-        if(route==='/mcp'||route?.startsWith('/mcp/')){
+        if(route === '/mcp' || route?.startsWith('/mcp/')){
             if(!mcp)return respond(res,503,{error:'messagesUnavailable'})
             return mcp(req,res)
         }
         if (!route?.startsWith('/api/')) {
-            const emoji=route?.match(/^\/assets\/wechat-emoji\/(emoji-[a-f0-9]{16}\.(png|webp))$/)
+            const emoji = route?.match(/^\/assets\/wechat-emoji\/(emoji-[a-f0-9]{16}\.(png|webp))$/)
             if(emoji){
                 if(!['GET','HEAD'].includes(req.method))return respond(res,404,{error:'notFound'})
                 try{
-                    const content=fs.readFileSync(path.join(assetDirectory,'emoji',emoji[1]))
-                    res.writeHead(200,{'Content-Type':emoji[2]==='webp'?'image/webp':'image/png','Content-Length':content.length,'Cache-Control':'public, max-age=31536000, immutable'})
-                    res.end(req.method==='HEAD'?undefined:content)
-                }catch(error){respond(res,error?.code==='ENOENT'?404:500,{error:error?.code==='ENOENT'?'notFound':'assetsUnavailable'})}
+                    const content = fs.readFileSync(path.join(assetDirectory,'emoji',emoji[1]))
+                    res.writeHead(200,{'Content-Type':emoji[2] === 'webp' ? 'image/webp' : 'image/png','Content-Length':content.length,'Cache-Control':'public, max-age=31536000, immutable'})
+                    res.end(req.method === 'HEAD' ? undefined : content)
+                }catch(error){respond(res,error?.code === 'ENOENT' ? 404 : 500,{error:error?.code === 'ENOENT' ? 'notFound' : 'assetsUnavailable'})}
                 return
             }
             if (!['GET', 'HEAD'].includes(req.method)) return respond(res, 404, {error: 'notFound'})
@@ -151,6 +155,22 @@ export function createWebUIServer(options: Options) {
         }
         attempts.delete(ip)
         try {
+            if (route === '/api/automation' || route === '/api/automation/test' || route === '/api/automation/generate') {
+                if (route === '/api/automation' && req.method === 'GET') return respond(res,200,await automationService().snapshot())
+                if (req.method !== 'POST') return respond(res,405,{error:'invalidRequest'})
+                if (!req.headers['content-type']?.startsWith('application/json')) return respond(res,415,{error:'jsonRequired'})
+                let raw = '',size = 0
+                for await (const chunk of req) {size += chunk.length;if (size > 96000) return respond(res,413,{error:'tooLarge'});raw += chunk.toString()}
+                let body
+                try {body = JSON.parse(raw)} catch {return respond(res,400,{error:'invalidJson'})}
+                if (!body || typeof body !== 'object' || Array.isArray(body)) return respond(res,400,{error:'invalidRequest'})
+                if (route === '/api/automation/generate') {
+                    if (typeof body.requirement !== 'string' || !body.requirement.trim() || body.requirement.length > 4000) return respond(res,400,{error:'invalidRequest'})
+                    return respond(res,200,await ai('script',{requirement:body.requirement}))
+                }
+                try {return respond(res,200,route.endsWith('/test') ? await automationService().test(body) : await automationService().command(body))}
+                catch (error) {if (error?.name === 'ZodError') return respond(res,400,{error:'automationValidation'});throw error}
+            }
             if (route === '/api/auth/logout') {
                 if (req.method !== 'POST') return respond(res, 405, {error: 'invalidRequest'})
                 miniAppAuth.revoke(supplied)
@@ -168,100 +188,100 @@ export function createWebUIServer(options: Options) {
                 if (!wxId || wxId.length > 256 || query.length > 100 || rawIds.length > 100 || rawIds.some(id => !/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id)))) return respond(res, 400, {error: 'invalidRequest'})
                 return respond(res, 200, await options.messages.updates(wxId, [...new Set(rawIds.map(Number))], query))
             }
-            if(route==='/api/mcp/settings'||route==='/api/mcp/token'){
-                if(route==='/api/mcp/settings'&&req.method==='GET')return respond(res,200,{...mcpSettings.metadata(),available:Boolean(options.messages)})
-                if(req.method!==(route==='/api/mcp/settings'?'PATCH':'POST'))return respond(res,405,{error:'invalidRequest'})
+            if(route === '/api/mcp/settings' || route === '/api/mcp/token'){
+                if(route === '/api/mcp/settings' && req.method === 'GET')return respond(res,200,{...mcpSettings.metadata(),available:Boolean(options.messages)})
+                if(req.method !== (route === '/api/mcp/settings' ? 'PATCH' : 'POST'))return respond(res,405,{error:'invalidRequest'})
                 if(!req.headers['content-type']?.startsWith('application/json'))return respond(res,415,{error:'jsonRequired'})
-                let size=0,raw='';for await(const chunk of req){size+=chunk.length;if(size>8192)return respond(res,413,{error:'tooLarge'});raw+=chunk.toString()}
-                let body;try{body=JSON.parse(raw)}catch{return respond(res,400,{error:'invalidJson'})}
-                return respond(res,200,route==='/api/mcp/settings'?await mcpSettings.update(body):await mcpSettings.token(body))
+                let size = 0,raw = '';for await(const chunk of req){size += chunk.length;if(size > 8192)return respond(res,413,{error:'tooLarge'});raw += chunk.toString()}
+                let body;try{body = JSON.parse(raw)}catch{return respond(res,400,{error:'invalidJson'})}
+                return respond(res,200,route === '/api/mcp/settings' ? await mcpSettings.update(body) : await mcpSettings.token(body))
             }
-            if(route==='/api/ai/models'||route==='/api/ai/test'){
-                if(req.method!=='POST')return respond(res,405,{error:'invalidRequest'})
-                let bytes=0,raw=''
-                for await(const chunk of req){bytes+=chunk.length;if(bytes>20000)return respond(res,413,{error:'tooLarge'});raw+=chunk.toString()}
+            if(route === '/api/ai/models' || route === '/api/ai/test'){
+                if(req.method !== 'POST')return respond(res,405,{error:'invalidRequest'})
+                let bytes = 0,raw = ''
+                for await(const chunk of req){bytes += chunk.length;if(bytes > 20000)return respond(res,413,{error:'tooLarge'});raw += chunk.toString()}
                 let body
-                try{body=JSON.parse(raw)}catch{return respond(res,400,{error:'invalidJson'})}
-                return respond(res,200,await ai(route.endsWith('/models')?'models':'test',body))
+                try{body = JSON.parse(raw)}catch{return respond(res,400,{error:'invalidJson'})}
+                return respond(res,200,await ai(route.endsWith('/models') ? 'models' : 'test',body))
             }
             if (req.method === 'GET' && route === '/api/config') return respond(res, 200, {...await snapshot(), fields, groups})
-            if(route==='/api/avatar'){
-                if(req.method!=='GET'||!options.messages?.avatar)return respond(res,404,{error:'avatarUnavailable'})
-                const wxId=new URL(req.url,'http://localhost').searchParams.get('wxId')||''
-                if(!wxId||wxId.length>256)return respond(res,400,{error:'invalidRequest'})
-                const image=await options.messages.avatar(wxId)
+            if(route === '/api/avatar'){
+                if(req.method !== 'GET' || !options.messages?.avatar)return respond(res,404,{error:'avatarUnavailable'})
+                const wxId = new URL(req.url,'http://localhost').searchParams.get('wxId') || ''
+                if(!wxId || wxId.length > 256)return respond(res,400,{error:'invalidRequest'})
+                const image = await options.messages.avatar(wxId)
                 res.writeHead(200,{'Content-Type':'image/png','Content-Length':image.length});res.end(image);return
             }
-            if(route==='/api/media') {
-                if(req.method!=='POST'||!options.messages?.upload)return respond(res,405,{error:'messagesUnavailable'})
+            if(route === '/api/media') {
+                if(req.method !== 'POST' || !options.messages?.upload)return respond(res,405,{error:'messagesUnavailable'})
                 if(!req.headers['content-type']?.startsWith('application/octet-stream'))return respond(res,415,{error:'binaryRequired'})
-                const url=new URL(req.url,'http://localhost'),name=url.searchParams.get('name')||'attachment.bin',preference=url.searchParams.get('type')||'auto'
-                if(name.length>240)return respond(res,400,{error:'invalidRequest'})
+                const url = new URL(req.url,'http://localhost'),name = url.searchParams.get('name') || 'attachment.bin',preference = url.searchParams.get('type') || 'auto'
+                if(name.length > 240)return respond(res,400,{error:'invalidRequest'})
                 return respond(res,201,await options.messages.upload(name,preference,req))
             }
-            const attachmentRoute=route?.match(/^\/api\/media\/message\/(\d+)$/)
+            const attachmentRoute = route?.match(/^\/api\/media\/message\/(\d+)$/)
             if(attachmentRoute) {
-                if(req.method!=='GET'||!options.messages?.attachment)return respond(res,405,{error:'messagesUnavailable'})
-                const {path,...file}=await options.messages.attachment(Number(attachmentRoute[1]))
+                if(req.method !== 'GET' || !options.messages?.attachment)return respond(res,405,{error:'messagesUnavailable'})
+                const {path,...file} = await options.messages.attachment(Number(attachmentRoute[1]))
                 void path // Filesystem paths are private; return metadata only.
                 return respond(res,200,file)
             }
-            const transcriptRoute=route?.match(/^\/api\/media\/transcript\/(\d+)$/)
+            const transcriptRoute = route?.match(/^\/api\/media\/transcript\/(\d+)$/)
             if(transcriptRoute){
-                if(req.method!=='GET'||!options.messages?.transcriptAttachment)return respond(res,404,{error:'mediaMissing'})
-                const query=new URL(req.url,'http://localhost').searchParams,path=query.get('path')||'root',id=query.get('id')||''
-                if(!/^(root|[a-zA-Z0-9_.-]{1,80})$/.test(path)||!/^\d{1,10}$/.test(id))return respond(res,400,{error:'invalidRequest'})
-                const {path:ignored,...file}=await options.messages.transcriptAttachment(Number(transcriptRoute[1]),path,id)
+                if(req.method !== 'GET' || !options.messages?.transcriptAttachment)return respond(res,404,{error:'mediaMissing'})
+                const query = new URL(req.url,'http://localhost').searchParams,path = query.get('path') || 'root',id = query.get('id') || ''
+                if(!/^(root|[a-zA-Z0-9_.-]{1,80})$/.test(path) || !/^\d{1,10}$/.test(id))return respond(res,400,{error:'invalidRequest'})
+                const {path:ignored,...file} = await options.messages.transcriptAttachment(Number(transcriptRoute[1]),path,id)
                 void ignored // Filesystem paths are private; return metadata only.
                 return respond(res,200,file)
             }
-            const binaryRoute=route?.match(/^\/api\/media\/([a-f0-9-]{36})$/)
+            const binaryRoute = route?.match(/^\/api\/media\/([a-f0-9-]{36})$/)
             if(binaryRoute) {
-                if(req.method!=='GET'||!options.messages?.media)return respond(res,405,{error:'messagesUnavailable'})
-                const file=await options.messages.media(binaryRoute[1])
-                const safeMime=['image/png','image/jpeg','image/webp','image/gif','video/mp4','audio/mpeg','audio/wav','audio/ogg','audio/mp4','audio/webm'].includes(file.mime)?file.mime:'application/octet-stream'
+                if(req.method !== 'GET' || !options.messages?.media)return respond(res,405,{error:'messagesUnavailable'})
+                const file = await options.messages.media(binaryRoute[1])
+                const safeMime = ['image/png','image/jpeg','image/webp','image/gif','video/mp4','audio/mpeg','audio/wav','audio/ogg','audio/mp4','audio/webm'].includes(file.mime) ? file.mime : 'application/octet-stream'
                 res.setHeader('Content-Type',safeMime)
-                res.setHeader('Content-Disposition',`${safeMime==='application/octet-stream'?'attachment':'inline'}; filename*=UTF-8''${encodeURIComponent(file.name)}`)
+                res.setHeader('Content-Disposition',`${safeMime === 'application/octet-stream' ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(file.name)}`)
                 res.setHeader('Accept-Ranges','bytes')
-                let start=0,end=file.size-1,status=200
+                let start = 0,end = file.size - 1,status = 200
                 if(req.headers.range) {
-                    const match=/^bytes=(\d*)-(\d*)$/.exec(req.headers.range)
-                    if(!match||(!match[1]&&!match[2])){res.writeHead(416);res.end();return}
-                    if(!match[1])start=Math.max(0,file.size-Number(match[2]))
-                    else {start=Number(match[1]);if(match[2])end=Math.min(end,Number(match[2]))}
-                    if(!Number.isSafeInteger(start)||start>end||start>=file.size){res.setHeader('Content-Range',`bytes */${file.size}`);res.writeHead(416);res.end();return}
-                    status=206;res.setHeader('Content-Range',`bytes ${start}-${end}/${file.size}`)
+                    const match = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range)
+                    if(!match || (!match[1] && !match[2])){res.writeHead(416);res.end();return}
+                    if(!match[1])start = Math.max(0,file.size - Number(match[2]))
+                    else {start = Number(match[1]);if(match[2])end = Math.min(end,Number(match[2]))}
+                    if(!Number.isSafeInteger(start) || start > end || start >= file.size){res.setHeader('Content-Range',`bytes */${file.size}`);res.writeHead(416);res.end();return}
+                    status = 206;res.setHeader('Content-Range',`bytes ${start}-${end}/${file.size}`)
                 }
-                res.writeHead(status,{'Content-Length':end-start+1})
-                const stream=fs.createReadStream(file.path,{start,end});stream.on('error',()=>res.destroy());res.on('close',()=>stream.destroy());stream.pipe(res);return
+                res.writeHead(status,{'Content-Length':end - start + 1})
+                const stream = fs.createReadStream(file.path,{start,end});stream.on('error',()=>res.destroy());res.on('close',()=>stream.destroy());stream.pipe(res);return
             }
-            const syncRoute=route?.match(/^\/api\/messages\/(\d+)\/sync$/)
-            const revokeRoute=route?.match(/^\/api\/messages\/(\d+)\/revoke$/)
+            const syncRoute = route?.match(/^\/api\/messages\/(\d+)\/sync$/)
+            const revokeRoute = route?.match(/^\/api\/messages\/(\d+)\/revoke$/)
             if(revokeRoute){
-                if(req.method!=='POST'||!options.messages)return respond(res,405,{error:'messagesUnavailable'})
-                let raw='',size=0;for await(const chunk of req){size+=chunk.length;if(size>2048)return respond(res,413,{error:'tooLarge'});raw+=chunk.toString()}
-                let body;try{body=JSON.parse(raw)}catch{return respond(res,400,{error:'invalidJson'})}
-                if(!body||typeof body!=='object'||body.confirm!==true||typeof body.requestId!=='string'||!/^[a-zA-Z0-9-]{16,80}$/.test(body.requestId)||(body.confirmUncertain!==undefined&&typeof body.confirmUncertain!=='boolean'))return respond(res,400,{error:'invalidRequest'})
-                return respond(res,200,await options.messages.revoke(Number(revokeRoute[1]),body.requestId,body.confirmUncertain===true))
+                if(req.method !== 'POST' || !options.messages)return respond(res,405,{error:'messagesUnavailable'})
+                let raw = '',size = 0;for await(const chunk of req){size += chunk.length;if(size > 2048)return respond(res,413,{error:'tooLarge'});raw += chunk.toString()}
+                let body;try{body = JSON.parse(raw)}catch{return respond(res,400,{error:'invalidJson'})}
+                if(!body || typeof body !== 'object' || body.confirm !== true || typeof body.requestId !== 'string' || !/^[a-zA-Z0-9-]{16,80}$/.test(body.requestId) || (body.confirmUncertain !== undefined && typeof body.confirmUncertain !== 'boolean'))return respond(res,400,{error:'invalidRequest'})
+                return respond(res,200,await options.messages.revoke(Number(revokeRoute[1]),body.requestId,body.confirmUncertain === true))
             }
             if(syncRoute) {
-                if(req.method!=='POST'||!options.messages?.sync)return respond(res,405,{error:'messagesUnavailable'})
-                let bytes=0,raw=''
-                for await(const chunk of req){bytes+=chunk.length;if(bytes>512)return respond(res,413,{error:'tooLarge'});raw+=chunk.toString()}
+                if(req.method !== 'POST' || !options.messages?.sync)return respond(res,405,{error:'messagesUnavailable'})
+                let bytes = 0,raw = ''
+                for await(const chunk of req){bytes += chunk.length;if(bytes > 512)return respond(res,413,{error:'tooLarge'});raw += chunk.toString()}
                 let body
-                try{body=JSON.parse(raw||'{}')}catch{return respond(res,400,{error:'invalidJson'})}
-                if(!body||typeof body!=='object'||(body.confirm!==undefined&&typeof body.confirm!=='boolean'))return respond(res,400,{error:'invalidRequest'})
-                return respond(res,202,await options.messages.sync(Number(syncRoute[1]),body.confirm===true))
+                try{body = JSON.parse(raw || '{}')}catch{return respond(res,400,{error:'invalidJson'})}
+                if(!body || typeof body !== 'object' || (body.confirm !== undefined && typeof body.confirm !== 'boolean'))return respond(res,400,{error:'invalidRequest'})
+                return respond(res,202,await options.messages.sync(Number(syncRoute[1]),body.confirm === true))
             }
             if (route === '/api/messages/status') {
                 return respond(res, 200, options.messages ? await options.messages.status() : {available: false, wechatOnline: false, directoryAvailable: false})
             }
-            if(route==='/api/messages/locate'){
-                if(req.method!=='GET')return respond(res,405,{error:'invalidRequest'})
+            if(route === '/api/messages/locate'){
+                if(req.method !== 'GET')return respond(res,405,{error:'invalidRequest'})
                 if(!options.messages?.locate)return respond(res,503,{error:'messagesUnavailable'})
-                const url=new URL(req.url,'http://localhost'),wxId=url.searchParams.get('wxId')||'',id=url.searchParams.get('id'),remoteId=url.searchParams.get('remoteId')
-                if(!wxId||wxId.length>256||(!id&&!remoteId)||(id!==null&&(!/^[1-9]\d*$/.test(id)||!Number.isSafeInteger(Number(id))))||(remoteId!==null&&(!/^[1-9]\d{0,19}$/.test(remoteId)||BigInt(remoteId)>18446744073709551615n)))return respond(res,400,{error:'invalidRequest'})
-                return respond(res,200,await options.messages.locate(wxId,id===null?undefined:Number(id),remoteId===null?undefined:remoteId))
+                const url = new URL(req.url,'http://localhost'),wxId = url.searchParams.get('wxId') || '',id = url.searchParams.get('id'),remoteId = url.searchParams.get('remoteId')
+                if(!wxId || wxId.length > 256 || (!id && !remoteId) || (id !== null && (!/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id)))) || (remoteId !== null && (!/^[1-9]\d{0,19}$/.test(remoteId) || BigInt(remoteId) > 18446744073709551615n)))return respond(res,400,{error:'invalidRequest'})
+                return respond(res,200,await options.messages.locate(wxId,id === null ? undefined : Number(id),remoteId === null ? undefined : remoteId))
             }
             if (route === '/api/contacts' || route === '/api/messages') {
                 if (!options.messages) return respond(res, 503, {error: 'messagesUnavailable'})
@@ -295,14 +315,14 @@ export function createWebUIServer(options: Options) {
                 }
                 let body
                 try {body = JSON.parse(Buffer.concat(chunks).toString('utf8'))} catch {return respond(res, 400, {error: 'invalidJson'})}
-                if (!body || typeof body.wxId !== 'string' || !body.wxId || body.wxId.length > 256 || typeof body.body !== 'string' || (!body.body.trim()&&!body.attachmentId) || body.body.length > 4000 || (body.attachmentId!==undefined&&!/^[a-f0-9-]{36}$/.test(body.attachmentId)) || typeof body.requestId !== 'string' || !/^[a-zA-Z0-9-]{16,80}$/.test(body.requestId)) return respond(res, 400, {error: 'invalidRequest'})
+                if (!body || typeof body.wxId !== 'string' || !body.wxId || body.wxId.length > 256 || typeof body.body !== 'string' || (!body.body.trim() && !body.attachmentId) || body.body.length > 4000 || (body.attachmentId !== undefined && !/^[a-f0-9-]{36}$/.test(body.attachmentId)) || typeof body.requestId !== 'string' || !/^[a-zA-Z0-9-]{16,80}$/.test(body.requestId)) return respond(res, 400, {error: 'invalidRequest'})
                 return respond(res, 202, await options.messages.send(body.wxId, body.body, body.requestId,body.attachmentId,body.mentions,body.replyToId))
             }
-            if(route==='/api/groups/members'){
-                if(req.method!=='GET'||!options.messages)return respond(res,405,{error:'messagesUnavailable'})
-                const url=new URL(req.url,'http://localhost'),wxId=url.searchParams.get('wxId')||'',q=url.searchParams.get('q')||'',offset=url.searchParams.get('offset')||'0',refresh=url.searchParams.get('refresh')||'false'
-                if(!wxId.endsWith('@chatroom')||wxId.length>256||q.length>100||!/^\d{1,5}$/.test(offset)||Number(offset)>10000||!['true','false'].includes(refresh))return respond(res,400,{error:'invalidRequest'})
-                return respond(res,200,await options.messages.groupMembers(wxId,q,Number(offset),refresh==='true'))
+            if(route === '/api/groups/members'){
+                if(req.method !== 'GET' || !options.messages)return respond(res,405,{error:'messagesUnavailable'})
+                const url = new URL(req.url,'http://localhost'),wxId = url.searchParams.get('wxId') || '',q = url.searchParams.get('q') || '',offset = url.searchParams.get('offset') || '0',refresh = url.searchParams.get('refresh') || 'false'
+                if(!wxId.endsWith('@chatroom') || wxId.length > 256 || q.length > 100 || !/^\d{1,5}$/.test(offset) || Number(offset) > 10000 || !['true','false'].includes(refresh))return respond(res,400,{error:'invalidRequest'})
+                return respond(res,200,await options.messages.groupMembers(wxId,q,Number(offset),refresh === 'true'))
             }
             if (req.method !== 'PATCH' || route !== '/api/config') return respond(res, 404, {error: 'notFound'})
             if (!req.headers['content-type']?.startsWith('application/json')) return respond(res, 415, {error: 'jsonRequired'})
@@ -346,12 +366,12 @@ export function createWebUIServer(options: Options) {
     })
 }
 
-export function startWebUI(environment: Record<string, unknown>, runtime?: RuntimeAdapter, messages?: MessageCenterAdapter) {
+export function startWebUI(environment: Record<string, unknown>, runtime?: RuntimeAdapter, messages?: MessageCenterAdapter, automation?: AutomationEngine) {
     if (process.env.WEBUI_ENABLED === 'false') return
     const port = Number(process.env.WEBUI_PORT || 17863)
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('WEBUI_PORT 必须为 1–65535')
     const host = process.env.WEBUI_HOST || '127.0.0.1'
-    const server = createWebUIServer({environment, runtime, messages})
+    const server = createWebUIServer({environment, runtime, messages, automation})
     server.on('error', error => console.error(`WebUI 启动失败：${error.message}`))
     server.listen(port, host, () => {
         console.log(`WebUI: http://${host}:${port} · 访问令牌：WEBUI_TOKEN 或 ${path.join(path.dirname(settingsPath()), 'webui-token')}`)

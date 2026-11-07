@@ -1,5 +1,7 @@
 # wechat2tg (v6)
 
+> **Development preview: v6.0.40-dev.1.** This checkout adds script automation, scoped rules, dry runs and AI-assisted drafts. It is not a stable release; stable `v6` remains unchanged. See [automation setup and safety limits](docs/automation.md). Test manually with the dev image; do not share one writable storage directory between stable and dev instances.
+
 [中文](README_zh.md) | English
 
 Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad, Mac, Car, Windows, Pad)
@@ -224,7 +226,7 @@ The default Compose file is:
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.39
+    image: finalpi/wechat2tg:v6.0.40-dev.1
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"

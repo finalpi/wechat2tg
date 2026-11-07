@@ -12,6 +12,7 @@ import {Spinner} from '@/components/ui/spinner'
 import {api, request, ApiError, type ConfigSnapshot, type Field} from '@/lib/api'
 import {cn} from '@/lib/utils'
 import {McpPanel} from '@/features/mcp-panel'
+import {AutomationPanel} from '@/features/automation-panel'
 import {AITools} from '@/features/ai-tools'
 import {TemplatePreview} from '@/features/template-preview'
 import {MessagesPanel} from '@/features/messages-panel'
@@ -165,7 +166,7 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout, miniApp = false}: {
   const groups = useMemo(() => {
     if (!snapshot) return []
     const wanted = ['messages', 'connection', 'forward', 'templates', 'proxy', 'ai', 'mcp', 'advanced']
-    return snapshot.groups.filter(group => wanted.includes(group.id))
+    return [...snapshot.groups.filter(group => wanted.includes(group.id)), {id:'automation',label:'自动化',caption:'脚本函数与应用规则',icon:'spark'}]
   }, [snapshot])
 
   const currentValue = (field: Field): FieldValue => {
@@ -303,7 +304,7 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout, miniApp = false}: {
         </aside>
 
         <main className={cn('min-h-0 min-w-0 flex-1', active === 'messages' ? 'overflow-hidden md:p-4' : 'overflow-y-auto p-4 md:p-6')}>
-          {active === 'messages' ? <MessagesPanel token={token} drafts={messageDrafts} onLogout={onLogout} /> : active === 'mcp' ? (
+          {active === 'messages' ? <MessagesPanel token={token} drafts={messageDrafts} onLogout={onLogout} /> : active === 'automation' ? <AutomationPanel token={token} /> : active === 'mcp' ? (
             <McpPanel token={token} />
           ) : (
             <Card>
@@ -328,7 +329,7 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout, miniApp = false}: {
         </main>
       </div>
 
-      {active !== 'messages' && <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+      {active !== 'messages' && active !== 'automation' && <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
         <div className="flex flex-col">
           {snapshot.restartRequired && <span className="text-sm text-amber-600">保存后需重启应用生效</span>}
           {error && <span className="text-sm text-destructive">{error}</span>}

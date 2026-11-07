@@ -1,5 +1,7 @@
 # wechat2tg（v6）
 
+> **开发预览：v6.0.40-dev.1。** 新增脚本函数库、应用范围/权限、模拟测试和 AI 辅助草稿，尚未正式发布，稳定 `v6` 不变。见[自动化使用与安全边界](docs/automation.md)。请手动使用开发镜像验收，不要让稳定版和开发版同时读写同一个 storage 目录。
+
 中文 | [English](README.md)
 
 基于微信协议在 Telegram 收发微信消息，支持 ipad,mac,car,windows,pad 多种协议
@@ -224,7 +226,7 @@ docker compose restart wechat2tg
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.39
+    image: finalpi/wechat2tg:v6.0.40-dev.1
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"

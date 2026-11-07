@@ -36,6 +36,7 @@ import {isSameTelegramDestination} from '../util/TelegramTopicUtils'
 import {WechatAccountClassificationService} from '../service/WechatAccountClassificationService'
 import {createGroupMemberNameResolver} from '../service/GroupMemberNameService'
 import {solitaireJoins} from '../service/SolitaireService'
+import {emitWechatAutomation} from '../automation/events'
 
 const TELEGRAM_BOT_API_UPLOAD_LIMIT = 50 * 1024 * 1024
 
@@ -500,6 +501,7 @@ export class WeChatClient extends AbstractClient {
         if (oldMsg) {
             return
         }
+        await emitWechatAutomation?.(msg,this._wxInfo?.wxid)
         // 查找 group
         let wxId
         const room = await msg.room()

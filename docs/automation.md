@@ -1,0 +1,102 @@
+# 脚本自动化（v6.0.40-dev.1 开发预览）
+
+本功能只在 Bot 中新增能力，不升级 puppet/server，不迁移旧绑定或修改原转发策略。未连接真实账号做发送/接龙验收，请先使用预览模式。
+
+## 页面与使用顺序
+
+在 WebUI 或主人 Telegram Mini App 的导航选择「自动化」。浏览器访问仍要求 WebUI Token；Mini App 仍要求主人签名会话。MCP 读写 Token 不能代替管理员鉴权。
+
+1. **函数库**：新建函数，写 JavaScript ES Module，或插入「关键词回复」「自动接龙」模板。保存草稿不影响线上版本；发布后才能给规则引用。
+2. **应用规则**：选择已发布函数，精确选择来源账号、群组、Telegram 话题；填写关键词、发送者 ID、JSON 参数及能力授权。一个函数可被多个群复用不同参数。
+3. **模拟测试**：从规则生成样例，或选择最近收到的真实事件，再编辑测试 JSON。使用规则当前输入和函数已保存草稿，永远不发送、写状态或占用接龙去重记录。未匹配范围时显示未匹配，而不是偷偷忽略范围。
+4. **运行记录**：规则启用预览后，新事件生成计划；实际模式显示成功、失败、结果不确定。记录可重新作为模拟输入，不提供危险的“一键重发不确定动作”。目前需点击刷新查看最新记录。
+5. 确认预览后，将模式改为实际执行并启用，保存时再次确认。没有当前已登录账号/群目录时不能启用实际执行。独立离线 WebUI 提供一个假群用于模拟，不是实际发送目标。
+
+发布新函数版本会将引用规则全部暂停、切回预览，并更新所引用版本，需要重新确认才能实际执行。保留最近五个函数版本，可把上一版恢复为草稿后重新发布。
+
+## JavaScript 入口
+
+```javascript
+export default async function handler(event, api, params) {
+  if (event.text.trim() === (params.keyword || "帮助")) {
+    await api.replyText(params.reply || "收到，稍后处理。");
+  }
+}
+```
+
+函数先生成一份完整动作计划，宿主再次校验所有动作后才可能执行。`await api.replyText()` 等返回 `{planned:true}`，**不是 Telegram/微信已成功送达**。不要依赖这些返回值判断远端执行结果。
+
+### 事件字段
+
+- `id`：当前消息标识，字符串，保留微信 uint64 精度。
+- `source`：`wechat` / `telegram`。
+- `accountId`、`groupId`、`topicId?`：来源账号、群、精确话题。没有话题不代表“任意话题”。
+- `type`：`message.received` / `solitaire.received`。
+- `text`、`sender: {id,name}`、`timestamp`（毫秒）、`self`。
+- 原生微信接龙才有 `solitaire: {id?,title,messageId}`；脚本拿不到原始 XML。
+
+只接收实时群文本和原生接龙。历史导入、撤回通知、数据库状态更新、私聊、自发消息以及 Telegram 机器人消息不会触发。入站事件超过五分钟会丢弃，重启不补跑历史。Telegram 目录目前限于现有绑定群和已就绪的公众号话题；机器人必须确实能收到消息，Privacy Mode/群权限不会被自动修改。微信群来自当前微信目录与既有群绑定。
+
+### 能力与授权
+
+| 接口 | 必需权限 | 范围 |
+| --- | --- | --- |
+| `api.replyText(text)` | `reply` | 当前规则匹配的来源群/话题 |
+| `api.sendText(target,text)` | `send` | `target` 必须是规则明确授权的 `{source,accountId,groupId,topicId?}` |
+| `api.solitaire.join({solitaireId,entry})` | `solitaire.join` | 当前微信接龙，ID 必须与事件一致 |
+| `api.solitaire.create({title,entry,tail?})` | `solitaire.create` | 当前来源微信群 |
+| `api.state.get(key)` / `api.state.set(key,jsonValue)` | `state` | 当前规则自己的持久状态 |
+| `api.log(text)` | 无发送权限 | 当前执行日志，不写应用控制台 |
+
+脚本不能通过填写其他群 ID 绕过授权。启用以及实际执行前都重新核对当前账号和目录；账号切换后旧规则不会获得新账号权限。微信普通文字发送复用现有 WebUI 发送日志与消息回执；排队不等于送达。不确定结果立即暂停规则，不自动重发。
+
+## 自动参加接龙
+
+```javascript
+export default async function handler(event, api, params) {
+  if (event.type !== "solitaire.received") return;
+  if (!event.solitaire.title.includes(params.keyword || "午餐")) return;
+  if (!event.solitaire.id) {
+    api.log("缺少稳定轮次标识，转人工确认");
+    return;
+  }
+  await api.solitaire.join({
+    solitaireId: event.solitaire.id,
+    entry: params.entry || "我的报名内容"
+  });
+}
+```
+
+规则参数例如 `{"keyword":"午餐","entry":"张三，标准餐一份"}`。同函数可以为另一个群配置不同内容。
+
+**原生卡片识别是本开发版需要真实验收的边界：** 目前仅接受原生 `solitaire_info` 信封在参与内容前明确提供的 `id` / `solitaire_id` / `solitaireid` / `solitaireId`。不以标题或新消息 ID 猜测轮次，也不把纯文字“#接龙”冒充原生接龙。协议未提供受支持的稳定字段时，模板只记录日志、由人操作原有接龙功能；不会冒险报名。若已解析到参与者 `u` 字段包含当前微信 ID，也不会自动参加。该解析没有拿真实账号/卡片验证，不宣称已覆盖所有微信协议版本。
+
+真正参加调用已有 `/Msg/SendSolitaire` 适配器，保留 NewMsgID 的原始十进制位数，不新增凭据或要求 SDK/server 更新。按**账号＋群＋稳定轮次**全局持久记录尝试，跨规则、重启后也不重复。只有成功/明确拒绝/不确定三个结果；超时与重启时未完成的尝试保留为不确定。任何已记录尝试（包括明确拒绝）均不自动再试，必要时人工参加。纯文字接龙和没有轮次字段的卡片暂不支持自动参加。
+
+## AI 提示词与生成草稿
+
+函数页填写需求后：
+- **复制 AI 提示词**：展开并复制包含事件结构、真实能力、约束和需求的完整提示词，适合粘贴给任意 AI。剪贴板权限不可用时可手动复制。
+- **用配置的 AI 生成草稿**：使用既有 AI 配置的 URL/模型/密钥，只发送能力文档和本次需求，不自动附带聊天、源 XML、已有脚本或账号令牌。密钥只放在到已配置服务的授权头中，不下发浏览器。请不要自己把敏感内容写进需求。
+- 生成结果仅放入未保存编辑框，不保存、不执行、不发布、不启用。检查后保存草稿，再模拟，再发布并授权。
+
+不支持脚本内 `fetch` 或调用 AI；AI 只用于编辑阶段。生成接口拒绝临时指定另一模型服务 URL/密钥，以免把保存的密钥送到其他站点。
+
+## 隔离与执行保护
+
+- 使用固定 `quickjs-emscripten@0.32.0` 的 QuickJS/WASM，不使用 `node:vm`、vm2、宿主 eval 或宿主 Function 运行用户代码。
+- 每次新建独立工作线程，清空环境变量和继承的 Node 启动参数。QuickJS 不暴露宿主函数，只输入 JSON、输出动作计划；脚本里的 Function/eval 也仅存在于 QuickJS 内。
+- 无 `process`、`require`、网络、文件系统、定时器、外部模块或 npm 包；不提供 Token。
+- 执行约 200ms、QuickJS 堆 16MiB、栈 256KiB；外层线程超时 2 秒。最多五个动作、20 条日志、16KiB 规则状态。
+- 单实例串行执行，最多积压 50 个任务，规则冷却和每日动作上限；连续三次错误自动暂停，结果不确定立即暂停。
+- 动作前把尝试写入私有文件、fsync 并原子替换，避免进程崩溃后自动重试。只能保证“不会自动重复尝试”，不能保证断电/远端不确定时恰好送达一次。
+- 默认保存 `storage/automations.json`，权限0600；最近20个事件样例、200条运行记录、最多30个函数/100条规则/20000个去重键。达到去重容量后停止新动作，不能通过自动清空接龙记录换取重复报名风险。先备份再人工处理。
+- 身份令牌、CSRF/跨站来源拒绝、请求大小和配置 revision 冲突检查沿用现有 WebUI。尚未做独立安全审计；开发版应限可信管理员使用。
+
+## 自行测试开发镜像
+
+本次只推送开发 Tag，不创建正式 GitHub Release、不更新稳定 `v6`，也不部署生产。既有 Tag CI 会构建 `finalpi/wechat2tg:v6.0.40-dev.1` / `v6-dev`；需确认对应构建成功后才拉取，不能把推送成功当作镜像已可用。
+
+备份 SQLite、storage、会话与 Compose 后，手动只切 Bot 的镜像。SDK 仍为6.0.17，server 仍为6.0.16。不要同时运行两个使用同一套 Telegram 凭据/微信会话、可写 storage 的实例；不要覆盖私有 .env 或把示例 Compose 直接套到现有服务。先用测试群和预览模式验收，再逐条授权实际执行。
+
+检查文字/接龙、微信/Telegram 话题隔离、重复卡片、已报名/缺少标识、超时暂停、重新发布后暂停，以及重启后的去重。离线测试不代替真实账号消息收发、接龙与 Telegram Mini App 的人工验收。

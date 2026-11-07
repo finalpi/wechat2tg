@@ -8,6 +8,7 @@ import {MessageService} from './service/MessageService'
 import {startWebUI} from './webui/server'
 import I18n from './i18n'
 import {createMessageCenter} from './webui/messages'
+import {createLiveAutomation} from './automation/live'
 
 // 校验配置是否配置了必填项
 const missingCredentials = ['API_HASH', 'API_ID', 'BOT_TOKEN'].filter(key => !config[key])
@@ -64,14 +65,19 @@ async function cleanupOldMessages() {
 AppDataSource.initialize()
     .then(async () => {
         return ConfigurationService.getInstance().getConfig().then(()=>{
+            const messages = createMessageCenter()
+            let automation
+            try {automation = createLiveAutomation(messages)} catch {console.error('[Automation] Storage unavailable; automation disabled, ordinary forwarding remains enabled')}
             startWebUI(config, {
+                // SAFETY: Configuration is an object snapshot; this existing adapter
+                // exposes its own enumerable fields without changing the runtime value.
                 read: () => ConfigurationService.getInstance().getConfig() as unknown as Promise<Record<string, unknown>>,
                 save: async patch => {
                     const current = await ConfigurationService.getInstance().getConfig()
                     await ConfigurationService.getInstance().saveConfig(Object.assign(current, patch))
                     if (patch.language) I18n.getInstance().setLanguage(patch.language as 'zh-CN' | 'en-US')
                 },
-            }, createMessageCenter())
+            }, messages, automation)
             webUIStarted = true
             if (missingCredentials.length) {
                 console.error(`请在 WebUI 配置 ${missingCredentials.join(', ')}，保存后重启应用。`)

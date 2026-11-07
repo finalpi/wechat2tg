@@ -1,6 +1,6 @@
 {
   "name": "wechat2tg",
-  "version": "6.0.39",
+  "version": "6.0.40-dev.1",
   "description": "simple kit send wechat message to telegram",
   "main": "app.ts",
   "esModuleInterop": true,
@@ -15,7 +15,7 @@
     "test:mcp": "npm run build && node --test test/mcp.test.cjs",
     "mcp": "node scripts/wechat-mcp.cjs",
     "build:webui": "tsc -p webui/tsconfig.json && vite build --config webui/vite.config.ts",
-    "test:webui:browser": "npm run build && node scripts/test-webui-browser.cjs && node scripts/test-webui-config-browser.cjs && node scripts/test-mini-app-browser.cjs",
+    "test:webui:browser": "npm run build && node scripts/test-webui-browser.cjs && node scripts/test-webui-config-browser.cjs && node scripts/test-mini-app-browser.cjs && node scripts/test-automation-browser.cjs",
     "dev:webui": "node scripts/dev-webui.cjs"
   },
   "keywords": [],
@@ -35,6 +35,7 @@
     "log4js": "^6.9.1",
     "mqtt": "^5.15.0",
     "qrcode": "^1.5.1",
+    "quickjs-emscripten": "0.32.0",
     "reflect-metadata": "^0.2.2",
     "sharp": "^0.33.4",
     "socks-proxy-agent": "^6.2.1",
