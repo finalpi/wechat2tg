@@ -65,7 +65,8 @@ async function main() {
     await page.goto(launch(123))
     await page.getByLabel('会话列表').waitFor()
     await page.getByText('实时连接', {exact: true}).first().waitFor()
-    assert(apiRequests.filter(request => request.url.endsWith('/api/config')).every(request => request.authorization?.startsWith('Bearer miniapp_')))
+    assert.equal(apiRequests.filter(request => request.url.endsWith('/api/config')).length, 0, 'chat is independent of admin settings')
+    assert.equal(await page.evaluate(async () => (await window.navigator.serviceWorker.getRegistrations()).length), 0, 'Mini App must not register a PWA worker')
     assert(apiRequests.every(request => !new URL(request.url).searchParams.has('token')))
     assert.equal(await page.evaluate(() => localStorage.getItem('webui-access-token')), browserToken)
     assert.equal(await page.evaluate(() => Object.values(localStorage).some(value => value.startsWith('miniapp_'))), false)
@@ -104,6 +105,8 @@ async function main() {
       if (captures && width === 425) await page.screenshot({path: path.join(captures, 'chat.png')})
       await page.getByRole('button', {name: '返回会话列表'}).click()
     }
+    await page.getByRole('button', {name: '聊天菜单'}).click()
+    await page.getByRole('button', {name: '管理设置', exact: true}).click()
     await page.getByRole('combobox', {name: '切换页面'}).click()
     await page.getByRole('option', {name: 'AI 与语音'}).click()
     assert.equal(await page.evaluate(() => window.__backVisible), true)

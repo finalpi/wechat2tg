@@ -67,6 +67,7 @@ export function AutomationPanel({token}:{token:string}) {
   const [tab,setTab] = useState('rules')
   const [advanced,setAdvanced] = useState(false)
   const busyRef = useRef(false)
+  const ruleBaseline = useRef(JSON.stringify(emptyRule))
   const [scriptId,setScriptId] = useState(''),[name,setName] = useState('新函数'),[source,setSource] = useState('')
   const [ruleId,setRuleId] = useState(''),[rule,setRule] = useState<RuleInput>({...emptyRule}),[params,setParams] = useState(JSON.stringify(emptyRule.params,null,2))
   const [event,setEvent] = useState(''),[result,setResult] = useState('')
@@ -82,8 +83,9 @@ export function AutomationPanel({token}:{token:string}) {
     finally {busyRef.current=false;setBusy(false)}
   }
   const reload = ()=>perform(async()=>{const next=await request<Metadata>('/api/automation',token);setMeta(next);return next})
-  useEffect(()=>{void request<Metadata>('/api/automation',token).then(next=>{setMeta(next);if(next.scripts[0]){setScriptId(next.scripts[0].id);setName(next.scripts[0].name);setSource(next.scripts[0].draft)}else setSource(next.templates.solitaire);const fresh=newRule(next.scripts.find(s=>s.versions.length),next);setRule(fresh);setParams(JSON.stringify(fresh.params,null,2))}).catch(e=>setError(e.message))},[token])
-  useEffect(()=>{if(!dirty)return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue=''};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn)},[dirty])
+  useEffect(()=>{void request<Metadata>('/api/automation',token).then(next=>{setMeta(next);if(next.scripts[0]){setScriptId(next.scripts[0].id);setName(next.scripts[0].name);setSource(next.scripts[0].draft)}else setSource(next.templates.solitaire);const fresh=newRule(next.scripts.find(s=>s.versions.length),next);ruleBaseline.current=JSON.stringify(fresh);setRule(fresh);setParams(JSON.stringify(fresh.params,null,2))}).catch(e=>setError(e.message))},[token])
+  const ruleDirty = JSON.stringify({...rule,params:parseParams(params) || params})!==ruleBaseline.current
+  useEffect(()=>{if(!dirty && !ruleDirty && !busy)return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue=''};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn)},[dirty,ruleDirty,busy])
   const mutate = async (body:Record<string,unknown>)=>{
     if(!meta)throw Error('请先加载配置')
     const next=await request<Metadata>('/api/automation',token,{method:'POST',body:JSON.stringify({...body,revision:meta.revision})});setMeta(next);return next
@@ -95,8 +97,8 @@ export function AutomationPanel({token}:{token:string}) {
   const chooseRule = (id:string)=>{
     const saved=meta?.rules.find(r=>r.id===id)
     setRuleId(id);setError('');setNotice('');setResult('')
-    if(saved){const {id:ignored,version,failures,lastRun,daily,...input}=saved;void ignored;void version;void failures;void lastRun;void daily;setRule(input);setParams(JSON.stringify(saved.params,null,2))}
-    else if(meta){const fresh=newRule(meta.scripts.find(s=>s.id===scriptId && s.versions.length) || meta.scripts.find(s=>s.versions.length),meta);setRule(fresh);setParams(JSON.stringify(fresh.params,null,2))}
+    if(saved){const {id:ignored,version,failures,lastRun,daily,...input}=saved;void ignored;void version;void failures;void lastRun;void daily;ruleBaseline.current=JSON.stringify(input);setRule(input);setParams(JSON.stringify(saved.params,null,2))}
+    else if(meta){const fresh=newRule(meta.scripts.find(s=>s.id===scriptId && s.versions.length) || meta.scripts.find(s=>s.versions.length),meta);ruleBaseline.current=JSON.stringify(fresh);setRule(fresh);setParams(JSON.stringify(fresh.params,null,2))}
   }
   const selectRuleScript = (id:string)=>{
     if(!meta || id===rule.scriptId)return
@@ -122,6 +124,7 @@ export function AutomationPanel({token}:{token:string}) {
     const old=new Set(meta?.rules.map(r=>r.id))
     const next=await mutate({operation:'saveRule',...(ruleId?{id:ruleId}:{}),rule:input,confirmLive})
     if(!ruleId)setRuleId(next.rules.find(r=>!old.has(r.id))?.id || '')
+    ruleBaseline.current=JSON.stringify(input)
     setRule(input)
   },'监听已保存。')
   const makeSample = ()=>{

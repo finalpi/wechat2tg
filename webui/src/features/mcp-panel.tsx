@@ -49,6 +49,12 @@ export function McpPanel({token}: {token: string}) {
   }, [token])
 
   const dirty = meta && (enabled !== meta.enabled || endpoint !== meta.endpoint || scriptPath !== meta.scriptPath)
+  useEffect(() => {
+    if(!dirty && !busy)return
+    const warn=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue=''}
+    window.addEventListener('beforeunload',warn)
+    return()=>window.removeEventListener('beforeunload',warn)
+  },[dirty,busy])
 
   const save = async () => {
     if (!meta || busy) return

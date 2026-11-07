@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react'
+import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 import {createRequestId} from '@/lib/request-id'
 import {AtSign, Paperclip, Send, X} from 'lucide-react'
 import {Button} from '@/components/ui/button'
@@ -23,8 +23,8 @@ export interface ComposerDraft {
   inFlight?: boolean
 }
 
-export function MessageComposer({token, contact, online, quote, draft, onClearQuote, onSent, onAuthError}: {
-  token: string; contact: Contact; online: boolean; quote: ChatMessage | null; draft: ComposerDraft
+export function MessageComposer({token, contact, online, quote, draft, onClearQuote, onSent, onAuthError, offlineReason}: {
+  token: string; contact: Contact; online: boolean; quote: ChatMessage | null; draft: ComposerDraft; offlineReason?:string
   onClearQuote: () => void; onSent: (row: ChatMessage) => void; onAuthError: (error: unknown) => void
 }) {
   const [body, setBody] = useState(draft.body || '')
@@ -45,6 +45,22 @@ export function MessageComposer({token, contact, online, quote, draft, onClearQu
   const [selected, setSelected] = useState<Member[]>(draft.selected || [])
   const [all, setAll] = useState(draft.all || false)
   const input = useRef<HTMLInputElement>(null)
+  const textarea = useRef<HTMLTextAreaElement>(null)
+  const resizeInput = () => {
+    const field=textarea.current
+    if(!field)return
+    field.style.height='44px'
+    const maximum=Math.min(160,Math.max(44,(window.visualViewport?.height || window.innerHeight)*0.25))
+    field.style.height=`${Math.min(maximum,Math.max(44,field.scrollHeight+2))}px`
+  }
+  useLayoutEffect(resizeInput,[body])
+  useEffect(()=>{
+    let width=0
+    const observer=new ResizeObserver(entries=>{const next=entries[0]?.contentRect.width || 0;if(next!==width){width=next;resizeInput()}})
+    if(textarea.current)observer.observe(textarea.current)
+    window.visualViewport?.addEventListener('resize',resizeInput)
+    return()=>{observer.disconnect();window.visualViewport?.removeEventListener('resize',resizeInput)}
+  },[])
   const memberGeneration = useRef(0)
   const mounted = useRef(true)
   useEffect(() => {mounted.current = true; return () => {mounted.current = false}}, [])
@@ -138,8 +154,8 @@ export function MessageComposer({token, contact, online, quote, draft, onClearQu
     setError(''); setFile(candidate)
   }
 
-  return <div className="flex shrink-0 flex-col gap-2 border-t bg-background p-2 md:gap-3 md:p-4">
-    {!online && <Alert><AlertDescription>微信未连接，暂时无法发送。</AlertDescription></Alert>}
+  return <div className="flex shrink-0 flex-col gap-2 border-t bg-background px-2 py-2 md:px-4">
+    {!online && <Alert><AlertDescription>{offlineReason || '微信未连接，暂时无法发送。'}</AlertDescription></Alert>}
     {quote && <div className="flex min-w-0 items-center gap-2">
       <Badge variant="secondary">引用</Badge><span className="min-w-0 flex-1 truncate text-sm">{quote.body || `[${quote.type}]`}</span>
       <Button variant="ghost" size="icon" aria-label="取消引用" disabled={locked} onClick={onClearQuote}><X /></Button>
@@ -167,25 +183,21 @@ export function MessageComposer({token, contact, online, quote, draft, onClearQu
       <AttachmentContent><AttachmentTitle>{file.name}</AttachmentTitle><AttachmentDescription>{(file.size / 1024 / 1024).toFixed(1)} MB</AttachmentDescription></AttachmentContent>
       <AttachmentActions><Button variant="ghost" size="icon" aria-label="移除附件" disabled={locked} onClick={() => setFile(null)}><X /></Button></AttachmentActions>
     </Attachment>}
-    <FieldGroup className="gap-2"><Field>
-      <FieldLabel htmlFor="message-body" className="sr-only">消息内容</FieldLabel>
-      <Textarea id="message-body" className="h-10 min-h-10 resize-y md:h-20 md:min-h-20" placeholder="输入消息，Ctrl / ⌘ + Enter 发送" maxLength={4000} rows={1} value={body} disabled={locked || !online}
-        onChange={e => setBody(e.target.value)} onPaste={e => {const pasted = e.clipboardData.files[0]; if (pasted && !locked) {e.preventDefault(); chooseFile(pasted)}}}
-        onKeyDown={e => {if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !e.nativeEvent.isComposing) {e.preventDefault(); void submit()}}} />
-    </Field></FieldGroup>
     {error && <Alert variant="destructive"><AlertDescription>{error}{pending && ' 重试会使用同一请求，不会重新提交已受理的部分。'}</AlertDescription></Alert>}
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="flex items-center gap-1">
-        <input ref={input} type="file" className="hidden" aria-label="选择附件" onChange={e => {chooseFile(e.target.files?.[0]); e.target.value = ''}} />
-        <Button variant="ghost" size="sm" disabled={locked || !online || Boolean(quote) || all || selected.length > 0} onClick={() => input.current?.click()}><Paperclip /> 附件</Button>
-        {contact.kind === 'group' && <Button variant="ghost" size="sm" aria-expanded={showMembers} disabled={locked || !online || Boolean(quote) || Boolean(file)} onClick={() => setShowMembers(value => !value)}><AtSign /> 成员</Button>}
-        {file && <Field orientation="horizontal"><Switch id="send-as-voice" checked={voice} disabled={locked} onCheckedChange={setVoice} /><FieldLabel htmlFor="send-as-voice">语音</FieldLabel></Field>}
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">{body.length}/4000</span>
-        {pending && <Button variant="outline" size="sm" disabled={busy} onClick={() => {if (window.confirm('部分消息可能已发送。放弃后再次发送可能重复，仍要放弃？')) {attempt.current = null; draft.attempt = null; setPending(false); setError('')}}}>放弃重试</Button>}
-        <Button disabled={busy || Boolean(draft.inFlight) || !online || (!pending && !body.trim() && !file)} onClick={submit}>{busy ? <Spinner /> : <Send />} {pending ? '重试请求' : '发送'}</Button>
-      </div>
+    {file && <Field orientation="horizontal"><Switch id="send-as-voice" checked={voice} disabled={locked} onCheckedChange={setVoice} /><FieldLabel htmlFor="send-as-voice">语音</FieldLabel></Field>}
+    {pending && <Button variant="outline" size="sm" disabled={busy} onClick={() => {if (window.confirm('部分消息可能已发送。放弃后再次发送可能重复，仍要放弃？')) {attempt.current = null; draft.attempt = null; setPending(false); setError('')}}}>放弃重试</Button>}
+    <div className="flex items-end gap-1 md:gap-2">
+      <input ref={input} type="file" className="hidden" aria-label="选择附件" onChange={e => {chooseFile(e.target.files?.[0]); e.target.value = ''}} />
+      <Button variant="ghost" size="icon" className="size-11 shrink-0" aria-label="附件" disabled={locked || !online || Boolean(quote) || all || selected.length > 0} onClick={() => input.current?.click()}><Paperclip /></Button>
+      {contact.kind === 'group' && <Button variant="ghost" size="icon" className="size-11 shrink-0" aria-label="成员" aria-expanded={showMembers} disabled={locked || !online || Boolean(quote) || Boolean(file)} onClick={() => setShowMembers(value => !value)}><AtSign /></Button>}
+      <FieldGroup className="min-w-0 flex-1 gap-2"><Field>
+        <FieldLabel htmlFor="message-body" className="sr-only">消息内容</FieldLabel>
+        <Textarea ref={textarea} id="message-body" className="min-h-11 resize-none" placeholder="输入消息…" title="Ctrl / ⌘ + Enter 发送" maxLength={4000} rows={1} value={body} disabled={locked}
+          onChange={e => setBody(e.target.value)} onPaste={e => {const pasted = e.clipboardData.files[0]; if (pasted && !locked) {e.preventDefault(); chooseFile(pasted)}}}
+          onKeyDown={e => {if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !e.nativeEvent.isComposing) {e.preventDefault(); void submit()}}} />
+      </Field></FieldGroup>
+      <Button size="icon" className="size-11 shrink-0" aria-label={pending?'重试请求':'发送'} disabled={busy || Boolean(draft.inFlight) || !online || (!pending && !body.trim() && !file)} onClick={submit}>{busy ? <Spinner /> : <Send />}</Button>
     </div>
+    {body.length>3600 && <span className="text-right text-xs text-muted-foreground">{body.length}/4000</span>}
   </div>
 }

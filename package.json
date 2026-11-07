@@ -15,7 +15,7 @@
     "test:mcp": "npm run build && node --test test/mcp.test.cjs",
     "mcp": "node scripts/wechat-mcp.cjs",
     "build:webui": "tsc -p webui/tsconfig.json && vite build --config webui/vite.config.ts",
-    "test:webui:browser": "npm run build && node scripts/test-webui-browser.cjs && node scripts/test-webui-config-browser.cjs && node scripts/test-mini-app-browser.cjs && node scripts/test-automation-browser.cjs",
+    "test:webui:browser": "npm run build && node scripts/test-webui-browser.cjs && node scripts/test-webui-config-browser.cjs && node scripts/test-mini-app-browser.cjs && node scripts/test-automation-browser.cjs && node scripts/test-pwa-chat-browser.cjs",
     "dev:webui": "node scripts/dev-webui.cjs"
   },
   "keywords": [],

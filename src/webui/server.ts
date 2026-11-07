@@ -87,7 +87,7 @@ export function createWebUIServer(options: Options) {
         res.setHeader('Cache-Control', 'no-store')
         res.setHeader('X-Content-Type-Options', 'nosniff')
         res.setHeader('Referrer-Policy', 'no-referrer')
-        res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self'${miniAppUrl ? ' https://telegram.org' : ''}; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors ${miniAppUrl ? 'https://web.telegram.org https://*.web.telegram.org' : '\'none\''}; base-uri 'none'; form-action 'self'`)
+        res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self'${miniAppUrl ? ' https://telegram.org' : ''}; worker-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors ${miniAppUrl ? 'https://web.telegram.org https://*.web.telegram.org' : '\'none\''}; base-uri 'none'; form-action 'self'`)
         const route = req.url?.split('?')[0]
         if(route === '/mcp' || route?.startsWith('/mcp/')){
             if(!mcp)return respond(res,503,{error:'messagesUnavailable'})
@@ -106,11 +106,12 @@ export function createWebUIServer(options: Options) {
             }
             if (!['GET', 'HEAD'].includes(req.method)) return respond(res, 404, {error: 'notFound'})
             // Static files: the React SPA bundle plus the emoji image directory.
-            const relative = route === '/' ? 'index.html' : route.replace(/^\/+/, '')
+            const relative = ['/', '/chat', '/manage'].includes(route) ? 'index.html' : route.replace(/^\/+/, '')
             if (relative.includes('..') || relative.includes('\0')) return respond(res, 404, {error: 'notFound'})
-            const mime = {'.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.svg':'image/svg+xml', '.png':'image/png', '.webp':'image/webp', '.ico':'image/x-icon', '.woff':'font/woff', '.woff2':'font/woff2', '.json':'application/json'}[path.extname(relative)] || 'application/octet-stream'
+            const mime = {'.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.svg':'image/svg+xml', '.png':'image/png', '.webp':'image/webp', '.ico':'image/x-icon', '.woff':'font/woff', '.woff2':'font/woff2', '.json':'application/json', '.webmanifest':'application/manifest+json; charset=utf-8'}[path.extname(relative)] || 'application/octet-stream'
             try {
                 const content = fs.readFileSync(path.join(assetDirectory, relative))
+                if (relative === 'sw.js') res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
                 res.writeHead(200, {'Content-Type': mime, 'Content-Length': content.length})
                 res.end(req.method === 'HEAD' ? undefined : content)
             } catch { respond(res, 404, {error: 'notFound'}) }

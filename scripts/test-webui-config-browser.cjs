@@ -26,7 +26,7 @@ async function main() {
     page.setDefaultTimeout(5000)
     const errors = []
     page.on('pageerror', e => errors.push(e.message))
-    await page.goto(`http://127.0.0.1:${server.address().port}`)
+    await page.goto(`http://127.0.0.1:${server.address().port}/manage`)
     await page.getByLabel('访问令牌').fill('local-config-test-token')
     await page.getByRole('button', {name: '进入控制台'}).click()
     await page.getByRole('button', {name: 'AI 与语音'}).click()

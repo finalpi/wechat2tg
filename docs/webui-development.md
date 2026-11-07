@@ -11,7 +11,7 @@ npm run dev:webui
 
 The launcher rebuilds the backend and frontend, prints the local address and access token, then starts the standalone server. It reads `.env`, reuses the saved token unless `WEBUI_TOKEN` is set, and forwards shutdown signals to the child process.
 
-The standalone server supports configuration editing. It has no live message adapter: the message page shows **消息服务未连接**. Run the normal bot with WebUI enabled to use real conversations. Do not expose the access token or enable a remote service merely to preview the page.
+The default `/` and `/chat` routes open the chat-only workspace; use `/manage` or the chat menu for configuration. The standalone server supports configuration editing. It has no live message adapter: the message page shows **消息服务未连接**. Run the normal bot with WebUI enabled to use real conversations. Do not expose the access token or enable a remote service merely to preview the page.
 
 ## Message page
 
@@ -26,6 +26,14 @@ The standalone server supports configuration editing. It has no live message ada
 - Theme-aware bubbles and a single-column conversation view on small screens.
 
 HTML is rendered through a small React allowlist, not `dangerouslySetInnerHTML`. Only HTTP(S) links and local, allowlisted custom-emoji image paths are rendered. Tokens are never placed in media URLs.
+
+## Installable chat workspace (unreleased)
+
+The chat shell is independent of configuration loading and remains mounted when visiting management pages. Focus mode hides the conversation list; its width is keyboard/pointer adjustable. Browser back/forward and the Mini App BackButton return to the list without discarding in-memory drafts.
+
+The build generates a root service worker from an explicit public-file allowlist. PWA installation requires HTTPS (loopback is a development exception). Only the shell and static assets are cached, never authenticated API/SSE/media responses. Activation is opt-in and only the approving tab reloads, after checking unsaved changes again; other tabs keep their drafts. Mini Apps do not register a worker or use saved browser credentials. See [PWA/chat operation and boundaries](pwa-chat.md).
+
+`test-pwa-chat-browser.cjs` uses real Chromium service workers and a temporary HTTP server to test cache isolation, offline shell behavior, focus/resize, draft/scroll preservation, guarded updates and multi-tab behavior. Native mobile installation and real soft keyboards still require device testing.
 
 ## Telegram Mini App
 

@@ -8,6 +8,7 @@ const bubbleVariants = cva(
   'group/bubble relative flex w-fit max-w-[90%] min-w-0 flex-col gap-1 data-[align=end]:self-end md:max-w-[80%]',
   {variants: {variant: {
     default: '[&>[data-slot=bubble-content]]:bg-primary [&>[data-slot=bubble-content]]:text-primary-foreground',
+    sent: '[&>[data-slot=bubble-content]]:bg-primary/10 [&>[data-slot=bubble-content]]:text-foreground',
     secondary: '[&>[data-slot=bubble-content]]:bg-secondary [&>[data-slot=bubble-content]]:text-secondary-foreground',
     muted: '[&>[data-slot=bubble-content]]:bg-muted',
     outline: '[&>[data-slot=bubble-content]]:border-border [&>[data-slot=bubble-content]]:bg-background',
@@ -20,6 +21,6 @@ function Bubble({variant, align = 'start', className, ...props}: React.Component
 }
 function BubbleContent({asChild = false, className, ...props}: React.ComponentProps<'div'> & {asChild?: boolean}) {
   const Comp = asChild ? Slot : 'div'
-  return <Comp data-slot="bubble-content" className={cn('w-fit max-w-full min-w-0 break-words overflow-hidden rounded-xl border border-transparent px-3 py-2 text-sm leading-relaxed', className)} {...props} />
+  return <Comp data-slot="bubble-content" className={cn('w-fit max-w-full min-w-0 break-words overflow-hidden rounded-xl border border-transparent px-3 py-2 text-base leading-relaxed md:text-sm', className)} {...props} />
 }
 export {Bubble, BubbleContent}

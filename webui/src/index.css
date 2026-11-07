@@ -48,6 +48,20 @@
   }
   * { @apply border-border; }
   body { @apply bg-background text-foreground; }
+  .workspace-shell {
+    position: fixed;
+    top: var(--workspace-top, 0px);
+    left: 0;
+    width: 100%;
+    height: var(--workspace-height, 100dvh);
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  .workspace-shell.mini-app-shell {
+    height: min(var(--mini-app-height, 100dvh), var(--workspace-height, 100dvh));
+  }
   .mini-app-shell {
     height: var(--mini-app-height, 100dvh);
     padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));

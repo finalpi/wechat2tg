@@ -16,6 +16,9 @@ import {AutomationPanel} from '@/features/automation-panel'
 import {AITools} from '@/features/ai-tools'
 import {TemplatePreview} from '@/features/template-preview'
 import {MessagesPanel} from '@/features/messages-panel'
+import {ChatMenu} from '@/features/chat-menu'
+import {usePwa} from '@/lib/use-pwa'
+import {useWorkspaceRoute,useWorkspaceViewport,editorsAllowReload} from '@/lib/workspace'
 import {telegramLaunch, loadTelegramSDK, connectTelegramAppearance} from '@/lib/telegram-mini-app'
 import type {ComposerDraft} from '@/features/message-composer'
 import {ArrowLeftRight, Globe, Link2, LogOut, MessageSquare, Moon, Send, SlidersHorizontal, Sparkles, Sun, Type} from 'lucide-react'
@@ -48,7 +51,7 @@ function Auth({onAuthed}: {onAuthed: (token: string) => void}) {
     setBusy(true)
     setError('')
     try {
-      await api.getConfig(candidate)
+      await request('/api/messages/status',candidate)
       localStorage.setItem(TOKEN_KEY, candidate)
       onAuthed(candidate)
     } catch (e) {
@@ -122,7 +125,7 @@ function FieldControl({field, value, onChange, disabled}: {
   return <Input id={field.key} value={String(value ?? '')} disabled={disabled} onChange={e => onChange(e.target.value)} />
 }
 
-function ConfigPanel({token, theme, onToggleTheme, onLogout, miniApp = false}: {
+function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
   token: string
   theme: 'light' | 'dark'
   onToggleTheme: () => void
@@ -131,37 +134,45 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout, miniApp = false}: {
 }) {
   const [snapshot, setSnapshot] = useState<ConfigSnapshot | null>(null)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
-  const [active, setActive] = useState('messages')
+  const [active, setActive] = useState('connection')
+  const {chatOnly,navigate} = useWorkspaceRoute()
+  useWorkspaceViewport()
+  const [chatMounted,setChatMounted] = useState(chatOnly)
+  useEffect(()=>{if(chatOnly)setChatMounted(true)},[chatOnly])
+  const selectPage = (page:string)=>{if(page==='messages')navigate(true);else setActive(page)}
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
   const [conflict, setConflict] = useState(false)
   const [messageDrafts] = useState(() => new Map<string, ComposerDraft>())
 
+  const pwa = usePwa({enabled:!miniApp,canReload:()=>!busy && !Object.keys(draft).length && editorsAllowReload()})
   useEffect(() => {
-    if (!miniApp) return
+    if (!miniApp || chatOnly) return
     const back = window.Telegram?.WebApp?.BackButton
-    const onBack = () => setActive('messages')
-    if (active === 'messages') back?.hide()
-    else back?.show()
-    back?.onClick(onBack)
+    const onBack = () => navigate(true)
+    back?.show();back?.onClick(onBack)
     return () => {back?.offClick(onBack); back?.hide()}
-  }, [miniApp, active])
+  }, [miniApp, chatOnly])
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
-      if ([...messageDrafts.values()].some(draft => draft.body?.trim() || draft.file || draft.attempt || draft.inFlight || draft.quote)) {event.preventDefault(); event.returnValue = ''}
+      if (busy || Object.keys(draft).length || [...messageDrafts.values()].some(draft => draft.body?.trim() || draft.file || draft.attempt || draft.inFlight || draft.quote || draft.selected?.length || draft.all || draft.voice)) {event.preventDefault(); event.returnValue = ''}
     }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [messageDrafts])
+  }, [messageDrafts,draft,busy])
 
   useEffect(() => {
-    api.getConfig(token).then(setSnapshot).catch(e => {
+    if(chatOnly || snapshot)return
+    const controller = new AbortController()
+    request<ConfigSnapshot>('/api/config',token,{signal:controller.signal}).then(value=>{if(!controller.signal.aborted){setSnapshot(value);setError('')}}).catch(e => {
+      if(controller.signal.aborted)return
       if (e instanceof ApiError && e.code === 'unauthorized') onLogout()
       else setError(e.message)
     })
-  }, [token, onLogout])
+    return ()=>controller.abort()
+  }, [token, onLogout, chatOnly, Boolean(snapshot)])
 
   const groups = useMemo(() => {
     if (!snapshot) return []
@@ -238,41 +249,32 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout, miniApp = false}: {
     }
   }
 
-  if (!snapshot) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        {error ? <Alert variant="destructive" className="max-w-sm"><AlertDescription>{error}</AlertDescription></Alert>
-          : <Spinner className="size-6 text-muted-foreground" />}
-      </div>
-    )
-  }
-
   const activeGroup = groups.find(group => group.id === active)
-  const fields = snapshot.fields.filter(field => field.group === active)
+  const fields = snapshot?.fields.filter(field => field.group === active) || []
   const environment = fields.filter(field => field.source === 'environment')
   const runtime = fields.filter(field => field.source === 'runtime')
-  const aiUrlField = snapshot.fields.find(field => field.key === 'AI_API_URL')
-  const aiModelField = snapshot.fields.find(field => field.key === 'AI_MODEL')
+  const aiUrlField = snapshot?.fields.find(field => field.key === 'AI_API_URL')
+  const aiModelField = snapshot?.fields.find(field => field.key === 'AI_MODEL')
   const aiUrl = aiUrlField ? String(currentValue(aiUrlField) ?? '') : ''
   const aiModel = aiModelField ? String(currentValue(aiModelField) ?? '') : ''
   const templateValues: Record<string, string> = {}
   for (const key of TEMPLATE_KEYS) {
-    const raw = Object.prototype.hasOwnProperty.call(draft, key) ? draft[key] : snapshot.values[key]
-    templateValues[key] = typeof raw === 'string' && raw.trim() ? raw : snapshot.templateDefaults?.[key] || ''
+    const raw = Object.prototype.hasOwnProperty.call(draft, key) ? draft[key] : snapshot?.values[key]
+    templateValues[key] = typeof raw === 'string' && raw.trim() ? raw : snapshot?.templateDefaults?.[key] || ''
   }
 
   return (
-    <div className={cn('flex min-h-0 flex-col overflow-hidden', miniApp ? 'mini-app-shell' : 'h-dvh')}>
-      <header className="flex h-11 shrink-0 items-center justify-between gap-2 border-b px-2 md:h-14 md:px-4">
+    <div className={cn('workspace-shell flex min-h-0 flex-col overflow-hidden', miniApp && 'mini-app-shell')} data-workspace={chatOnly?'chat':'manage'}>
+      {!chatOnly && <header className="flex h-11 shrink-0 items-center justify-between gap-2 border-b px-2 md:h-14 md:px-4">
         <div className="hidden items-center gap-3 md:flex">
           <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <ArrowLeftRight className="size-4" />
           </div>
           <span className="font-semibold">wechat2tg</span>
-          {snapshot.runtimeAvailable ? <Badge variant="secondary">运行中</Badge> : <Badge variant="outline">离线</Badge>}
+          {snapshot?.runtimeAvailable ? <Badge variant="secondary">运行中</Badge> : <Badge variant="outline">离线</Badge>}
         </div>
         <div className="min-w-0 flex-1 md:hidden">
-          <Select value={active} onValueChange={setActive}>
+          <Select value={active} onValueChange={selectPage}>
             <SelectTrigger aria-label="切换页面" className="w-44"><SelectValue /></SelectTrigger>
             <SelectContent><SelectGroup>{groups.map(group => {
               const Icon = GROUP_ICONS[group.icon] || MessageSquare
@@ -281,30 +283,35 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout, miniApp = false}: {
           </Select>
         </div>
         <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" aria-label="返回聊天" title="聊天全屏" onClick={()=>navigate(true)}><MessageSquare /></Button>
           <Button variant="ghost" size="icon" aria-label="切换主题" onClick={onToggleTheme}>
             {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </Button>
           <Button variant="ghost" size="sm" aria-label="退出" onClick={onLogout}><LogOut data-icon="inline-start" /><span className="hidden md:inline">退出</span></Button>
         </div>
-      </header>
-
+      </header>}
+      {!miniApp && pwa.updateReady && <div role="status" className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-b bg-background px-3 py-1 text-sm"><span>{pwa.error || '新版本已就绪，当前页面不会自动刷新。'}</span><Button size="sm" variant="outline" onClick={()=>void pwa.applyUpdate()}>更新应用</Button></div>}
       <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-44 shrink-0 overflow-y-auto border-r p-2 md:block">
+        {!chatOnly && <aside className="hidden w-44 shrink-0 overflow-y-auto border-r p-2 md:block">
           <nav className="flex flex-col gap-1" aria-label="主导航">
             {groups.map(group => {
               const Icon = GROUP_ICONS[group.icon] || MessageSquare
               return (
                 <Button key={group.id} variant={group.id === active ? 'secondary' : 'ghost'} size="sm"
-                  className="justify-start" onClick={() => setActive(group.id)}>
+                  className="justify-start" onClick={() => selectPage(group.id)}>
                   <Icon className="size-4" /> {group.label}
                 </Button>
               )
             })}
           </nav>
-        </aside>
+        </aside>}
 
-        <main className={cn('min-h-0 min-w-0 flex-1', active === 'messages' ? 'overflow-hidden md:p-4' : 'overflow-y-auto p-4 md:p-6')}>
-          {active === 'messages' ? <MessagesPanel token={token} drafts={messageDrafts} onLogout={onLogout} /> : active === 'automation' ? <AutomationPanel token={token} /> : active === 'mcp' ? (
+        <main className={cn('min-h-0 min-w-0 flex-1', chatOnly ? 'overflow-hidden' : 'overflow-y-auto p-4 md:p-6')}>
+          <div hidden={!chatOnly} className="h-full min-h-0">
+            {chatMounted && <MessagesPanel token={token} drafts={messageDrafts} onLogout={onLogout} visible={chatOnly} miniApp={miniApp} controls={<ChatMenu theme={theme} onToggleTheme={onToggleTheme} onManage={()=>navigate(false)} onLogout={onLogout} miniApp={miniApp} pwa={pwa} />} />}
+          </div>
+          <div hidden={chatOnly}>
+          {!snapshot ? <div className="flex flex-col items-center gap-3">{error?<Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>:<Spinner />}<Button variant="outline" onClick={()=>void reloadConfig()}>重新加载配置</Button></div> : active === 'automation' ? <AutomationPanel token={token} /> : active === 'mcp' ? (
             <McpPanel token={token} />
           ) : (
             <Card>
@@ -326,10 +333,11 @@ function ConfigPanel({token, theme, onToggleTheme, onLogout, miniApp = false}: {
               </CardContent>
             </Card>
           )}
+          </div>
         </main>
       </div>
 
-      {active !== 'messages' && active !== 'automation' && <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+      {!chatOnly && snapshot && active !== 'messages' && active !== 'automation' && <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
         <div className="flex flex-col">
           {snapshot.restartRequired && <span className="text-sm text-amber-600">保存后需重启应用生效</span>}
           {error && <span className="text-sm text-destructive">{error}</span>}
@@ -406,6 +414,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content',theme==='dark'?'#09090b':'#ffffff')
     if (!launch.isMiniApp) localStorage.setItem(THEME_KEY, theme)
   }, [theme])
 
@@ -417,13 +426,26 @@ export default function App() {
     return () => {disposed = true; cleanup?.()}
   }, [])
 
+  const clearSession = useCallback(()=>{
+    const state={...window.history.state}
+    delete state.chatSession;delete state.chatConversation
+    window.history.replaceState(state,'')
+    setToken('')
+  },[])
+  useEffect(()=>{
+    if(launch.isMiniApp)return
+    const check=()=>{if(token && localStorage.getItem(TOKEN_KEY)!==token)clearSession()}
+    window.addEventListener('storage',check);window.addEventListener('pageshow',check)
+    return()=>{window.removeEventListener('storage',check);window.removeEventListener('pageshow',check)}
+  },[token,clearSession])
+
   const logout = useCallback(() => {
     if (launch.isMiniApp) {
       setMiniBlocked(true)
       if (token) void request('/api/auth/logout', token, {method: 'POST', body: '{}'}).catch(() => undefined)
     } else localStorage.removeItem(TOKEN_KEY)
-    setToken('')
-  }, [token])
+    clearSession()
+  }, [token,clearSession])
   const miniAuthed = useCallback((value: string, expiry: number) => {setExpiresAt(expiry); setToken(value)}, [])
   useEffect(() => {
     if (!launch.isMiniApp || !token || !expiresAt) return
@@ -433,7 +455,7 @@ export default function App() {
 
   if (!token) return launch.isMiniApp ? <MiniAppLogin blocked={miniBlocked} onAuthed={miniAuthed} /> : <Auth onAuthed={setToken} />
   return (
-    <ConfigPanel
+    <Workspace
       miniApp={launch.isMiniApp}
       token={token}
       theme={theme}
