@@ -1,6 +1,6 @@
 # 群消息自动化（开发预览）
 
-基于 v6.0.40-dev.1，以下配置简化和保存校验修复尚未单独发布。
+v6.0.40-dev.2 包含群消息监听简化、普通参数表单以及缺少群 / 函数时的保存校验提示；仍为开发预览，需手动验收。
 
 本功能只在 Bot 中新增能力，不升级 puppet/server，不迁移旧绑定或修改原转发策略。未连接真实账号做发送/接龙验收，请先使用预览模式。
 
@@ -111,7 +111,7 @@ export default async function handler(event, api, params) {
 
 ## 自行测试开发镜像
 
-本次只推送开发 Tag，不创建正式 GitHub Release、不更新稳定 `v6`，也不部署生产。既有 Tag CI 会构建 `finalpi/wechat2tg:v6.0.40-dev.1` / `v6-dev`；需确认对应构建成功后才拉取，不能把推送成功当作镜像已可用。
+本次只推送开发 Tag，不创建正式 GitHub Release、不更新稳定 `v6`，也不部署生产。既有 Tag CI 会构建 `finalpi/wechat2tg:v6.0.40-dev.2` / `v6-dev`；需确认对应构建成功后才拉取，不能把推送成功当作镜像已可用。
 
 备份 SQLite、storage、会话与 Compose 后，手动只切 Bot 的镜像。SDK 仍为6.0.17，server 仍为6.0.16。不要同时运行两个使用同一套 Telegram 凭据/微信会话、可写 storage 的实例；不要覆盖私有 .env 或把示例 Compose 直接套到现有服务。先用测试群和预览模式验收，再逐条授权实际执行。
 

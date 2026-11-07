@@ -1,6 +1,6 @@
 # wechat2tg（v6）
 
-> **开发预览：v6.0.40-dev.1。** 新增脚本函数库、应用范围/权限、模拟测试和 AI 辅助草稿，尚未正式发布，稳定 `v6` 不变。见[自动化使用与安全边界](docs/automation.md)。请手动使用开发镜像验收，不要让稳定版和开发版同时读写同一个 storage 目录。
+> **开发预览：v6.0.40-dev.2。** 自动化简化为选群、触发条件、执行函数和普通参数；高级选项收起，缺少群或函数时明确提示，保留已有范围与权限。稳定 `v6` 不变，见[使用与安全边界](docs/automation.md)。不要让稳定版和开发版同时使用同一套账号会话或可写 storage。
 
 中文 | [English](README.md)
 
@@ -200,7 +200,7 @@ Docker 部署使用 Docker Engine 和 Docker Compose v2；本地开发使用 Nod
 
 ### Docker Compose
 
-直接使用仓库的 `docker-compose.yml`，无需再叠加 WebUI 覆盖文件。主配置固定完整版本 `finalpi/wechat2tg:v6.0.39`，不跟随滚动别名。amd64 用户可以改用同版本 `-amd64` 镜像以提前部署，无需等待 ARM。
+当前开发分支的 `docker-compose.yml` 固定 `finalpi/wechat2tg:v6.0.40-dev.2`，无需 WebUI 覆盖文件。正式部署请使用 `v6.0.39` 标签下的 Compose，不要直接用开发分支覆盖生产配置。amd64 用户可在对应构建成功后使用同版本 `-amd64` 镜像，无需等待 ARM。
 
 以下命令用于初始化全新整套服务。已有部署应保留旧镜像和私有配置，核对本地 Compose 后，仅用 `docker compose pull wechat2tg` 和 `docker compose up -d --no-deps wechat2tg` 更新 bot。本示例的 `wx2tg-server` 镜像、命名空间和版本保持不变；本次 bot 命名修正不能替换或重启已有生产后端。
 
@@ -226,7 +226,7 @@ docker compose restart wechat2tg
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.40-dev.1
+    image: finalpi/wechat2tg:v6.0.40-dev.2
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"
