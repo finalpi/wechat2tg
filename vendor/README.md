@@ -2,17 +2,17 @@
 
 当前正式版使用：
 
-- 文件：`wx2tg-puppet-6.0.16.tgz`
+- 文件：`wx2tg-puppet-6.0.17.tgz`
 - 来源仓库：`https://github.com/finalpi/wx2tg-puppet`
 - 唯一维护分支：`v6`（dev 是 tag 后缀，不是分支）
-- 来源提交：`cffa0a269541d98be254c693df4fd55f9e9c89b7`
-- 对应发行标签：`v6.0.16`
-- 包版本：`6.0.16`
-- SHA-256：`34fd56d4c67c579e2d970082cadd45f0fb9ac1f30b9736aac5ef20121fa89387`
+- 来源提交：`f13313245ab791585fcdccfa16f3634c95e869c5`
+- 对应发行标签：`v6.0.17`
+- 包版本：`6.0.17`
+- SHA-256：`e9b38f8c2b6c9e39ffd6d3e740c03f290a08eb955d77e844c8560ab6769297d7`
 - npm SHA-512 integrity：由 `package-lock.json` 保存，`npm ci` 和 `test/release.test.cjs` 验证。
 
 由上述源码执行测试、构建和 `npm pack` 生成，不是修改 `node_modules` 得到的补丁，不包含配置凭据或真实消息。当前 lockfile 仅使用这一正式版制品；目录内旧 `6.0.12` 包保留为历史参考，不参与当前安装。
 
-保留制品是为了在 npm registry 尚未发布该版本时仍能重现构建。`package.json` 精确依赖 `6.0.16`，lockfile 将其解析到本目录；不要删除 lockfile 后改用不存在的 registry 地址，也不要手填 integrity。
+保留制品是为了在 npm registry 尚未发布该版本时仍能重现构建。`package.json` 精确依赖 `6.0.17`，lockfile 将其解析到本目录；不要删除 lockfile 后改用不存在的 registry 地址，也不要手填 integrity。
 
 这个来源记录不代表 npm registry 已发布。新的 Git tag 工作流还会执行 npm 发布并验证 registry；若认证失败，不能仅凭 artifact 判断已发布。完整规则见 [发行说明](../docs/releases.md)。

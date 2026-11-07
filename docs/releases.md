@@ -1,6 +1,14 @@
 # v6：单分支、双发行通道
 
-## 当前 Bot 正式版：v6.0.38
+## 当前 Bot 正式版：v6.0.39
+
+- 修复消息历史合并时 SSE 临时通知表主键冲突，导致群聊 / 公众号接口返回 500 / serverError。
+- 补齐安全异常日志与 Telegram 连接尝试提示，不把 Token、SQL 参数或消息正文写入日志。
+- SDK 升至 v6.0.17，联系人详情每页最多 4 个并发请求，逐项等待并隔离失败，避免初始化异常刷屏。server 保持 v6.0.16，不更新微信服务端。
+- Bot 472 项测试、SDK 183 项测试及三组浏览器回归通过；临时部署全部 15 个可见群聊及报告的公众号历史接口均返回 200，用户已确认验收。
+- 临时验证镜像的用户，正式更新时需移除测试用 Compose override，避免继续启动本地验证镜像。
+
+### v6.0.38：发送与撤回兼容性修复
 
 - 修复部分浏览器 / WebView 中发送消息直接报 `crypto.randomUUID is not a function` 的问题；撤回入口同步修复。
 - 缺少原生 randomUUID 时，使用 crypto.getRandomValues 生成安全 UUID；保留同一次操作重试时的请求编号，避免重复提交。
@@ -71,8 +79,8 @@
 
 | 仓库 | 分支 | 使用的 Git 标签 | 配套制品 |
 | --- | --- | --- | --- |
-| `wechat2tg` | `v6` | `v6.0.38`（本次发布） | 包版本 `6.0.38`；`finalpi/wechat2tg:v6.0.38` |
-| `wx2tg-puppet` | `v6` | `v6.0.16` | `wx2tg-puppet@6.0.16` 的 npm 格式打包文件 |
+| `wechat2tg` | `v6` | `v6.0.39`（本次发布） | 包版本 `6.0.39`；`finalpi/wechat2tg:v6.0.39` |
+| `wx2tg-puppet` | `v6` | `v6.0.17` | `wx2tg-puppet@6.0.17` 的 npm 格式打包文件 |
 | `fk-zhang` / wx2tg-server | `v6` | `v6.0.16` | `finalpi/wx2tg-server:v6.0.16`（amd64） |
 
 ## 版本编号与通道
@@ -97,18 +105,18 @@
 
 bot 工作流先验证版本并运行测试，再并行执行两个互不等待的原生构建：
 
-- `Build amd64`：`ubuntu-24.04`，发布 `v6.0.38-amd64`。
-- `Build arm64`：`ubuntu-24.04-arm`，发布 `v6.0.38-arm64`。
+- `Build amd64`：`ubuntu-24.04`，发布 `v6.0.39-amd64`。
+- `Build arm64`：`ubuntu-24.04-arm`，发布 `v6.0.39-arm64`。
 - 两种架构分别使用 GHA 构建缓存；`fail-fast=false`，ARM 失败不会取消已成功的 amd64。
-- 两边都成功后，才合并通用多架构标签 `v6.0.38` 和对应通道别名。
+- 两边都成功后，才合并通用多架构标签 `v6.0.39` 和对应通道别名。
 
-想尽早部署 amd64 时，使用 `finalpi/wechat2tg:v6.0.38-amd64`，或稳定滚动别名 `v6-amd64`。ARM 对应 `v6.0.38-arm64` / `v6-arm64`。正式 Git tag `v6.0.38` 发布 Docker `v6.0.38`、`v6.0.38-amd64` 和 `v6.0.38-arm64`，稳定别名为 `v6-amd64` / `v6-arm64`，合并后更新 `v6`。手动快照只发布 `v6-dev-<短 SHA>-amd64` / `v6-dev-<短 SHA>-arm64` 和合并的 `v6-dev-<短 SHA>`，不更新任何滚动别名。
+想尽早部署 amd64 时，使用 `finalpi/wechat2tg:v6.0.39-amd64`，或稳定滚动别名 `v6-amd64`。ARM 对应 `v6.0.39-arm64` / `v6-arm64`。正式 Git tag `v6.0.39` 发布 Docker `v6.0.39`、`v6.0.39-amd64` 和 `v6.0.39-arm64`，稳定别名为 `v6-amd64` / `v6-arm64`，合并后更新 `v6`。手动快照只发布 `v6-dev-<短 SHA>-amd64` / `v6-dev-<短 SHA>-arm64` 和合并的 `v6-dev-<短 SHA>`，不更新任何滚动别名。
 
 因此不必等整个工作流结束才能更新 amd64；部署端应核对目标提交和 **`Build amd64` 成功**。通用标签仍等待 ARM，保留正确的多架构内容，不会先用 amd64 覆盖掉 ARM。具体耗时受原生依赖编译、缓存和 runner 排队影响，不承诺固定 30 分钟。server 有原生库限制，仍只构建 amd64，不伪装支持 ARM。
 
 ## 固定 puppet 制品
 
-`vendor/wx2tg-puppet-6.0.16.tgz` 沿用此前验证的 puppet 制品，本次不重打包或修改。bot 的 `package.json` 精确声明 `6.0.16`，lockfile 将其解析到本地制品并保存 npm 计算的 SHA-512 integrity。
+`vendor/wx2tg-puppet-6.0.17.tgz` 从 SDK v6.0.17 的固定提交测试、构建并打包，包含联系人初始化修复；旧制品保持不变。Bot 的 `package.json` 精确声明 `6.0.17`，lockfile 将其解析到本地制品并保存 npm 计算的 SHA-512 integrity。
 
 这使 Docker / `npm ci` 不依赖尚未发布的 npm registry 版本。保留 lockfile 和 vendor 文件；不要手填不存在的 registry URL 或伪造 integrity。puppet 的 tag 工作流会上传 npm 格式 `.tgz`；独立 `publish.yml` 在验证、测试后执行 npm 发布并核验 registry，正式版用 `latest`、开发版用 `v6-dev`。发布需要有效的 NPM_TOKEN 和对应免交互权限。
 
@@ -122,8 +130,8 @@ npm test
 npm pack --pack-destination ../wechat2tg/vendor
 
 # wechat2tg
-npm install --package-lock-only --ignore-scripts ./vendor/wx2tg-puppet-6.0.16.tgz
-npm pkg set dependencies.wx2tg-puppet=6.0.16
+npm install --package-lock-only --ignore-scripts ./vendor/wx2tg-puppet-6.0.17.tgz
+npm pkg set dependencies.wx2tg-puppet=6.0.17
 npm install --package-lock-only --ignore-scripts --offline
 npm ci
 npm run check:version
@@ -138,7 +146,7 @@ npm test
 2. bot / puppet 运行 `npm run check:version`、`npm test`；server 运行 `bash scripts/check-release-version.sh`、`go test ./buildinfo`。
 3. 同时验证稳定 / dev 版本格式、错 tag 拒绝、开发构建不能覆盖稳定通道。
 4. 完成 merge、检查 diff，提交本次文件；不要把 server 工作区原有测试修改、样本消息或私有配置带进提交。
-5. 明确授权后仅推送本次需要发布的仓库的 `v6` 分支和指定完整 tag。Bot/server 各自的 tag 会触发自己的镜像构建；只有 server tag 才创建其 Release，只有 puppet tag 才上传 SDK artifact 并发布 npm。本次仅推送 Bot `v6.0.38`。
+5. 明确授权后仅推送本次需要发布的仓库的 `v6` 分支和指定完整 tag。Bot/server 各自的 tag 会触发自己的镜像构建；只有 server tag 才创建其 Release，只有 puppet tag 才上传 SDK artifact 并发布 npm。本次推送 Bot `v6.0.39` 与 SDK `v6.0.17`，server 不打新标签。
 6. 部署前备份 SQLite、会话和 Compose，保留旧镜像；不覆盖用户现有 `.env`、`home_202.env` 等私有配置，不把示例文件覆盖到部署目录。已有微信服务的部署与新 bot 更新分开处理：此次命名修正不更改 `wx2tg-server` 镜像/命名空间/版本，也不更新或重启用户现有生产后端。
 7. 先验证 amd64 制品、服务健康、旧绑定和配置校验值，再做真实双向消息验收。离线测试不等于真实微信 / Telegram 全链路已验收。
 
