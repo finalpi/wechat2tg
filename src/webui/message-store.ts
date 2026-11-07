@@ -87,13 +87,15 @@ export class WebMessageStore {
         // journal rolls back with a failed statement. Compare actual values:
         // importHistory/reconcile/read-time enrichment often issue no-op UPDATEs.
         const columns = ['id','wxId','requestId','remoteId','senderId','senderName','body','direction','type','status','timestamp','attachmentId','telegramStatus','source','details','telegramTracked','bodyFormat','hidden','revokeStatus','revokeRequestId','revokedAt','revokeTelegramStatus']
-        const record = (ref:string)=>`INSERT OR IGNORE INTO message_changes(wxId,id) SELECT ${ref}.wxId,${ref}.id WHERE ${ref}.hidden=0 AND (SELECT COUNT(*) FROM message_changes)<257;`
+        // UPSERT's DO UPDATE uses ABORT even inside triggers, overriding INSERT OR
+        // IGNORE. Filter existing keys before insertion so OLD/NEW cannot conflict.
+        const record = (ref:string)=>`INSERT INTO message_changes(wxId,id) SELECT ${ref}.wxId,${ref}.id WHERE ${ref}.hidden=0 AND NOT EXISTS(SELECT 1 FROM message_changes WHERE wxId=${ref}.wxId AND id=${ref}.id) AND (SELECT COUNT(*) FROM message_changes)<257;`
         const recall = (ref:string)=>{
             // Keys may include a Telegram topic prefix. Match an exact suffix,
             // never parse/publish the key (which contains Telegram identifiers).
             const match = `i.hidden=0 AND i.remoteId IS NOT NULL AND substr(${ref}.key,-length(':'||i.wxId||':'||i.remoteId))=':'||i.wxId||':'||i.remoteId`
-            return `INSERT OR IGNORE INTO message_changes(wxId,id) SELECT i.wxId,i.id FROM inbox i WHERE ${match} LIMIT MAX(0,257-(SELECT COUNT(*) FROM message_changes));
-                INSERT OR IGNORE INTO message_changes(wxId,id) SELECT '',0 WHERE NOT EXISTS(SELECT 1 FROM inbox i WHERE ${match}) AND (SELECT COUNT(*) FROM message_changes)<257;`
+            return `INSERT INTO message_changes(wxId,id) SELECT i.wxId,i.id FROM inbox i WHERE ${match} AND NOT EXISTS(SELECT 1 FROM message_changes WHERE wxId=i.wxId AND id=i.id) LIMIT MAX(0,257-(SELECT COUNT(*) FROM message_changes));
+                INSERT INTO message_changes(wxId,id) SELECT '',0 WHERE NOT EXISTS(SELECT 1 FROM inbox i WHERE ${match}) AND NOT EXISTS(SELECT 1 FROM message_changes WHERE wxId='' AND id=0) AND (SELECT COUNT(*) FROM message_changes)<257;`
         }
         await new Promise<void>((resolve,reject)=>this.db.exec(`
             PRAGMA recursive_triggers=ON;

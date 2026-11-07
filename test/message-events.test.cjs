@@ -177,6 +177,33 @@ test('history import and ownership/enrichment repair no-ops do not notify endles
   assert.deepEqual(events, [])
 })
 
+test('history UPSERT can change an existing row without duplicate change-journal keys', async t => {
+  const {store, events} = await fixture(t)
+  const row = await store.insert(message('1', {bodyFormat: 'plain', telegramStatus: 'pending'}))
+  clear(events)
+  const imported = message('1', {bodyFormat: 'telegram_html', telegramStatus: 'synced', source: 'private receipt'})
+  await store.importHistory([imported, imported])
+  assert.equal((await store.byId(row.id)).bodyFormat, 'telegram_html')
+  assert.equal((await store.byId(row.id)).telegramStatus, 'synced')
+  assert.deepEqual(events, [changed(row.id)], 'OLD and NEW refer to the same journal key')
+  clear(events)
+  await store.importHistory([imported])
+  assert.deepEqual(events, [])
+  await store.run('UPDATE OR ABORT inbox SET status=? WHERE id=?', ['submitted', row.id])
+  assert.deepEqual(events, [changed(row.id)])
+})
+
+test('recall UPSERT notifications work for matched and unmatched keys under ABORT semantics', async t => {
+  const {store, events} = await fixture(t)
+  const row = await store.insert(message('100'))
+  for (const key of ['topic:peer:100', 'unmatched']) {
+    await store.run('INSERT INTO telegram_recalls(key,status) VALUES(?,?)', [key, 'sending'])
+    clear(events)
+    await store.run('INSERT INTO telegram_recalls(key,status) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET status=excluded.status', [key, 'synced'])
+    assert.deepEqual(events, key === 'unmatched' ? [{type: 'messages'}] : [changed(row.id)])
+  }
+})
+
 test('managed send replacement also reports the removed native echo', async t => {
   const {store, events} = await fixture(t)
   const managed = await store.insert(message(null, {requestId: 'managed-send', direction: 'outgoing', status: 'sending'}))

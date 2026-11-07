@@ -11,6 +11,7 @@ import {McpSettings} from '../mcp/settings'
 import {MESSAGE_TEMPLATE_DEFAULTS, resolveMessageTemplates} from '../util/MessageTemplates'
 import {createMiniAppAuth, normalizeMiniAppUrl} from './mini-app-auth'
 import {createMessageStreamHandler} from './message-stream'
+import {safeErrorDetails} from '../util/SafeError'
 
 export interface RuntimeAdapter {
     read(): Promise<Record<string, unknown>>
@@ -338,7 +339,8 @@ export function createWebUIServer(options: Options) {
             await operation
         } catch (error) {
             if (error?.status && typeof error?.code === 'string') return respond(res, error.status, {error: error.code})
-            // Never reflect exceptions which may contain credentials or request bodies.
+            // Log source locations and error categories, never credentials, SQL or request bodies.
+            console.error('[WebUI] %s %s failed', req.method, route, safeErrorDetails(error))
             if (!res.headersSent) respond(res, 500, {error: 'serverError'})
         }
     })

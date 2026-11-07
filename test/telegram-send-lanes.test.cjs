@@ -68,6 +68,22 @@ function queueFixture(Client) {
   return {client, started, finished, release: gate.resolve, item}
 }
 
+test('Telegram startup announces connection attempts before waiting for getMe', async () => {
+  const stop = new Error('stop the synthetic retry loop')
+  const Client = loadClient({clock: {Date, setTimeout: () => {throw stop}}})
+  const client = Object.create(Client.prototype), entries = []
+  Object.assign(client, {RECONNECT_BASE_DELAY: 1, logger: {
+    info: message => entries.push(message), error: noop, warn: noop,
+  }})
+  const bot = {launch: async () => {
+    assert.match(entries[0], /正在连接 Telegram Bot API/)
+    throw new Error('synthetic connection failure')
+  }}
+  await assert.rejects(client.botLaunch(bot), error => error === stop)
+  assert.equal(client.hasLogin, false)
+  assert(entries.some(message => message.includes('不会放弃重试')))
+})
+
 test('a slow message in one chat never blocks another chat', async () => {
   const Client = loadClient()
   const q = queueFixture(Client)

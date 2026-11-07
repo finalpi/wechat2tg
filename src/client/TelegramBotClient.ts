@@ -2480,6 +2480,7 @@ ${this.i18n.t('help.instructions')}`))
         // eslint-disable-next-line no-constant-condition
         while (true) {
             try {
+                this.logger.info(`正在连接 Telegram Bot API（第 ${retryCount + 1} 次）；WebUI 已启动不代表 Bot 已上线`)
                 await bot.launch(() => {
                     this.isConnected = true
                     retryCount = 0
