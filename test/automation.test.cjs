@@ -154,6 +154,51 @@ test('automation HTTP endpoints use existing auth/origin gates; tests never exec
  assert.equal(response.status,200);assert.equal(f.calls.length,0)
  assert.equal((await fetch(url + '/api/automation/execute',{method:'POST',headers,body:'{}'})).status,404)
 })
+test('authenticated rule validation reports required selections without weakening safety',async t=>{
+ const f = await fixture(t)
+ const server = createWebUIServer({environment:{},token:'test-token',file:path.join(f.dir,'settings.json'),automation:f.engine})
+ server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)))
+ const url = 'http://127.0.0.1:' + server.address().port + '/api/automation'
+ const headers = {Authorization:'Bearer test-token','Content-Type':'application/json'}
+ const post = (body,suffix = '')=>fetch(url + suffix,{method:'POST',headers,body:JSON.stringify(body)})
+ const initial = await (await fetch(url,{headers})).json()
+ assert.equal(initial.scripts[0].versions.length,1)
+ const rule = {name:'新应用规则',scriptId:initial.scripts[0].id,enabled:false,mode:'preview',scopes:[],targets:[],permissions:[],trigger:'all',keyword:'',senders:[],params:{keyword:'午餐',entry:'我的报名内容'},cooldownSeconds:10,maxActionsPerDay:20}
+ const save = candidate=>post({operation:'saveRule',revision:initial.revision,rule:candidate,confirmLive:true})
+ const expectError = async(response,error,status = 400)=>{
+  assert.equal(response.status,status);assert.deepEqual(await response.json(),{error})
+ }
+ // The original disabled/preview payload must identify the missing scope, not automationValidation.
+ await expectError(await post({operation:'saveRule',rule,confirmLive:false,revision:initial.revision}),'scopeRequired')
+ const before = fs.readFileSync(f.file,'utf8')
+ for(const enabled of [false,true])for(const mode of ['preview','live'])for(const scopes of [[],undefined]){
+  const candidate = {...rule,enabled,mode,scopes}
+  await expectError(await save(candidate),'scopeRequired')
+  await expectError(await post({rule:candidate,event:event(),source:TEMPLATE},'/test'),'scopeRequired')
+ }
+ for(const scriptId of ['', '   ',undefined]){
+  const candidate = {...rule,scopes:[scope],scriptId}
+  await expectError(await save(candidate),'scriptRequired')
+  await expectError(await post({rule:candidate,event:event(),source:TEMPLATE},'/test'),'scriptRequired')
+ }
+ // Wrong types, malformed nested scopes, unknown fields and bounds still use strict Zod validation.
+ for(const patch of [{scopes:null},{scopes:{}},{scopes:[{}]},{scriptId:123},{scriptId:'x'.repeat(201)},{extra:true},{cooldownSeconds:-1}]){
+  const candidate = {...rule,scopes:[scope],...patch}
+  await expectError(await save(candidate),'automationValidation')
+  await expectError(await post({rule:candidate,event:event(),source:TEMPLATE},'/test'),'automationValidation')
+ }
+ await expectError(await post({operation:'saveRule',revision:'stale',rule}),'conflict',409)
+ assert.equal(fs.readFileSync(f.file,'utf8'),before)
+ const response = await save({...rule,scopes:[scope]})
+ assert.equal(response.status,200)
+ const saved = await response.json()
+ assert.equal(saved.rules.length,1);assert.equal(saved.rules[0].enabled,false);assert.equal(saved.rules[0].mode,'preview')
+ assert.deepEqual(saved.rules[0].scopes,[scope]);assert.deepEqual(saved.rules[0].permissions,[])
+ assert.deepEqual(saved.rules[0].params,rule.params);assert.equal(saved.rules[0].version,1)
+ assert.notEqual(saved.revision,initial.revision)
+ await expectError(await save({...rule,scopes:[scope]}),'conflict',409)
+ assert.equal(f.calls.length,0);assert.deepEqual(saved.runs,[])
+})
 test('AI generation sends only capability prompt and requirements, never executes output',async()=>{
  let request
  const ai = createAIConnector(()=>({url:'https://ai.example/v1',key:'private-key',model:'example'}),{post:async(...args)=>{request = args;return {data:{choices:[{message:{content:'export default function(){}'}}]}}}})

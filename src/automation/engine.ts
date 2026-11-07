@@ -8,6 +8,18 @@ import {sandbox} from './sandbox'
 const clone = <T>(value:T):T => {
     try {return JSON.parse(JSON.stringify(value))} catch {throw new AutomationError('invalidJsonValue')}
 }
+const validateRule = (input:unknown) => {
+    try {return ruleInputSchema.parse(input)} catch (error) {
+        if (error instanceof z.ZodError) {
+            for (const field of ['scopes','scriptId']) {
+                const required = error.issues.some(issue => issue.path.length === 1 && issue.path[0] === field
+                    && (issue.code === 'too_small' || (issue.code === 'invalid_type' && issue.received === 'undefined')))
+                if (required) throw new AutomationError(field === 'scopes' ? 'scopeRequired' : 'scriptRequired')
+            }
+        }
+        throw error
+    }
+}
 const redact = (value:string) => value.replace(/(?:bot)?\d{6,}:[A-Za-z0-9_-]{20,}/g,'[TOKEN REDACTED]').slice(0,500)
 const text = z.string().trim().min(1).max(4000)
 const actionSchema = z.discriminatedUnion('kind',[
@@ -95,7 +107,7 @@ export class AutomationEngine {
                     if (this.data.rules.some(r=>r.scriptId === body.id)) throw new AutomationError('scriptInUse',409)
                     this.data.scripts = this.data.scripts.filter(s=>s.id !== body.id)
                 } else if (body.operation === 'saveRule') {
-                    const input = ruleInputSchema.parse(body.rule)
+                    const input = validateRule(body.rule)
                     if (Buffer.byteLength(JSON.stringify(input.params)) > 8000) throw new AutomationError('paramsTooLarge')
                     const script = this.script(input.scriptId),version = script.versions[script.versions.length - 1]?.version
                     if (!version) throw new AutomationError('scriptNotPublished')
@@ -156,7 +168,7 @@ export class AutomationEngine {
     async test(body:any) {
         return this.serial(async()=>{
             const event = eventSchema.parse(body.event)
-            const rule = ruleInputSchema.parse(body.rule)
+            const rule = validateRule(body.rule)
             const mock = {...rule,id:body.id || 'simulation',version:0,failures:0} as AutomationRule
             const source = z.string().min(1).max(20000).parse(body.source)
             if (!this.matches(mock,event)) return {matched:false,actions:[],logs:['事件未匹配绑定范围、关键词或发送者；没有执行脚本。']}
