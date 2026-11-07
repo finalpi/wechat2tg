@@ -5,6 +5,7 @@ import {createHash, timingSafeEqual} from 'node:crypto'
 import {fields, groups, validatePatch} from './schema'
 import {getAccessToken, readOverrides, settingsPath, writeOverrides} from './store'
 import type {MessageCenterAdapter} from './messages'
+import {CONTACT_KINDS} from './contact-directory'
 import {createAIConnector} from './ai-connector'
 import {createMcpHandler} from '../mcp/http'
 import {McpSettings} from '../mcp/settings'
@@ -284,6 +285,14 @@ export function createWebUIServer(options: Options) {
                 if(!wxId || wxId.length > 256 || (!id && !remoteId) || (id !== null && (!/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id)))) || (remoteId !== null && (!/^[1-9]\d{0,19}$/.test(remoteId) || BigInt(remoteId) > 18446744073709551615n)))return respond(res,400,{error:'invalidRequest'})
                 return respond(res,200,await options.messages.locate(wxId,id === null ? undefined : Number(id),remoteId === null ? undefined : remoteId))
             }
+            if (route === '/api/contacts/menu') {
+                if (req.method !== 'GET') return respond(res, 405, {error: 'invalidRequest'})
+                const params = new URL(req.url, 'http://localhost').searchParams
+                const wxId = params.get('wxId') || ''
+                if (params.getAll('wxId').length !== 1 || !wxId.trim() || wxId.length > 256) return respond(res, 400, {error: 'invalidRequest'})
+                if (!options.messages?.officialMenu) return respond(res, 503, {error: 'messagesUnavailable'})
+                return respond(res, 200, await options.messages.officialMenu(wxId))
+            }
             if (route === '/api/contacts' || route === '/api/messages') {
                 if (!options.messages) return respond(res, 503, {error: 'messagesUnavailable'})
                 const url = new URL(req.url, 'http://localhost')
@@ -299,8 +308,9 @@ export function createWebUIServer(options: Options) {
                 if (req.method === 'GET') {
                     if (route === '/api/contacts') {
                         const kind = url.searchParams.get('kind') || 'all'
-                        if (!['all', 'contact', 'group'].includes(kind)) return respond(res, 400, {error: 'invalidRequest'})
-                        return respond(res, 200, await options.messages.contacts(query, kind, number('offset')))
+                        const order = url.searchParams.get('order')
+                        if (!CONTACT_KINDS.some(value => value === kind) || (order !== null && order !== 'letter')) return respond(res, 400, {error: 'invalidRequest'})
+                        return respond(res, 200, await options.messages.contacts(query, kind, number('offset'), order === 'letter' ? 'letter' : undefined))
                     }
                     if (!wxId) return respond(res, 400, {error: 'invalidRequest'})
                     return respond(res, 200, await options.messages.history(wxId, number('before'), query))

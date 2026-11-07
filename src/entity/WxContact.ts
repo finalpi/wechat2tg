@@ -21,6 +21,12 @@ export class WxContact {
     @Column('integer', {nullable: true})
     verifyFlag: number | null
 
+    @Column('integer', {nullable: true})
+    serviceType: number | null
+
+    @Column('text', {nullable: true})
+    officialMenu: string | null
+
     @Column('text', {nullable: true})
     remark: string
 

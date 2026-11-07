@@ -1,6 +1,12 @@
 # Official/service-account bottom-menu capability: local server source audit
 
-## Answer first
+## dev.4 follow-up: authorized read-only evidence
+
+The source audit below is a historical pre-probe assessment. Subsequent user-authorized contact-detail reads confirmed `ExternalInfo.MMBizMenu` and explicit top-level `ServiceType` in selected real accounts. SDK `6.0.18-dev.1` now normalizes and stores safe menus; Bot dev.4 exposes a cached, authenticated GET and renders menus with ordinary HTTP(S) navigation. Repeated placeholder button IDs occur in real data and are not treated as unique identities. See the [sanitized sample table and implementation boundaries](wechat-contact-classification.md).
+
+This supersedes the earlier uncertainty about **retrieval through contact metadata**, not the absence of native click execution. No event clicks, subscriptions, authorizations or deployments were performed. Missing menu/type data remains unknown, not an empty menu or subscription-account claim. The dedicated BizProfileV2 and ClickCommand routes remain unimplemented; adjacent authorization helpers are not used as substitutes.
+
+## Original source-only answer (before the authorized probes)
 
 **Do not currently promise WeChat-like bottom-menu retrieval and activation through this server.** In both examined revisions:
 

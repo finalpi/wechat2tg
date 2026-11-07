@@ -15,7 +15,8 @@ The default `/` and `/chat` routes open the chat-only workspace; use `/manage` o
 
 ## Message page
 
-- Conversation search and recent/contact/group filters, with paged contact lists.
+- Chat / directory views, expandable cached categories, stable alphabet sections, avatars, search and pagination. Category counts cover deduplicated cached search matches before category filtering/paging, not live WeChat totals.
+- Official/service menu display reads normalized cached metadata only. Ordinary HTTP(S) links require user navigation; native events, mini-programs and authorization are disabled. Menu refresh shares SSE notifications and does not add another stream or polling.
 - Saved history, message search, older pages, quote replies and original-message lookup.
 - Separate send/Telegram-sync/recall statuses. Pending sync counts are not unread counts.
 - Text, files, voice preference, pasted attachments, group-member and everyone mentions.
@@ -24,6 +25,8 @@ The default `/` and `/chat` routes open the chat-only workspace; use `/manage` o
 - Drafts survive conversation switches while the message page remains open. Drafts are memory-only, not persisted across page reloads/logout. An in-flight send continues even if another conversation is selected.
 - One authenticated SSE connection, event-driven refreshes, preserved older history, and no jump to latest while viewing located quote context. No periodic message/contact/status HTTP polling.
 - Theme-aware bubbles and a single-column conversation view on small screens.
+
+These are partial implementation paths, not complete WeChat message-type support. Complex cards/media may only have summaries or fail to render; see the limitations in both READMEs.
 
 HTML is rendered through a small React allowlist, not `dangerouslySetInnerHTML`. Only HTTP(S) links and local, allowlisted custom-emoji image paths are rendered. Tokens are never placed in media URLs.
 
@@ -58,5 +61,7 @@ npm run test:webui:browser     # Chromium integration checks against local fixtu
 Browser tests use `playwright-core` with an installed Chrome/Chromium. Set `BROWSER_EXECUTABLE_PATH` if it is not installed at a common system path. They start a temporary local WebUI server and fake message adapter; they do not send to WeChat/Telegram or use account credentials.
 
 The Mini App suite mocks only Telegram launch/SDK behavior while exercising the real local HTTP auth and SSE endpoints. It checks owner enforcement, theme/viewport/back button, session revocation and saved-token bypass protection. The message suite asserts zero recurring requests during an idle interval, long-connection reconnect, backdated updates and older-message status changes.
+
+`test-contact-directory-browser.cjs` additionally checks real HTTP category counts beyond 60 rows, alphabetical sections/search/paging, SSE-driven category removal and menu availability, safe links/disabled native actions, draft retention and 320–430px layouts. It performs no sends or external navigation.
 
 The browser suite exercises login, layout, history/search, original-message lookup, confirmed sync/recall, media preview, drafts, member selection, text/file splitting, lost-response retries, theme/proxy controls, mobile layout and unavailable/offline states. Live account receipt handling still requires real integration testing.

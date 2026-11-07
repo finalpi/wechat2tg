@@ -2,7 +2,7 @@ import {useCallback, useEffect, useRef, useState, type ReactNode, type CSSProper
 import {createRequestId} from '@/lib/request-id'
 import {ArrowLeft, RefreshCw, Search, MessageSquare, Reply, Undo2, Wifi, WifiOff, PanelLeftClose, PanelLeftOpen} from 'lucide-react'
 import {ApiError} from '@/lib/api'
-import {messagesApi, mergeMessages, messageError, type Contact, type ChatMessage, type MessageStatus, type MessageUpdates} from '@/lib/messages-api'
+import {messagesApi, mergeMessages, messageError, type Contact, type ChatMessage, type MessageStatus, type MessageUpdates, type ContactCategory, type ContactCounts} from '@/lib/messages-api'
 import {cn} from '@/lib/utils'
 import {fillMessageGap} from '@/lib/message-history'
 import {createMessageEventHub, createRefreshQueue, startMessageEvents, type MessageEventHub, type MessageConnectionState} from '@/lib/message-events'
@@ -20,6 +20,8 @@ import {Marker, MarkerContent} from '@/components/ui/marker'
 import {MessageScrollerProvider, MessageScroller, MessageScrollerViewport, MessageScrollerContent, MessageScrollerItem, MessageScrollerButton, useMessageScroller} from '@/components/ui/message-scroller'
 import {ContactAvatar, MessageBody} from './message-content'
 import {MessageComposer, type ComposerDraft} from './message-composer'
+import {ContactDirectory,LetterContacts} from './contact-directory'
+import {OfficialAccountMenu} from './official-account-menu'
 
 const sendLabels: Record<string, string> = {received: '已接收', sending: '发送中', submitted: '已提交微信', unknown: '结果未知', failed: '发送失败'}
 const syncLabels: Record<string, string> = {pending: '待同步', syncing: '同步中', synced: '已同步', failed: '同步失败', unknown: '同步未知', unverified: '待核实', excluded: '不参与同步'}
@@ -297,6 +299,7 @@ function Conversation({token, contact, online, draft, events, connection, onBack
         </MessageScroller>
       </MessageScrollerProvider>
     )}
+    <OfficialAccountMenu token={token} contact={contact} events={events} onAuthError={onAuthError} />
     <MessageComposer token={token} contact={contact} online={online && networkOnline} offlineReason={networkOnline?undefined:'网络已断开，草稿已保留；恢复后请手动发送。'} draft={draft} quote={quote} onClearQuote={clearQuote} onSent={sent} onAuthError={onAuthError} />
   </section>
 }
@@ -338,7 +341,11 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
   const toggleFocus=()=>setFocused(current=>{localStorage.setItem('webui-chat-focus',String(!current));return !current})
   const resizeList=(width:number)=>{const bounded=Math.min(440,Math.max(260,width));setListWidth(bounded);localStorage.setItem('webui-chat-list-width',String(bounded))}
   const [query, setQuery] = useState('')
-  const [kind, setKind] = useState('all')
+  const [view,setView] = useState<'chats'|'directory'>('chats')
+  const [category,setCategory] = useState<ContactCategory|null>(null)
+  const [counts,setCounts] = useState<ContactCounts>()
+  const kind = view==='chats'?'all':category || 'all'
+  const order = view==='directory'?'letter':undefined
   const [loading, setLoading] = useState(false)
   const [moreBusy, setMoreBusy] = useState(false)
   const [offset, setOffset] = useState(0)
@@ -395,12 +402,13 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
     const controller = new AbortController()
     contactRequests.current = controller
     const generation = ++contactGeneration.current
-    setLoading(true); setContacts([]); setError(''); setHasMore(false); setMoreBusy(false)
+    setLoading(true); setContacts([]); setCounts(undefined); setError(''); setHasMore(false); setMoreBusy(false)
     contactOffset.current = 0
     let initial = true
     const queue = createRefreshQueue(async () => {
-      const first = await messagesApi.contacts(token, query, kind, 0, controller.signal)
+      const first = await messagesApi.contacts(token, query, kind, 0, controller.signal, order)
       if (controller.signal.aborted || generation !== contactGeneration.current) return
+      setCounts(first.countsScope==='cached'?first.counts:undefined)
       if (initial) {
         initial = false
         setContacts(first.contacts); setOffset(first.offset); contactOffset.current = first.offset
@@ -410,18 +418,16 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
         let page = first
         // Refresh summaries on loaded directory pages too, without dropping their pagination state.
         while (page.hasMore && page.offset > 0 && page.offset < contactOffset.current) {
-          const next = await messagesApi.contacts(token, query, kind, page.offset, controller.signal)
+          const next = await messagesApi.contacts(token, query, kind, page.offset, controller.signal, order)
           if (controller.signal.aborted || generation !== contactGeneration.current) return
           refreshed.push(...next.contacts)
           if (next.offset <= page.offset) break
           page = next
         }
-        setContacts(current => {
-          const merged = new Map(current.map(contact => [contact.wxId, contact]))
-          refreshed.forEach(contact => merged.set(contact.wxId, contact))
-          return [...merged.values()].sort((a, b) => kind === 'all' ? b.lastActivity - a.lastActivity || b.lastSequence - a.lastSequence || a.name.localeCompare(b.name) : a.name.localeCompare(b.name))
-        })
-        if (!contactOffset.current) {setOffset(first.offset); contactOffset.current = first.offset; setHasMore(first.hasMore)}
+        // Replace the loaded window: a contact moved to another category (or
+        // removed from this search) must not linger after an SSE invalidation.
+        setContacts([...new Map(refreshed.map(contact=>[contact.wxId,contact])).values()])
+        setOffset(page.offset);contactOffset.current=page.offset;setHasMore(page.hasMore)
       }
       setError('')
     }, e => {if (!controller.signal.aborted) {setError(messageError(e)); setLoading(false); onAuthError(e)}})
@@ -430,7 +436,7 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
     })
     const timer = window.setTimeout(queue.flush, query ? 250 : 0)
     return () => {controller.abort(); queue.dispose(); unsubscribe(); window.clearTimeout(timer); contactGeneration.current++}
-  }, [token, query, kind, reload, status?.available, onAuthError, events])
+  }, [token, query, kind, order, reload, status?.available, onAuthError, events])
 
   const more = async () => {
     if (moreBusy) return
@@ -438,13 +444,23 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
     const signal = contactRequests.current?.signal
     setMoreBusy(true)
     try {
-      const page = await messagesApi.contacts(token, query, kind, offset, signal)
+      const page = await messagesApi.contacts(token, query, kind, offset, signal, order)
       if (signal?.aborted || generation !== contactGeneration.current) return
       setContacts(current => [...new Map([...current, ...page.contacts].map(contact => [contact.wxId, contact])).values()]); setOffset(page.offset); contactOffset.current = page.offset; setHasMore(page.hasMore)
+      setCounts(page.countsScope==='cached'?page.counts:undefined)
     } catch (e) {if (!signal?.aborted && generation === contactGeneration.current) {setError(messageError(e)); onAuthError(e)}}
     finally {if (generation === contactGeneration.current) setMoreBusy(false)}
   }
 
+  const renderContact = (contact:Contact)=><Button key={contact.wxId} variant={active?.wxId===contact.wxId?'secondary':'ghost'} aria-pressed={active?.wxId===contact.wxId} aria-label={view==='directory'?contact.name || contact.wxId:undefined} className="h-auto w-full justify-start gap-3 whitespace-normal px-3 py-2 text-left md:py-3" onClick={()=>selectContact(contact)}>
+    <ContactAvatar token={token} wxId={contact.wxId} name={contact.name} available={contact.hasAvatar} group={contact.kind==='group'} />
+    <span className="flex min-w-0 flex-1 flex-col gap-1"><span className="flex items-center justify-between gap-2"><span className="truncate">{contact.name || contact.wxId}</span>{view==='chats' && contact.lastActivity>0 && <span className="shrink-0 text-xs text-muted-foreground">{time(contact.lastActivity)}</span>}</span>
+      {view==='chats' && <><span className="truncate text-xs text-muted-foreground">{contact.lastBody || contact.nickname || contact.wxId}</span>{contact.unsyncedCount>0 && <span className="text-xs text-muted-foreground">{contact.unsyncedCount} 条待同步</span>}</>}
+    </span>
+  </Button>
+  const contactRows = <>{loading?<div className="flex justify-center p-6"><Spinner /></div>:!contacts.length?<Placeholder title={view==='directory'?'暂无匹配的缓存记录':'未找到会话'} detail={status?.directoryAvailable?undefined:'联系人目录尚未加载。'} />:view==='directory'?<LetterContacts contacts={contacts} renderContact={renderContact} />:contacts.map(renderContact)}
+    {hasMore && <Button variant="ghost" size="sm" disabled={moreBusy || loading} onClick={more}>{moreBusy && <Spinner />} 更多会话</Button>}
+  </>
   const liveBadge = <ConnectionBadge state={connection} />
   if (!status?.available) return <div className="flex h-full flex-col gap-4 p-4"><div className="flex items-center gap-2">{controls}{liveBadge}</div>{error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}{!status && !error?<div className="flex flex-1 items-center justify-center"><Spinner /></div>:<Placeholder title="消息服务未连接" detail="机器人启动后可查看和发送消息。" />}<Button variant="outline" onClick={() => setReload(value => value + 1)}><RefreshCw /> 刷新</Button></div>
 
@@ -454,21 +470,17 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
         <h1 className="sr-only">消息</h1>
         <div className="flex items-center gap-2">
           {controls}
-          <Input aria-label="搜索会话" placeholder="搜索联系人、群聊" maxLength={100} value={query} onChange={e => setQuery(e.target.value)} />
+          <Input aria-label={view==='chats'?'搜索会话':'搜索通讯录'} placeholder="搜索联系人、群聊" maxLength={100} value={query} onChange={e => setQuery(e.target.value)} />
           <Button variant="ghost" size="icon" className="shrink-0" aria-label="刷新会话" onClick={() => setReload(value => value + 1)}><RefreshCw /></Button>
         </div>
         <div className="flex items-center gap-1">
-          <Tabs value={kind} onValueChange={setKind} className="min-w-0 flex-1"><TabsList className="w-full"><TabsTrigger value="all" className="flex-1">最近</TabsTrigger><TabsTrigger value="contact" className="flex-1">联系人</TabsTrigger><TabsTrigger value="group" className="flex-1">群聊</TabsTrigger></TabsList></Tabs>
+          <Tabs value={view} onValueChange={value=>{if(value==='chats' || value==='directory')setView(value)}} className="min-w-0 flex-1"><TabsList className="w-full" aria-label="聊天与通讯录"><TabsTrigger value="chats" className="flex-1">聊天</TabsTrigger><TabsTrigger value="directory" className="flex-1">通讯录</TabsTrigger></TabsList></Tabs>
           <ConnectionDetails state={connection} status={status} />
         </div>
       </div>
       {error && <Alert variant="destructive" className="rounded-none border-x-0"><AlertDescription>{error}</AlertDescription></Alert>}
       <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2" aria-label="会话列表">
-        {loading ? <div className="flex justify-center p-6"><Spinner /></div> : !contacts.length ? <Placeholder title="未找到会话" detail={status.directoryAvailable ? undefined : '联系人目录尚未加载。'} /> : contacts.map(contact => <Button key={contact.wxId} variant={active?.wxId === contact.wxId ? 'secondary' : 'ghost'} aria-pressed={active?.wxId === contact.wxId} className="h-auto w-full justify-start gap-3 whitespace-normal px-3 py-2 text-left md:py-3" onClick={() => selectContact(contact)}>
-          <ContactAvatar token={token} wxId={contact.wxId} name={contact.name} available={contact.hasAvatar} group={contact.kind === 'group'} />
-          <span className="flex min-w-0 flex-1 flex-col gap-1"><span className="flex items-center justify-between gap-2"><span className="truncate">{contact.name || contact.wxId}</span>{contact.lastActivity > 0 && <span className="shrink-0 text-xs text-muted-foreground">{time(contact.lastActivity)}</span>}</span><span className="truncate text-xs text-muted-foreground">{contact.lastBody || contact.nickname || contact.wxId}</span>{contact.unsyncedCount > 0 && <span className="text-xs text-muted-foreground">{contact.unsyncedCount} 条待同步</span>}</span>
-        </Button>)}
-        {hasMore && <Button variant="ghost" size="sm" disabled={moreBusy || loading} onClick={more}>{moreBusy && <Spinner />} 更多会话</Button>}
+        {view==='directory'?<ContactDirectory category={category} onCategory={setCategory} counts={counts} searching={Boolean(query)}>{contactRows}</ContactDirectory>:contactRows}
       </div>
     </aside>
     {!(active && focused) && <div role="separator" aria-label="调整侧栏宽度" aria-orientation="vertical" aria-valuemin={260} aria-valuemax={440} aria-valuenow={listWidth} tabIndex={0} className="hidden w-1 shrink-0 cursor-col-resize touch-none bg-border/40 focus-visible:bg-primary md:block" onPointerDown={e=>e.currentTarget.setPointerCapture(e.pointerId)} onPointerMove={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))resizeList(e.clientX-(root.current?.getBoundingClientRect().left || 0))}} onPointerUp={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId)}} onKeyDown={e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();resizeList(e.key==='Home'?260:e.key==='End'?440:listWidth+(e.key==='ArrowLeft'?-16:16))}}} />}

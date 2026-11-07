@@ -1,6 +1,6 @@
 # wechat2tg (v6)
 
-> **Development preview: v6.0.40-dev.3.** Adds a chat-first workspace, desktop focus mode, mobile layout and installable PWA with public-only caching and draft-safe updates. Includes the simplified group automation from dev.2. Stable `v6` is unchanged. See [PWA/chat setup and limits](docs/pwa-chat.md) and [automation safety](docs/automation.md). Do not run stable and dev instances against the same writable storage or account sessions.
+> **Development preview: v6.0.40-dev.4.** Adds WeChat-style contact categories and alphabetical sections, safe read-only official-account menus with ordinary web links, and SDK `6.0.18-dev.1` so login no longer waits for full contact sync. **WebUI chat remains a limited, basic message viewer, not a complete WeChat client; see the limitations below.** Stable `v6` is unchanged. Do not run stable and dev instances against the same writable storage or account sessions.
 
 [中文](README_zh.md) | English
 
@@ -48,9 +48,9 @@ Native amd64 and arm64 builds publish independently as the Docker version plus `
 2. Send messages via Telegram to specific WeChat users, groups, and official accounts
 3. Flexible group message blocking functionality
 4. AI reply suggestions based on the current WeChat chat context
-5. Chinese / English WebUI with live message-template previews and model discovery/testing
-6. WebUI contact search, multi-type messaging, attachment downloads, and Telegram delivery tracking
-7. Eleven MCP tools with WebUI token management and client configuration export
+5. WebUI configuration, message-template previews and model discovery/testing (current React UI is primarily Chinese)
+6. Basic WebUI message viewing, limited operations, categorized contacts and Telegram synchronization tracking; message-type support is incomplete
+7. Eleven MCP tools and WebUI token management; client setup is documented separately
 
 ## Automatic chat-folder overflow
 
@@ -66,7 +66,7 @@ Optionally set `OFFICIAL_ACCOUNT_TOPICS_ENABLED=true` and restart. The first off
 
 ## WebUI and message center
 
-The Chinese / English WebUI starts with the application. Docker Compose exposes **TCP 17863 on all host interfaces by default**: open `http://<server-address>:17863/`. Local development listens on loopback by default: `http://127.0.0.1:17863/`. WebUI and MCP share the same port; the MCP path is `/mcp`.
+The WebUI starts with the application; the current React interface is primarily Chinese. Docker Compose exposes **TCP 17863 on all host interfaces by default**: open `http://<server-address>:17863/`. Local development listens on loopback by default: `http://127.0.0.1:17863/`. WebUI and MCP share the same port; the MCP path is `/mcp`.
 
 ### Telegram Mini App and live messages
 
@@ -75,34 +75,30 @@ The same WebUI can open from the owner’s private-chat **控制台** menu. Conf
 ### Configuration console
 
 - Configure Telegram / WeChat connections, forwarding preferences, message templates, proxies, AI / speech recognition, retries, retention, and logging.
-- Switch UI language independently of the Telegram bot language. Global settings search, validation, unsaved-change tracking, conflict detection, responsive layouts, and restart feedback are included.
+- Existing-field validation, unsaved-change tracking, conflict detection, responsive layouts and restart feedback are available. Telegram bot language settings do not imply equivalent WebUI language switching.
 - Telegram and WeChat proxies are presented separately. Message templates have live contact, group, and official-account previews, including missing-alias examples. Previews use sample data and never send messages.
-- Sign in with `WEBUI_TOKEN` (at least 16 characters), or the generated `storage/webui-token`. Sign-in opens Messages by default. Refreshing the current tab preserves login; optional Remember access token also restores login after reopening the browser. Signing out or a rejected token clears saved credentials.
-- Configuration secret fields remain blank: leave blank to retain the saved value, enter a new value to replace it, or explicitly clear an optional secret. MCP tokens have separate, explicit reveal/export controls.
+- Sign in with `WEBUI_TOKEN` (at least 16 characters), or the generated `storage/webui-token`. Sign-in opens chat by default. Ordinary browsers save the access token locally for refresh/reopen; Mini App sessions remain separate and memory-only. Signing out or a rejected token clears saved credentials.
+- Configuration secret fields remain blank: leave blank to retain the saved value, enter a new value to replace it, or explicitly clear an optional secret. MCP tokens have separate reveal/regeneration controls.
 
-### Conversations and attachments
+### Chat capabilities and current limitations — read first
 
-- Messages opens directly into a full-height conversation workspace. Shared histories show each sender, time, body and attachment in the original order, with nested records expanded in place. Long records reveal 20 entries at a time while preserving expansion and scroll state.
+> [!IMPORTANT]
+> **WebUI chat is currently intended mainly for viewing simple messages such as text, with limited send, quote, recall and synchronization operations. It does not fully support every WeChat message type and is not a replacement for the WeChat client.** A summary, link or attachment entry does not mean that a message type is fully decoded, interactive or comprehensively verified. Use WeChat for the complete experience.
 
-- Search contacts and groups by nickname, remark, or WeChat ID. The All / Recent view sorts by latest message activity and shows real avatars with initial-letter fallback.
-- In a group, type `@` or select **@ Group members** to search and select up to 20 members, or mention everyone. Native mentions apply to text; WeChat enforces owner/admin permissions for @Everyone. Mentioned text mirrors to Telegram.
-- Use arrow keys and Enter to select a member; the mention is inserted at the cursor and the picker closes automatically. Editing a selected mention removes its member ID binding.
-- Quote a saved message using **Reply**, then send a native WeChat text reply. Quotes mirror to Telegram. Click a quote to locate and highlight the original, loading its saved context when needed; return to the latest messages with one click. Quoted replies cannot currently include native mentions or attachments.
-- Recall your own confirmed messages within WeChat's limits: ordinary messages within 2 minutes; documents, MP3 files and archives within 3 hours. The limit follows the actual WeChat message type (voice messages remain 2 minutes). Expired messages or messages missing native receipts cannot be recalled. Successful recalls create one separate reply notice referencing the original in WebUI and Telegram. Original content and attachments remain available; clicking the WebUI reference locates the original. Failed Telegram notices can be retried separately. See [WeChat's explanation, republished by The Paper](https://www.thepaper.cn/newsDetail_forward_33209118).
-- Read and search saved history and load older messages. Starting with v6.0.35, updates use SSE change notifications instead of five-second polling. First opening a conversation shows the latest 60 imported records first and fills older history in the background (up to 500 records); it does not retrieve all historical messages from WeChat.
-- Built-in WeChat emoji (such as `[抱拳]`) render using bundled local WebP assets in messages, quotes, nested histories and official-account posts, with Chinese and English aliases. Web rendering is independent of Telegram conversion settings; Unicode and unknown labels remain intact, and failed assets fall back to their labels.
-- Send text, images, GIF, MP4 video, audio, voice, and files. Attachments are limited to 50 MiB. Paste clipboard images with Ctrl / ⌘ + V; preview first, then explicitly send with the button or Ctrl / ⌘ + Enter. Attachment and text are sent as separate messages.
-- Images automatically load previews; images inside merged histories load when their record is expanded. Failed previews offer a manual retry. Files and other media load on demand. Click images to open a large preview with wheel/button zoom, rotation, fit-to-window and drag-to-pan; press Esc or click the backdrop to close. Official-account posts display one or more articles with clickable titles, summaries and read-more links. Links, locations, and contact cards have rich cards. Group messages separate sender, avatar, and content; merged chat histories expand into cards with downloadable embedded files and images, including nested attachments. Nested histories expand one level at a time. Media transport XML and non-chat function, game-badge and counter control packets are excluded from conversation display and retry.
-- Messages sent from WebUI or MCP also appear in WebUI and synchronize to Telegram. Request IDs prevent duplicate sends. `submitted` means WeChat returned a message ID, not that the recipient read it. Uncertain send results are never retried automatically.
-- Videos in shared chat histories, including nested records, can be downloaded as Telegram videos or played and downloaded in WebUI. Full MP4 downloads use RecordItem `DataType=4`, keeping record uint64 IDs out of the ordinary video API. The server must support record video downloads (v6.0.6 or later in the v6 series).
-- File downloads use `wx2tg-puppet 6.0.17`, supporting both legacy JSON and the binary `200/206` sections introduced in server v6.0.10. Ordinary files and shared-record file fallbacks advance by actual received bytes, including short sections; shared-record files explicitly use `DataType=8`. The first CDN fallback section may wait for the entire file, so file requests have a separate 180-second timeout. Empty, inconsistent or merely claimed successful responses are rejected. WebUI download caching allows up to 256 MiB; uploads remain limited to 50 MiB. Failed cards show the actual error. Telegram download buttons restore both saved media type names and legacy numeric types.
-- Messages sent to WeChat through a bound Telegram conversation also appear in WebUI, including text, quoted replies and media. They show their Telegram origin and WeChat send status without being forwarded back to Telegram or counted as unread Telegram deliveries. Attachments and captions are separate WeChat messages; cached media can be previewed or downloaded. If caching fails, WebUI prompts you to view the attachment in Telegram.
-- Red conversation counters mean tracked Telegram deliveries that are pending, in flight, or definitely failed. Successful synchronization clears them. Unverified historical receipts and uncertain delivery results are displayed separately and do not count as unread. Opening a conversation does not clear unsent Telegram deliveries.
-- Retry to Telegram only without resending to WeChat. Parallel retries are blocked; an uncertain Telegram outcome requires explicit confirmation before another attempt.
+- **Rendering is partial.** Images, audio/video, files, official-account articles and merged histories have some preview/download/decoding paths. Protocol responses, expired media, cache availability and nested formats can still produce summaries, placeholders, missing attachments or failures. Red packets, transfers, mini-programs, Channels content, special cards and real-time voice/video calls are not fully supported Web features.
+- **History is not your complete WeChat history.** The page reads records this project has saved or synchronized; it does not retrieve all old messages from WeChat. Telegram forwarding support must not be confused with WebUI rendering support.
+- **Operations are type-dependent.** Text, some attachment sends and eligible quote/recall operations are available; uploads are limited to 50 MiB and captions are sent separately. Quotes cannot include attachments or native mentions; use the member picker for group mentions. Recalls require native receipts and remain subject to WeChat limits. Native interactions on complex cards are not guaranteed.
+- **Status is not a read receipt.** Submitted means a WeChat-side receipt was returned, not that the recipient received/read the message. Pending Telegram synchronization is not WeChat unread state. Uncertain outcomes are not automatically resent.
+- **Contacts are a cached directory.** dev.4 adds WeChat-style categories, alphabetical sections, avatars, search and paging. Service accounts require an explicit protocol field; remaining official accounts are not asserted to be confirmed subscription accounts. Counts are neither page lengths nor authoritative real-time WeChat totals. Cached groups are not necessarily saved-to-contacts groups. New-friend management, My Enterprise, and contact add/delete/approval are not implemented in WebUI.
+- **Official-account menus are only partially supported.** dev.4 displays synchronized menus/submenus and opens ordinary HTTP(S) links in a new window. Event clicks, mini-programs and WeChat authorization/QR actions remain disabled. Button text is never sent as a fake menu click. Missing cached menus do not prove an account has no menu, and links may still require WeChat to complete their workflow.
+- **PWA installation is not offline WeChat or background delivery.** Trusted HTTPS is required. Only public shell assets are cached, never protected APIs, chat bodies or attachments. Drafts live in the current signed-in window's memory; closing or forcing a reload does not guarantee recovery. There is no offline send replay or reliable closed-window push. Native mobile installation, keyboard and Telegram WebView behavior still need device testing.
+- **The UI migration is incomplete.** The current React UI is primarily Chinese. Independent UI-language switching, global configuration search, inline keyboard mention selection and one-click MCP client-configuration export from the old UI are not fully migrated.
+
+Use `/chat` for chat and `/manage` for settings. Implemented features retain SSE-driven updates without periodic message/contact polling; desktop focus mode and chat/settings switching preserve in-window chat drafts and reading position. See [PWA/chat boundaries](docs/pwa-chat.md), [directory/menu capabilities](docs/research/wechat-contact-classification.md) and [WebUI development](docs/webui-development.md).
 
 ### AI and speech
 
-Enter an OpenAI-compatible API URL and key, read the provider's model list, select a model, and test the connection before saving. A blank key uses the saved key; switching provider origin requires explicitly entering a key. Checks use the current unsaved inputs and a generic test prompt, never conversation history. `/ai` generates contextual reply suggestions; it does not automatically send them.
+Enter an OpenAI-compatible API URL and key, read the provider's model list, select a model, and test the connection before saving. The current model tools use the saved key; do not assume an unsaved replacement key is being tested. Save and review configuration when changing provider origin. Checks use a generic test prompt, never conversation history. `/ai` generates contextual reply suggestions; it does not automatically send them.
 
 Configure Tencent Cloud ASR credentials and enable automatic voice transcription through WebUI or `/settings`.
 
@@ -111,8 +107,8 @@ Configure Tencent Cloud ASR credentials and enable automatic voice transcription
 Manage MCP directly in the WebUI **MCP access** page:
 
 - Enable or disable MCP immediately; set the client endpoint and local bridge script path. The endpoint is for client configuration, not the server listener.
-- Reveal, download, generate, or manually replace independent read-only and read/send tokens. Rotation takes effect on the next request; update connected clients afterward.
-- Copy or download Streamable HTTP or stdio client configurations. Preview uses `<TOKEN>`; explicit export includes the selected credential. Export defaults to read-only permissions.
+- Reveal or regenerate independent read-only and read/send tokens; update connected clients after rotation.
+- Complete one-click client-configuration export is not present in the current React page. Configure Streamable HTTP / stdio manually using the MCP documentation and keep credentials private.
 - The stdio bridge supports local file uploads and downloads; paths in repository examples are placeholders. Keep actual installation paths and credentials in private client configuration outside this repository.
 
 | Tool | Purpose |
@@ -200,7 +196,7 @@ Use Docker Engine with Docker Compose v2, or Node.js 18+ for local development. 
 
 ### Docker Compose
 
-This development checkout pins `finalpi/wechat2tg:v6.0.40-dev.3` in `docker-compose.yml`; no WebUI override is needed. For the current stable deployment, use the Compose file from tag `v6.0.39` instead. amd64 users may use the matching `-amd64` image once its build succeeds, without waiting for ARM.
+This development checkout pins `finalpi/wechat2tg:v6.0.40-dev.4` in `docker-compose.yml`; no WebUI override is needed. For the current stable deployment, use the Compose file from tag `v6.0.39` instead. amd64 users may use the matching `-amd64` image once its build succeeds, without waiting for ARM.
 
 The commands below initialize a new stack. For an existing deployment, preserve old images and private configuration; update only the bot with `docker compose pull wechat2tg` and `docker compose up -d --no-deps wechat2tg` after reviewing your local Compose. The `wx2tg-server` image, namespace, and version in this example are unchanged; do not replace or restart the existing production backend as part of this bot naming correction.
 
@@ -226,7 +222,7 @@ The default Compose file is:
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.40-dev.3
+    image: finalpi/wechat2tg:v6.0.40-dev.4
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"

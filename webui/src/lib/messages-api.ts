@@ -1,10 +1,23 @@
 import {ApiError, request} from './api'
 
+export type ContactCategory = 'person' | 'group' | 'official' | 'service' | 'enterprise' | 'unknown'
+export type ContactCounts = Partial<Record<ContactCategory, number>>
+export interface OfficialMenuButton {
+  name: string
+  kind: 'group' | 'url' | 'unsupported'
+  url?: string
+  reason?: 'event' | 'miniapp' | 'wechat' | 'unknown'
+  children?: OfficialMenuButton[]
+}
+export interface OfficialMenuResult {available: boolean; menu: {buttons: OfficialMenuButton[]} | null; reason?: 'notSynced' | 'notOfficial'}
+
 export interface Contact {
   wxId: string
   name: string
   nickname: string
   kind: 'contact' | 'group'
+  category?: ContactCategory
+  indexLetter?: string
   hasAvatar: boolean
   lastActivity: number
   lastSequence: number
@@ -56,7 +69,7 @@ export interface ChatMessage {
 }
 export interface MessageUpdates {messages: ChatMessage[]; serverTime: number}
 export interface HistoryPage extends MessageUpdates {hasMore: boolean; before: number}
-export interface ContactsPage {contacts: Contact[]; hasMore: boolean; offset: number; directoryAvailable: boolean}
+export interface ContactsPage {contacts: Contact[]; hasMore: boolean; offset: number; directoryAvailable: boolean; counts?: ContactCounts; total?: number; countsScope?: 'cached'}
 export interface MessageStatus {available: boolean; wechatOnline: boolean; telegramOnline?: boolean; directoryAvailable: boolean}
 export interface Member {wxId: string; name: string; nickname: string; displayName: string; hasAvatar: boolean}
 export interface MembersPage {members: Member[]; hasMore: boolean; offset: number; total: number}
@@ -72,8 +85,10 @@ export interface SendMessage {
 const query = (values: Record<string, string | number | boolean>) => new URLSearchParams(Object.entries(values).map(([key, value]) => [key, String(value)]))
 export const messagesApi = {
   status: (token: string, signal?: AbortSignal) => request<MessageStatus>('/api/messages/status', token, {signal}),
-  contacts: (token: string, q = '', kind = 'all', offset = 0, signal?: AbortSignal) =>
-    request<ContactsPage>(`/api/contacts?${query({q, kind, offset})}`, token, {signal}),
+  contacts: (token: string, q = '', kind = 'all', offset = 0, signal?: AbortSignal, order?: 'letter') =>
+    request<ContactsPage>(`/api/contacts?${query({q, kind, offset})}${order === 'letter'?'&order=letter':''}`, token, {signal}),
+  officialMenu: (token: string, wxId: string, signal?: AbortSignal) =>
+    request<OfficialMenuResult>(`/api/contacts/menu?${query({wxId})}`, token, {signal}),
   history: (token: string, wxId: string, q = '', before = 0, signal?: AbortSignal) =>
     request<HistoryPage>(`/api/messages?${query({wxId, q, before})}`, token, {signal}),
   updates: (token: string, wxId: string, ids: number[], signal?: AbortSignal, q = '') => {

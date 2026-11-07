@@ -7,7 +7,8 @@ import {Message} from '../entity/Message'
 import {WebMessageStore} from './message-store'
 import {messageEvents,MessageChange} from './message-events'
 import {WebMediaStore,MediaFile} from './media'
-import {Message as WxMessage} from 'wx2tg-puppet'
+import {Message as WxMessage, isOfficialAccountVerifyFlag, parseStoredOfficialMenu, OfficialMenu} from 'wx2tg-puppet'
+import {cachedDirectory, CachedContact, contactIndexLetter, compareCategoryContacts, matchesContactKind} from './contact-directory'
 import {TelegramGroupOperateService} from '../service/TelegramGroupOperateService'
 import {BindGroupService} from '../service/BindGroupService'
 import {ConfigurationService} from '../service/ConfigurationService'
@@ -30,7 +31,8 @@ export interface MessageCenterAdapter {
     subscribe?(listener:(event:MessageChange)=>void):()=>void
     updates?(wxId:string,ids:number[],query?:string):Promise<unknown>
     status(): Promise<unknown>
-    contacts(query: string, kind: string, offset: number): Promise<unknown>
+    contacts(query: string, kind: string, offset: number, order?: 'letter'): Promise<unknown>
+    officialMenu?(wxId: string): Promise<{available: boolean; menu: OfficialMenu | null; reason?: 'notSynced' | 'notOfficial'}>
     history(wxId: string, before: number, query: string): Promise<unknown>
     locate(wxId:string,id?:number,remoteId?:string):Promise<unknown>
     send(wxId: string, body: string, requestId: string, attachmentId?:string,mentions?:Mentions,replyToId?:number): Promise<unknown>
@@ -290,35 +292,32 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
             return details
         }catch{return {}}
     }
-    const list = async (query: string, kind: string, offset: number) => {
+    const list = async (query: string, kind: string, offset: number, order?: 'letter') => {
         await repairOwnership()
         const available = getGeWeChatDataSource().isInitialized
-        const contacts = []
+        const contacts: CachedContact[] = []
         if (available) {
-            for (const [entity, type] of [[WxContact, 'contact'], [WxRoom, 'group']] as const) {
-                if (kind === 'contact' && type === 'group') continue
+            // Room rows win over duplicate contacts; SDK metadata wins over bindings/topics.
+            for (const [entity, type] of [[WxRoom, 'group'], [WxContact, 'contact']] as const) {
                 const qb = getGeWeChatDataSource().getRepository(entity as any).createQueryBuilder('c')
                 const id = type === 'contact' ? 'userName' : 'chatroomId'
-                const rows = await qb.select([`c.${id}`,'c.nickName','c.remark','c.smallHeadImgUrl',...(type === 'contact' ? ['c.bigHeadImgUrl'] : [])]).where(`(c.nickName LIKE :q OR c.remark LIKE :q OR c.${id} LIKE :q)`, {q: `%${query}%`}).getMany()
-                contacts.push(...rows.map((c: any) => ({wxId: c[id],name:c.remark || c.nickName || c[id],nickname:c.nickName || '',kind:c[id].endsWith('@chatroom') ? 'group' : 'contact',hasAvatar:Boolean(c.smallHeadImgUrl || c.bigHeadImgUrl)})).filter(c=>kind === 'all' || c.kind === kind))
+                const rows = await qb.select([`c.${id}`,'c.nickName','c.remark','c.pyInitial','c.quanPin','c.remarkPyInitial','c.smallHeadImgUrl',...(type === 'contact' ? ['c.bigHeadImgUrl','c.verifyFlag','c.serviceType'] : [])]).getMany()
+                contacts.push(...rows.map((c: any): CachedContact => ({wxId:c[id],name:c.remark || c.nickName || c[id],nickname:c.nickName || '',kind:type === 'group' || c[id].endsWith('@chatroom') ? 'group' : 'contact',hasAvatar:Boolean(c.smallHeadImgUrl || c.bigHeadImgUrl),verifyFlag:c.verifyFlag,serviceType:c.serviceType,indexLetter:contactIndexLetter(c.remark || c.nickName || c[id],c.remark ? [c.remarkPyInitial] : [c.pyInitial,c.quanPin])})))
             }
         }
-        const bindings = await AppDataSource.getRepository(BindGroup).createQueryBuilder('b').where('(b.name LIKE :q OR b.alias LIKE :q OR b.wxId LIKE :q)', {q: `%${query}%`}).getMany()
-        contacts.push(...bindings.map(b => ({wxId:b.wxId,name:b.alias || b.name || b.wxId,nickname:b.name || '',kind:b.wxId.endsWith('@chatroom') || b.type === 1 ? 'group' : 'contact',hasAvatar:Boolean(b.avatarLink)})).filter(b=>kind === 'all' || b.kind === kind))
-        const topics = await AppDataSource.getRepository(OfficialAccountTopic).createQueryBuilder('t')
-            .where('(t.name LIKE :q OR t.wxId LIKE :q)', {q: `%${query}%`}).getMany()
-        if (kind === 'all' || kind === 'contact') contacts.push(...topics.map(t => ({wxId: t.wxId, name: t.name, nickname: t.name, kind: 'contact', hasAvatar: false})))
-        // Prefer actual WeChat directory names over formatted Telegram binding titles.
-        const directory = new Map()
-        for (const contact of contacts) {if(!directory.has(contact.wxId))directory.set(contact.wxId,contact);else if(contact.hasAvatar)directory.get(contact.wxId).hasAvatar = true}
+        const bindings = await AppDataSource.getRepository(BindGroup).find()
+        const topics = await AppDataSource.getRepository(OfficialAccountTopic).find()
+        const directory = cachedDirectory(contacts,
+            bindings.map(b => ({wxId:b.wxId,name:b.alias || b.name || b.wxId,nickname:b.name || '',kind:b.wxId.endsWith('@chatroom') || b.type === 1 ? 'group' : 'contact',hasAvatar:Boolean(b.avatarLink)})),
+            topics.map(t => ({wxId:t.wxId,name:t.name || t.wxId,nickname:t.name || '',kind:t.wxId.endsWith('@chatroom') ? 'group' : 'contact',hasAvatar:false})), query)
         await reconcile()
         const legacy = await telegramConversationRecents(AppDataSource)
         const recent = new Map(legacy.map(r=>[r.wxId,{...r,body:'',type:'text'}]))
         for(const row of await store.recents())if(row.timestamp >= (recent.get(row.wxId) as any)?.timestamp || !recent.has(row.wxId))recent.set(row.wxId,row)
         const unconfirmed = new Map<string,Set<string>>()
         for(const row of await store.all('SELECT wxId,remoteId,id FROM inbox WHERE hidden=0 AND revokeStatus<>\'revoked\' AND telegramTracked=1 AND telegramStatus IN (\'pending\',\'syncing\',\'failed\') AND (direction=\'incoming\' OR status=\'submitted\')')){if(!unconfirmed.has(row.wxId))unconfirmed.set(row.wxId,new Set());unconfirmed.get(row.wxId).add(row.remoteId || `journal:${row.id}`)}
-        const unique = [...directory.values()].map(c=>({...c,lastActivity:Number((recent.get(c.wxId) as any)?.timestamp) || 0,lastSequence:Number((recent.get(c.wxId) as any)?.sequence) || 0,lastBody:String((recent.get(c.wxId) as any)?.body || '').slice(0,100),lastType:(recent.get(c.wxId) as any)?.type || 'text',unsyncedCount:unconfirmed.get(c.wxId)?.size || 0})).sort((a,b)=>(kind === 'all' ? b.lastActivity - a.lastActivity || b.lastSequence - a.lastSequence : 0) || a.name.localeCompare(b.name) || a.wxId.localeCompare(b.wxId))
-        return {contacts: unique.slice(offset, offset + 60), hasMore: unique.length > offset + 60, offset: offset + 60, directoryAvailable: available}
+        const unique = directory.contacts.filter(c=>matchesContactKind(c,kind)).map(c=>({...c,lastActivity:Number((recent.get(c.wxId) as any)?.timestamp) || 0,lastSequence:Number((recent.get(c.wxId) as any)?.sequence) || 0,lastBody:String((recent.get(c.wxId) as any)?.body || '').slice(0,100),lastType:(recent.get(c.wxId) as any)?.type || 'text',unsyncedCount:unconfirmed.get(c.wxId)?.size || 0})).sort((a,b)=>(kind === 'all' && order !== 'letter' ? b.lastActivity - a.lastActivity || b.lastSequence - a.lastSequence : 0) || (order === 'letter' || !['all','contact','group'].includes(kind) ? compareCategoryContacts(a,b) : a.name.localeCompare(b.name)) || a.wxId.localeCompare(b.wxId))
+        return {contacts: unique.slice(offset, offset + 60), hasMore: unique.length > offset + 60, offset: offset + 60, directoryAvailable: available, counts: directory.counts, total: directory.total, countsScope: directory.countsScope}
     }
     const recipient = async (wxId: string) => {
         if (getGeWeChatDataSource().isInitialized) {
@@ -429,6 +428,18 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         transcriptAttachment:transcriptDownload,
         sync,
         contacts: list,
+        officialMenu: async wxId => {
+            if (typeof wxId !== 'string' || !wxId.trim() || wxId.length > 256) throw new MessageCenterError('invalidRequest')
+            const target = await recipient(wxId)
+            if (target.kind === 'group' || wxId.endsWith('@openim')) return {available:false,menu:null,reason:'notOfficial'}
+            const row = getGeWeChatDataSource().isInitialized
+                ? await getGeWeChatDataSource().getRepository(WxContact).findOne({where:{userName:wxId},select:['userName','verifyFlag','officialMenu']}) : null
+            const official = isOfficialAccountVerifyFlag(row?.verifyFlag)
+            if (official === false) return {available:false,menu:null,reason:'notOfficial'}
+            // Topic hints can label the directory, but never authorize menu metadata.
+            const menu = official === true ? parseStoredOfficialMenu(row?.officialMenu) : null
+            return menu ? {available:true,menu} : {available:false,menu:null,reason:'notSynced'}
+        },
         revoke:async(id,requestId,confirmUncertain = false)=>{
             if(!/^[a-zA-Z0-9-]{16,80}$/.test(requestId || ''))throw new MessageCenterError('invalidRequest')
             if(!client()?.hasLogin)throw new MessageCenterError('wechatOffline',503)
