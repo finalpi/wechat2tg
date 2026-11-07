@@ -476,6 +476,12 @@ export class WeChatClient extends AbstractClient {
             this.loginReady = undefined
         })
 
+        this.client.on('contacts-updated', () => {
+            // Directory sync finishes after login in newer SDKs; refresh the list
+            // without resetting account readiness or repeating login maintenance.
+            messageEvents?.publish({type: 'contacts'})
+        })
+
         this.client.on('login', () => {
             messageEvents?.publish({type: 'contacts'})
             this.loginReady = undefined

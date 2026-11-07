@@ -20,6 +20,7 @@ function clientClass(config = {}, spies = {}, schedule = callback => queueMicrot
       if (name === '../config') return {config}
       if (name === '../service/WechatAccountClassificationService') return {WechatAccountClassificationService: {getInstance: () => ({isOfficialAccount: async (_id, flag) => require('wx2tg-puppet').isOfficialAccountVerifyFlag(flag)})}}
       if (name === '../webui/message-visibility') return {isControlMessage: () => false}
+      if (name === '../webui/message-events') return {messageEvents: spies.messageEvents}
       if (name === '../entity/BindGroup') return {BindGroup: class {}}
       if (name === '../util/TelegramTopicUtils') return require('../dist/util/TelegramTopicUtils')
       if (name === '../util/FormatUtils') return {FormatUtils: {transformTitleStr: () => '', escapeHtml: require('../dist/util/FormatUtils').FormatUtils.escapeHtml}}
@@ -58,6 +59,24 @@ test('an immediate callback waits for asynchronous login initialization', async 
   release({wxid: 'wxid_test'})
   await pending
   assert.equal(entered, true)
+})
+
+test('background contact updates refresh the directory without repeating login', async () => {
+  const changes = []
+  const client = fixture({}, {messageEvents: {publish: event => changes.push(event.type)}})
+  const ready = client.loginReady
+  client.hasLogin = true
+  let logins = 0, lookups = 0
+  client.client.info = async () => {lookups++; return {wxid: 'synthetic-owner'}}
+  client.loginSuccess = async () => {logins++}
+  client.init()
+  client.client.emit('contacts-updated')
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(changes, ['contacts'])
+  assert.equal(client.loginReady, ready)
+  assert.equal(client.hasLogin, true)
+  assert.equal(logins, 0)
+  assert.equal(lookups, 0)
 })
 
 test('failed initialization rejects message processing instead of using missing account state', async () => {

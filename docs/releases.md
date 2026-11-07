@@ -1,5 +1,12 @@
 # v6：单分支、双发行通道
 
+## 本地待发布：微信登录不再等待联系人全量同步
+
+- 将目录同步从 SDK 登录等待链移至受管理的后台任务，先完成接收 / 心跳就绪；保留每批 4 并发、失败隔离和启动消息分发。
+- Bot 接收目录完成通知刷新 WebUI，不重置登录状态。退出 / 重登停止旧任务继续排队；清缓存先等待旧在途写入。
+- 本地接入 SDK `6.0.18-dev.1`，尚未发布 tag / npm 或部署。已发布 `v6.0.40-dev.3` 仍使用 SDK `6.0.17`，不会被覆盖。
+- 根因及真实 SDK / SQLite 集成回归见 [启动等待诊断](diagnostics/login-contact-sync.md)，制品来源见 [vendor 记录](../vendor/README.md)。
+
 ## 开发预览：v6.0.40-dev.3（非稳定版）
 
 - 新增 `/chat` 独立聊天工作区和 `/manage` 管理入口；聊天默认不显示管理顶栏、侧栏与外层卡片，不依赖整份配置加载。
@@ -145,7 +152,7 @@ bot 工作流先验证版本并运行测试，再并行执行两个互不等待�
 
 ## 固定 puppet 制品
 
-`vendor/wx2tg-puppet-6.0.17.tgz` 从 SDK v6.0.17 的固定提交测试、构建并打包，包含联系人初始化修复；旧制品保持不变。Bot 的 `package.json` 精确声明 `6.0.17`，lockfile 将其解析到本地制品并保存 npm 计算的 SHA-512 integrity。
+当前开发工作区使用 `vendor/wx2tg-puppet-6.0.18-dev.1.tgz`，从 SDK 固定提交测试、构建并打包，包含登录 / 后台目录解耦修复；尚未发布，来源与校验值见 [vendor 记录](../vendor/README.md)。Bot 的 `package.json` 精确声明 `6.0.18-dev.1`，lockfile 将其解析到本地制品并保存 npm 计算的 SHA-512 integrity。已发布 Bot 正式版和 `v6.0.40-dev.3` 的 SDK `6.0.17` 制品保持不变。
 
 这使 Docker / `npm ci` 不依赖尚未发布的 npm registry 版本。保留 lockfile 和 vendor 文件；不要手填不存在的 registry URL 或伪造 integrity。puppet 的 tag 工作流会上传 npm 格式 `.tgz`；独立 `publish.yml` 在验证、测试后执行 npm 发布并核验 registry，正式版用 `latest`、开发版用 `v6-dev`。发布需要有效的 NPM_TOKEN 和对应免交互权限。
 
@@ -159,8 +166,8 @@ npm test
 npm pack --pack-destination ../wechat2tg/vendor
 
 # wechat2tg
-npm install --package-lock-only --ignore-scripts ./vendor/wx2tg-puppet-6.0.17.tgz
-npm pkg set dependencies.wx2tg-puppet=6.0.17
+npm install --package-lock-only --ignore-scripts ./vendor/wx2tg-puppet-6.0.18-dev.1.tgz
+npm pkg set dependencies.wx2tg-puppet=6.0.18-dev.1
 npm install --package-lock-only --ignore-scripts --offline
 npm ci
 npm run check:version

@@ -243,10 +243,12 @@ async function main() {
     // Keep this row outside the latest-50 response, as a real backdated insertion would be.
     rows.unshift(delayed)
     events.publish({type: 'messages', wxId: group, ids: [9999]})
-    await page.getByText('迟到的历史消息', {exact: true}).waitFor()
+    // The backdated row is intentionally off-screen. content-visibility may skip
+    // painting it; assert reconciliation without forcing a jump to old history.
+    await page.getByText('迟到的历史消息', {exact: true}).waitFor({state: 'attached'})
     rows.splice(rows.indexOf(delayed), 1)
     events.publish({type: 'messages', wxId: group, ids: [9999]})
-    await page.getByText('迟到的历史消息', {exact: true}).waitFor({state: 'hidden'})
+    await page.getByText('迟到的历史消息', {exact: true}).waitFor({state: 'detached'})
     online = false
     events.publish({type: 'status'})
     await page.getByText('微信未连接，暂时无法发送。', {exact: true}).waitFor()
