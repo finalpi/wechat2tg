@@ -27,7 +27,7 @@ The default `/` and `/chat` routes open the chat-only workspace; use `/manage` o
 
 HTML is rendered through a small React allowlist, not `dangerouslySetInnerHTML`. Only HTTP(S) links and local, allowlisted custom-emoji image paths are rendered. Tokens are never placed in media URLs.
 
-## Installable chat workspace (unreleased)
+## Installable chat workspace (v6.0.40-dev.3 preview)
 
 The chat shell is independent of configuration loading and remains mounted when visiting management pages. Focus mode hides the conversation list; its width is keyboard/pointer adjustable. Browser back/forward and the Mini App BackButton return to the list without discarding in-memory drafts.
 

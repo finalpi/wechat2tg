@@ -1,6 +1,6 @@
-# PWA 与独立聊天工作区（未发布）
+# PWA 与独立聊天工作区（v6.0.40-dev.3 开发预览）
 
-这是 [设计草案](design/pwa-chat-workspace.md) 的第一阶段实现。尚未打新 tag、发布镜像或部署。
+这是 [设计草案](design/pwa-chat-workspace.md) 的第一阶段实现，从 `v6.0.40-dev.3` 提供开发预览。镜像以对应 Actions 构建成功为准，不是稳定版，不自动部署。
 
 ## 入口与布局
 
