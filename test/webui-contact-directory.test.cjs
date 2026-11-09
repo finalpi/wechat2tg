@@ -240,6 +240,41 @@ test('real HTTP directory/menu routes retain owner auth, validate inputs/methods
   assert.deepEqual(await response.json(), {available:true, menu:{buttons:[]}})
 })
 
+test('group avatars include non-friends, reuse member lookup and reject untrusted media URLs', async t => {
+  const f = await fixture(t)
+  const {groupApi} = require('wx2tg-puppet/dist/api/GroupApi')
+  const avatars = require('../dist/webui/avatars')
+  const {parseGroupMembers} = require('../dist/webui/mentions')
+  const roomId = 'avatars@chatroom'
+  await f.sdk.getRepository(WxRoom).save({chatroomId:roomId,nickName:'Avatar room'})
+  await f.contact({userName:'friend',nickName:'Friend',verifyFlag:0,smallHeadImgUrl:'https://wx.qlogo.cn/friend'})
+  t.mock.method(AbstractClient,'getSpyClient',name=>name === 'wxClient' ? {hasLogin:true,wxInfo:{wxid:'self'}} : undefined)
+  let lookups = 0
+  const data = {NewChatroomData:{ChatRoomMember:[
+    {UserName:'friend',NickName:'Friend'},
+    {UserName:'nonfriend',NickName:'Member',SmallHeadImgUrl:{string:'https://wx.qlogo.cn/member'}},
+    {UserName:'unsafe',NickName:'Unsafe',SmallHeadImgUrl:'http://127.0.0.1/private'},
+  ]}}
+  assert.equal(parseGroupMembers(data)[2].hasAvatar,false)
+  t.mock.method(groupApi,'GetChatRoomMemberDetail',async()=>{lookups++;return {data:{Code:0,Data:data}}})
+  t.mock.method(avatars,'loadAvatar',async url=>{
+    if(!avatars.allowedAvatarURL(url))throw Object.assign(new Error('missing'),{code:'avatarUnavailable',status:404})
+    return Buffer.from(url)
+  })
+  const members = await f.messages.groupMembers(roomId,'',0)
+  assert.deepEqual(members.members.map(m=>m.hasAvatar),[true,true,false])
+  assert(!JSON.stringify(members).includes('qlogo.cn'),'member API exposes availability, not CDN metadata')
+  assert.equal((await f.messages.avatar('nonfriend',roomId)).toString(),'https://wx.qlogo.cn/member')
+  assert.equal((await f.messages.avatar('friend',roomId)).toString(),'https://wx.qlogo.cn/friend')
+  await assert.rejects(f.messages.avatar('unsafe',roomId),error=>error.code === 'avatarUnavailable')
+  await assert.rejects(f.messages.avatar('not-a-member',roomId),error=>error.code === 'avatarUnavailable')
+  assert.equal(lookups,1,'member metadata is fetched once for the group')
+  const request = await httpFixture(t,f.messages)
+  assert.equal((await request(`/api/avatar?wxId=nonfriend&roomId=${roomId}`)).status,200)
+  assert.equal((await request('/api/avatar?wxId=nonfriend&roomId=not-a-group')).status,400)
+  assert.equal((await request(`/api/avatar?wxId=nonfriend&roomId=${roomId}`,{headers:{Authorization:''}})).status,401)
+})
+
 test('old optional adapters return a safe error rather than dispatching menu requests as messages', async t => {
   const request = await httpFixture(t, {contacts:async () => ({contacts:[]})})
   const response = await request('/api/contacts/menu?wxId=official')

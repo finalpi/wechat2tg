@@ -2,6 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Keep routine controls quiet without taking them away from touch or keyboard users. */
+@layer components {
+  .message-actions { @apply relative flex min-w-0 items-center gap-1; }
+  .message-actions-content { @apply hidden flex-wrap items-center gap-2; }
+  .message-actions[data-open="true"] .message-actions-content { @apply flex; }
+  @media (hover: hover) and (pointer: fine) {
+    .message-actions .message-actions-toggle { display: none; }
+    .message-actions-content {
+      @apply absolute bottom-full left-0 w-max rounded-lg border bg-background p-1 shadow-sm;
+      max-width: calc(100vw - 6rem);
+      display: flex; opacity: 0; pointer-events: none; transition: opacity 120ms ease;
+    }
+    [data-slot="message"][data-align="end"] .message-actions-content { left: auto; right: 0; }
+    [data-slot="message"]:hover .message-actions-content,
+    [data-slot="message"]:focus-within .message-actions-content {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

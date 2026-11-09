@@ -45,7 +45,7 @@ export interface MessageCenterAdapter {
     media?(id:string):Promise<MediaFile>
     attachment?(messageId:number):Promise<MediaFile>
     sync?(messageId:number,confirm:boolean):Promise<unknown>
-    avatar?(wxId:string):Promise<Buffer>
+    avatar?(wxId:string,roomId?:string):Promise<Buffer>
     transcriptAttachment?(messageId:number,path:string,id:string):Promise<MediaFile>
 }
 export class MessageCenterError extends Error {
@@ -127,7 +127,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         return {...safe, details}
     }
     const escape = (text:string)=>String(text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    const avatar = async(wxId:string)=>{
+    const avatar = async(wxId:string,roomId?:string)=>{
         let url = ''
         if(getGeWeChatDataSource().isInitialized){
             const group = wxId.endsWith('@chatroom')
@@ -135,6 +135,12 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
             url = row?.smallHeadImgUrl || row?.bigHeadImgUrl || ''
         }
         if(!url)url = (await AppDataSource.getRepository(BindGroup).findOneBy({wxId}))?.avatarLink || ''
+        if(!url && roomId){
+            const target = await recipient(roomId)
+            if(target.kind !== 'group')throw new MessageCenterError('mentionsGroupOnly')
+            const member = (await mentionService.members(roomId)).find(member=>member.wxId === wxId)
+            url = member?.avatarUrl || ''
+        }
         return loadAvatar(url)
     }
     const reconcile = async(wxId?:string)=>{
@@ -469,12 +475,12 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
             if(target.kind !== 'group')throw new MessageCenterError('mentionsGroupOnly')
             let members = await mentionService.members(wxId,refresh)
             if(getGeWeChatDataSource().isInitialized && members.length){
-                const contacts = await getGeWeChatDataSource().getRepository(WxContact).createQueryBuilder('c').select(['c.userName','c.remark','c.nickName']).where('c.userName IN (:...ids)',{ids:members.map(m=>m.wxId)}).getMany()
+                const contacts = await getGeWeChatDataSource().getRepository(WxContact).createQueryBuilder('c').select(['c.userName','c.remark','c.nickName','c.smallHeadImgUrl','c.bigHeadImgUrl']).where('c.userName IN (:...ids)',{ids:members.map(m=>m.wxId)}).getMany()
                 const map = new Map(contacts.map(c=>[c.userName,c]))
-                members = members.map(m=>({...m,remark:map.get(m.wxId)?.remark || ''}))
+                members = members.map(m=>({...m,remark:map.get(m.wxId)?.remark || '',hasAvatar:m.hasAvatar || Boolean(map.get(m.wxId)?.smallHeadImgUrl || map.get(m.wxId)?.bigHeadImgUrl)}))
             }
             const q = query.toLocaleLowerCase(),filtered = members.filter(m=>[m.name,m.nickname,m.wxId,(m as any).remark].some(v=>v?.toLocaleLowerCase().includes(q)))
-            return {wxId,members:filtered.slice(offset,offset + 100),total:filtered.length,hasMore:filtered.length > offset + 100,offset:offset + 100}
+            return {wxId,members:filtered.slice(offset,offset + 100).map(({avatarUrl,...member})=>{void avatarUrl;return member}),total:filtered.length,hasMore:filtered.length > offset + 100,offset:offset + 100}
         },
         conversations:async offset=>{
             await repairOwnership()

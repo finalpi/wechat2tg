@@ -209,9 +209,10 @@ export function createWebUIServer(options: Options) {
             if (req.method === 'GET' && route === '/api/config') return respond(res, 200, {...await snapshot(), fields, groups})
             if(route === '/api/avatar'){
                 if(req.method !== 'GET' || !options.messages?.avatar)return respond(res,404,{error:'avatarUnavailable'})
-                const wxId = new URL(req.url,'http://localhost').searchParams.get('wxId') || ''
-                if(!wxId || wxId.length > 256)return respond(res,400,{error:'invalidRequest'})
-                const image = await options.messages.avatar(wxId)
+                const params = new URL(req.url,'http://localhost').searchParams
+                const wxId = params.get('wxId') || '',roomId = params.get('roomId') || undefined
+                if(!wxId || wxId.length > 256 || (roomId && (!roomId.endsWith('@chatroom') || roomId.length > 256)))return respond(res,400,{error:'invalidRequest'})
+                const image = await options.messages.avatar(wxId,roomId)
                 res.writeHead(200,{'Content-Type':'image/png','Content-Length':image.length});res.end(image);return
             }
             if(route === '/api/media') {

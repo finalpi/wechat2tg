@@ -46,12 +46,43 @@ async function main(){
   page.on('request',r=>{if(r.url().includes('/api/'))apiRequests.push({url:r.url(),method:r.method()})})
   await page.goto('http://127.0.0.1:' + server.address().port + '/chat')
   await page.getByRole('tab',{name:'通讯录',exact:true}).click()
+  await page.waitForFunction(()=>document.querySelector('[aria-label="联系人已缓存数量"]').textContent === '65')
+  const expectedCounts = ['1','2','1','1','65','1']
+  // Hold each response so assertions cover loading, not just the settled UI.
+  for(const label of ['群聊','公众号','服务号','企业微信联系人','联系人','待识别']) {
+   let release
+   const gate = new Promise(resolve=>{release = resolve})
+   const routeHandler = async route=>{await gate;await route.continue()}
+   await page.route('**/api/contacts?*',routeHandler)
+   const requested = page.waitForRequest(r=>new URL(r.url()).pathname === '/api/contacts')
+   const responded = page.waitForResponse(r=>new URL(r.url()).pathname === '/api/contacts')
+   await page.getByRole('button',{name:'分类：' + label,exact:true}).click()
+   await requested
+   try {
+    assert.deepEqual(await page.locator('[aria-label$="已缓存数量"]').allTextContents(),expectedCounts,'first category loads must retain counts while loading')
+   } finally {release()}
+   await responded
+   await page.evaluate(()=>new Promise(resolve=>window.requestAnimationFrame(()=>window.requestAnimationFrame(resolve))))
+   await page.unroute('**/api/contacts?*',routeHandler)
+  }
+  const contactRequestCount = ()=>apiRequests.filter(r=>new URL(r.url).pathname === '/api/contacts').length
+  const beforeCachedNavigation = contactRequestCount()
+  await page.getByRole('button',{name:'分类：待识别',exact:true}).click()
   await page.getByRole('button',{name:'分类：联系人',exact:true}).click()
   await page.getByRole('button',{name:'Alpha person 00',exact:true}).waitFor()
+  events.publish({type:'messages',wxId:'person-0'})
+  await page.waitForTimeout(400)
+  assert.equal(contactRequestCount(),beforeCachedNavigation,'collapse, cached category navigation and messages must not fetch directory rows')
   assert.equal(await page.getByLabel('联系人已缓存数量',{exact:true}).innerText(),'65','count is not current page length')
   assert(await page.getByRole('region',{name:'通讯录字母 A',exact:true}).isVisible())
   await page.getByRole('button',{name:'更多会话',exact:true}).click()
   await page.getByRole('button',{name:'Alpha person 64',exact:true}).waitFor()
+  const beforePagedNavigation = contactRequestCount()
+  await page.getByRole('button',{name:'分类：群聊',exact:true}).click()
+  await page.getByRole('button',{name:'分类：联系人',exact:true}).click()
+  await page.getByRole('button',{name:'Alpha person 64',exact:true}).waitFor()
+  await page.waitForTimeout(400)
+  assert.equal(contactRequestCount(),beforePagedNavigation,'cached categories must retain loaded pagination without refetching')
   await page.getByLabel('搜索通讯录',{exact:true}).fill('Alpha person 64')
   await page.waitForFunction(()=>document.querySelector('[aria-label="联系人已缓存数量"]').textContent === '1')
   assert.equal(await page.getByRole('button',{name:'Alpha person 00',exact:true}).count(),0)

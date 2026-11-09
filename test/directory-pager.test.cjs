@@ -15,8 +15,9 @@ function load(file) {
     fileName: filename,
   }).outputText
   const exports = {}
-  vm.runInNewContext(output, {exports, require(name) {
-    assert.equal(name, 'node:crypto', 'No application dependencies allowed')
+  vm.runInNewContext(output, {exports, URL, require(name) {
+    if (name === './AvatarURL') return load('AvatarURL.ts')
+    assert.equal(name, 'node:crypto', 'No application dependencies allowed beyond the pure avatar URL validator')
     return require(name)
   }}, {filename})
   return exports
@@ -26,7 +27,7 @@ const {answerDirectoryCallback, deliverDirectoryPage, replyDirectoryText, isRich
 const scope = {chatId: -100, userId: 7, threadId: 42, accountId: 'wechat-a'}
 const translations = {
   'pagination.title_us': 'Contacts', 'pagination.title_of': 'Official accounts',
-  'pagination.title_ro': 'Rooms', 'pagination.page': 'Page {{page}} / {{pages}}',
+  'pagination.title_ro': 'Rooms', 'pagination.title_gm': 'Members', 'pagination.page': 'Page {{page}} / {{pages}}',
   'pagination.total': 'Total {{count}}', 'pagination.search': 'Search:',
   'pagination.previous': 'Previous', 'pagination.next': 'Next', 'pagination.home': 'Home',
   'pagination.back': 'Back', 'pagination.clear_search': 'Full list', 'pagination.compatibility': 'Compatibility mode',
@@ -85,6 +86,40 @@ function nativeContext(outcomes = [], extra = {}) {
   }}
   return ctx
 }
+
+test('member avatar galleries use only safe visible-page CDN images and scoped selection buttons', () => {
+  const pager = new DirectoryPager()
+  const members = items(65).map((item,index)=>({...item,avatarUrl:`https://wx.qlogo.cn/avatar/${index}`}))
+  const view = render(pager,{kind:'gm',page:2,items:members})
+  const photos = richNodes(view.rich_message).filter(node=>node.type === 'photo' && node.photo)
+  assert.equal(photos.length,30)
+  assert.equal(photos[0].photo.media,members[30].avatarUrl)
+  assert.equal(photos[29].photo.media,members[59].avatarUrl)
+  for(const photo of photos) {
+    const result = pager.resolve(scope,photo.caption.text.button.callback_data)
+    assert.equal(result.type,'select')
+    assert.equal(result.item.avatarUrl,photo.photo.media)
+  }
+  assert(!view.html.includes('qlogo.cn'))
+  assert(!view.plain.includes('qlogo.cn'))
+  for(const avatarUrl of ['http://127.0.0.1/a','https://qlogo.cn.evil.test/a','https://user:secret@qlogo.cn/a','file:///etc/passwd','https://qlogo.cn:8080/a','javascript:alert(1)']) {
+    const unsafe = render(pager,{kind:'gm',items:[{remark:'Name',action:'id',avatarUrl}]})
+    assert.equal(richNodes(unsafe.rich_message).filter(n=>n.type === 'photo').length,0)
+    assert(!unsafe.state.items[0].avatarUrl)
+  }
+  assert.equal(richNodes(render(pager,{items:members}).rich_message).filter(n=>n.type === 'photo').length,0,'other directories retain text-only layout')
+})
+
+test('explicit avatar fetch rejection falls back to a usable text directory without network-error retries', async () => {
+  const view = render(new DirectoryPager(),{kind:'gm',items:[{remark:'Member',action:'member',avatarUrl:'https://wx.qlogo.cn/avatar'}]})
+  const ctx = nativeContext([apiError('Bad Request: failed to get HTTP URL content')])
+  assert.equal(await deliverDirectoryPage(ctx,view),'sent')
+  assert.deepEqual(ctx.calls.map(call=>call.method),['sendRichMessage','sendMessage'])
+  assert.deepEqual(ctx.calls[1].payload.reply_markup,view.reply_markup)
+  const uncertain = nativeContext([new Error('ECONNRESET')])
+  assert.equal(await deliverDirectoryPage(uncertain,view),'failed')
+  assert.equal(uncertain.calls.length,1)
+})
 
 test('native JSON preserves literal malicious names/query; compatibility body has metadata only', () => {
   const pager = new DirectoryPager()

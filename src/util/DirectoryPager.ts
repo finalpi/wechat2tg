@@ -1,4 +1,5 @@
 import {randomBytes} from 'node:crypto'
+import {allowedAvatarURL} from './AvatarURL'
 
 export type DirectoryKind = 'us' | 'of' | 'ro' | 'ct' | 'gr' | 'gm';
 export type DirectoryScope = Readonly<{
@@ -7,7 +8,7 @@ export type DirectoryScope = Readonly<{
     threadId?: number;
     accountId?: string;
 }>;
-export type DirectoryItem = Readonly<{remark: string; action: string}>;
+export type DirectoryItem = Readonly<{remark: string; action: string; avatarUrl?: string}>;
 export type DirectoryState = Readonly<{
     token: string;
     scope: DirectoryScope;
@@ -21,13 +22,15 @@ export type DirectoryState = Readonly<{
 export type DirectoryButton = {text: string; callback_data: string};
 export type DirectoryMarkup = {inline_keyboard: Array<Array<DirectoryButton | {text: string; url: string}>>};
 export type DirectoryTranslate = (key: string, values?: Record<string, string | number>) => string;
-/** The paragraph-only subset of Telegram's InputRichMessage used by directories. */
+/** The text and photo-gallery subset of Telegram's InputRichMessage used by directories. */
 export type DirectoryRichText = string | DirectoryRichText[]
     | {type: 'bold' | 'code'; text: DirectoryRichText}
     | {type: 'url'; text: DirectoryRichText; url: string}
     | {type: 'button'; button: {text: string; callback_data: string; style: 'link'}};
 export type DirectoryRichParagraph = {type: 'paragraph'; text: DirectoryRichText};
-export type DirectoryRichMessage = {blocks: DirectoryRichParagraph[]; skip_entity_detection: true};
+export type DirectoryRichPhoto = {type: 'photo'; photo: {type: 'photo'; media: string}; caption: {text: DirectoryRichText}};
+export type DirectoryRichCollage = {type: 'collage'; blocks: DirectoryRichPhoto[]};
+export type DirectoryRichMessage = {blocks: (DirectoryRichParagraph | DirectoryRichCollage)[]; skip_entity_detection: true};
 export type DirectoryView = {
     rich_message: DirectoryRichMessage;
     /** Only the escape hatch for clients that cannot display rich messages. */
@@ -129,7 +132,9 @@ export class DirectoryPager {
             ...(input.roomId ? {roomId: input.roomId} : {}),
             ...(input.parentToken ? {parentToken: input.parentToken} : {}),
             items: Object.freeze(input.items.slice(start, start + PAGE_SIZE)
-                .map(item => Object.freeze({remark: item.remark, action: item.action}))),
+                .map(item => Object.freeze({remark: item.remark, action: item.action,
+                    ...(input.kind === 'gm' && item.avatarUrl && allowedAvatarURL(item.avatarUrl) ? {avatarUrl: item.avatarUrl} : {}),
+                }))),
         })
         const title = truncate(translate(`pagination.title_${input.kind}`), 80)
         const metadata = [
@@ -155,6 +160,14 @@ export class DirectoryPager {
                 blocks.push({type: 'paragraph', text: display})
             }
         }
+        // Photo captions link to the same scoped selection as the numbered list.
+        // Never embed arbitrary URLs, hidden pages, raw identities, or credentials.
+        const photos: DirectoryRichPhoto[] = state.items.flatMap((item, index) => item.avatarUrl ? [{
+            type: 'photo', photo: {type: 'photo', media: item.avatarUrl},
+            caption: {text: {type: 'button', button: {text: String(start + index + 1), callback_data: `dl:${token}:s:${index}`, style: 'link'}}},
+        }] : [])
+        const galleries: DirectoryRichCollage[] = []
+        for (let i = 0; i < photos.length; i += 6) galleries.push({type: 'collage', blocks: photos.slice(i, i + 6)})
         const buttons: DirectoryButton[] = []
         // Bound labels, not identities or page slices. Legacy bodies contain only
         // metadata; names are rendered exactly once in either presentation.
@@ -210,7 +223,7 @@ export class DirectoryPager {
         }
         this.states.set(token, {state, expiresAt: this.now() + this.ttlMs})
         return {
-            rich_message: {blocks, skip_entity_detection: true},
+            rich_message: {blocks: [...blocks.slice(0, 3), ...galleries, ...blocks.slice(3)], skip_entity_detection: true},
             rich_reply_markup: {inline_keyboard: [[{
                 text: translate('pagination.compatibility'), callback_data: `dl:${token}:c`,
             }]]},

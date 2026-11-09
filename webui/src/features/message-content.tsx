@@ -1,4 +1,4 @@
-import {Fragment, useEffect, useRef, useState, type ReactNode} from 'react'
+import {Fragment, createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode} from 'react'
 import {Download, FileText, ImageIcon, Users, ZoomIn, ZoomOut, RotateCw, Maximize} from 'lucide-react'
 import {Button} from '@/components/ui/button'
 import {Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger} from '@/components/ui/dialog'
@@ -50,22 +50,37 @@ export function MessageText({body, format}: {body: string; format?: string}) {
   return <span className="whitespace-pre-wrap break-words">{Array.from(document.body.childNodes).map(render)}</span>
 }
 
-export function ContactAvatar({token, wxId, name, available, group = false}: {token: string; wxId: string; name: string; available?: boolean; group?: boolean}) {
+type AvatarEntry = {controller:AbortController; promise:Promise<Blob|null>}
+const AvatarCache = createContext<Map<string,AvatarEntry>|null>(null)
+export function AvatarCacheProvider({token,children}:{token:string;children:ReactNode}) {
+  const cache = useMemo(()=>new Map<string,AvatarEntry>(),[token])
+  useEffect(()=>()=>{cache.forEach(entry=>entry.controller.abort());cache.clear()},[cache])
+  return <AvatarCache.Provider value={cache}>{children}</AvatarCache.Provider>
+}
+
+export function ContactAvatar({token, wxId, name, available, group = false, roomId}: {token: string; wxId: string; name: string; available?: boolean; group?: boolean;roomId?:string}) {
+  const cache = useContext(AvatarCache)
   const [url, setUrl] = useState('')
   useEffect(() => {
     setUrl('')
     if (!available || !wxId) return
-    const controller = new AbortController()
-    let objectUrl = ''
-    messagesApi.blob(token, `/api/avatar?wxId=${encodeURIComponent(wxId)}`, controller.signal).then(blob => {
-      if (controller.signal.aborted) return
+    const path = `/api/avatar?wxId=${encodeURIComponent(wxId)}${roomId?`&roomId=${encodeURIComponent(roomId)}`:''}`
+    let entry = cache?.get(path)
+    if (!entry) {
+      const controller = new AbortController()
+      entry = {controller,promise:messagesApi.blob(token,path,controller.signal).catch(()=>null)}
+      if (cache) {if(cache.size>=512)cache.delete(cache.keys().next().value!);cache.set(path,entry)}
+    }
+    let objectUrl = '', disposed = false
+    entry.promise.then(blob => {
+      if (disposed || !blob) return
       objectUrl = URL.createObjectURL(blob)
       setUrl(objectUrl)
-    }).catch(() => undefined)
-    return () => {controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl)}
-  }, [token, wxId, available])
-  return <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary text-sm font-medium text-secondary-foreground">
-    {url ? <img src={url} alt="" className="size-full object-cover" /> : group ? <Users className="size-4" /> : Array.from(name || '?')[0]}
+    })
+    return () => {disposed=true;if(!cache)entry.controller.abort();if(objectUrl)URL.revokeObjectURL(objectUrl)}
+  }, [token, wxId, available, roomId, cache])
+  return <span role="img" aria-label={`${name || '联系人'}的头像`} className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary text-sm font-medium text-secondary-foreground">
+    {url ? <img src={url} alt="" onError={()=>setUrl('')} className="size-full object-cover" /> : group ? <Users className="size-4" /> : Array.from(name || '?')[0]}
   </span>
 }
 

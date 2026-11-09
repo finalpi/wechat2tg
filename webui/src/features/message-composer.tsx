@@ -11,6 +11,7 @@ import {Alert, AlertDescription} from '@/components/ui/alert'
 import {Field, FieldGroup, FieldLabel} from '@/components/ui/field'
 import {Attachment, AttachmentMedia, AttachmentContent, AttachmentTitle, AttachmentDescription, AttachmentActions} from '@/components/ui/attachment'
 import {messagesApi, messageError, type ChatMessage, type Contact, type Member, type SendMessage} from '@/lib/messages-api'
+import {ContactAvatar} from './message-content'
 
 export interface ComposerDraft {
   body?: string
@@ -170,6 +171,7 @@ export function MessageComposer({token, contact, online, quote, draft, onClearQu
         <Field orientation="horizontal"><input id="mention-all" type="checkbox" checked={all} disabled={locked} onChange={e => {setAll(e.target.checked); setSelected([])}} /><FieldLabel htmlFor="mention-all">@所有人</FieldLabel></Field>
         {members.map(member => <Field key={member.wxId} orientation="horizontal">
           <input id={`member-${member.wxId}`} type="checkbox" checked={selected.some(row => row.wxId === member.wxId)} disabled={locked || (!selected.some(row => row.wxId === member.wxId) && selected.length >= 20)} onChange={e => {setAll(false); setSelected(rows => e.target.checked ? [...rows, member] : rows.filter(row => row.wxId !== member.wxId))}} />
+          <ContactAvatar token={token} wxId={member.wxId} name={member.displayName || member.name} available={member.hasAvatar} roomId={contact.wxId} />
           <FieldLabel htmlFor={`member-${member.wxId}`}>{member.displayName || member.name || member.wxId}</FieldLabel>
         </Field>)}
       </FieldGroup>

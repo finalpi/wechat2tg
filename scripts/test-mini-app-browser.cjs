@@ -64,7 +64,7 @@ async function main() {
     await page.goto('about:blank')
     await page.goto(launch(123))
     await page.getByLabel('会话列表').waitFor()
-    await page.getByText('实时连接', {exact: true}).first().waitFor()
+    await page.locator('button[aria-label="连接状态"][title="实时连接"]').waitFor()
     assert.equal(apiRequests.filter(request => request.url.endsWith('/api/config')).length, 0, 'chat is independent of admin settings')
     assert.equal(await page.evaluate(async () => (await window.navigator.serviceWorker.getRegistrations()).length), 0, 'Mini App must not register a PWA worker')
     assert(apiRequests.every(request => !new URL(request.url).searchParams.has('token')))
@@ -92,7 +92,7 @@ async function main() {
       await page.getByRole('dialog').getByText('微信在线', {exact: true}).waitFor()
       await page.keyboard.press('Escape')
       if (captures && width === 425) await page.screenshot({path: path.join(captures, 'home.png')})
-      await page.getByLabel('会话列表').getByRole('button', {name: /测试会话 1 点击查看聊天记录/}).click()
+      await page.getByLabel('会话列表').getByRole('button', {name: '测试会话 1', exact:true}).click()
       await page.getByText('聊天内容应占据主要空间。', {exact: true}).waitFor()
       const history = await page.locator('[data-slot="message-scroller-viewport"]').boundingBox()
       assert(history.height / height >= 0.60, `${width}x${height}: chat history must occupy at least 60%`)
@@ -114,7 +114,7 @@ async function main() {
     await page.waitForFunction(() => !document.documentElement.classList.contains('dark'))
     await page.evaluate(() => window.__backClick())
     await page.getByLabel('会话列表').waitFor()
-    await page.getByText('实时连接', {exact: true}).first().waitFor()
+    await page.locator('button[aria-label="连接状态"][title="实时连接"]').waitFor()
     // Changed owner invalidates an already-open stream and cannot fall back to stored token.
     owner = 999
     events.publish({type: 'status'})

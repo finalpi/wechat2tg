@@ -115,7 +115,7 @@ async function main() {
     older.body = '更早的消息已更新'
     events.publish({type: 'messages', wxId: group, ids: [90]})
     await page.getByText('更早的消息已更新', {exact: true}).waitFor()
-    await page.getByText('实时连接', {exact: true}).first().waitFor()
+    await page.locator('button[aria-label="连接状态"][title="实时连接"]').waitFor()
     // Deliberately idle longer than the removed polling interval: no HTTP churn.
     await page.waitForTimeout(400)
     const idleCounts = [histories.length, statusRequests, contactRequests, connections]
@@ -135,13 +135,18 @@ async function main() {
     await page.getByRole('button', {name: '返回最新'}).waitFor()
     assert.equal(locates.at(-1).remoteId, '18446744073709551614')
     await page.getByRole('button', {name: '返回最新'}).click()
-    await page.getByRole('button', {name: '同步 Telegram'}).click()
+    const messageAction = async name => {
+      const button = page.getByRole('button', {name, exact:true}).first()
+      await button.locator('xpath=ancestor::*[@data-slot="message"]').hover()
+      await button.click()
+    }
+    await messageAction('同步 Telegram')
     assert.deepEqual(syncs, [{id: 4, confirm: true}])
-    await page.getByRole('button', {name: '撤回', exact: true}).first().click()
+    await messageAction('撤回')
     await page.getByText('撤回失败', {exact: true}).waitFor()
-    await page.getByRole('button', {name: '撤回', exact: true}).first().click()
+    await messageAction('撤回')
     await page.getByText('撤回结果未知', {exact: true}).waitFor()
-    await page.getByRole('button', {name: '撤回', exact: true}).first().click()
+    await messageAction('撤回')
     await page.getByText('已撤回', {exact: true}).waitFor()
     assert.equal(new Set(recalls.map(item => item.requestId)).size, 3)
     assert.equal(recalls.at(-1).confirmUncertain, true)

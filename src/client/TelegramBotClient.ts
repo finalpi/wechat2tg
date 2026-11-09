@@ -1656,16 +1656,18 @@ export class TelegramBotClient extends AbstractClient {
             const scope = this.directoryScope(ctx)
             let unknown = 0
             let notice: string | undefined
-            let items: Array<{remark: string, action: string}>
+            let items: Array<{remark: string, action: string, avatarUrl?: string}>
             if (kind === 'gm') {
                 if (!context.roomId) throw new Error('Missing member directory room')
                 const members = await this.getDirectoryMembers().members(context.roomId)
                 const contacts = await WxContactRepository.getInstance().getAll()
                 const remarks = new Map(contacts.map(contact => [contact.userName, contact.remark]))
+                const avatars = new Map(contacts.map(contact => [contact.userName, contact.smallHeadImgUrl || contact.bigHeadImgUrl]))
                 const search = query.toLocaleLowerCase()
                 items = members.filter(member => !query || [member.wxId, member.name, member.nickname, remarks.get(member.wxId)]
                     .some(value => value?.toLocaleLowerCase().includes(search)))
-                    .map(member => ({remark: member.displayName || remarks.get(member.wxId) || member.name, action: member.wxId}))
+                    .map(member => ({remark: member.displayName || remarks.get(member.wxId) || member.name, action: member.wxId,
+                        avatarUrl: member.avatarUrl || avatars.get(member.wxId)}))
                 const rooms = await WxRoomRepository.getInstance().getAll()
                 const room = rooms.find(row => row.chatroomId === context.roomId)
                 notice = (room?.remark || room?.nickName || context.roomId) + '\n' + context.roomId

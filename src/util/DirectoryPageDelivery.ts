@@ -158,7 +158,9 @@ export async function deliverDirectoryPage(
                     continue
                 }
             }
-            if (format === 'rich' && richRejected(error)) {
+            const avatarRejected = rejection.code === 400 && view.rich_message.blocks.some(block => block.type === 'collage')
+                && /failed to get HTTP URL content|wrong file identifier\/HTTP URL specified|wrong type of the web page content|IMAGE_PROCESS_FAILED|PHOTO_INVALID/i.test(rejection.description)
+            if (format === 'rich' && (richRejected(error) || avatarRejected)) {
                 format = 'html'
                 continue
             }

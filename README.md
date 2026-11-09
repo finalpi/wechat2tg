@@ -1,6 +1,6 @@
 # wechat2tg (v6)
 
-> **Development preview: v6.0.40-dev.4.** Adds WeChat-style contact categories and alphabetical sections, safe read-only official-account menus with ordinary web links, and SDK `6.0.18-dev.1` so login no longer waits for full contact sync. **WebUI chat remains a limited, basic message viewer, not a complete WeChat client; see the limitations below.** Stable `v6` is unchanged. Do not run stable and dev instances against the same writable storage or account sessions.
+> **Development preview: v6.0.40-dev.5.** Adds cached directory navigation, a cleaner chat UI with hover actions and sender avatars, visual category visibility preferences, and rich member avatar galleries for `/members`. SDK stays at `6.0.18-dev.1`. See [chat appearance](docs/chat-appearance.md). **WebUI chat remains a limited, basic message viewer, not a complete WeChat client; see the limitations below.** Stable `v6` is unchanged. Do not run stable and dev instances against the same writable storage or account sessions.
 
 [中文](README_zh.md) | English
 
@@ -196,7 +196,7 @@ Use Docker Engine with Docker Compose v2, or Node.js 18+ for local development. 
 
 ### Docker Compose
 
-This development checkout pins `finalpi/wechat2tg:v6.0.40-dev.4` in `docker-compose.yml`; no WebUI override is needed. For the current stable deployment, use the Compose file from tag `v6.0.39` instead. amd64 users may use the matching `-amd64` image once its build succeeds, without waiting for ARM.
+This development checkout pins `finalpi/wechat2tg:v6.0.40-dev.5` in `docker-compose.yml`; no WebUI override is needed. For the current stable deployment, use the Compose file from tag `v6.0.39` instead. amd64 users may use the matching `-amd64` image once its build succeeds, without waiting for ARM.
 
 The commands below initialize a new stack. For an existing deployment, preserve old images and private configuration; update only the bot with `docker compose pull wechat2tg` and `docker compose up -d --no-deps wechat2tg` after reviewing your local Compose. The `wx2tg-server` image, namespace, and version in this example are unchanged; do not replace or restart the existing production backend as part of this bot naming correction.
 
@@ -222,7 +222,7 @@ The default Compose file is:
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.40-dev.4
+    image: finalpi/wechat2tg:v6.0.40-dev.5
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"

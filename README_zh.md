@@ -1,6 +1,6 @@
 # wechat2tg（v6）
 
-> **开发预览：v6.0.40-dev.4。** 新增微信式通讯录分类与字母分组、公众号只读菜单和普通网页跳转；接入 SDK `6.0.18-dev.1`，登录不再等待全量联系人同步。**WebUI 聊天目前仅为基础消息查看与有限操作，尚未完整支持微信消息类型，请先阅读下方局限性。** 稳定 `v6` 不变，不要让稳定版和开发版同时使用同一套账号会话或可写 storage。
+> **开发预览：v6.0.40-dev.5。** 新增通讯录分类缓存、简洁聊天界面与悬停操作、发言人头像、可视化分类隐藏设置，以及 `/members` 富文本头像图集。SDK 保持 `6.0.18-dev.1`，详见 [聊天界面说明](docs/chat-appearance.md)。**WebUI 聊天目前仅为基础消息查看与有限操作，尚未完整支持微信消息类型，请先阅读下方局限性。** 稳定 `v6` 不变，不要让稳定版和开发版同时使用同一套账号会话或可写 storage。
 
 中文 | [English](README.md)
 
@@ -196,7 +196,7 @@ Docker 部署使用 Docker Engine 和 Docker Compose v2；本地开发使用 Nod
 
 ### Docker Compose
 
-当前开发分支的 `docker-compose.yml` 固定 `finalpi/wechat2tg:v6.0.40-dev.4`，无需 WebUI 覆盖文件。正式部署请使用 `v6.0.39` 标签下的 Compose，不要直接用开发分支覆盖生产配置。amd64 用户可在对应构建成功后使用同版本 `-amd64` 镜像，无需等待 ARM。
+当前开发分支的 `docker-compose.yml` 固定 `finalpi/wechat2tg:v6.0.40-dev.5`，无需 WebUI 覆盖文件。正式部署请使用 `v6.0.39` 标签下的 Compose，不要直接用开发分支覆盖生产配置。amd64 用户可在对应构建成功后使用同版本 `-amd64` 镜像，无需等待 ARM。
 
 以下命令用于初始化全新整套服务。已有部署应保留旧镜像和私有配置，核对本地 Compose 后，仅用 `docker compose pull wechat2tg` 和 `docker compose up -d --no-deps wechat2tg` 更新 bot。本示例的 `wx2tg-server` 镜像、命名空间和版本保持不变；本次 bot 命名修正不能替换或重启已有生产后端。
 
@@ -222,7 +222,7 @@ docker compose restart wechat2tg
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.40-dev.4
+    image: finalpi/wechat2tg:v6.0.40-dev.5
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"

@@ -17,6 +17,9 @@ import {AITools} from '@/features/ai-tools'
 import {TemplatePreview} from '@/features/template-preview'
 import {MessagesPanel} from '@/features/messages-panel'
 import {ChatMenu} from '@/features/chat-menu'
+import {ChatAppearance} from '@/features/chat-appearance'
+import {AvatarCacheProvider} from '@/features/message-content'
+import {useChatPreferences} from '@/lib/chat-preferences'
 import {usePwa} from '@/lib/use-pwa'
 import {useWorkspaceRoute,useWorkspaceViewport,editorsAllowReload} from '@/lib/workspace'
 import {telegramLaunch, loadTelegramSDK, connectTelegramAppearance} from '@/lib/telegram-mini-app'
@@ -145,6 +148,7 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
   const [toast, setToast] = useState('')
   const [conflict, setConflict] = useState(false)
   const [messageDrafts] = useState(() => new Map<string, ComposerDraft>())
+  const chatPreferences = useChatPreferences()
 
   const pwa = usePwa({enabled:!miniApp,canReload:()=>!busy && !Object.keys(draft).length && editorsAllowReload()})
   useEffect(() => {
@@ -177,7 +181,7 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
   const groups = useMemo(() => {
     if (!snapshot) return []
     const wanted = ['messages', 'connection', 'forward', 'templates', 'proxy', 'ai', 'mcp', 'advanced']
-    return [...snapshot.groups.filter(group => wanted.includes(group.id)), {id:'automation',label:'自动化',caption:'脚本函数与应用规则',icon:'spark'}]
+    return [...snapshot.groups.filter(group => wanted.includes(group.id)), {id:'chat-appearance',label:'聊天界面',caption:'预览与显示偏好',icon:'message'}, {id:'automation',label:'自动化',caption:'脚本函数与应用规则',icon:'spark'}]
   }, [snapshot])
 
   const currentValue = (field: Field): FieldValue => {
@@ -308,10 +312,10 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
 
         <main className={cn('min-h-0 min-w-0 flex-1', chatOnly ? 'overflow-hidden' : 'overflow-y-auto p-4 md:p-6')}>
           <div hidden={!chatOnly} className="h-full min-h-0">
-            {chatMounted && <MessagesPanel token={token} drafts={messageDrafts} onLogout={onLogout} visible={chatOnly} miniApp={miniApp} controls={<ChatMenu theme={theme} onToggleTheme={onToggleTheme} onManage={()=>navigate(false)} onLogout={onLogout} miniApp={miniApp} pwa={pwa} />} />}
+            {chatMounted && <AvatarCacheProvider key={token} token={token}><MessagesPanel preferences={chatPreferences.preferences} token={token} drafts={messageDrafts} onLogout={onLogout} visible={chatOnly} miniApp={miniApp} controls={<ChatMenu theme={theme} onToggleTheme={onToggleTheme} onManage={()=>navigate(false)} onLogout={onLogout} miniApp={miniApp} pwa={pwa} />} /></AvatarCacheProvider>}
           </div>
           <div hidden={chatOnly}>
-          {!snapshot ? <div className="flex flex-col items-center gap-3">{error?<Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>:<Spinner />}<Button variant="outline" onClick={()=>void reloadConfig()}>重新加载配置</Button></div> : active === 'automation' ? <AutomationPanel token={token} /> : active === 'mcp' ? (
+          {!snapshot ? <div className="flex flex-col items-center gap-3">{error?<Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>:<Spinner />}<Button variant="outline" onClick={()=>void reloadConfig()}>重新加载配置</Button></div> : active === 'chat-appearance' ? <ChatAppearance preferences={chatPreferences.preferences} onChange={chatPreferences.update} error={chatPreferences.error} /> : active === 'automation' ? <AutomationPanel token={token} /> : active === 'mcp' ? (
             <McpPanel token={token} />
           ) : (
             <Card>
@@ -337,7 +341,7 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
         </main>
       </div>
 
-      {!chatOnly && snapshot && active !== 'messages' && active !== 'automation' && <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+      {!chatOnly && snapshot && active !== 'messages' && active !== 'automation' && active !== 'chat-appearance' && <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
         <div className="flex flex-col">
           {snapshot.restartRequired && <span className="text-sm text-amber-600">保存后需重启应用生效</span>}
           {error && <span className="text-sm text-destructive">{error}</span>}

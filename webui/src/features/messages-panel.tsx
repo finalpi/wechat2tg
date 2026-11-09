@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useRef, useState, type ReactNode, type CSSProperties} from 'react'
 import {createRequestId} from '@/lib/request-id'
-import {ArrowLeft, RefreshCw, Search, MessageSquare, Reply, Undo2, Wifi, WifiOff, PanelLeftClose, PanelLeftOpen} from 'lucide-react'
+import {ArrowLeft, RefreshCw, Search, MessageSquare, Reply, Undo2, MoreHorizontal, PanelLeftClose, PanelLeftOpen} from 'lucide-react'
 import {ApiError} from '@/lib/api'
 import {messagesApi, mergeMessages, messageError, type Contact, type ChatMessage, type MessageStatus, type MessageUpdates, type ContactCategory, type ContactCounts} from '@/lib/messages-api'
 import {cn} from '@/lib/utils'
@@ -22,6 +22,7 @@ import {ContactAvatar, MessageBody} from './message-content'
 import {MessageComposer, type ComposerDraft} from './message-composer'
 import {ContactDirectory,LetterContacts} from './contact-directory'
 import {OfficialAccountMenu} from './official-account-menu'
+import {isContactVisible, type ChatPreferences} from '@/lib/chat-preferences'
 
 const sendLabels: Record<string, string> = {received: '已接收', sending: '发送中', submitted: '已提交微信', unknown: '结果未知', failed: '发送失败'}
 const syncLabels: Record<string, string> = {pending: '待同步', syncing: '同步中', synced: '已同步', failed: '同步失败', unknown: '同步未知', unverified: '待核实', excluded: '不参与同步'}
@@ -33,16 +34,25 @@ function Placeholder({title, detail}: {title: string; detail?: string}) {
   return <Empty><EmptyHeader><EmptyMedia variant="icon"><MessageSquare /></EmptyMedia><EmptyTitle>{title}</EmptyTitle>{detail && <EmptyDescription>{detail}</EmptyDescription>}</EmptyHeader></Empty>
 }
 
+const connectionLabels = {connected:'实时连接',connecting:'连接中',reconnecting:'重连中',disconnected:'连接已断开'}
+const connectionEmoji = {connected:'🟢',connecting:'🟡',reconnecting:'🟡',disconnected:'🔴'}
 function ConnectionBadge({state, className}: {state: MessageConnectionState; className?: string}) {
-  return <Badge variant="outline" role="status" className={className}>{{connected: '实时连接', connecting: '连接中', reconnecting: '重连中', disconnected: '连接已断开'}[state]}</Badge>
+  return <span role="status" className={className} aria-label={connectionLabels[state]} title={connectionLabels[state]}>{connectionEmoji[state]}</span>
+}
+
+function MessageActions({children}:{children:ReactNode}) {
+  const [open,setOpen] = useState(false)
+  return <div className="message-actions" data-open={open}>
+    <Button variant="ghost" size="icon" className="message-actions-toggle size-7" aria-label="消息操作" aria-expanded={open} onClick={()=>setOpen(value=>!value)}><MoreHorizontal /></Button>
+    <div className="message-actions-content" onKeyDown={event=>{if(event.key==='Escape')setOpen(false)}}>{children}</div>
+  </div>
 }
 
 function ConnectionDetails({state, status}: {state: MessageConnectionState; status: MessageStatus}) {
   const healthy = state === 'connected' && status.wechatOnline && status.telegramOnline
   return <Dialog><DialogTrigger asChild>
-    <Button variant="ghost" size="sm" aria-label="连接状态">
-      {healthy ? <Wifi data-icon="inline-start" /> : <WifiOff data-icon="inline-start" />}
-      {healthy ? '实时连接' : state === 'connected' ? '服务离线' : state === 'connecting' ? '连接中' : state === 'disconnected' ? '已断开' : '重连中'}
+    <Button variant="ghost" size="icon" aria-label="连接状态" title={healthy?'实时连接':state==='connected'?'服务离线':connectionLabels[state]}>
+      <span aria-hidden="true">{healthy?'🟢':state==='connected'?'🟠':connectionEmoji[state]}</span>
     </Button>
   </DialogTrigger><DialogContent>
     <DialogHeader><DialogTitle>连接状态</DialogTitle><DialogDescription>消息更新与服务连接</DialogDescription></DialogHeader>
@@ -276,6 +286,7 @@ function Conversation({token, contact, online, draft, events, connection, onBack
               return <MessageScrollerItem key={row.id} messageId={String(row.id)}>
                 {newDay && <Marker variant="separator" className="mb-4"><MarkerContent>{date(row.timestamp)}</MarkerContent></Marker>}
                 <Message align={outgoing ? 'end' : 'start'}>
+                  <ContactAvatar token={token} wxId={row.senderId || (!outgoing?contact.wxId:'')} name={outgoing?'我':row.senderDisplayName || row.senderName || contact.name} available={row.senderHasAvatar || (!outgoing && contact.hasAvatar) || (contact.kind==='group' && Boolean(row.senderId))} roomId={contact.kind==='group'?contact.wxId:undefined} />
                   <MessageContent className="gap-1">
                     {!outgoing && (newDay || !row.senderId || rows[index-1].senderId!==row.senderId || rows[index-1].direction!==row.direction || row.timestamp-rows[index-1].timestamp>120) && <MessageHeader>{row.senderDisplayName || row.senderName || row.senderId || contact.name}</MessageHeader>}
                     <Bubble variant={outgoing ? 'sent' : 'outline'} align={outgoing ? 'end' : 'start'} className={cn(targetId === row.id && 'rounded-xl ring-2 ring-ring')}>
@@ -283,12 +294,15 @@ function Conversation({token, contact, online, draft, events, connection, onBack
                     </Bubble>
                     <MessageFooter className="flex-wrap gap-2">
                       <time dateTime={new Date(row.timestamp * 1000).toISOString()}>{time(row.timestamp)}</time>
-                      {outgoing && <span className={cn(['failed', 'unknown'].includes(row.status) && 'text-destructive')}>{sendLabels[row.status] || row.status}</span>}
-                      {row.telegramTracked && syncLabels[row.telegramStatus] && <span>{syncLabels[row.telegramStatus]}</span>}
+                      {outgoing && row.status !== 'submitted' && <span className={cn(['failed', 'unknown'].includes(row.status) && 'text-destructive')}>{sendLabels[row.status] || row.status}</span>}
                       {row.revokeStatus && revokeLabels[row.revokeStatus] && <Badge variant="secondary">{revokeLabels[row.revokeStatus]}</Badge>}
+                      {row.telegramTracked && ['failed','unknown'].includes(row.telegramStatus) && <span className="text-destructive">{syncLabels[row.telegramStatus]}</span>}
+                      <MessageActions>
+                      {row.telegramTracked && syncLabels[row.telegramStatus] && <span>{syncLabels[row.telegramStatus]}</span>}
                       {canQuote && <Button variant="ghost" size="icon" className="size-6" aria-label="引用回复" onClick={() => setQuote(row)}><Reply /></Button>}
                       {canSync && <Button variant="ghost" size="sm" disabled={busyIds.has(row.id)} onClick={() => action(row, 'sync')}><RefreshCw /> 同步 Telegram</Button>}
                       {canRevoke && <Button variant="ghost" size="sm" disabled={busyIds.has(row.id)} onClick={() => action(row, 'revoke')}><Undo2 /> 撤回</Button>}
+                      </MessageActions>
                     </MessageFooter>
                   </MessageContent>
                 </Message>
@@ -304,7 +318,7 @@ function Conversation({token, contact, online, draft, events, connection, onBack
   </section>
 }
 
-export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp = false, controls}: {token: string; drafts: Map<string, ComposerDraft>; onLogout: () => void; visible?:boolean; miniApp?:boolean; controls?:ReactNode}) {
+export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp = false, controls, preferences={hiddenCategories:[]}}: {token: string; drafts: Map<string, ComposerDraft>; onLogout: () => void; visible?:boolean; miniApp?:boolean; controls?:ReactNode;preferences?:ChatPreferences}) {
   const [status, setStatus] = useState<MessageStatus | null>(null)
   const [contacts, setContacts] = useState<Contact[]>([])
   const [active, setActive] = useState<Contact | null>(null)
@@ -343,7 +357,13 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
   const [query, setQuery] = useState('')
   const [view,setView] = useState<'chats'|'directory'>('chats')
   const [category,setCategory] = useState<ContactCategory|null>(null)
+  useEffect(()=>{
+    if(category && preferences.hiddenCategories.includes(category))setCategory(null)
+    if(active && !isContactVisible(active,preferences))setActive(null)
+  },[preferences,category,active])
   const [counts,setCounts] = useState<ContactCounts>()
+  const directoryCache = useRef(new Map<string, {contacts:Contact[]; offset:number; hasMore:boolean}>())
+  const directoryRevision = useRef(0)
   const kind = view==='chats'?'all':category || 'all'
   const order = view==='directory'?'letter':undefined
   const [loading, setLoading] = useState(false)
@@ -398,14 +418,37 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
   }, [token, reload, onAuthError, events])
 
   useEffect(() => {
+    directoryCache.current.clear()
+    directoryRevision.current++
+  }, [token, query, reload, status?.available])
+
+  useEffect(() => events.subscribe(event => {
+    if (event.event === 'ready' || event.data.type === 'contacts') {
+      directoryCache.current.clear()
+      directoryRevision.current++
+    }
+  }), [events])
+
+  // Counts cover every category for the current search, independent of the
+  // expanded category, ordering, or page. Keep them visible while rows reload.
+  useEffect(() => {
+    setCounts(undefined)
+  }, [token, query, status?.available])
+
+  useEffect(() => {
     if (!status?.available) return
     const controller = new AbortController()
     contactRequests.current = controller
     const generation = ++contactGeneration.current
-    setLoading(true); setContacts([]); setCounts(undefined); setError(''); setHasMore(false); setMoreBusy(false)
-    contactOffset.current = 0
-    let initial = true
+    const directory = order === 'letter'
+    const cached = directory ? directoryCache.current.get(kind) : undefined
+    const collapsed = directory && kind === 'all'
+    setLoading(!cached && !collapsed); setContacts(cached?.contacts || []); setError(''); setHasMore(cached?.hasMore || false); setMoreBusy(false)
+    setOffset(cached?.offset || 0)
+    contactOffset.current = cached?.offset || 0
+    let initial = !cached
     const queue = createRefreshQueue(async () => {
+      const revision = directoryRevision.current
       const first = await messagesApi.contacts(token, query, kind, 0, controller.signal, order)
       if (controller.signal.aborted || generation !== contactGeneration.current) return
       setCounts(first.countsScope==='cached'?first.counts:undefined)
@@ -413,6 +456,7 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
         initial = false
         setContacts(first.contacts); setOffset(first.offset); contactOffset.current = first.offset
         setHasMore(first.hasMore); setLoading(false)
+        if (directory && revision === directoryRevision.current) directoryCache.current.set(kind, first)
       } else {
         const refreshed = [...first.contacts]
         let page = first
@@ -426,15 +470,19 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
         }
         // Replace the loaded window: a contact moved to another category (or
         // removed from this search) must not linger after an SSE invalidation.
-        setContacts([...new Map(refreshed.map(contact=>[contact.wxId,contact])).values()])
+        const contacts = [...new Map(refreshed.map(contact=>[contact.wxId,contact])).values()]
+        setContacts(contacts)
         setOffset(page.offset);contactOffset.current=page.offset;setHasMore(page.hasMore)
+        if (directory && revision === directoryRevision.current) directoryCache.current.set(kind, {contacts, offset:page.offset, hasMore:page.hasMore})
       }
       setError('')
     }, e => {if (!controller.signal.aborted) {setError(messageError(e)); setLoading(false); onAuthError(e)}})
     const unsubscribe = events.subscribe(event => {
-      if (event.event === 'ready' || event.data.type === 'messages' || event.data.type === 'contacts') queue.schedule()
+      if (event.event === 'ready' || event.data.type === 'contacts' || (!directory && event.data.type === 'messages')) queue.schedule()
     })
-    const timer = window.setTimeout(queue.flush, query ? 250 : 0)
+    // Collapsing needs no rows; loaded categories restore their entire paged window.
+    const timer = !cached && (!collapsed || !directoryCache.current.size)
+      ? window.setTimeout(queue.flush, query ? 250 : 0) : undefined
     return () => {controller.abort(); queue.dispose(); unsubscribe(); window.clearTimeout(timer); contactGeneration.current++}
   }, [token, query, kind, order, reload, status?.available, onAuthError, events])
 
@@ -442,23 +490,29 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
     if (moreBusy) return
     const generation = contactGeneration.current
     const signal = contactRequests.current?.signal
+    const revision = directoryRevision.current
     setMoreBusy(true)
     try {
       const page = await messagesApi.contacts(token, query, kind, offset, signal, order)
       if (signal?.aborted || generation !== contactGeneration.current) return
-      setContacts(current => [...new Map([...current, ...page.contacts].map(contact => [contact.wxId, contact])).values()]); setOffset(page.offset); contactOffset.current = page.offset; setHasMore(page.hasMore)
+      if (order === 'letter' && revision !== directoryRevision.current) return
+      const previous = directoryCache.current.get(kind)?.contacts || contacts
+      const merged = [...new Map([...previous, ...page.contacts].map(contact => [contact.wxId, contact])).values()]
+      setContacts(current => order === 'letter' ? merged : [...new Map([...current, ...page.contacts].map(contact => [contact.wxId, contact])).values()]); setOffset(page.offset); contactOffset.current = page.offset; setHasMore(page.hasMore)
+      if (order === 'letter' && revision === directoryRevision.current) directoryCache.current.set(kind, {contacts:merged, offset:page.offset, hasMore:page.hasMore})
       setCounts(page.countsScope==='cached'?page.counts:undefined)
     } catch (e) {if (!signal?.aborted && generation === contactGeneration.current) {setError(messageError(e)); onAuthError(e)}}
     finally {if (generation === contactGeneration.current) setMoreBusy(false)}
   }
 
-  const renderContact = (contact:Contact)=><Button key={contact.wxId} variant={active?.wxId===contact.wxId?'secondary':'ghost'} aria-pressed={active?.wxId===contact.wxId} aria-label={view==='directory'?contact.name || contact.wxId:undefined} className="h-auto w-full justify-start gap-3 whitespace-normal px-3 py-2 text-left md:py-3" onClick={()=>selectContact(contact)}>
+  const renderContact = (contact:Contact)=><Button key={contact.wxId} variant={active?.wxId===contact.wxId?'secondary':'ghost'} aria-pressed={active?.wxId===contact.wxId} aria-label={contact.name || contact.wxId} className="h-auto w-full justify-start gap-3 whitespace-normal px-3 py-2 text-left md:py-3" onClick={()=>selectContact(contact)}>
     <ContactAvatar token={token} wxId={contact.wxId} name={contact.name} available={contact.hasAvatar} group={contact.kind==='group'} />
     <span className="flex min-w-0 flex-1 flex-col gap-1"><span className="flex items-center justify-between gap-2"><span className="truncate">{contact.name || contact.wxId}</span>{view==='chats' && contact.lastActivity>0 && <span className="shrink-0 text-xs text-muted-foreground">{time(contact.lastActivity)}</span>}</span>
-      {view==='chats' && <><span className="truncate text-xs text-muted-foreground">{contact.lastBody || contact.nickname || contact.wxId}</span>{contact.unsyncedCount>0 && <span className="text-xs text-muted-foreground">{contact.unsyncedCount} 条待同步</span>}</>}
+      {view==='chats' && <><span className="truncate text-xs text-muted-foreground">{contact.lastBody || contact.nickname || contact.wxId}</span></>}
     </span>
   </Button>
-  const contactRows = <>{loading?<div className="flex justify-center p-6"><Spinner /></div>:!contacts.length?<Placeholder title={view==='directory'?'暂无匹配的缓存记录':'未找到会话'} detail={status?.directoryAvailable?undefined:'联系人目录尚未加载。'} />:view==='directory'?<LetterContacts contacts={contacts} renderContact={renderContact} />:contacts.map(renderContact)}
+  const visibleContacts = contacts.filter(contact=>isContactVisible(contact,preferences))
+  const contactRows = <>{loading?<div className="flex justify-center p-6"><Spinner /></div>:!visibleContacts.length?<Placeholder title={view==='directory'?'暂无匹配的缓存记录':'暂无可见会话'} detail={status?.directoryAvailable?undefined:'联系人目录尚未加载。'} />:view==='directory'?<LetterContacts contacts={visibleContacts} renderContact={renderContact} />:visibleContacts.map(renderContact)}
     {hasMore && <Button variant="ghost" size="sm" disabled={moreBusy || loading} onClick={more}>{moreBusy && <Spinner />} 更多会话</Button>}
   </>
   const liveBadge = <ConnectionBadge state={connection} />
@@ -480,7 +534,7 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
       </div>
       {error && <Alert variant="destructive" className="rounded-none border-x-0"><AlertDescription>{error}</AlertDescription></Alert>}
       <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2" aria-label="会话列表">
-        {view==='directory'?<ContactDirectory category={category} onCategory={setCategory} counts={counts} searching={Boolean(query)}>{contactRows}</ContactDirectory>:contactRows}
+        {view==='directory'?<ContactDirectory category={category} onCategory={setCategory} counts={counts} searching={Boolean(query)} hiddenCategories={preferences.hiddenCategories}>{contactRows}</ContactDirectory>:contactRows}
       </div>
     </aside>
     {!(active && focused) && <div role="separator" aria-label="调整侧栏宽度" aria-orientation="vertical" aria-valuemin={260} aria-valuemax={440} aria-valuenow={listWidth} tabIndex={0} className="hidden w-1 shrink-0 cursor-col-resize touch-none bg-border/40 focus-visible:bg-primary md:block" onPointerDown={e=>e.currentTarget.setPointerCapture(e.pointerId)} onPointerMove={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))resizeList(e.clientX-(root.current?.getBoundingClientRect().left || 0))}} onPointerUp={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId)}} onKeyDown={e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();resizeList(e.key==='Home'?260:e.key==='End'?440:listWidth+(e.key==='ArrowLeft'?-16:16))}}} />}
