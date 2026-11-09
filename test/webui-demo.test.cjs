@@ -1,0 +1,108 @@
+/* eslint-disable @typescript-eslint/no-var-requires */
+const {test} = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+const {once} = require('node:events')
+const {createDemoWebUI} = require('../dist/webui/dev')
+const {createWebUIServer} = require('../dist/webui/server')
+
+async function fixture(t) {
+  const preview = await createDemoWebUI('demo-test-token')
+  preview.server.listen(0,'127.0.0.1');await once(preview.server,'listening')
+  t.after(preview.dispose)
+  const base = `http://127.0.0.1:${preview.server.address().port}`
+  const request = (url,options = {})=>fetch(base + url,{...options,headers:{Authorization:'Bearer demo-test-token','Content-Type':'application/json',...options.headers}})
+  const json = async url=>{const response = await request(url);assert.equal(response.status,200);return response.json()}
+  return {...preview,request,json}
+}
+
+test('demo is explicitly marked, authenticated and covers all cached contact categories', async t=>{
+  const f = await fixture(t)
+  assert.equal((await f.request('/api/contacts',{headers:{Authorization:''}})).status,401)
+  assert.equal((await f.json('/api/messages/status')).demo,true)
+  const all = await f.json('/api/contacts?kind=all')
+  assert.equal(all.contacts.length,12)
+  assert.deepEqual(all.counts,{person:4,group:3,official:2,service:1,enterprise:1,unknown:1})
+  const groups = await f.json('/api/contacts?kind=group&order=letter')
+  assert.equal(groups.contacts.length,3)
+  assert.deepEqual(groups.counts,all.counts)
+  const search = await f.json('/api/contacts?q=' + encodeURIComponent('林小满'))
+  assert.equal(search.contacts.length,1)
+  assert.equal(search.counts.person,1)
+  const members = await f.json('/api/groups/members?wxId=demo-team@chatroom')
+  assert.equal(members.total,5)
+  assert(members.members.some(member=>member.wxId === 'demo-work@openim'))
+  assert(members.members.every(member=>member.hasAvatar))
+  const first = await f.json('/api/messages?wxId=demo-team@chatroom')
+  assert(first.hasMore)
+  const older = await f.json(`/api/messages?wxId=demo-team@chatroom&before=${first.before}`)
+  assert.equal(new Set([...older.messages,...first.messages].map(row=>row.id)).size,older.messages.length + first.messages.length)
+  assert(older.messages.at(-1).timestamp <= first.messages[0].timestamp)
+  const quote = first.messages.find(row=>row.type === 'quote')
+  const located = await f.json(`/api/messages/locate?wxId=demo-team@chatroom&id=${quote.details.replyTo.id}`)
+  assert.equal(located.targetId,quote.details.replyTo.id)
+  assert.equal((await f.json('/api/contacts/menu?wxId=demo-design')).available,true)
+})
+
+test('demo sends, mentions, idempotency, sync and recall only mutate the disposable preview', async t=>{
+  const f = await fixture(t)
+  const body = {wxId:'demo-team@chatroom',body:'仅用于演示测试',requestId:'demo-send-request-0001',mentions:{memberIds:['demo-lin']}}
+  const send = ()=>f.request('/api/messages',{method:'POST',body:JSON.stringify(body)})
+  const sent = await (await send()).json()
+  assert.equal(sent.body,'@林小满 仅用于演示测试')
+  assert.equal((await (await send()).json()).id,sent.id)
+  const changed = await f.request('/api/messages',{method:'POST',body:JSON.stringify({...body,body:'different'})})
+  assert.equal(changed.status,409)
+  const updates = await f.json(`/api/messages/updates?wxId=${body.wxId}&ids=${sent.id}`)
+  assert.equal(updates.messages.length,1)
+  const synced = await f.request(`/api/messages/${sent.id}/sync`,{method:'POST',body:'{}'})
+  assert.equal(synced.status,202)
+  const revoked = await f.request(`/api/messages/${sent.id}/revoke`,{method:'POST',body:JSON.stringify({requestId:'demo-revoke-request-01',confirm:true})})
+  assert.equal((await revoked.json()).revokeStatus,'revoked')
+  const fresh = await fixture(t)
+  const freshHistory = await fresh.json('/api/messages?wxId=demo-team@chatroom')
+  assert(!freshHistory.messages.some(row=>row.requestId === body.requestId),'independent previews never share mutations')
+  const directory = f.directory
+  await f.dispose()
+  assert.equal(fs.existsSync(directory),false,'preview files are removed on close')
+})
+
+test('demo avatars/media are local fixtures; external services and configuration writes are blocked', async t=>{
+  const f = await fixture(t)
+  const avatar = await f.request('/api/avatar?wxId=demo-lin')
+  assert.equal(avatar.status,200)
+  assert.equal(avatar.headers.get('content-type'),'image/png')
+  assert.equal((await f.request('/api/avatar?wxId=https://example.com')).status,404)
+  const history = await f.json('/api/messages?wxId=demo-team@chatroom')
+  for(const type of ['image','audio','file']) {
+    const message = history.messages.find(row=>row.type === type)
+    const info = await f.json('/api/media/message/' + message.id)
+    assert.equal(info.path,undefined,'filesystem paths never leave the API')
+    const response = await f.request('/api/media/' + info.id)
+    assert.equal(response.status,200)
+    assert.equal((await response.arrayBuffer()).byteLength,info.size)
+  }
+  const snapshot = await f.json('/api/config')
+  assert.equal(snapshot.demo,true)
+  for(const [url,method] of [['/api/config','PATCH'],['/api/ai/test','POST'],['/api/ai/models','POST'],['/api/automation/test','POST'],['/api/mcp/token','POST']]) {
+    const response = await f.request(url,{method,body:JSON.stringify({url:'http://127.0.0.1:1',source:'environment',revision:snapshot.revision,values:{BOT_TOKEN:'must-not-save'}})})
+    assert.equal(response.status,403)
+    assert.equal((await response.json()).error,'demoReadOnly')
+  }
+  assert.equal((await f.request('/api/media?name=file.txt',{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:'local file'})).status,403)
+  assert.equal(fs.existsSync(path.join(f.directory,'settings.json')),false)
+  assert.equal((await f.request('/mcp',{method:'POST',body:'{}'})).status,503)
+})
+
+test('normal standalone remains disconnected and never silently replaces an outage with demo data', async t=>{
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(),'webui-no-demo-'))
+  const server = createWebUIServer({environment:{WEBUI_MOCK:'true'},token:'normal-token',file:path.join(directory,'config.json'),mcpTokens:{read:'r'.repeat(32),write:'w'.repeat(32)}})
+  server.listen(0,'127.0.0.1');await once(server,'listening')
+  t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));fs.rmSync(directory,{recursive:true,force:true})})
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/messages/status`,{headers:{Authorization:'Bearer normal-token'}})
+  const status = await response.json()
+  assert.equal(status.available,false)
+  assert.equal(status.demo,undefined)
+})

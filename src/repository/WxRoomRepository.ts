@@ -1,7 +1,7 @@
 import {getGeWeChatDataSource} from '../data-sourse'
-import {Like, Repository, SelectQueryBuilder} from 'typeorm'
+import {Repository} from 'typeorm'
+import {directoryContains} from './DirectorySearch'
 import { WxRoom } from '../entity/WxRoom'
-import {Page} from '../entity/Page'
 
 export class WxRoomRepository {
     private WxRoomRepository: Repository<WxRoom>
@@ -23,8 +23,9 @@ export class WxRoomRepository {
     async getByNickNameOrRemark(query: string) {
         return this.WxRoomRepository.find({
             where: [
-                { nickName: Like(`%${query}%`) },
-                { remark: Like(`%${query}%`) }
+                { nickName: directoryContains(query) },
+                { remark: directoryContains(query) },
+                { chatroomId: directoryContains(query) }
             ]
         })
     }

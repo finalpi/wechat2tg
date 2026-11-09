@@ -294,6 +294,7 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
           <Button variant="ghost" size="sm" aria-label="退出" onClick={onLogout}><LogOut data-icon="inline-start" /><span className="hidden md:inline">退出</span></Button>
         </div>
       </header>}
+      {!chatOnly && snapshot?.demo && <Alert className="shrink-0 rounded-none border-x-0 py-2"><AlertDescription>🧪 演示预览：服务配置只读，不调用真实服务；「聊天界面」显示偏好仍可调整。</AlertDescription></Alert>}
       {!miniApp && pwa.updateReady && <div role="status" className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-b bg-background px-3 py-1 text-sm"><span>{pwa.error || '新版本已就绪，当前页面不会自动刷新。'}</span><Button size="sm" variant="outline" onClick={()=>void pwa.applyUpdate()}>更新应用</Button></div>}
       <div className="flex min-h-0 flex-1">
         {!chatOnly && <aside className="hidden w-44 shrink-0 overflow-y-auto border-r p-2 md:block">
@@ -315,7 +316,7 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
             {chatMounted && <AvatarCacheProvider key={token} token={token}><MessagesPanel preferences={chatPreferences.preferences} token={token} drafts={messageDrafts} onLogout={onLogout} visible={chatOnly} miniApp={miniApp} controls={<ChatMenu theme={theme} onToggleTheme={onToggleTheme} onManage={()=>navigate(false)} onLogout={onLogout} miniApp={miniApp} pwa={pwa} />} /></AvatarCacheProvider>}
           </div>
           <div hidden={chatOnly}>
-          {!snapshot ? <div className="flex flex-col items-center gap-3">{error?<Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>:<Spinner />}<Button variant="outline" onClick={()=>void reloadConfig()}>重新加载配置</Button></div> : active === 'chat-appearance' ? <ChatAppearance preferences={chatPreferences.preferences} onChange={chatPreferences.update} error={chatPreferences.error} /> : active === 'automation' ? <AutomationPanel token={token} /> : active === 'mcp' ? (
+          {!snapshot ? <div className="flex flex-col items-center gap-3">{error?<Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>:<Spinner />}<Button variant="outline" onClick={()=>void reloadConfig()}>重新加载配置</Button></div> : active === 'chat-appearance' ? <ChatAppearance preferences={chatPreferences.preferences} onChange={chatPreferences.update} error={chatPreferences.error} /> : snapshot.demo && ['automation','mcp'].includes(active) ? <Alert><AlertDescription>演示模式未连接外部服务，此功能暂不可用。</AlertDescription></Alert> : active === 'automation' ? <AutomationPanel token={token} /> : active === 'mcp' ? (
             <McpPanel token={token} />
           ) : (
             <Card>
@@ -324,12 +325,12 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
               </CardHeader>
               <CardContent className="flex flex-col gap-6">
                 {environment.length > 0 && (
-                  <Section title="环境配置" fields={environment} currentValue={currentValue} setField={setField} busy={busy} />
+                  <Section title="环境配置" fields={environment} currentValue={currentValue} setField={setField} busy={busy || Boolean(snapshot.demo)} />
                 )}
                 {runtime.length > 0 && (
-                  <Section title="机器人偏好" fields={runtime} currentValue={currentValue} setField={setField} busy={busy} />
+                  <Section title="机器人偏好" fields={runtime} currentValue={currentValue} setField={setField} busy={busy || Boolean(snapshot.demo)} />
                 )}
-                {active === 'ai' && aiModelField && (
+                {active === 'ai' && aiModelField && !snapshot.demo && (
                   <AITools token={token} url={aiUrl} model={aiModel} onModel={model => setField(aiModelField, model)} />
                 )}
                 {active === 'templates' && <TemplatePreview values={templateValues} />}
@@ -341,7 +342,7 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
         </main>
       </div>
 
-      {!chatOnly && snapshot && active !== 'messages' && active !== 'automation' && active !== 'chat-appearance' && <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+      {!chatOnly && snapshot && !snapshot.demo && active !== 'messages' && active !== 'automation' && active !== 'chat-appearance' && <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
         <div className="flex flex-col">
           {snapshot.restartRequired && <span className="text-sm text-amber-600">保存后需重启应用生效</span>}
           {error && <span className="text-sm text-destructive">{error}</span>}

@@ -18,7 +18,7 @@ import {Message, MessageContent, MessageHeader, MessageFooter} from '@/component
 import {Bubble, BubbleContent} from '@/components/ui/bubble'
 import {Marker, MarkerContent} from '@/components/ui/marker'
 import {MessageScrollerProvider, MessageScroller, MessageScrollerViewport, MessageScrollerContent, MessageScrollerItem, MessageScrollerButton, useMessageScroller} from '@/components/ui/message-scroller'
-import {ContactAvatar, MessageBody} from './message-content'
+import {ContactAvatar, MessageBody, useRefreshAvatars} from './message-content'
 import {MessageComposer, type ComposerDraft} from './message-composer'
 import {ContactDirectory,LetterContacts} from './contact-directory'
 import {OfficialAccountMenu} from './official-account-menu'
@@ -50,16 +50,28 @@ function MessageActions({children}:{children:ReactNode}) {
 
 function ConnectionDetails({state, status}: {state: MessageConnectionState; status: MessageStatus}) {
   const healthy = state === 'connected' && status.wechatOnline && status.telegramOnline
+  const polling = status.telegramPolling
+  const pollingLabel = polling && {starting:'等待首次轮询成功',healthy:'更新拉取正常',retrying:'轮询失败，正在重试',stalled:'轮询进度停滞',stopped:'轮询已停止'}[polling.state]
+  const stamp = (value:number|null)=>value === null ? '暂无' : new Date(value).toLocaleString()
   return <Dialog><DialogTrigger asChild>
-    <Button variant="ghost" size="icon" aria-label="连接状态" title={healthy?'实时连接':state==='connected'?'服务离线':connectionLabels[state]}>
-      <span aria-hidden="true">{healthy?'🟢':state==='connected'?'🟠':connectionEmoji[state]}</span>
+    <Button variant="ghost" size="icon" aria-label="连接状态" title={status.demo?'演示连接（未连接真实账号）':healthy?'实时连接':state==='connected'?(polling && !polling.healthy?`Telegram：${pollingLabel}`:'服务离线'):connectionLabels[state]}>
+      <span aria-hidden="true">{status.demo?'🧪':healthy?'🟢':state==='connected'?'🟠':connectionEmoji[state]}</span>
     </Button>
   </DialogTrigger><DialogContent>
-    <DialogHeader><DialogTitle>连接状态</DialogTitle><DialogDescription>消息更新与服务连接</DialogDescription></DialogHeader>
+    <DialogHeader><DialogTitle>连接状态</DialogTitle><DialogDescription>{status.demo?'本地演示数据，没有连接微信或 Telegram。':'浏览器实时连接与 Telegram 更新轮询分别检测，连接 WebUI 不代表机器人正在正常收取消息。'}</DialogDescription></DialogHeader>
     <div className="flex flex-wrap gap-2"><ConnectionBadge state={state} />
-      <Badge variant={status.wechatOnline ? 'secondary' : 'outline'}>{status.wechatOnline ? '微信在线' : '微信离线'}</Badge>
-      <Badge variant={status.telegramOnline ? 'secondary' : 'outline'}>{status.telegramOnline ? 'Telegram 在线' : 'Telegram 离线'}</Badge>
+      <Badge variant={status.wechatOnline ? 'secondary' : 'outline'}>{status.demo ? '模拟微信连接' : status.wechatOnline ? '微信在线' : '微信离线'}</Badge>
+      <Badge variant={status.telegramOnline ? 'secondary' : 'outline'}>{status.demo ? '模拟 Telegram 连接' : status.telegramOnline ? 'Telegram 在线' : 'Telegram 离线'}</Badge>
     </div>
+    {polling && <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm" aria-label="Telegram 轮询详情">
+      <dt className="text-muted-foreground">轮询状态</dt><dd>{pollingLabel}{polling.inFlight?' · 请求进行中':''}</dd>
+      <dt className="text-muted-foreground">最近成功拉取</dt><dd>{polling.lastSuccessAt === null?'尚未成功拉取更新':stamp(polling.lastSuccessAt)}</dd>
+      <dt className="text-muted-foreground">最近请求开始</dt><dd>{stamp(polling.lastAttemptAt)}</dd>
+      <dt className="text-muted-foreground">最近失败</dt><dd>{stamp(polling.lastFailureAt)}{polling.lastError?` · ${polling.lastError}`:''}</dd>
+      <dt className="text-muted-foreground">连续失败</dt><dd>{polling.consecutiveFailures} 次</dd>
+      <dt className="text-muted-foreground">最近请求耗时</dt><dd>{polling.lastDurationMs === null?'暂无':`${(polling.lastDurationMs/1000).toFixed(1)} 秒`}</dd>
+      <dt className="text-muted-foreground">请求截止时间</dt><dd>{polling.requestTimeoutMs/1000} 秒，仅 getUpdates；文件上传不受影响。</dd>
+    </dl>}
   </DialogContent></Dialog>
 }
 
@@ -372,6 +384,11 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
   const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState('')
   const [reload, setReload] = useState(0)
+  const refreshAvatars = useRefreshAvatars()
+  const [refreshing,setRefreshing] = useState(false)
+  const [refreshFeedback,setRefreshFeedback] = useState<{kind:'success'|'error';message:string}|null>(null)
+  const refreshInProgress = useRef(false)
+  const refreshContacts = useRef<(()=>void)|null>(null)
   const contactGeneration = useRef(0)
   const contactRequests = useRef<AbortController | null>(null)
   const contactOffset = useRef(0)
@@ -388,7 +405,7 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
     return drafts.get(wxId)!
   }
   const onAuthError = useCallback((error: unknown) => {
-    if (error instanceof ApiError && (error.status === 401 || error.status === 403)) expire()
+    if (error instanceof ApiError && error.code !== 'demoReadOnly' && (error.status === 401 || error.status === 403)) expire()
   }, [expire])
 
   useEffect(()=>{
@@ -435,7 +452,14 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
     setCounts(undefined)
   }, [token, query, status?.available])
 
+  useEffect(()=>{
+    if(refreshFeedback?.kind!=='success')return
+    const timer=window.setTimeout(()=>setRefreshFeedback(null),5000)
+    return()=>window.clearTimeout(timer)
+  },[refreshFeedback])
+
   useEffect(() => {
+    refreshInProgress.current=false;setRefreshing(false);setRefreshFeedback(null)
     if (!status?.available) return
     const controller = new AbortController()
     contactRequests.current = controller
@@ -446,48 +470,78 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
     setLoading(!cached && !collapsed); setContacts(cached?.contacts || []); setError(''); setHasMore(cached?.hasMore || false); setMoreBusy(false)
     setOffset(cached?.offset || 0)
     contactOffset.current = cached?.offset || 0
-    let initial = !cached
+    let initial = !cached, manualQueued = false
+    let inFlight:AbortController|undefined, initialTimer:number|undefined
+    const current = ()=>!controller.signal.aborted && generation===contactGeneration.current
     const queue = createRefreshQueue(async () => {
-      const revision = directoryRevision.current
-      const first = await messagesApi.contacts(token, query, kind, 0, controller.signal, order)
-      if (controller.signal.aborted || generation !== contactGeneration.current) return
-      setCounts(first.countsScope==='cached'?first.counts:undefined)
-      if (initial) {
-        initial = false
-        setContacts(first.contacts); setOffset(first.offset); contactOffset.current = first.offset
-        setHasMore(first.hasMore); setLoading(false)
-        if (directory && revision === directoryRevision.current) directoryCache.current.set(kind, first)
-      } else {
+      const manual = manualQueued;manualQueued=false
+      const revision = directoryRevision.current, loadedOffset = contactOffset.current
+      const request = new AbortController()
+      inFlight=request
+      const abort = ()=>request.abort()
+      controller.signal.addEventListener('abort',abort,{once:true})
+      let timedOut = false
+      const deadline=window.setTimeout(()=>{timedOut=true;request.abort()},30000)
+      try {
+        const first = await messagesApi.contacts(token, query, kind, 0, request.signal, order)
+        if(timedOut)throw new Error('Contact refresh timed out')
+        if (!current() || request.signal.aborted) return
         const refreshed = [...first.contacts]
         let page = first
-        // Refresh summaries on loaded directory pages too, without dropping their pagination state.
-        while (page.hasMore && page.offset > 0 && page.offset < contactOffset.current) {
-          const next = await messagesApi.contacts(token, query, kind, page.offset, controller.signal, order)
-          if (controller.signal.aborted || generation !== contactGeneration.current) return
+        // A manual refresh replaces every loaded page, not just the first 60
+        // records. Keep the existing rows/counts until the whole window succeeds.
+        while (!initial && page.hasMore && page.offset > 0 && page.offset < loadedOffset) {
+          const next = await messagesApi.contacts(token, query, kind, page.offset, request.signal, order)
+          if(timedOut)throw new Error('Contact refresh timed out')
+          if (!current() || request.signal.aborted) return
           refreshed.push(...next.contacts)
           if (next.offset <= page.offset) break
           page = next
         }
-        // Replace the loaded window: a contact moved to another category (or
-        // removed from this search) must not linger after an SSE invalidation.
         const contacts = [...new Map(refreshed.map(contact=>[contact.wxId,contact])).values()]
-        setContacts(contacts)
-        setOffset(page.offset);contactOffset.current=page.offset;setHasMore(page.hasMore)
+        initial=false
+        setContacts(contacts);setCounts(first.countsScope==='cached'?first.counts:undefined)
+        setOffset(page.offset);contactOffset.current=page.offset;setHasMore(page.hasMore);setLoading(false)
         if (directory && revision === directoryRevision.current) directoryCache.current.set(kind, {contacts, offset:page.offset, hasMore:page.hasMore})
+        setError('')
+        if(manual){refreshAvatars();setRefreshFeedback({kind:'success',message:`已重新读取服务端缓存（${new Date().toLocaleTimeString()}）`})}
+      } catch(e) {
+        if(current() && (!request.signal.aborted || timedOut)) {
+          const detail=timedOut?'请求超过 30 秒，请稍后重试。':messageError(e)
+          if(manual)setRefreshFeedback({kind:'error',message:`刷新失败：${detail} 已保留原列表。`})
+          else if(!manualQueued)setError(detail)
+          setLoading(false);onAuthError(e)
+        }
+      } finally {
+        window.clearTimeout(deadline);controller.signal.removeEventListener('abort',abort)
+        if(inFlight===request)inFlight=undefined
+        if(manual && current()){refreshInProgress.current=false;setRefreshing(false)}
       }
-      setError('')
-    }, e => {if (!controller.signal.aborted) {setError(messageError(e)); setLoading(false); onAuthError(e)}})
+    }, e => {if(current()){setError(messageError(e));setLoading(false);onAuthError(e)}})
+    const manualRefresh = ()=>{
+      if(!current() || refreshInProgress.current)return
+      refreshInProgress.current=true;manualQueued=true
+      setRefreshing(true);setRefreshFeedback(null)
+      directoryCache.current.clear();directoryRevision.current++
+      // Supersede a background load rather than report its old response as a
+      // successful click. The queue starts one fresh request after cancellation.
+      inFlight?.abort();window.clearTimeout(initialTimer);queue.flush()
+    }
+    refreshContacts.current=manualRefresh
     const unsubscribe = events.subscribe(event => {
       if (event.event === 'ready' || event.data.type === 'contacts' || (!directory && event.data.type === 'messages')) queue.schedule()
     })
     // Collapsing needs no rows; loaded categories restore their entire paged window.
-    const timer = !cached && (!collapsed || !directoryCache.current.size)
+    initialTimer = !cached && (!collapsed || !directoryCache.current.size)
       ? window.setTimeout(queue.flush, query ? 250 : 0) : undefined
-    return () => {controller.abort(); queue.dispose(); unsubscribe(); window.clearTimeout(timer); contactGeneration.current++}
-  }, [token, query, kind, order, reload, status?.available, onAuthError, events])
+    return () => {
+      controller.abort();queue.dispose();unsubscribe();window.clearTimeout(initialTimer);contactGeneration.current++
+      if(refreshContacts.current===manualRefresh)refreshContacts.current=null
+    }
+  }, [token, query, kind, order, reload, status?.available, onAuthError, events, refreshAvatars])
 
   const more = async () => {
-    if (moreBusy) return
+    if (moreBusy || refreshInProgress.current) return
     const generation = contactGeneration.current
     const signal = contactRequests.current?.signal
     const revision = directoryRevision.current
@@ -513,25 +567,28 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
   </Button>
   const visibleContacts = contacts.filter(contact=>isContactVisible(contact,preferences))
   const contactRows = <>{loading?<div className="flex justify-center p-6"><Spinner /></div>:!visibleContacts.length?<Placeholder title={view==='directory'?'暂无匹配的缓存记录':'暂无可见会话'} detail={status?.directoryAvailable?undefined:'联系人目录尚未加载。'} />:view==='directory'?<LetterContacts contacts={visibleContacts} renderContact={renderContact} />:visibleContacts.map(renderContact)}
-    {hasMore && <Button variant="ghost" size="sm" disabled={moreBusy || loading} onClick={more}>{moreBusy && <Spinner />} 更多会话</Button>}
+    {hasMore && <Button variant="ghost" size="sm" disabled={moreBusy || loading || refreshing} onClick={more}>{moreBusy && <Spinner />} 更多会话</Button>}
   </>
   const liveBadge = <ConnectionBadge state={connection} />
   if (!status?.available) return <div className="flex h-full flex-col gap-4 p-4"><div className="flex items-center gap-2">{controls}{liveBadge}</div>{error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}{!status && !error?<div className="flex flex-1 items-center justify-center"><Spinner /></div>:<Placeholder title="消息服务未连接" detail="机器人启动后可查看和发送消息。" />}<Button variant="outline" onClick={() => setReload(value => value + 1)}><RefreshCw /> 刷新</Button></div>
 
-  return <div ref={root} className="flex h-full min-h-0 min-w-0 overflow-hidden bg-background" style={{'--chat-list-width':`${listWidth}px`} as CSSProperties}>
+  return <div ref={root} className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background" style={{'--chat-list-width':`${listWidth}px`} as CSSProperties}>
+    {status.demo && <Alert className="shrink-0 rounded-none border-x-0 border-t-0 py-2" aria-label="演示模式"><AlertDescription>🧪 演示模式 · 示例数据；发送、同步与撤回仅在本地模拟，不连接真实账号，重启后重置。</AlertDescription></Alert>}
+    <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
     <aside aria-label="会话侧栏" className={cn('flex w-full shrink-0 flex-col border-r md:w-[var(--chat-list-width)]', active && (focused?'hidden':'hidden md:flex'))}>
       <div className="flex shrink-0 flex-col gap-2 border-b p-2 md:p-3">
         <h1 className="sr-only">消息</h1>
         <div className="flex items-center gap-2">
           {controls}
           <Input aria-label={view==='chats'?'搜索会话':'搜索通讯录'} placeholder="搜索联系人、群聊" maxLength={100} value={query} onChange={e => setQuery(e.target.value)} />
-          <Button variant="ghost" size="icon" className="shrink-0" aria-label="刷新会话" onClick={() => setReload(value => value + 1)}><RefreshCw /></Button>
+          <Button variant="ghost" size="icon" className="shrink-0" aria-label={view==='directory'?'刷新通讯录':'刷新会话'} title="重新读取服务端缓存，不触发微信全量同步" aria-busy={refreshing} disabled={refreshing || moreBusy} onClick={()=>refreshContacts.current?.()}>{refreshing?<Spinner />:<RefreshCw />}</Button>
         </div>
         <div className="flex items-center gap-1">
           <Tabs value={view} onValueChange={value=>{if(value==='chats' || value==='directory')setView(value)}} className="min-w-0 flex-1"><TabsList className="w-full" aria-label="聊天与通讯录"><TabsTrigger value="chats" className="flex-1">聊天</TabsTrigger><TabsTrigger value="directory" className="flex-1">通讯录</TabsTrigger></TabsList></Tabs>
           <ConnectionDetails state={connection} status={status} />
         </div>
       </div>
+      {(refreshing || refreshFeedback) && <Alert variant={refreshFeedback?.kind==='error'?'destructive':'default'} className="rounded-none border-x-0 py-2" role={refreshFeedback?.kind==='error'?'alert':'status'} aria-label="联系人刷新状态"><AlertDescription>{refreshing?'正在刷新列表与数量…':refreshFeedback?.message}</AlertDescription></Alert>}
       {error && <Alert variant="destructive" className="rounded-none border-x-0"><AlertDescription>{error}</AlertDescription></Alert>}
       <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2" aria-label="会话列表">
         {view==='directory'?<ContactDirectory category={category} onCategory={setCategory} counts={counts} searching={Boolean(query)} hiddenCategories={preferences.hiddenCategories}>{contactRows}</ContactDirectory>:contactRows}
@@ -540,5 +597,6 @@ export function MessagesPanel({token, drafts, onLogout, visible = true, miniApp 
     {!(active && focused) && <div role="separator" aria-label="调整侧栏宽度" aria-orientation="vertical" aria-valuemin={260} aria-valuemax={440} aria-valuenow={listWidth} tabIndex={0} className="hidden w-1 shrink-0 cursor-col-resize touch-none bg-border/40 focus-visible:bg-primary md:block" onPointerDown={e=>e.currentTarget.setPointerCapture(e.pointerId)} onPointerMove={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))resizeList(e.clientX-(root.current?.getBoundingClientRect().left || 0))}} onPointerUp={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId)}} onKeyDown={e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();resizeList(e.key==='Home'?260:e.key==='End'?440:listWidth+(e.key==='ArrowLeft'?-16:16))}}} />}
     {active ? <Conversation key={active.wxId} token={token} events={events} connection={connection} draft={getDraft(active.wxId)} contact={contacts.find(contact => contact.wxId === active.wxId) || active} online={status.wechatOnline} onBack={back} onAuthError={onAuthError} focused={focused} onFocus={toggleFocus} controls={controls} networkOnline={networkOnline} visible={visible} />
       : <div className="hidden flex-1 md:flex"><Placeholder title="选择一个会话" detail="查看消息或开始聊天。" /></div>}
+    </div>
   </div>
 }

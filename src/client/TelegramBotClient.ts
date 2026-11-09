@@ -1,8 +1,11 @@
 import {annotateTelegramRecall} from '../webui/telegram-recall'
 import {emitTelegramAutomation} from '../automation/events'
 import {installMiniAppMenu} from '../webui/mini-app-menu'
+import {messageEvents} from '../webui/message-events'
+import {installTelegramPollingHealth} from '../util/TelegramPollingHealth'
+import {safeErrorDetails} from '../util/SafeError'
 import {Context, Markup, session, Telegraf} from 'telegraf'
-import {config, useProxy} from '../config'
+import {config} from '../config'
 import {SocksProxyAgent} from 'socks-proxy-agent'
 import {HttpsProxyAgent} from 'https-proxy-agent'
 import * as fs from 'node:fs'
@@ -284,7 +287,7 @@ export class TelegramBotClient extends AbstractClient {
             return {success: await this.sendLocationMessage(message, messageEntity)}
         }
         if (message.type === 6) {
-            return {success: await this.sendRevokeMessage(message, messageEntity)}
+            return {success: await this.sendRevokeMessage(message)}
         }
 
         return {success: true}
@@ -615,7 +618,7 @@ export class TelegramBotClient extends AbstractClient {
         }
     }
 
-    private async sendRevokeMessage(message: BaseMessage, messageEntity: Message): Promise<boolean> {
+    private async sendRevokeMessage(message: BaseMessage): Promise<boolean> {
         try {
             const revokeMsg = await this.messageService.getByWxMsgId(message.revokeMsgId)
             // Recall follows the original delivery, not today's routing or feature flag.
@@ -630,7 +633,7 @@ export class TelegramBotClient extends AbstractClient {
         }
     }
 
-    handlerMessage(event: Event, message: BaseMessage): Promise<unknown> {
+    handlerMessage(): Promise<unknown> {
         throw new Error('Method not implemented.')
     }
 
@@ -1254,7 +1257,7 @@ export class TelegramBotClient extends AbstractClient {
                 } else {
                     this.sendGif(saveFile, gifFile, ctx, lottie_config)
                 }
-            }).catch(e => {
+            }).catch(() => {
                 ctx.reply(this.i18n.t('send.failed'), {
                     reply_parameters: {
                         message_id: ctx.message.message_id
@@ -1455,7 +1458,7 @@ export class TelegramBotClient extends AbstractClient {
                                     file: buff,
                                 }
                                 TelegramBotClient.getSpyClient('wxClient').sendMessage(baseMessage)
-                            }).catch((err) => {
+                            }).catch(() => {
                             ctx.reply(this.i18n.t('send.failed'), {
                                 reply_parameters: {
                                     message_id: ctx.message.message_id
@@ -1483,7 +1486,7 @@ export class TelegramBotClient extends AbstractClient {
                         message_id: ctx.message.message_id
                     }
                 }))
-            }).catch(reason => {
+            }).catch(() => {
                 ctx.reply(this.i18n.t('send.failed'), {
                     reply_parameters: {
                         message_id: ctx.message.message_id
@@ -2430,7 +2433,7 @@ ${this.i18n.t('help.instructions')}`))
                         }, 1000)
                     })
                 }),
-            password: async (hint?: string) =>
+            password: async () =>
                 new Promise((resolve) => {
                     this.client.telegram.sendMessage(this.chatId, this.i18n.t('auth.password')).then(res => {
                         this.waitInputCommand = 'password'
@@ -2445,7 +2448,7 @@ ${this.i18n.t('help.instructions')}`))
                         }, 1000)
                     })
                 }),
-            phoneCode: async (isCodeViaApp?) =>
+            phoneCode: async () =>
                 new Promise((resolve) => {
                     this.client.telegram.sendMessage(this.chatId, this.i18n.t('auth.verification_code'), {
                         reply_markup: {
@@ -2495,7 +2498,14 @@ ${this.i18n.t('help.instructions')}`))
         }
     }
 
+    private pollingHealth?: ReturnType<typeof installTelegramPollingHealth>
+
+    getPollingHealth() {return this.pollingHealth?.snapshot()}
+
     private async botLaunch(bot: Telegraf) {
+        this.pollingHealth ??= installTelegramPollingHealth(bot.telegram, {
+            logger: this.logger, onChange: () => messageEvents?.publish({type: 'status'}),
+        })
         let retryCount = 0
 
         // bot.launch 会在 long polling 运行期间一直等待；运行中的短暂网络错误
@@ -2503,6 +2513,7 @@ ${this.i18n.t('help.instructions')}`))
         // 以及 polling 意外退出的场景，不能因为有限次数重试耗尽而永久假活。
         // eslint-disable-next-line no-constant-condition
         while (true) {
+            this.pollingHealth.start()
             try {
                 this.logger.info(`正在连接 Telegram Bot API（第 ${retryCount + 1} 次）；WebUI 已启动不代表 Bot 已上线`)
                 await bot.launch(() => {
@@ -2528,7 +2539,9 @@ ${this.i18n.t('help.instructions')}`))
                 })
                 this.logger.warn('Telegram Bot polling 已停止，准备重新启动')
             } catch (error) {
-                this.logger.error(`Telegram Bot 启动或监听失败 (第 ${retryCount + 1} 次):`, error)
+                this.logger.error(`Telegram Bot 启动或监听失败 (第 ${retryCount + 1} 次):`, safeErrorDetails(error))
+            } finally {
+                this.pollingHealth.stop()
             }
 
             this.isConnected = false

@@ -1,4 +1,5 @@
-// Classification is based on the server's VerifyFlag, never on a username prefix.
+// Ordinary accounts use server VerifyFlag, never a guessed username prefix.
+// The explicit @openim namespace is an enterprise contact, not an official account.
 // Keep clients and the SDK database lazy: importing this module must not start either.
 import {normalizeContactVerifyFlag, isOfficialAccountVerifyFlag} from 'wx2tg-puppet'
 export interface ClassificationSession {
@@ -210,6 +211,7 @@ export class WechatAccountClassificationService {
 
     async isOfficialAccount(wxId: string, hintVerifyFlag?: unknown): Promise<boolean | undefined> {
         if (!wxId || wxId.endsWith('@chatroom')) return undefined
+        if (wxId.endsWith('@openim')) return false
         const result = await this.classifyContacts([{userName: wxId, verifyFlag: hintVerifyFlag}])
         return result.official.length ? true : result.contacts.length ? false : undefined
     }
@@ -220,9 +222,9 @@ export class WechatAccountClassificationService {
             if (!unique.has(row.userName) || normalizeFlag(row.verifyFlag) !== undefined) unique.set(row.userName, row)
         }
         const ids = [...unique.keys()]
-        const cacheIds = ids.filter(id => normalizeFlag(unique.get(id)?.verifyFlag) === undefined)
+        const cacheIds = ids.filter(id => !id.endsWith('@openim') && normalizeFlag(unique.get(id)?.verifyFlag) === undefined)
         let cache = await this.cached(cacheIds)
-        const resolveLocal = (id: string) => normalizeFlag(unique.get(id)?.verifyFlag) ?? normalizeFlag(cache.get(id))
+        const resolveLocal = (id: string) => id.endsWith('@openim') ? 0 : normalizeFlag(unique.get(id)?.verifyFlag) ?? normalizeFlag(cache.get(id))
         const missing = ids.filter(id => resolveLocal(id) === undefined)
         let memoryAvailable = false
         if (missing.length) {

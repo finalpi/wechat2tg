@@ -1,4 +1,4 @@
-import {Fragment, createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode} from 'react'
+import {Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode} from 'react'
 import {Download, FileText, ImageIcon, Users, ZoomIn, ZoomOut, RotateCw, Maximize} from 'lucide-react'
 import {Button} from '@/components/ui/button'
 import {Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger} from '@/components/ui/dialog'
@@ -52,10 +52,14 @@ export function MessageText({body, format}: {body: string; format?: string}) {
 
 type AvatarEntry = {controller:AbortController; promise:Promise<Blob|null>}
 const AvatarCache = createContext<Map<string,AvatarEntry>|null>(null)
+const AvatarRefresh = createContext<()=>void>(()=>undefined)
+export const useRefreshAvatars = ()=>useContext(AvatarRefresh)
 export function AvatarCacheProvider({token,children}:{token:string;children:ReactNode}) {
-  const cache = useMemo(()=>new Map<string,AvatarEntry>(),[token])
+  const [revision,setRevision] = useState(0)
+  const refresh = useCallback(()=>setRevision(value=>value+1),[])
+  const cache = useMemo(()=>new Map<string,AvatarEntry>(),[token,revision])
   useEffect(()=>()=>{cache.forEach(entry=>entry.controller.abort());cache.clear()},[cache])
-  return <AvatarCache.Provider value={cache}>{children}</AvatarCache.Provider>
+  return <AvatarRefresh.Provider value={refresh}><AvatarCache.Provider value={cache}>{children}</AvatarCache.Provider></AvatarRefresh.Provider>
 }
 
 export function ContactAvatar({token, wxId, name, available, group = false, roomId}: {token: string; wxId: string; name: string; available?: boolean; group?: boolean;roomId?:string}) {

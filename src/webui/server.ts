@@ -28,6 +28,8 @@ interface Options {
     messages?: MessageCenterAdapter
     mcpTokens?: {write:string,read:string}
     automation?: AutomationEngine
+    /** Only the isolated dev entry point enables this; never inferred from an outage. */
+    demo?: boolean
 }
 
 const aliases = {PROXY_PROTOCOL: 'PROTOCOL', PROXY_HOST: 'HOST', PROXY_PORT: 'PORT', PROXY_USERNAME: 'USERNAME', PROXY_PASSWORD: 'PASSWORD'}
@@ -37,14 +39,14 @@ export function createWebUIServer(options: Options) {
     const file = options.file || settingsPath()
     const assetDirectory = options.publicDirectory || path.join(__dirname, 'public')
     const startedAt = new Date().toISOString()
-    const miniAppUrl = normalizeMiniAppUrl(options.environment.WEBUI_MINI_APP_URL || process.env.WEBUI_MINI_APP_URL)
+    const miniAppUrl = options.demo ? '' : normalizeMiniAppUrl(options.environment.WEBUI_MINI_APP_URL || process.env.WEBUI_MINI_APP_URL)
     const miniAppAuth = createMiniAppAuth({
         botToken: String(options.environment.BOT_TOKEN || ''),
         ownerId: async () => (await options.runtime?.read())?.chatId,
     })
     const stream = createMessageStreamHandler()
     const mcpSettings = new McpSettings(path.join(path.dirname(file),'mcp-settings.json'),options.mcpTokens)
-    const mcp = options.messages ? createMcpHandler(options.messages,undefined,mcpSettings) : undefined
+    const mcp = options.messages && !options.demo ? createMcpHandler(options.messages,undefined,mcpSettings) : undefined
     const ai = createAIConnector(()=>{const saved = readOverrides(file);return {url:saved.AI_API_URL ?? String(options.environment.AI_API_URL || ''),key:saved.AI_API_KEY ?? String(options.environment.AI_API_KEY || ''),model:saved.AI_MODEL ?? String(options.environment.AI_MODEL || '')}})
     let automation = options.automation
     const automationService = () => automation || (automation = new AutomationEngine(path.join(path.dirname(file),'automations.json')))
@@ -78,7 +80,7 @@ export function createWebUIServer(options: Options) {
             Object.prototype.hasOwnProperty.call(MESSAGE_TEMPLATE_DEFAULTS, key)
                 ? startupTemplates[key] !== savedTemplates[key]
                 : String(options.environment[aliases[key] || key] ?? '') !== value)
-        return {revision, values, secrets, restartRequired, runtimeAvailable: Boolean(options.runtime), startedAt, templateDefaults: MESSAGE_TEMPLATE_DEFAULTS}
+        return {revision, values, secrets, restartRequired, runtimeAvailable: Boolean(options.runtime), startedAt, templateDefaults: MESSAGE_TEMPLATE_DEFAULTS, ...(options.demo ? {demo: true} : {})}
     }
     const respond = (res: ServerResponse, status: number, data: unknown) => {
         res.writeHead(status, {'Content-Type': 'application/json; charset=utf-8'})
@@ -156,6 +158,12 @@ export function createWebUIServer(options: Options) {
             return respond(res, 401, {error: 'unauthorized'})
         }
         attempts.delete(ip)
+        // A dev preview may simulate chat mutations, never configuration writes,
+        // automation, AI requests, MCP access or calls to real external services.
+        if (options.demo && (route.startsWith('/api/ai/') || route.startsWith('/api/automation')
+            || route.startsWith('/api/mcp/') || route === '/api/config' && req.method !== 'GET')) {
+            return respond(res, 403, {error: 'demoReadOnly'})
+        }
         try {
             if (route === '/api/automation' || route === '/api/automation/test' || route === '/api/automation/generate') {
                 if (route === '/api/automation' && req.method === 'GET') return respond(res,200,await automationService().snapshot())

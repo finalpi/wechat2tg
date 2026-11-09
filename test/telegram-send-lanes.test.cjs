@@ -25,6 +25,8 @@ function loadClient({getTranscript = async () => '转写文本', calls = [], sta
     '../base/BaseClient': {AbstractClient: class {static getSpyClient() {return undefined}}},
     '../config': {config: {TENCENT_SECRET_ID: 'id', TENCENT_SECRET_KEY: 'key', WECHAT_CUSTOM_EMOJI_ENABLED: false}},
     '../util/TelegramTopicUtils': require('../dist/util/TelegramTopicUtils'),
+    '../util/TelegramPollingHealth': require('../dist/util/TelegramPollingHealth'),
+    '../util/SafeError': require('../dist/util/SafeError'),
     '../service/SpeechService': {SpeechService: {getInstance: () => ({
       getTranscript: async buffer => {
         calls.push({method: 'transcript', buffer})
@@ -75,12 +77,14 @@ test('Telegram startup announces connection attempts before waiting for getMe', 
   Object.assign(client, {RECONNECT_BASE_DELAY: 1, logger: {
     info: message => entries.push(message), error: noop, warn: noop,
   }})
-  const bot = {launch: async () => {
+  const bot = {telegram:{callApi:async()=>[]},launch: async () => {
     assert.match(entries[0], /正在连接 Telegram Bot API/)
     throw new Error('synthetic connection failure')
   }}
   await assert.rejects(client.botLaunch(bot), error => error === stop)
   assert.equal(client.hasLogin, false)
+  assert.equal(client.getPollingHealth().state,'stopped')
+  assert.equal(client.getPollingHealth().healthy,false)
   assert(entries.some(message => message.includes('不会放弃重试')))
 })
 

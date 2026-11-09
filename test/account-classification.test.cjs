@@ -67,6 +67,19 @@ test('authoritative flags: non-gh official, gh personal, absent/malformed remain
   assert.equal(await f.service.isOfficialAccount('x@chatroom', 24), undefined)
 })
 
+test('@openim contacts never become official/unknown or require VerifyFlag enrichment', async () => {
+  const f = fixture({flags:new Map([['cached@openim',24]])})
+  const rows = [undefined,null,0,24,'bad'].map((verifyFlag,index)=>({userName:`worker_${index}@openim`,verifyFlag}))
+  rows.push({userName:'cached@openim'})
+  const result = await f.service.classifyContacts(rows)
+  assert.deepEqual(names(result.contacts),rows.map(row=>row.userName))
+  assert.equal(result.official.length,0)
+  assert.equal(result.unknown.length,0)
+  for(const entry of rows)assert.equal(await f.service.isOfficialAccount(entry.userName,entry.verifyFlag),false)
+  assert.equal(f.queries.length,0)
+  assert.equal(f.lookups.length,0)
+})
+
 test('missing hints cannot erase cached zero; known hints/cache require no client or HTTP', async () => {
   const f = fixture({flags: new Map([['gh_person', 0], ['news', 24]])})
   const result = await f.service.classifyContacts([{userName: 'gh_person'}, {userName: 'news', verifyFlag: null}])

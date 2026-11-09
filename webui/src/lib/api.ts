@@ -27,6 +27,7 @@ export interface ConfigSnapshot {
   secrets: Record<string, boolean>
   restartRequired: boolean
   runtimeAvailable: boolean
+  demo?: boolean
   startedAt: string
   templateDefaults?: Record<string, string>
   fields: Field[]
@@ -63,7 +64,7 @@ export async function request<T>(path: string, token: string, init?: RequestInit
   if (response.status === 401) throw new ApiError('访问令牌不正确，请重试。', 'unauthorized', 401)
   let body: any = {}
   try { body = await response.json() } catch { /* ignore */ }
-  if (!response.ok) throw new ApiError(body?.error || 'serverError', body?.error || 'serverError', response.status)
+  if (!response.ok) throw new ApiError(body?.error === 'demoReadOnly' ? '演示模式下此功能只读，不会调用真实服务。' : body?.error || 'serverError', body?.error || 'serverError', response.status)
   return body as T
 }
 

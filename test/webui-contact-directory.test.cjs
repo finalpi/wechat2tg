@@ -60,6 +60,27 @@ async function httpFixture(t, messages) {
   return (route, options = {}) => fetch(url + route, {...options, headers:{Authorization:'Bearer directory-token', ...options.headers}})
 }
 
+test('WebUI Telegram online state follows polling progress rather than a stale login flag', async t => {
+  const f = await fixture(t)
+  let polling = {state:'starting',healthy:false,inFlight:false,lastAttemptAt:null,lastSuccessAt:null,lastFailureAt:null,lastError:null,consecutiveFailures:0,lastDurationMs:null,requestTimeoutMs:85000}
+  const bot = {hasLogin:true,getPollingHealth:()=>polling}
+  t.mock.method(AbstractClient,'getSpyClient',name=>name === 'botClient' ? bot : {hasLogin:false})
+  const request = await httpFixture(t,f.messages)
+  const status = async()=>(await request('/api/messages/status')).json()
+  assert.equal((await status()).telegramOnline,false,'getMe/login alone does not prove update polling works')
+  polling = {...polling,state:'healthy',healthy:true,lastSuccessAt:Date.now()}
+  assert.equal((await status()).telegramOnline,true)
+  polling = {...polling,state:'stalled',healthy:false}
+  const stalled = await status()
+  assert.equal(stalled.telegramOnline,false)
+  assert.equal(stalled.telegramPolling.lastSuccessAt,polling.lastSuccessAt)
+  polling = {...polling,state:'retrying',lastError:'ETIMEDOUT',consecutiveFailures:1}
+  assert.equal((await status()).telegramPolling.lastError,'ETIMEDOUT')
+  polling = {...polling,state:'healthy',healthy:true}
+  bot.hasLogin = false
+  assert.equal((await status()).telegramOnline,false)
+})
+
 test('classification uses valid bit8 flags and only explicit numeric serviceType=1', () => {
   const row = {wxId:'ordinary-id', kind:'contact'}
   for (const verifyFlag of [8, 24, 40, 0xffffffff, '24']) {

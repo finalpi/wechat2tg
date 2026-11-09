@@ -1,5 +1,6 @@
 import {getGeWeChatDataSource} from '../data-sourse'
-import {Like, Repository, SelectQueryBuilder} from 'typeorm'
+import {Repository} from 'typeorm'
+import {directoryContains} from './DirectorySearch'
 import { WxContact } from '../entity/WxContact'
 import {Page} from '../entity/Page'
 
@@ -31,8 +32,10 @@ export class WxContactRepository {
     async getByNickNameOrRemark(query: string) {
         return this.WxContactRepository.find({
             where: [
-                { nickName: Like(`%${query}%`) },
-                { remark: Like(`%${query}%`) }
+                { nickName: directoryContains(query) },
+                { remark: directoryContains(query) },
+                { alias: directoryContains(query) },
+                { userName: directoryContains(query) }
             ]
         })
     }

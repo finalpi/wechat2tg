@@ -427,7 +427,14 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
             })
             return enrichHistory({messages})
         },
-        status: async () => {await repairOwnership();return {available:true,wechatOnline:Boolean(client()?.hasLogin),telegramOnline:Boolean(AbstractClient.getSpyClient('botClient')?.hasLogin),directoryAvailable:getGeWeChatDataSource().isInitialized}},
+        status: async () => {
+            await repairOwnership()
+            const bot = AbstractClient.getSpyClient('botClient')
+            const telegramPolling = bot?.getPollingHealth?.()
+            return {available:true,wechatOnline:Boolean(client()?.hasLogin),
+                telegramOnline:Boolean(bot?.hasLogin && (!telegramPolling || telegramPolling.healthy)),
+                ...(telegramPolling ? {telegramPolling} : {}),directoryAvailable:getGeWeChatDataSource().isInitialized}
+        },
         upload:(name,preference,stream)=>media.save(name,preference,stream),
         media:id=>media.get(id),attachment,
         avatar,

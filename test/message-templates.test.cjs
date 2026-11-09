@@ -9,9 +9,27 @@ const {MESSAGE_TEMPLATE_DEFAULTS: defaults} = require('../dist/util/MessageTempl
 const preview = require('../src/webui/public/template-preview')
 const {groupApi} = require('wx2tg-puppet/dist/api/GroupApi')
 const {createGroupMemberNameResolver} = require('../dist/service/GroupMemberNameService')
+const {WechatAccountClassificationService} = require('../dist/service/WechatAccountClassificationService')
+const {parseGroupMembers,normalizeMentions,createGroupMentionService} = require('../dist/webui/mentions')
 
 const result = list => ({data: {Code: 0, Data: {NewChatroomData: {ChatRoomMember: list}}}})
 const member = (id, displayName, nickname = '微信昵称') => ({UserName: {string: id}, DisplayName: displayName, NickName: {string: nickname}, Remark: '绝不能显示的通讯录备注'})
+
+test('enterprise group members survive parsing and explicit mentions without allowing notify@all injection', async t => {
+  const data = {NewChatroomData:{ChatRoomMember:[
+    member('worker_123@openim','企微成员'),member('wxid_person','普通成员'),
+    member('notify@all','不能伪装全体'),member('worker@openim,other','不能注入'),member('@openim','缺少标识'),member('other@invalid','未知后缀'),
+  ]}}
+  assert.deepEqual(parseGroupMembers(data).map(row=>row.wxId),['worker_123@openim','wxid_person'])
+  t.mock.method(groupApi,'GetChatRoomMemberDetail',async()=>({data:{Code:0,Data:data}}))
+  const service = createGroupMentionService(()=>'self')
+  const resolved = await service.resolve('room@chatroom','正文',normalizeMentions({memberIds:['worker_123@openim']}))
+  assert.equal(resolved.at,'worker_123@openim')
+  assert.equal(resolved.text,'@企微成员 正文')
+  for(const id of ['notify@all','worker@openim,other','@openim','worker@openim@invalid','other@invalid','a b@openim']) {
+    assert.throws(()=>normalizeMentions({memberIds:[id]}),error=>error.code === 'invalidMentions')
+  }
+})
 
 test('member_name is not confused with name, and legacy conditional wrappers keep working', () => {
   const text = FormatUtils.transformTitleStr('#[member_name]|#[name]|#[(alias)]|#[[name]]|#[alias_first]|#[topic]', '备注', '昵称', '群名', '群昵称')
@@ -125,6 +143,9 @@ function forwardingFixture() {
       if (name === '../config') return {config: configuration}
       if (name === '../util/FormatUtils') return {FormatUtils}
       if (name === '../service/GroupMemberNameService') return {createGroupMemberNameResolver}
+      if (name === '../service/WechatAccountClassificationService') return {WechatAccountClassificationService: {getInstance:()=>new WechatAccountClassificationService({
+        getSession:async()=>{throw Error('Enterprise classification must not query the server')},readFlags:async()=>{throw Error('Enterprise classification must not require VerifyFlag')},backfillFlags:async()=>undefined,
+      })}}
       if (name === '../webui/message-visibility') return {isControlMessage: () => false}
       if (name === '../util/EmojiUtils') return {EmojiConverter: class {convert(value) {return value}}}
       if (name === 'wx2tg-puppet') return {Message: {Type: {Text: 1}}}
@@ -146,6 +167,18 @@ function forwardingFixture() {
     room: async () => ({chatroomId: 'room@chatroom', name: '群名称'}), from: async () => sender, to: async () => recipient, mentionSelf: async () => false}
   return {client, message, sent, sender, configuration}
 }
+
+test('enterprise incoming messages are forwarded even when official-account receiving is disabled', async () => {
+  const f = forwardingFixture()
+  f.sender._wxid = 'worker@openim'
+  f.message.fromId = 'worker@openim'
+  f.message.room = async()=>null
+  f.client.configurationService.getConfig = async()=>({selfMessage:true,receivePublicAccount:false})
+  f.client.bindGroupService.resolveWechat = async wxId=>({chatId:-123,wxId,type:0,isReceive:true})
+  await f.client.onMessage(f.message)
+  assert.equal(f.sent.length,1)
+  assert.equal(f.sent[0].wxId,'worker@openim')
+})
 
 for (const selfMessage of [false, true]) {
   test(`group forwarding uses the actual sender group nickname and preserves body emoji (self=${selfMessage})`, async t => {

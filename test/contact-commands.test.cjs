@@ -61,7 +61,7 @@ function fixture({contacts = [], rooms = [], members = [], loggedIn = true, topi
       events.push('repository')
       queries.push({kind, query})
       if (hooks.repository) await hooks.repository(kind)
-      return rows.filter(c => c.nickName.includes(query) || c.remark?.includes(query))
+      return rows.filter(c => [c.nickName,c.remark,c.alias,c.userName,c.chatroomId].some(value=>value?.toLocaleLowerCase().includes(query.toLocaleLowerCase())))
     },
   })
   const wxClient = {hasLogin: loggedIn, wxInfo: {wxid: 'wx_owner'}, client: {
@@ -988,6 +988,38 @@ test('bound contact lookup errors and account changes cannot expose another acco
 
 const groupMembers = Array.from({length: 63}, (_, i) => ({wxId: `member_${i}`, name: `群名${i}`,
   nickname: `昵称${i}`, displayName: `群名${i}`, hasAvatar: false}))
+
+test('enterprise contacts are searchable via /user and /contacts, never listed as official accounts or rooms', async () => {
+  const enterprise = {userName:'worker_123@openim',nickName:'企微同事',remark:'项目伙伴',alias:'work-account',verifyFlag:null}
+  for(const query of ['企微','项目伙伴','work-account','worker_123@openim','@openim']) {
+    const f = fixture({contacts:[enterprise,...people],rooms:[{chatroomId:'team@chatroom',nickName:'项目群'}]})
+    await f.command('/user ' + query)
+    assert.equal(dataButtons(f.replies.at(-1)).length,1)
+    assert.equal(f.resolve(dataButtons(f.replies.at(-1))[0].callback_data).item.action,enterprise.userName)
+    await f.command('/contacts ' + query)
+    await f.action(dataButtons(f.replies.at(-1))[0].callback_data)
+    assert.match(resultText(f.replies.at(-1)),/worker_123@openim/)
+    assert.match(resultText(f.replies.at(-1)),/企微同事/)
+    await f.command('/official ' + query)
+    assert.equal(dataButtons(f.replies.at(-1)).length,0)
+    await f.command('/room ' + query)
+    assert.equal(dataButtons(f.replies.at(-1)).length,0)
+  }
+  const f = fixture({rooms:[{chatroomId:'team_123@chatroom',nickName:'项目群'}]})
+  await f.command('/room team_123@chatroom')
+  assert.equal(dataButtons(f.replies.at(-1)).length,1)
+})
+
+test('/members exposes enterprise group members and their read-only profile', async () => {
+  const f = fixture({members:[{wxId:'worker@openim',name:'企微成员',displayName:'企微成员',nickname:'企业微信昵称',hasAvatar:false}],topic:{type:1,wxId:'team@chatroom'}})
+  await f.command('/members','supergroup')
+  const item = dataButtons(f.replies.at(-1))[0]
+  assert.equal(f.resolve(item.callback_data,'supergroup').item.action,'worker@openim')
+  await f.action(item.callback_data,'supergroup')
+  assert.match(resultText(f.replies.at(-1)),/worker@openim/)
+  assert.match(resultText(f.replies.at(-1)),/企微成员/)
+  assert.equal(f.bindings.length + f.creations.length,0)
+})
 
 test('/members keeps avatars out of lists and shows only the chosen small named avatar in details', async () => {
   const members = groupMembers.map((member,index)=>({...member,avatarUrl:`https://wx.qlogo.cn/member/${index}`}))

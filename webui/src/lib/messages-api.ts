@@ -70,7 +70,12 @@ export interface ChatMessage {
 export interface MessageUpdates {messages: ChatMessage[]; serverTime: number}
 export interface HistoryPage extends MessageUpdates {hasMore: boolean; before: number}
 export interface ContactsPage {contacts: Contact[]; hasMore: boolean; offset: number; directoryAvailable: boolean; counts?: ContactCounts; total?: number; countsScope?: 'cached'}
-export interface MessageStatus {available: boolean; wechatOnline: boolean; telegramOnline?: boolean; directoryAvailable: boolean}
+interface TelegramPollingStatus {
+  state:'starting'|'healthy'|'retrying'|'stalled'|'stopped'; healthy:boolean; inFlight:boolean
+  lastAttemptAt:number|null; lastSuccessAt:number|null; lastFailureAt:number|null
+  lastError:string|null; consecutiveFailures:number; lastDurationMs:number|null; requestTimeoutMs:number
+}
+export interface MessageStatus {available: boolean; wechatOnline: boolean; telegramOnline?: boolean; telegramPolling?:TelegramPollingStatus; directoryAvailable: boolean; demo?: boolean}
 export interface Member {wxId: string; name: string; nickname: string; displayName: string; hasAvatar: boolean}
 export interface MembersPage {members: Member[]; hasMore: boolean; offset: number; total: number}
 export interface SendMessage {
@@ -86,7 +91,7 @@ const query = (values: Record<string, string | number | boolean>) => new URLSear
 export const messagesApi = {
   status: (token: string, signal?: AbortSignal) => request<MessageStatus>('/api/messages/status', token, {signal}),
   contacts: (token: string, q = '', kind = 'all', offset = 0, signal?: AbortSignal, order?: 'letter') =>
-    request<ContactsPage>(`/api/contacts?${query({q, kind, offset})}${order === 'letter'?'&order=letter':''}`, token, {signal}),
+    request<ContactsPage>(`/api/contacts?${query({q, kind, offset})}${order === 'letter'?'&order=letter':''}`, token, {signal,cache:'no-store'}),
   officialMenu: (token: string, wxId: string, signal?: AbortSignal) =>
     request<OfficialMenuResult>(`/api/contacts/menu?${query({wxId})}`, token, {signal}),
   history: (token: string, wxId: string, q = '', before = 0, signal?: AbortSignal) =>
@@ -130,6 +135,8 @@ export const messagesApi = {
 }
 
 const errors: Record<string, string> = {
+  networkError: '无法连接服务，请检查网络。',
+  demoReadOnly: '演示模式不支持上传附件或修改服务配置；可以预览示例附件、模拟发送文字。', demoLimit: '本次演示消息已达上限，请重启 dev:webui 重置。',
   wechatOffline: '微信未连接，暂时无法发送。', messagesUnavailable: '消息服务未连接。', telegramOffline: 'Telegram 未连接。',
   sendQueueFull: '发送队列已满，请稍后重试。', mediaMissing: '附件暂不可用。', downloadTooLarge: '附件超过下载限制。',
   mediaTooLarge: '文件不能超过 50 MB。', invalidVoiceFormat: '请选择音频文件。', recipientMissing: '联系人不存在。',

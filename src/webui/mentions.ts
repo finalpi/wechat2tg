@@ -6,9 +6,10 @@ import {allowedAvatarURL} from '../util/AvatarURL'
 export interface Mentions {memberIds?:string[];all?:boolean;inline?:boolean}
 export interface GroupMember {wxId:string;name:string;nickname:string;displayName:string;hasAvatar:boolean;avatarUrl?:string}
 const error = (code:string,status = 400)=>Object.assign(new Error(code),{code,status})
+const validMemberId = (id: unknown): id is string => typeof id === 'string' && id.length <= 128 && /^[^\s,@<>]+(?:@openim)?$/.test(id)
 export function normalizeMentions(input:any):Required<Mentions>{
     if(input === undefined)return {memberIds:[],all:false,inline:false}
-    if(!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(k=>!['memberIds','all','inline'].includes(k)) || (input.all !== undefined && typeof input.all !== 'boolean') || (input.inline !== undefined && typeof input.inline !== 'boolean') || (input.memberIds !== undefined && (!Array.isArray(input.memberIds) || input.memberIds.length > 20 || input.memberIds.some(id=>typeof id !== 'string' || !id || id.length > 128 || /[\s,@<>]/.test(id)))))throw error('invalidMentions')
+    if(!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(k=>!['memberIds','all','inline'].includes(k)) || (input.all !== undefined && typeof input.all !== 'boolean') || (input.inline !== undefined && typeof input.inline !== 'boolean') || (input.memberIds !== undefined && (!Array.isArray(input.memberIds) || input.memberIds.length > 20 || input.memberIds.some(id=>!validMemberId(id)))))throw error('invalidMentions')
     const memberIds = [...new Set<string>(input.memberIds || [])].sort(),all = input.all === true
     if(all && memberIds.length)throw error('mentionAllExclusive')
     return {memberIds,all,inline:Boolean((all || memberIds.length) && input.inline)}
@@ -20,7 +21,7 @@ export function parseGroupMembers(data:any):GroupMember[]{
     const members = new Map<string,GroupMember>()
     for(const item of list){
         const wxId = clean(item.UserName),nickname = clean(item.NickName),displayName = clean(item.DisplayName)
-        if(!wxId || /[\s,@<>]/.test(wxId))continue
+        if(!validMemberId(wxId))continue
         const avatarUrl = [item.SmallHeadImgUrl,item.BigHeadImgUrl,item.HeadImgUrl].map(value=>typeof value === 'string' ? value : value?.string).find(value=>typeof value === 'string' && allowedAvatarURL(value))
         members.set(wxId,{wxId,name:displayName || nickname || wxId,nickname,displayName,hasAvatar:Boolean(avatarUrl),...(avatarUrl ? {avatarUrl} : {})})
     }

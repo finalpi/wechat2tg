@@ -3,6 +3,7 @@ import {Logger} from 'log4js'
 import {LogUtils} from '../util/LogUtil'
 import {botType} from './BaseFactory'
 import {messageEvents} from '../webui/message-events'
+import type {TelegramPollingSnapshot} from '../util/TelegramPollingHealth'
 
 
 export abstract class AbstractClient implements IClient {
@@ -75,6 +76,7 @@ export interface IClient {
 
     hasReady: boolean
     hasLogin: boolean
+    getPollingHealth?(): TelegramPollingSnapshot | undefined
     logger: Logger
     client: Client
 }

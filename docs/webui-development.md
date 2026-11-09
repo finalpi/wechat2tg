@@ -9,9 +9,22 @@ npm ci
 npm run dev:webui
 ```
 
-The launcher rebuilds the backend and frontend, prints the local address and access token, then starts the standalone server. It reads `.env`, reuses the saved token unless `WEBUI_TOKEN` is set, and forwards shutdown signals to the child process.
+The launcher rebuilds the backend and frontend, prints the address and access token, then starts an **isolated demo server by default**. It reads `.env`, uses a separate saved `webui-demo-token` unless `WEBUI_TOKEN` is set, and forwards shutdown signals to the child process.
 
-The default `/` and `/chat` routes open the chat-only workspace; use `/manage` or the chat menu for configuration. The standalone server supports configuration editing. It has no live message adapter: the message page shows **消息服务未连接**. Run the normal bot with WebUI enabled to use real conversations. Do not expose the access token or enable a remote service merely to preview the page.
+```sh
+# Preview from another device on your LAN (token required):
+WEBUI_HOST=0.0.0.0 npm run dev:webui
+
+# Opt out of mock data and inspect the original disconnected/configuration preview:
+npm run dev:webui -- --no-mock
+# Equivalent: WEBUI_MOCK=false npm run dev:webui
+```
+
+The default `/` and `/chat` routes open the chat-only workspace; use `/manage` or the chat menu for configuration. Demo mode includes 12 synthetic contacts covering all six categories, multiple group senders, older history, quote messages, generated avatars, a local image/audio/file sample and read-only official-account menus. Sending text, mentions, syncing and recalling are simulated in memory and emit the usual SSE changes. A visible **演示模式** banner and 🧪 connection indicator distinguish it from a real account.
+
+Demo messages reset on server restart. Media and server settings use a disposable temporary directory cleaned up on shutdown, never the production message database. Service settings are read-only; AI, automation, MCP and attachment uploads are blocked. Browser-local chat appearance preferences still work. No WeChat/Telegram client is started, no real messages are sent, and demo assets need no external downloads. Do not expose the access token or enable a remote service merely to preview the page.
+
+The normal `npm run webui` standalone entry remains unchanged: it supports configuration editing but has no live message adapter, so the message page shows **消息服务未连接**. Run the normal bot with WebUI enabled for real conversations. A real bot outage never silently switches to demo data.
 
 ## Message page
 
@@ -59,6 +72,8 @@ npm run test:webui:browser     # Chromium integration checks against local fixtu
 ```
 
 Browser tests use `playwright-core` with an installed Chrome/Chromium. Set `BROWSER_EXECUTABLE_PATH` if it is not installed at a common system path. They start a temporary local WebUI server and fake message adapter; they do not send to WeChat/Telegram or use account credentials.
+
+`test-webui-demo-browser.cjs` exercises the actual demo adapter and real HTTP routes, including visible demo labels, avatar/media rendering, simulated sends/recall/sync/mentions, blocked uploads without logout, read-only service settings and mobile layout. Unit/API tests cover launcher defaults/opt-out, authentication, disposable state and production isolation.
 
 The Mini App suite mocks only Telegram launch/SDK behavior while exercising the real local HTTP auth and SSE endpoints. It checks owner enforcement, theme/viewport/back button, session revocation and saved-token bypass protection. The message suite asserts zero recurring requests during an idle interval, long-connection reconnect, backdated updates and older-message status changes.
 
