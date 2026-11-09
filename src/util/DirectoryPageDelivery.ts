@@ -20,7 +20,8 @@ export type DirectoryCallbackContext = {
 };
 export type DirectoryDeliveryResult = 'sent' | 'edited' | 'unchanged' | 'failed';
 
-type RichPayload = {chat_id: number; rich_message: DirectoryRichMessage; reply_markup?: DirectoryMarkup};
+export type DirectoryDetailAvatar = {image: Buffer; name: string};
+type RichPayload = {chat_id: number; rich_message: DirectoryRichMessage | string; reply_markup?: DirectoryMarkup; profile_avatar?: {source: Buffer; filename: string}};
 type DirectoryApiPayloads = {
     sendRichMessage: RichPayload & {message_thread_id?: number};
     sendMessage: {chat_id: number; text: string} & DirectoryReplyOptions;
@@ -158,9 +159,7 @@ export async function deliverDirectoryPage(
                     continue
                 }
             }
-            const avatarRejected = rejection.code === 400 && view.rich_message.blocks.some(block => block.type === 'collage')
-                && /failed to get HTTP URL content|wrong file identifier\/HTTP URL specified|wrong type of the web page content|IMAGE_PROCESS_FAILED|PHOTO_INVALID/i.test(rejection.description)
-            if (format === 'rich' && (richRejected(error) || avatarRejected)) {
+            if (format === 'rich' && richRejected(error)) {
                 format = 'html'
                 continue
             }
@@ -180,16 +179,17 @@ export async function deliverDirectoryPage(
  * Callers without rich source messages or markup retain the plain reply behavior.
  */
 export async function replyDirectoryText(
-    ctx: DirectoryDeliveryContext, text: string, reply_markup?: DirectoryMarkup,
+    ctx: DirectoryDeliveryContext, text: string, reply_markup?: DirectoryMarkup, avatar?: DirectoryDetailAvatar,
 ): Promise<boolean> {
     const message = sourceMessage(ctx)
     const topic = topicOptions(message?.message_thread_id)
-    if (reply_markup && ctx.callbackQuery && isRichDirectoryMessage(ctx) && typeof ctx.telegram?.callApi === 'function') {
+    if (reply_markup && (avatar || ctx.callbackQuery && isRichDirectoryMessage(ctx)) && typeof ctx.telegram?.callApi === 'function') {
         const chatId = message?.chat?.id ?? ctx.chat?.id
         if (chatId === undefined || (ctx.chat && ctx.chat.id !== chatId)) return false
         const content: DirectoryRichText = /^https?:\/\/[^\s<>]+$/i.test(text)
             ? {type: 'url', text, url: text} : text
         const rich_message: DirectoryRichMessage = {blocks: [{type: 'paragraph', text: content}], skip_entity_detection: true}
+        if (avatar) rich_message.blocks.push({type: 'photo', photo: {type: 'photo', media: 'attach://profile_avatar'}, caption: {text: avatar.name}})
         for (const row of reply_markup.inline_keyboard) {
             if (!row.length) continue
             const links: DirectoryRichText[] = []
@@ -202,10 +202,16 @@ export async function replyDirectoryText(
             rich_message.blocks.push({type: 'paragraph', text: links})
         }
         try {
-            await callDirectoryApi(ctx, 'sendRichMessage', {chat_id: chatId, rich_message, ...topic})
+            // Telegraf 4 does not know rich_message is a JSON form field. Serialize
+            // it explicitly when uploading the small avatar strip as an attachment.
+            await callDirectoryApi(ctx, 'sendRichMessage', {chat_id: chatId, rich_message: avatar ? JSON.stringify(rich_message) : rich_message,
+                ...(avatar ? {profile_avatar: {source: avatar.image, filename: 'profile-avatar.png'}} : {}), ...topic})
             return true
         } catch (error) {
-            if (!richRejected(error)) return false
+            const rejection = apiRejection(error)
+            const avatarRejected = avatar && rejection?.code === 400
+                && /wrong file identifier\/HTTP URL specified|IMAGE_PROCESS_FAILED|PHOTO_INVALID|can't parse (?:input media|file)|failed to (?:process|decode) (?:image|photo)/i.test(rejection.description)
+            if (!richRejected(error) && !avatarRejected) return false
         }
         try {
             await callDirectoryApi(ctx, 'sendMessage', {chat_id: chatId, text, reply_markup, ...topic})

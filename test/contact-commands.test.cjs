@@ -90,6 +90,11 @@ function fixture({contacts = [], rooms = [], members = [], loggedIn = true, topi
     '../service/WechatAccountClassificationService': {WechatAccountClassificationService: {getInstance: () => classification}},
     '../util/DirectoryPager': pagerModule,
     '../util/DirectoryPageDelivery': deliveryModule,
+    '../util/AvatarURL': require('../dist/util/AvatarURL'),
+    '../util/DirectoryAvatar': {createDirectoryAvatar: async (url,name) => {
+      events.push('avatar:' + url)
+      return hooks.avatar ? hooks.avatar(url,name) : Buffer.from('small profile avatar')
+    }},
     '../webui/mentions': {createGroupMentionService: () => ({members: async roomId => {
       events.push('members:' + roomId)
       return hooks.members ? hooks.members(roomId) : members
@@ -120,7 +125,7 @@ function fixture({contacts = [], rooms = [], members = [], loggedIn = true, topi
   bot.telegram.setMyCommands = async commands => {menus.push(...commands)}
   let messageId = 100
   const result = async (kind, target, text, options = {}, payload, sourceId) => {
-    const rich_message = payload?.rich_message
+    const rich_message = typeof payload?.rich_message === 'string' ? JSON.parse(payload.rich_message) : payload?.rich_message
     const record = {
       text: rich_message ? rich_message.blocks.map(richText).join('\n') : text,
       options, rich_message, payload,
@@ -153,7 +158,8 @@ function fixture({contacts = [], rooms = [], members = [], loggedIn = true, topi
       apiCalls.push({method, payload})
       assert(['sendRichMessage', 'sendMessage', 'editMessageText'].includes(method), `Unexpected context API call: ${method}`)
       if (method === 'sendRichMessage' || payload.rich_message) {
-        assert(payload.rich_message?.blocks?.length)
+        const rich = typeof payload.rich_message === 'string' ? JSON.parse(payload.rich_message) : payload.rich_message
+        assert(rich?.blocks?.length)
         assert(!('text' in payload), 'Native payload must omit text')
         assert(!('parse_mode' in payload), 'Native payload must omit parse_mode')
       } else {
@@ -982,6 +988,46 @@ test('bound contact lookup errors and account changes cannot expose another acco
 
 const groupMembers = Array.from({length: 63}, (_, i) => ({wxId: `member_${i}`, name: `群名${i}`,
   nickname: `昵称${i}`, displayName: `群名${i}`, hasAvatar: false}))
+
+test('/members keeps avatars out of lists and shows only the chosen small named avatar in details', async () => {
+  const members = groupMembers.map((member,index)=>({...member,avatarUrl:`https://wx.qlogo.cn/member/${index}`}))
+  const f = fixture({members,topic:{type:1,wxId:'group@chatroom'}})
+  const context = {type:'supergroup',threadId:77}
+  await f.command('/members',context)
+  assert.equal(richNodes(f.replies.at(-1).rich_message,'photo').length,0)
+  assert.equal(f.events.filter(event=>event.startsWith('avatar:')).length,0)
+  await f.action(button(f.replies.at(-1),':p:2'),context)
+  const page = f.edits.at(-1)
+  assert.equal(richNodes(page.rich_message,'photo').length,0)
+  await f.action(dataButtons(page)[0].callback_data,context)
+  const detail = f.replies.at(-1)
+  assert.match(resultText(detail),/群内名称：群名30/)
+  const photos = detail.rich_message.blocks.filter(block=>block.type === 'photo')
+  assert.equal(photos.length,1)
+  assert.equal(photos[0].caption.text,'群名30')
+  assert.equal(photos[0].photo.media,'attach://profile_avatar')
+  assert(Buffer.isBuffer(detail.payload.profile_avatar.source))
+  assert.deepEqual(f.events.filter(event=>event.startsWith('avatar:')),['avatar:https://wx.qlogo.cn/member/30'])
+  await f.action(button(detail,':b'),context)
+  assert.equal(richNodes(f.edits.at(-1).rich_message,'photo').length,0)
+  assert.equal(f.resolve(dataButtons(f.edits.at(-1))[0].callback_data,context).state.page,2)
+})
+
+test('avatar failure preserves names; an account switch during avatar loading never publishes the profile', async () => {
+  const member = {...groupMembers[0],avatarUrl:'https://wx.qlogo.cn/member/0'}
+  const f = fixture({members:[member],topic:{type:1,wxId:'group@chatroom'}})
+  const context = {type:'supergroup',threadId:77}
+  await f.command('/members',context)
+  const select = dataButtons(f.replies.at(-1))[0].callback_data
+  f.hooks.avatar = async()=>{throw new Error('image unavailable')}
+  await f.action(select,context)
+  assert.match(resultText(f.replies.at(-1)),/群内名称：群名0/)
+  assert.equal(richNodes(f.replies.at(-1).rich_message,'photo').length,0)
+  f.hooks.avatar = async()=>{f.wxClient.wxInfo.wxid = 'other-account';return Buffer.from('photo')}
+  await f.action(select,context)
+  assert.equal(resultText(f.replies.at(-1)),zh['pagination.expired'])
+  assert.equal(richNodes(f.replies.at(-1).rich_message,'photo').length,0)
+})
 
 test('/members preserves group search/page, room identity, member pagination and non-friend detail', async () => {
   const rooms = Array.from({length: 32}, (_, i) => ({chatroomId: `group_${i}@chatroom`, nickName: `项目 A ${i}`}))

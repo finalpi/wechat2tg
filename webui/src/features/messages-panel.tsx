@@ -292,7 +292,7 @@ function Conversation({token, contact, online, draft, events, connection, onBack
                     <Bubble variant={outgoing ? 'sent' : 'outline'} align={outgoing ? 'end' : 'start'} className={cn(targetId === row.id && 'rounded-xl ring-2 ring-ring')}>
                       <BubbleContent><MessageBody token={token} message={row} onLocate={locate} /></BubbleContent>
                     </Bubble>
-                    <MessageFooter className="flex-wrap gap-2">
+                    <MessageFooter className={cn('flex-wrap gap-2', outgoing && 'flex-row-reverse')}>
                       <time dateTime={new Date(row.timestamp * 1000).toISOString()}>{time(row.timestamp)}</time>
                       {outgoing && row.status !== 'submitted' && <span className={cn(['failed', 'unknown'].includes(row.status) && 'text-destructive')}>{sendLabels[row.status] || row.status}</span>}
                       {row.revokeStatus && revokeLabels[row.revokeStatus] && <Badge variant="secondary">{revokeLabels[row.revokeStatus]}</Badge>}

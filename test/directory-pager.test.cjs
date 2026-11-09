@@ -87,19 +87,18 @@ function nativeContext(outcomes = [], extra = {}) {
   return ctx
 }
 
-test('member avatar galleries use only safe visible-page CDN images and scoped selection buttons', () => {
+test('member lists stay text-only and retain safe avatar metadata only for the selected profile', () => {
   const pager = new DirectoryPager()
   const members = items(65).map((item,index)=>({...item,avatarUrl:`https://wx.qlogo.cn/avatar/${index}`}))
   const view = render(pager,{kind:'gm',page:2,items:members})
   const photos = richNodes(view.rich_message).filter(node=>node.type === 'photo' && node.photo)
-  assert.equal(photos.length,30)
-  assert.equal(photos[0].photo.media,members[30].avatarUrl)
-  assert.equal(photos[29].photo.media,members[59].avatarUrl)
-  for(const photo of photos) {
-    const result = pager.resolve(scope,photo.caption.text.button.callback_data)
-    assert.equal(result.type,'select')
-    assert.equal(result.item.avatarUrl,photo.photo.media)
-  }
+  assert.equal(photos.length,0)
+  assert(!JSON.stringify(view.rich_message).includes('qlogo.cn'))
+  assert.equal(richNodes(view.rich_message).filter(node=>node.type === 'collage').length,0)
+  const result = pager.resolve(scope,selection(view))
+  assert.equal(result.type,'select')
+  assert.equal(result.item.avatarUrl,members[30].avatarUrl)
+  assert.equal(result.item.remark,'Name 31')
   assert(!view.html.includes('qlogo.cn'))
   assert(!view.plain.includes('qlogo.cn'))
   for(const avatarUrl of ['http://127.0.0.1/a','https://qlogo.cn.evil.test/a','https://user:secret@qlogo.cn/a','file:///etc/passwd','https://qlogo.cn:8080/a','javascript:alert(1)']) {
@@ -110,14 +109,34 @@ test('member avatar galleries use only safe visible-page CDN images and scoped s
   assert.equal(richNodes(render(pager,{items:members}).rich_message).filter(n=>n.type === 'photo').length,0,'other directories retain text-only layout')
 })
 
-test('explicit avatar fetch rejection falls back to a usable text directory without network-error retries', async () => {
-  const view = render(new DirectoryPager(),{kind:'gm',items:[{remark:'Member',action:'member',avatarUrl:'https://wx.qlogo.cn/avatar'}]})
-  const ctx = nativeContext([apiError('Bad Request: failed to get HTTP URL content')])
-  assert.equal(await deliverDirectoryPage(ctx,view),'sent')
-  assert.deepEqual(ctx.calls.map(call=>call.method),['sendRichMessage','sendMessage'])
-  assert.deepEqual(ctx.calls[1].payload.reply_markup,view.reply_markup)
+test('profile thumbnails have a name caption and upload as an explicit multipart JSON field', async () => {
+  const ctx = nativeContext()
+  const markup = {inline_keyboard:[[{text:'Back',callback_data:'back'}]]}
+  const avatar = {image:Buffer.from('small named thumbnail'),name:'Alice <Bob> & 王'}
+  assert.equal(await replyDirectoryText(ctx,'Name: Alice <Bob> & 王',markup,avatar),true)
+  const payload = ctx.calls[0].payload
+  assert.equal(typeof payload.rich_message,'string')
+  const blocks = JSON.parse(payload.rich_message).blocks
+  assert.equal(blocks[0].text,'Name: Alice <Bob> & 王')
+  assert.deepEqual(blocks[1],{type:'photo',photo:{type:'photo',media:'attach://profile_avatar'},caption:{text:avatar.name}})
+  assert.equal(payload.profile_avatar.source,avatar.image)
+  assert.equal(payload.message_thread_id,999)
+  assert.equal(blocks.at(-1).text[0].button.callback_data,'back')
+})
+
+test('explicit profile image rejection falls back to names and details without network-error retries', async () => {
+  const markup = {inline_keyboard:[[{text:'Back',callback_data:'back'}]]}
+  const avatar = {image:Buffer.from('thumbnail'),name:'Member'}
+  for(const error of [apiError('Bad Request: IMAGE_PROCESS_FAILED'),unsupportedError()]) {
+    const ctx = nativeContext([error])
+    assert.equal(await replyDirectoryText(ctx,'Member details',markup,avatar),true)
+    assert.deepEqual(ctx.calls.map(call=>call.method),['sendRichMessage','sendMessage'])
+    assert.equal(ctx.calls[1].payload.text,'Member details')
+    assert.deepEqual(ctx.calls[1].payload.reply_markup,markup)
+    assert.equal(ctx.calls[1].payload.profile_avatar,undefined)
+  }
   const uncertain = nativeContext([new Error('ECONNRESET')])
-  assert.equal(await deliverDirectoryPage(uncertain,view),'failed')
+  assert.equal(await replyDirectoryText(uncertain,'Member details',markup,avatar),false)
   assert.equal(uncertain.calls.length,1)
 })
 

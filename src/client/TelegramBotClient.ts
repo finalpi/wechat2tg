@@ -31,6 +31,8 @@ import {TelegramGroupOperateService} from '../service/TelegramGroupOperateServic
 import {WxContactRepository} from '../repository/WxContactRepository'
 import {DirectoryKind, DirectoryPager, DirectoryScope, DirectoryState} from '../util/DirectoryPager'
 import {createGroupMentionService} from '../webui/mentions'
+import {createDirectoryAvatar} from '../util/DirectoryAvatar'
+import {allowedAvatarURL} from '../util/AvatarURL'
 import {answerDirectoryCallback, deliverDirectoryPage, isRichDirectoryMessage, replyDirectoryText} from '../util/DirectoryPageDelivery'
 import {BindGroup} from '../entity/BindGroup'
 import {WxRoomRepository} from '../repository/WxRoomRepository'
@@ -1743,7 +1745,23 @@ export class TelegramBotClient extends AbstractClient {
         field('signature', contact?.signature)
         field('description', contact?.description)
         lines.push(this.i18n.t('directory.cache_notice'))
-        await reply(lines.join('\n'))
+        const member = state.kind === 'gm' ? state.items.find(item => item.action === wxId) : undefined
+        const avatarUrl = [member?.avatarUrl, contact?.smallHeadImgUrl, contact?.bigHeadImgUrl]
+            .find(url => typeof url === 'string' && allowedAvatarURL(url))
+        const displayName = selectedName || contact?.remark || contact?.nickName || wxId
+        let avatar: {image: Buffer; name: string} | undefined
+        if (avatarUrl) {
+            try {avatar = {image: await createDirectoryAvatar(avatarUrl, displayName), name: Array.from(displayName).slice(0, 200).join('')}}
+            catch { /* Missing photos must not hide the person's name and profile. */ }
+        }
+        // Thumbnail generation may involve a network read. Recheck account/scope
+        // before publishing any profile data after that asynchronous boundary.
+        if (!TelegramBotClient.getSpyClient('wxClient')?.hasLogin
+            || !this.getDirectoryPager().resolve(this.directoryScope(ctx), 'dl:' + state.token + ':b')) {
+            await reply(this.i18n.t('pagination.expired'))
+            return
+        }
+        await replyDirectoryText(ctx, lines.join('\n'), markup, avatar)
     }
 
     private async selectDirectoryItem(ctx: Context, kind: 'us' | 'of' | 'ro', wxId: string, returnToken?: string) {
