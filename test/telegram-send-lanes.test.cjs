@@ -14,10 +14,12 @@ function deferred() {
 }
 
 /** Loads the compiled client with only the collaborators each test needs. */
-function loadClient({getTranscript = async () => '转写文本', calls = [], statuses, clock} = {}) {
+function loadClient({getTranscript = async () => '转写文本', calls = [], statuses, clock, prepareArticles = async()=>undefined} = {}) {
   const stubs = {
     'node:async_hooks': require('node:async_hooks'),
     '../webui/delivery': require('../dist/webui/delivery'),
+    'entities':require('entities'),
+    '../util/TelegramArticleMessage':{...require('../dist/util/TelegramArticleMessage'),prepareTelegramArticles:prepareArticles},
     '../util/FormatUtils': {FormatUtils:{transformIdentityBodyStr:(_template,_sender,content)=>content}},
     '../util/WechatCustomEmoji': require('../dist/util/WechatCustomEmoji'),
     '../util/TelegramTextUtils': require('../dist/util/TelegramTextUtils'),
@@ -355,6 +357,39 @@ test('real local Telegram HTTP connection refusal recovers through the durable q
   assert.equal((await store.row(key)).state,'sent')
   assert.equal(received.length,1)
   assert.equal(received[0].message_thread_id,77)
+})
+
+test('article forwarding retains topic/reply receipts, falls back only on explicit rejection and isolates uncertain sends',async()=>{
+  const cases = [null,{response:{error_code:400,description:'Bad Request: rich_message not supported'}},Object.assign(new Error('reset'),{code:'ECONNRESET'}),{response:{error_code:429,parameters:{retry_after:1}}}]
+  for(const error of cases){
+    const q = queueFixture(loadClient({prepareArticles:async()=>({rich_message:'{"blocks":[]}',article_cover_0:{source:Buffer.from('jpg'),filename:'a.jpg'}})}))
+    delete q.client.sendBufferedMessage
+    q.client.bindGroupService = {isManagedForum:async()=>true}
+    q.client.waitForTelegramSendSlot = async()=>undefined
+    const requests = [],stored = [];let texts = 0
+    q.client.messageService = {createOrUpdate:async row=>stored.push({...row})}
+    q.client.sendTextMsgSynchronously = async()=>{texts++;return true}
+    q.client.client = {telegram:{callApi:async(method,payload)=>{requests.push({method,payload});if(error)throw error;return {message_id:123}}}}
+    const result = await q.client.mirrorWebUI({id:'article',type:0,chatId:-100,threadId:77,wxId:'publisher',sender:'<b>Publisher</b>',content:'text',param:{reply_id:44},articles:[{title:'Title',description:'',url:'https://example.com',coverUrl:'https://mmbiz.qpic.cn/a'}]})
+    assert.equal(requests.length,1);assert.equal(requests[0].method,'sendRichMessage')
+    assert.equal(requests[0].payload.message_thread_id,77)
+    assert.equal(requests[0].payload.reply_parameters.message_id,44)
+    assert.equal(texts,error?.response?.error_code === 400 ? 1 : 0)
+    if(!error)assert.equal(stored.at(-1).tgBotMsgId,123)
+    if(error?.code === 'ECONNRESET'){assert.equal(result.success,false);assert.equal(result.deliveryUncertain,true)}
+    if(error?.response?.error_code === 429){assert.equal(result.retryable,true);assert.equal(result.deliveryUncertain,false)}
+  }
+})
+
+test('an existing text checkpoint prevents switching a partially sent article to a fresh rich card',async()=>{
+  let preparations = 0,texts = 0
+  const q = queueFixture(loadClient({prepareArticles:async()=>{preparations++;return {rich_message:'{}'}}}))
+  delete q.client.sendBufferedMessage
+  q.client.bindGroupService = {isManagedForum:async()=>false}
+  q.client.messageBufferService.hasTextCheckpoint = async()=>true
+  q.client.sendTextMsgSynchronously = async()=>{texts++;return true}
+  const result = await q.client.enqueueTelegramRetry({id:'article',type:0,chatId:-100,articles:[{title:'Title',coverUrl:'https://mmbiz.qpic.cn/a'}]},'stored-key')
+  assert.equal(result.success,true);assert.equal(preparations,0);assert.equal(texts,1)
 })
 
 test('both lanes retain per-chat/global spacing and the shared flood deadline', async () => {

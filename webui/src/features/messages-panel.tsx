@@ -297,7 +297,7 @@ function Conversation({token, contact, online, draft, events, connection, onBack
               const canRevoke = row.canRevoke && (!row.revokeDeadline || row.revokeDeadline * 1000 > now + clockOffset.current)
               return <MessageScrollerItem key={row.id} messageId={String(row.id)}>
                 {newDay && <Marker variant="separator" className="mb-4"><MarkerContent>{date(row.timestamp)}</MarkerContent></Marker>}
-                <ChatMessageCard outgoing={outgoing} publication={!outgoing && (contact.category==='official' || contact.category==='service')} highlighted={targetId===row.id}
+                <ChatMessageCard outgoing={outgoing} externalAvatar={contact.kind==='group'} publication={!outgoing && (contact.category==='official' || contact.category==='service')} highlighted={targetId===row.id}
                   author={outgoing?'我':row.senderDisplayName || row.senderName || row.senderId || contact.name}
                   avatar={<ContactAvatar token={token} wxId={row.senderId || (!outgoing?contact.wxId:'')} name={outgoing?'我':row.senderDisplayName || row.senderName || contact.name} available={row.senderHasAvatar || (!outgoing && contact.hasAvatar) || (contact.kind==='group' && Boolean(row.senderId))} roomId={contact.kind==='group'?contact.wxId:undefined} />}
                   footer={<MessageFooter className="w-full flex-wrap justify-end gap-x-3 gap-y-2 px-0">

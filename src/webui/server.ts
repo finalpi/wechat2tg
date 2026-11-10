@@ -223,6 +223,14 @@ export function createWebUIServer(options: Options) {
                 const image = await options.messages.avatar(wxId,roomId)
                 res.writeHead(200,{'Content-Type':'image/png','Content-Length':image.length});res.end(image);return
             }
+            const articleCoverRoute = route?.match(/^\/api\/media\/article\/([1-9]\d*)\/(\d+)$/)
+            if(articleCoverRoute){
+                if(req.method !== 'GET' || !options.messages?.articleCover)return respond(res,404,{error:'coverUnavailable'})
+                const id = Number(articleCoverRoute[1]),index = Number(articleCoverRoute[2])
+                if(!Number.isSafeInteger(id) || !Number.isSafeInteger(index) || index < 0 || index >= 20)return respond(res,400,{error:'invalidRequest'})
+                const image = await options.messages.articleCover(id,index)
+                res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':image.length});res.end(image);return
+            }
             if(route === '/api/media') {
                 if(req.method !== 'POST' || !options.messages?.upload)return respond(res,405,{error:'messagesUnavailable'})
                 if(!req.headers['content-type']?.startsWith('application/octet-stream'))return respond(res,415,{error:'binaryRequired'})

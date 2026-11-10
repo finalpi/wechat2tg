@@ -67,6 +67,7 @@ export class MessageBufferService {
         const account = this.account()
         return Boolean(account && await this.store.begin(key,account))
     }
+    hasTextCheckpoint(key:string):Promise<boolean> {return this.store.hasTextProgress(key)}
     textProgress(key:string,chunks:string[],message?:BaseMessage):Promise<TextProgress> {return this.store.textProgress(key,chunks,message)}
     checkpoint(key:string,progress:TextProgress) {return this.store.checkpoint(key,progress)}
     accountIdentity() {return this.account()}

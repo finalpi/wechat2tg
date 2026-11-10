@@ -4,6 +4,8 @@ import {installMiniAppMenu} from '../webui/mini-app-menu'
 import {messageEvents} from '../webui/message-events'
 import {installTelegramPollingHealth} from '../util/TelegramPollingHealth'
 import {safeErrorDetails} from '../util/SafeError'
+import {prepareTelegramArticles,articleMessageRejected,ArticlePayload} from '../util/TelegramArticleMessage'
+import {decodeHTML} from 'entities'
 import {Context, Markup, session, Telegraf} from 'telegraf'
 import {config} from '../config'
 import {SocksProxyAgent} from 'socks-proxy-agent'
@@ -192,7 +194,7 @@ export class TelegramBotClient extends AbstractClient {
         this.telegramMessageQueue.push(item)
         // Media stays ordered without holding up later text in the same chat.
         const chat = item.message.chatId ?? 0
-        const kind = item.message.type === 1 ? 'media' : item.message.type === 6 ? 'recall' : 'message'
+        const kind = item.message.type === 1 || item.message.articles?.some(article=>article.coverUrl) ? 'media' : item.message.type === 6 ? 'recall' : 'message'
         const chatKey = `${chat}:${kind}`
         // A recall must follow earlier deliveries, but must not hold later text.
         const previous = kind === 'recall'
@@ -256,6 +258,10 @@ export class TelegramBotClient extends AbstractClient {
         if (message.type !== 6 && message.chatId && (!message.threadId || message.threadId === 1)
             && await this.bindGroupService.isManagedForum(message.chatId)) return {success: false}
         if (message.type === 0) {
+            if(message.articles?.length){
+                const result = await this.sendArticleMessage(message)
+                if(result !== undefined)return {success:result}
+            }
             return {success: await this.sendTextMsgSynchronously(message)}
         }
 
@@ -276,6 +282,35 @@ export class TelegramBotClient extends AbstractClient {
         }
 
         return {success: true}
+    }
+
+    private async sendArticleMessage(message:BaseMessage):Promise<boolean|undefined> {
+        // Never replace a partially delivered, checkpointed text fallback with a
+        // fresh rich message on the next retry.
+        const outboxId = this.telegramSendAttempt?.getStore()?.outboxId
+        if(outboxId && await this.messageBufferService.hasTextCheckpoint(outboxId))return undefined
+        if(!message.chatId)return undefined
+        const payload = await prepareTelegramArticles(message.articles,decodeHTML(String(message.sender || '').replace(/<[^>]*>/g,'')))
+        if(!payload)return undefined
+        const stored = this.createMessageEntity(message)
+        await this.messageService.createOrUpdate(stored)
+        let sent:{message_id:number}
+        try {
+            // SAFETY: Telegraf 4 predates sendRichMessage. This typed boundary
+            // uses the documented native rich blocks and multipart attachments.
+            const callApi = this.client.telegram.callApi as unknown as (method:'sendRichMessage',payload:ArticlePayload)=>Promise<{message_id:number}>
+            sent = await this.sendTelegramRequest(message.chatId,()=>callApi.call(this.client.telegram,'sendRichMessage',{
+                ...payload,chat_id:message.chatId,...(message.threadId ? {message_thread_id:message.threadId} : {}),
+                ...(message.param?.reply_id ? {reply_parameters:{message_id:message.param.reply_id}} : {}),
+            }))
+        } catch(error){
+            if(articleMessageRejected(error))return undefined
+            throw error // ambiguous failures must not trigger a second text send
+        }
+        if(!Number.isSafeInteger(sent?.message_id) || sent.message_id <= 0){this.currentDeliveryUncertain = true;return false}
+        stored.tgBotMsgId = sent.message_id
+        await this.messageService.createOrUpdate(stored)
+        return true
     }
 
     private async sendTelegramRequest<T>(chatId: number, request: () => Promise<T>): Promise<T> {

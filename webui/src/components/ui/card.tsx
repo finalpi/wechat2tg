@@ -9,8 +9,8 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
   <div ref={ref} className={cn('flex flex-col gap-1.5 p-6', className)} {...props} />
 ))
 CardHeader.displayName = 'CardHeader'
-const CardTitle = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({className, ...props}, ref) => (
-  <div ref={ref} className={cn('font-semibold leading-none tracking-tight', className)} {...props} />
+const CardTitle = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement> & {variant?:'default'|'article'}>(({className, variant = 'default', ...props}, ref) => (
+  <div ref={ref} className={cn('font-semibold tracking-tight',variant==='article'?'text-base leading-snug':'leading-none', className)} {...props} />
 ))
 CardTitle.displayName = 'CardTitle'
 const CardDescription = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({className, ...props}, ref) => (

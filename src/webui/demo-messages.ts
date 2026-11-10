@@ -99,6 +99,13 @@ export async function createDemoMessageCenter(directory: string): Promise<Messag
     attachments.set(add(team, '讨论纪要发在这里了。', false, 'demo-chen', 'file', now - 20).id, documentId)
     const pending = add(team, '这条是「同步结果未知」的演示，可以悬停后模拟重试。', true, 'demo-self', 'text', now - 10)
     pending.telegramStatus = 'unknown'
+    const coverArt = await sharp(await fs.readFile(files.get(imageId)!.path!)).jpeg().toBuffer()
+    const articleCovers = new Map<number,Buffer[]>()
+    for(const publisher of contacts.filter(item=>['official','service'].includes(item.category))){
+        const article = add(publisher,'本地图文示例',false,publisher.wxId,'link',now - 5)
+        article.details = {articles:['把日常整理成一篇图文','周末阅读清单','城市生活小提示'].map((title,index)=>({title,description:'离线生成的示例内容，不连接真实账号。',url:`https://example.com/demo/${index}`,coverPath:`/api/media/article/${article.id}/${index}`}))}
+        articleCovers.set(article.id,[coverArt,coverArt,coverArt])
+    }
     const contact = (wxId: string) => contacts.find(item => item.wxId === wxId) || fail('recipientMissing', 404)
     const row = (id: number) => messages.find(item => item.id === id) || fail('messageMissing', 404)
     const matching = (wxId: string, query = '') => {
@@ -116,6 +123,11 @@ export async function createDemoMessageCenter(directory: string): Promise<Messag
     const media = (id: string) => files.get(id) || fail('mediaMissing', 404)
     return {
         subscribe: listener => events.subscribe(listener),
+        articleCover:async(id,index)=>{
+            const image = articleCovers.get(id)?.[index]
+            if(!image || row(id).revokeStatus === 'revoked')fail('coverUnavailable',404)
+            return image
+        },
         status: async () => ({available: true, wechatOnline: true, telegramOnline: true, directoryAvailable: true, demo: true}),
         contacts: async (query, kind, offset, order) => {
             const all = summaries().filter(item => `${item.name} ${item.wxId}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()))

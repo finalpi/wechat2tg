@@ -22,7 +22,8 @@ import {quoteReference,quoteXML,sendQuote} from './quotes'
 import {revokePayload,revokeWechat,revokePolicy} from './revoke'
 import {annotateTelegramRecall} from './telegram-recall'
 import {cleanMediaBody} from './message-body'
-import {readLinkDetails} from './articles'
+import {readLinkDetails,linkArticles,publicLinkDetails,articleText} from './articles'
+import {loadArticleCover} from '../util/ArticleCover'
 import {OfficialAccountTopic} from '../entity/OfficialAccountTopic'
 import {conversationMessages, originalTelegramMessage, telegramConversationRecents} from './telegram-history'
 import {isSameTelegramDestination} from '../util/TelegramTopicUtils'
@@ -46,6 +47,7 @@ export interface MessageCenterAdapter {
     attachment?(messageId:number):Promise<MediaFile>
     sync?(messageId:number,confirm:boolean):Promise<unknown>
     avatar?(wxId:string,roomId?:string):Promise<Buffer>
+    articleCover?(messageId:number,index:number):Promise<Buffer>
     transcriptAttachment?(messageId:number,path:string,id:string):Promise<MediaFile>
 }
 export class MessageCenterError extends Error {
@@ -124,6 +126,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         let details: unknown = null
         try { if (row.details) details = JSON.parse(row.details) }
         catch { /* Malformed stored metadata must not expose raw protocol data. */ }
+        if(row.type === 'link')details = row.revokeStatus === 'revoked' ? {} : publicLinkDetails(readLinkDetails(row.source,details),row.id)
         return {...safe, details}
     }
     const escape = (text:string)=>String(text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -239,8 +242,10 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
                 else if(source && row.type === 'contact'){message.type = 4;message.source_text = source.Content;message.businessCardId = (await detailsFor(row)).wxId}
                 else if(!['text','solitaire'].includes(row.type)){
                     const details = await detailsFor(row)
-                    if(details.articles?.length){
-                        message.content = details.articles.map(a=>[(a.url ? `<a href="${escape(a.url).replace(/"/g,'&quot;')}">${escape(a.title || a.url)}</a>` : escape(a.title)),a.description ? `<blockquote>${escape(a.description)}</blockquote>` : ''].filter(Boolean).join('\n')).join('\n\n')
+                    if(row.type === 'link'){
+                        message.articles = linkArticles(details)
+                        message.source_type = 'link';message.source_text = row.source
+                        message.content = articleText(message.articles) || '[链接]'
                     }else message.content = [escape(details.title || `[${row.type}]`),escape(details.description || ''),details.url ? `<a href="${escape(details.url).replace(/"/g,'&quot;')}">${escape(details.url)}</a>` : ''].filter(Boolean).join('\n')
                 }
                 if(await bot.isWebUISyncActive?.(row.remoteId)){await store.run('UPDATE inbox SET telegramStatus=\'pending\' WHERE id=?',[id]);return}
@@ -261,7 +266,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
             } catch { return {title: row.body || '[接龙]'} }
         }
         if(row.type === 'link'){
-            const cached = Array.isArray(saved?.articles)
+            const cached = Array.isArray(saved?.articles) && saved.articleLayoutVersion === 2
             const details = readLinkDetails(cached ? undefined : row.source,saved)
             // The source is immutable after capture. Avoid reparsing the same
             // article XML on every poll, but leave source-less rows uncached.
@@ -403,6 +408,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
             }
             if(item.type === 'chat_histroy')item.details = {title:item.transcript?.title || ''}
             else if((!item.details || ['quote','link'].includes(item.type)) && item.type !== 'text')item.details = await detailsFor(row)
+            if(item.type === 'link')item.details = item.revokeStatus === 'revoked' ? {} : publicLinkDetails(item.details,item.id)
             const sender = directory.get(item.senderId)
             item.senderDisplayName = sender?.remark || sender?.nickName || String(item.senderName || item.senderId || '').replace(/<[^>]*>/g,'').replace(/^👤\s*/,'').trim()
             item.senderHasAvatar = Boolean(sender?.smallHeadImgUrl || sender?.bigHeadImgUrl)
@@ -438,6 +444,21 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         upload:(name,preference,stream)=>media.save(name,preference,stream),
         media:id=>media.get(id),attachment,
         avatar,
+        articleCover:async(id,index)=>{
+            if(!Number.isSafeInteger(id) || id < 1 || !Number.isSafeInteger(index) || index < 0 || index >= 20)throw new MessageCenterError('invalidRequest')
+            await repairOwnership()
+            const owner = (client() as any)?.wxInfo?.wxid
+            const row = await store.byId(id)
+            if(!row || row.hidden || row.type !== 'link' || row.revokeStatus === 'revoked')throw new MessageCenterError('coverUnavailable',404)
+            await recipient(row.wxId)
+            const article = linkArticles(await detailsFor(row))[index]
+            if(!article?.coverUrl)throw new MessageCenterError('coverUnavailable',404)
+            const image = await loadArticleCover(article.coverUrl)
+            const current = await store.byId(id)
+            if(owner !== (client() as any)?.wxInfo?.wxid || !current || current.hidden || current.revokeStatus === 'revoked'
+                || current.wxId !== row.wxId || current.remoteId !== row.remoteId)throw new MessageCenterError('coverUnavailable',404)
+            return image
+        },
         transcriptAttachment:transcriptDownload,
         sync,
         contacts: list,

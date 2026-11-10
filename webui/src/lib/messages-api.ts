@@ -36,6 +36,7 @@ export interface Transcript {
   children: Transcript[]
   truncated: boolean
 }
+export interface Article {title?:string;description?:string;url?:string;coverPath?:string}
 export interface ChatMessage {
   id: number
   requestId?: string
@@ -59,8 +60,8 @@ export interface ChatMessage {
   revokeDeadline?: number
   revokeUnavailableReason?: string
   details?: {
-    title?: string; description?: string; url?: string; mime?: string; size?: number
-    articles?: {title?: string; description?: string; url?: string}[]
+    title?: string; description?: string; url?: string; coverPath?:string; mime?: string; size?: number
+    articles?: Article[]
     replyTo?: {id?: number; remoteId: string; wxId?: string; name?: string; preview?: string; type?: string}
     attachmentUnavailable?: boolean
   } | null

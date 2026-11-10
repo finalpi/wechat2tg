@@ -39,6 +39,7 @@ import {solitaireJoins} from '../service/SolitaireService'
 import {emitWechatAutomation} from '../automation/events'
 import {LoginQrDelivery} from '../util/LoginQrDelivery'
 import {loginEvent} from '../util/LoginDiagnostics'
+import {readLinkDetails,linkArticles,articleText} from '../webui/articles'
 
 const TELEGRAM_BOT_API_UPLOAD_LIMIT = 50 * 1024 * 1024
 
@@ -674,7 +675,6 @@ export class WeChatClient extends AbstractClient {
         let filebox
         let fileBuff: Buffer
         let msgJson
-        let appLinkList
         const emojiConverter = new EmojiConverter()
         switch (msg.type()) {
             case WxMessage.Type.Solitaire: {
@@ -737,20 +737,8 @@ export class WeChatClient extends AbstractClient {
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.Link:
-                msgJson = WxMessage.getXmlToJson(msg._xml)
-                appLinkList = msgJson.msg.appmsg.mmreader?.category?.item
-                if (appLinkList) {
-                    // 判断是否是数组，有可能是对象
-                    if (Array.isArray(appLinkList)) {
-                        messageParam.content = appLinkList.map(it => {
-                            return `<a href="${it.url}">${it.title}</a><blockquote>${it.summary || it.digest}</blockquote>`
-                        }).join('\n')
-                    } else {
-                        messageParam.content = `<a href="${appLinkList.url}">${appLinkList.title}</a><blockquote>${appLinkList.summary || appLinkList.digest}</blockquote>`
-                    }
-                } else {
-                    messageParam.content = `<a href="${msgJson.msg.appmsg.url}">${msgJson.msg.appmsg.title}</a>`
-                }
+                messageParam.articles = linkArticles(readLinkDetails(msg._xml))
+                messageParam.content = articleText(messageParam.articles) || '[链接]'
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.Quote:

@@ -48,7 +48,7 @@ export class TelegramOutbox {
         if(!account || !message.id)throw new Error('Forwarding account/message identity unavailable')
         const conversation = message.conversationWxId || message.wxId || ''
         const key = createHash('sha256').update(JSON.stringify([account,conversation,message.id,message.type])).digest('hex')
-        const kind:OutboxKind = message.type === 1 ? 'media' : message.type === 6 ? 'recall' : 'message'
+        const kind:OutboxKind = message.type === 1 || message.articles?.some(article=>article.coverUrl) ? 'media' : message.type === 6 ? 'recall' : 'message'
         const {file,...rest} = message
         if(file && !Buffer.isBuffer(file.file))throw new Error('Invalid forwarding media')
         const payload = JSON.stringify({...rest,...(file ? {file:{fileName:file.fileName,sendType:file.sendType,duration:file.duration}} : {})})
@@ -103,6 +103,9 @@ export class TelegramOutbox {
     }
     async externallyUnknown(account:string,remoteId:string,conversation:string) {
         await this.run('UPDATE outbox SET state=\'unknown\',updatedAt=? WHERE account=? AND remoteId=? AND conversation=? AND state IN (\'queued\',\'enqueued\',\'failed\')',[Date.now(),account,remoteId,conversation])
+    }
+    async hasTextProgress(key:string):Promise<boolean> {
+        return (await this.all('SELECT key FROM outbox WHERE key=? AND progress IS NOT NULL',[key])).length > 0
     }
     async textProgress(key:string,chunks:string[],message?:BaseMessage):Promise<TextProgress> {
         await this.run('UPDATE outbox SET progress=?,payload=COALESCE(?,payload),chatId=COALESCE(?,chatId) WHERE key=? AND progress IS NULL AND state IN (\'queued\',\'enqueued\',\'sending\')',

@@ -6,6 +6,7 @@ import {Spinner} from '@/components/ui/spinner'
 import {Alert, AlertDescription} from '@/components/ui/alert'
 import {Attachment, AttachmentMedia, AttachmentContent, AttachmentTitle, AttachmentDescription, AttachmentActions} from '@/components/ui/attachment'
 import {messagesApi, messageError, type ChatMessage, type MediaFile, type Transcript} from '@/lib/messages-api'
+import {ArticleCards} from './article-cards'
 
 export function safeLink(url?: string) {
   if (!url) return undefined
@@ -186,16 +187,13 @@ function TranscriptView({token, messageId, transcript}: {token: string; messageI
 export function MessageBody({token, message, onLocate}: {token: string; message: ChatMessage; onLocate: (target: {id?: number; remoteId?: string}) => void}) {
   const mediaLabels: Record<string, string> = {image: '图片', emoji: '表情', video: '视频', voice: '语音', audio: '音频', file: '文件'}
   const quote = message.details?.replyTo
-  const articles = message.details?.articles || (message.details?.url ? [message.details] : [])
+  const articles = message.details?.articles?.length ? message.details.articles : (message.details?.url || message.type==='link' && message.details?.title ? [message.details!] : [])
   return <div className="flex min-w-0 flex-col gap-2">
     {quote && <Button variant="outline" size="sm" className="h-auto min-w-0 justify-start whitespace-normal py-2 text-left" onClick={() => onLocate(quote)}>
       <span className="flex min-w-0 flex-col gap-1"><span>{quote.name || '引用消息'}</span><span className="line-clamp-2 break-words">{quote.preview || '查看原消息'}</span></span>
     </Button>}
-    {message.body && !message.transcript && <MessageText body={message.body} format={message.bodyFormat} />}
-    {articles.map((article, index) => <div key={index} className="flex flex-col gap-1">
-      {safeLink(article.url) ? <a href={safeLink(article.url)} target="_blank" rel="noreferrer" className="break-words underline">{article.title || article.url}</a> : article.title}
-      {article.description && <span className="text-sm">{article.description}</span>}
-    </div>)}
+    {message.body && !message.transcript && !(message.type==='link' && articles.length) && <MessageText body={message.body} format={message.bodyFormat} />}
+    {articles.length > 0 && <ArticleCards token={token} articles={articles} />}
     {message.transcript ? <TranscriptView token={token} messageId={message.id} transcript={message.transcript} />
       : message.type === 'chat_histroy' && <span className="text-xs text-muted-foreground">聊天记录暂不可用。</span>}
     {['image', 'emoji', 'video', 'voice', 'audio', 'file'].includes(message.type) && !message.details?.attachmentUnavailable
