@@ -79,6 +79,7 @@ function fixture(customEmojiEnabled = false) {
     telegraf: {Markup}, 'telegraf/filters': {message: name => name},
     '../base/BaseClient': {AbstractClient: class {static getSpyClient(name) {return spy(name)}}},
     '../util/TelegramTopicUtils': topics, '../util/TelegramTextUtils': textUtils,
+    '../util/SafeError': require('../dist/util/SafeError'),
     '../config': {config: {AI_API_KEY: 'synthetic', AI_API_URL: 'https://invalid.example', AI_CONTEXT_LIMIT: 2, WECHAT_CUSTOM_EMOJI_ENABLED: customEmojiEnabled}},
     '../util/WechatCustomEmoji': emojiHtml,
     '../util/handleMsg': {getChatHistory: async () => history},

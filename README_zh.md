@@ -387,8 +387,8 @@ docker compose logs --tail=100 wechat2tg
 |`WX_PROXY_HOST`、`WX_PROXY_USERNAME`、`WX_PROXY_PASSWORD`| 否 | 独立的微信 SOCKS 登录代理 |
 |`TENCENT_SECRET_ID`、`TENCENT_SECRET_KEY`| 否 | 腾讯云 ASR 凭证 |
 |`SEND_TO_WX_MAX_RETRIES`、`SEND_TO_WX_TIMEOUT`| 否 | 原有微信转发重试次数（`3`）与超时（`30000` 毫秒） |
-|`SEND_TO_TG_MAX_RETRIES`、`SEND_TO_TG_RETRY_DELAY`| 否 | 原有 Telegram 转发重试次数（`3`）与退避基数（`5000` 毫秒） |
-|`MESSAGE_BUFFER_EXPIRE_TIME`| 否 | 消息缓冲有效期，默认 `300000` 毫秒 |
+|`SEND_TO_TG_MAX_RETRIES`、`SEND_TO_TG_RETRY_DELAY`| 否 | 普通错误重试上限（`3`）与退避基数（`5000` 毫秒）；明确未连接和 429 持续重试，结果未知需先核对。见[持久转发说明](docs/diagnostics/telegram-forwarding.md)。 |
+|`MESSAGE_BUFFER_EXPIRE_TIME`| 否 | 兼容旧配置的已完成转发记录清理时间（实际至少 7 天）；待发送、失败和未知记录不自动过期。 |
 |`AUTO_DELETE_OLD_MESSAGES`、`MESSAGE_RETENTION_DAYS`| 否 | 清理原有机器人消息历史，默认 `false` / `7` 天 |
 |`LOG_LEVEL`、`DEBUG_MODE`| 否 | 日志级别与调试模式，默认 `info` / `false` |
 |`DB_SQLITE_PATH`| 否 | 兼容保留字段；当前绑定数据库实际固定为 `storage/db/wx2tg.db` |

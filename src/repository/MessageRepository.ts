@@ -20,8 +20,11 @@ export class MessageRepository {
     }
 
     async getByWxMsgId(wxMsgId: string) {
-        return await this.repository.findOneBy({
-            wxMsgId: wxMsgId
+        // Older retries can leave a zero-receipt row before the successful one.
+        // Prefer a confirmed Telegram receipt rather than treating it as unsent.
+        return await this.repository.findOne({
+            where: {wxMsgId},
+            order: {tgBotMsgId: 'DESC', id: 'DESC'}
         })
     }
 

@@ -5,7 +5,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
 
-function fixture({binding, legacy, autoCreate = false, routeError, rowPatch = {}} = {}) {
+function fixture({binding, legacy, autoCreate = false, routeError, rowPatch = {}, queued = false} = {}) {
   const sent = [], created = []
   let finished
   const completion = new Promise(resolve => {finished = resolve})
@@ -20,7 +20,7 @@ function fixture({binding, legacy, autoCreate = false, routeError, rowPatch = {}
     },
   }
   const wx = {hasLogin: true, wxInfo: {wxid: 'self'}, client: {Contact: {find: async () => ({name: () => 'Publisher'})}}}
-  const bot = {hasLogin: true, isWebUISyncActive: () => false, mirrorWebUI: async message => {sent.push(message); return {success: true}}}
+  const bot = {hasLogin: true, isWebUISyncActive: async () => queued, mirrorWebUI: async message => {sent.push(message); return {success: true}}}
   const bindings = {getByWxId: async () => legacy, resolveWechat: async () => {
     if (routeError) throw new Error('forum provisioning failed')
     return binding
@@ -50,6 +50,12 @@ test('WebUI/MCP mirroring uses the topic even for a previously bound official ac
   assert.equal(f.sent[0].chatId, -100123)
   assert.equal(f.sent[0].threadId, 20)
   assert.equal(f.sent[0].conversationWxId, 'gh_test')
+})
+
+test('durable queued deliveries block manual mirroring after an asynchronous lookup', async()=>{
+  const f = fixture({queued:true})
+  await assert.rejects(f.center.sync(1),error=>error.code === 'telegramQueued')
+  assert.equal(f.sent.length,0)
 })
 
 test('solitaire mirroring keeps readable text and the raw source without degrading to a type label', {timeout: 2000}, async () => {

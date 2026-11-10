@@ -57,7 +57,7 @@ import {normalizeEscapedTelegramCommandText} from '../util/TelegramTextUtils'
 import {AiReplyService} from '../service/AiReplyService'
 import {CustomFile} from 'telegram/client/uploads'
 import {WebMessageStore} from '../webui/message-store'
-import {telegramDeliveryUncertain} from '../webui/delivery'
+import {telegramDeliveryUncertain, telegramRetryable} from '../webui/delivery'
 import {Api} from 'telegram'
 import {getTelegramThreadId, isSameTelegramDestination} from '../util/TelegramTopicUtils'
 import {WechatAccountClassificationService} from '../service/WechatAccountClassificationService'
@@ -89,10 +89,16 @@ type TelegramSendResult = MessageRetryResult & {
 interface TelegramSendAttempt {
     retryAfterMs?: number
     deliveryUncertain: boolean
+    retryable?: boolean
+    deferred?: boolean
+    outboxId?: string
+    accepted?: boolean
+    checkpointed?: boolean
 }
 
 interface QueuedTelegramMessage {
     webui?: boolean
+    account?: string
     message: BaseMessage
     messageId: string
     isRetry: boolean
@@ -170,26 +176,14 @@ export class TelegramBotClient extends AbstractClient {
     }
 
     async sendMessage(message: BaseMessage): Promise<boolean> {
-        // 检查消息是否已经在处理中（避免重复发送）
-        const existingMessageId = `${message.chatId}_${message.id}`
-        if (this.processingMessages.has(existingMessageId)) {
-            this.logger.warn(`消息已在处理中，跳过重复发送: ${message.id}`)
-            return true
-        }
-
-        // 标记消息正在处理
-        this.processingMessages.add(existingMessageId)
-
         try {
-            const messageId = this.messageBufferService.addMessage(message)
-
-            // 媒体与非媒体分别保持顺序，上传不会阻塞同一聊天的后续文本。
-            this.enqueueTelegramMessage({message, messageId, isRetry: false})
-            setTimeout(() => this.processingMessages.delete(existingMessageId), 30000)
+            // Acknowledgement means accepted into the durable outbox, not sent.
+            // Its bounded worker restores queued deliveries after network/process recovery.
+            await this.messageBufferService.addMessage(message)
             return true
         } catch (error) {
-            this.logger.error('发送消息失败:', error)
-            this.processingMessages.delete(existingMessageId)
+            this.logger.error('转发消息未能持久入队:', safeErrorDetails(error))
+            if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(message.id,'failed').catch(()=>undefined)
             return false
         }
     }
@@ -213,13 +207,16 @@ export class TelegramBotClient extends AbstractClient {
         })
     }
     public mirrorWebUI(message:BaseMessage):Promise<TelegramSendResult> {
-        return new Promise(resolve=>this.enqueueTelegramMessage({message,messageId:`webui:${message.id}`,isRetry:true,webui:true,resolve}))
+        return new Promise(resolve=>this.enqueueTelegramMessage({message,messageId:`webui:${message.id}`,isRetry:true,webui:true,account:this.messageBufferService.accountIdentity?.(),resolve}))
     }
-    public isWebUISyncActive(wxMsgId:string) {
-        return this.activeWebUISync.has(wxMsgId) || this.telegramMessageQueue.some(item=>item.message.id === wxMsgId) || this.messageBufferService.hasScheduledMessage(wxMsgId)
+    public async isWebUISyncActive(wxMsgId:string) {
+        return this.activeWebUISync.has(wxMsgId) || this.telegramMessageQueue.some(item=>item.message.id === wxMsgId) || await this.messageBufferService.hasScheduledMessage(wxMsgId)
     }
 
     private enqueueTelegramRetry(message: BaseMessage, messageId: string): Promise<TelegramSendResult> {
+        // A manual sync may have started just before this outbox row was added.
+        // Wait for its outcome instead of queueing a second Telegram write.
+        if(this.telegramMessageQueue.some(item=>item.webui && item.message.id === message.id))return Promise.resolve({success:false,deferred:true})
         return new Promise(resolve => {
             this.enqueueTelegramMessage({message, messageId, isRetry: true, resolve})
         })
@@ -229,7 +226,7 @@ export class TelegramBotClient extends AbstractClient {
     private async runQueuedTelegramItem(item: QueuedTelegramMessage): Promise<void> {
         // Lazy initialization also supports clients created from the prototype in tests.
         this.telegramSendAttempt ??= new AsyncLocalStorage<TelegramSendAttempt>()
-        const attempt: TelegramSendAttempt = {deliveryUncertain: false}
+        const attempt: TelegramSendAttempt = {deliveryUncertain: false, ...(!item.webui && item.isRetry ? {outboxId:item.messageId} : {})}
         await this.telegramSendAttempt.run(attempt, async () => {
             this.activeWebUISync.add(item.message.id)
             if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(item.message.id,'syncing').catch(() => undefined)
@@ -237,33 +234,21 @@ export class TelegramBotClient extends AbstractClient {
             try {
                 result = await this.sendBufferedMessage(item.message)
             } catch (error) {
-                this.logger.error(`Telegram 队列发送失败: ${item.message.id}`, error)
+                this.logger.error(`Telegram 队列发送失败: ${item.message.id}`, safeErrorDetails(error))
                 result = {success: false}
             }
 
             const retryAfterMs = Math.max(result.retryAfterMs || 0, attempt.retryAfterMs || 0) || undefined
-            const deliveryUncertain = Boolean(attempt.deliveryUncertain || result.skipRetry || result.deliveryUncertain)
+            const deliveryUncertain = Boolean(attempt.deliveryUncertain || result.skipRetry || result.deliveryUncertain
+                || !result.success && attempt.accepted && !attempt.checkpointed)
             this.activeWebUISync.delete(item.message.id)
             if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(item.message.id,deliveryUncertain ? 'unknown' : result.success ? 'synced' : 'failed').catch(() => undefined)
-            result = {...result, retryAfterMs, deliveryUncertain}
-
-            if (item.isRetry) {
-                // The buffer only understands success/failure: terminal uncertainty must
-                // stop its retry chain, while WebUI still receives the actual outcome.
-                item.resolve?.(item.webui ? result : result.skipRetry || deliveryUncertain ? {...result, success: true} : result)
-                return
-            }
-
-            if (result.success || result.skipRetry || deliveryUncertain) {
-                this.messageBufferService.markMessageAsSent(item.messageId)
-            } else {
-                this.messageBufferService.markMessageAsFailed(
-                    item.messageId,
-                    message => this.enqueueTelegramRetry(message, item.messageId),
-                    false,
-                    retryAfterMs
-                )
-            }
+            result = {...result, retryAfterMs, deliveryUncertain, retryable:attempt.retryable || result.retryable, deferred:attempt.deferred || result.deferred}
+            // Unknown is not success. The durable worker retains it for review,
+            // while confirmed pre-connect failures remain eligible for recovery.
+            if(item.webui && result.success && !deliveryUncertain)await this.messageBufferService.externallySent?.(item.message,item.account).catch(()=>undefined)
+            else if(item.webui && deliveryUncertain)await this.messageBufferService.externallyUnknown?.(item.message,item.account).catch(()=>undefined)
+            item.resolve?.(result)
         })
     }
 
@@ -295,9 +280,17 @@ export class TelegramBotClient extends AbstractClient {
 
     private async sendTelegramRequest<T>(chatId: number, request: () => Promise<T>): Promise<T> {
         await this.waitForTelegramSendSlot(chatId)
+        const attempt = this.telegramSendAttempt?.getStore()
+        if(attempt?.outboxId && !await this.messageBufferService.beginAttempt(attempt.outboxId)){
+            attempt.deferred = true
+            throw new Error('Forwarding account changed; delivery deferred')
+        }
         try {
-            return await request()
+            const result = await request()
+            if(attempt)attempt.accepted = true
+            return result
         } catch (error) {
+            if(attempt && telegramRetryable(error))attempt.retryable = true
             this.recordTelegramRetryAfter(error)
             if(telegramDeliveryUncertain(error))this.currentDeliveryUncertain = true
             throw error
@@ -654,8 +647,6 @@ export class TelegramBotClient extends AbstractClient {
     config: Configuration | undefined
     // 添加消息缓冲服务
     private messageBufferService = MessageBufferService.getInstance()
-    // 正在处理的消息集合，避免重复发送
-    private processingMessages = new Set<string>()
     // 所有转发消息和重试共用同一发送队列
     private telegramMessageQueue: QueuedTelegramMessage[] = []
     /** Per-chat media/non-media serial lanes, sharing the same rate limiter. */
@@ -744,6 +735,14 @@ export class TelegramBotClient extends AbstractClient {
         }
         this.sendQueueHelper = new SimpleMessageSendQueueHelper(this.sendTextMsg.bind(this), 617)
         this.messageSender = SenderFactory.createSender(this.client)
+        this.messageBufferService.configure(()=>{
+            const wechat = TelegramBotClient.getSpyClient('wxClient')
+            if(!(wechat instanceof WeChatClient))return undefined
+            const botId = this.client.botInfo?.id
+            return wechat?.hasLogin && wechat.wxInfo?.wxid && botId ? `${botId}:${wechat.wxInfo.wxid}` : undefined
+        },(message,key)=>this.enqueueTelegramRetry(message,key),async(id,status)=>{
+            if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(id,status)
+        })
     }
 
     private async sendTextMsg(message: BaseMessage): Promise<boolean> {
@@ -753,7 +752,7 @@ export class TelegramBotClient extends AbstractClient {
     }
 
     private async dealException(e, message: BaseMessage) {
-        this.logger.error('消息发送异常:', e)
+        this.logger.error('消息发送异常:', safeErrorDetails(e))
 
         // 检查是否是Telegram API响应错误
         if (e.response && e.response.error_code) {
@@ -770,12 +769,12 @@ export class TelegramBotClient extends AbstractClient {
         }
         // 处理网络错误 (如 FetchError, ECONNRESET 等)
         else if (e.code === 'ECONNRESET' || e.type === 'system' || e.name === 'FetchError') {
-            this.logger.warn(`网络错误，消息将通过缓冲区重试: ${message.id} - ${e.message}`)
+            this.logger.warn(`网络错误，保留消息并按送达状态处理: ${message.id}`)
             // 网络错误让缓冲区处理重试
         }
         // 其他未知错误
         else {
-            this.logger.warn(`未知错误，消息将通过缓冲区重试: ${message.id} - ${e.message || e}`)
+            this.logger.warn(`发送失败，保留消息并按送达状态处理: ${message.id}`)
         }
     }
 
@@ -2786,6 +2785,10 @@ ${this.i18n.t('help.instructions')}`))
             return false
         }
 
+        const attempt = this.telegramSendAttempt?.getStore()
+        const progress = attempt?.outboxId ? await this.messageBufferService.textProgress(attempt.outboxId,chunks,message) : undefined
+        if(progress){chunks = progress.chunks;attempt.checkpointed = true}
+
         // 所有验证通过后，才保存到数据库
         const messageEntity = this.createMessageEntity(message)
         await this.messageService.createOrUpdate(messageEntity)
@@ -2809,26 +2812,33 @@ ${this.i18n.t('help.instructions')}`))
             ].flat()
         }
 
-        let newMsg
+        let newMsg:{message_id:string|number}|undefined = progress?.ids.length ? {message_id:progress.ids[0]} : undefined
         let success = true
 
-        // Split the final rendered HTML, keeping tags balanced and emoji entities intact.
-        // Await every part: a failed/uncertain send must not send later parts or restart the sequence.
+        // Persist each confirmed fragment. Known pre-connect failures resume at
+        // the first unacknowledged fragment, never replaying the earlier prefix.
         if (chunks.length > 1) this.logger.info(`长文本消息将分 ${chunks.length} 片发送: ${message.id}`)
-        for (let i = 0; i < chunks.length; i++) {
+        for (let i = progress?.ids.length || 0; i < chunks.length; i++) {
             try {
                 const sent = await this.sendTelegramRequest(targetChatId, () => this.messageSender.sendText(targetChatId, chunks[i], option))
                 if (i === 0) newMsg = sent
+                if(progress){
+                    try {
+                        const id = Number(sent.message_id)
+                        if(!Number.isSafeInteger(id) || id <= 0)throw new Error('Missing Telegram receipt')
+                        progress.ids.push(id)
+                        await this.messageBufferService.checkpoint(attempt.outboxId,progress)
+                    } catch(error){this.currentDeliveryUncertain = true;throw error}
+                }
             } catch (e) {
-                this.logger.error(`文本消息发送失败 (分片${i + 1}/${chunks.length}): ${message.id} - ${e.message}`)
-                this.logger.error(`错误详情: chatId=${targetChatId}, wxMsgId=${message.id}, error_code=${e.response?.error_code}, error=${e.code || e.name}`)
+                this.logger.error(`文本消息发送失败 (分片${i + 1}/${chunks.length}): ${message.id}`,safeErrorDetails(e))
                 await this.dealException(e, message)
                 success = false
                 break
             }
         }
 
-        if(newMsg && !success)this.currentDeliveryUncertain = true
+        if(newMsg && !success && !progress)this.currentDeliveryUncertain = true
         // 更新chatId
         if (newMsg && success) {
             messageEntity.tgBotMsgId = parseInt(newMsg.message_id + '')

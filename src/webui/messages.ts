@@ -196,7 +196,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         if(row.telegramStatus === 'excluded')throw new MessageCenterError('messageExcluded',409)
         const bot = AbstractClient.getSpyClient('botClient') as any
         if(!bot?.hasLogin || !bot.mirrorWebUI)throw new MessageCenterError('telegramOffline',503)
-        if(synchronization.has(id) || bot.isWebUISyncActive?.(row.remoteId))throw new MessageCenterError('telegramQueued',409)
+        if(synchronization.has(id) || await bot.isWebUISyncActive?.(row.remoteId))throw new MessageCenterError('telegramQueued',409)
         if(['unknown','unverified'].includes(row.telegramStatus) && !confirm)throw new MessageCenterError('syncUncertain',409)
         if(!await store.claimSync(id))throw new MessageCenterError('telegramQueued',409)
         const operation = (async()=>{
@@ -243,7 +243,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
                         message.content = details.articles.map(a=>[(a.url ? `<a href="${escape(a.url).replace(/"/g,'&quot;')}">${escape(a.title || a.url)}</a>` : escape(a.title)),a.description ? `<blockquote>${escape(a.description)}</blockquote>` : ''].filter(Boolean).join('\n')).join('\n\n')
                     }else message.content = [escape(details.title || `[${row.type}]`),escape(details.description || ''),details.url ? `<a href="${escape(details.url).replace(/"/g,'&quot;')}">${escape(details.url)}</a>` : ''].filter(Boolean).join('\n')
                 }
-                if(bot.isWebUISyncActive?.(row.remoteId)){await store.run('UPDATE inbox SET telegramStatus=\'pending\' WHERE id=?',[id]);return}
+                if(await bot.isWebUISyncActive?.(row.remoteId)){await store.run('UPDATE inbox SET telegramStatus=\'pending\' WHERE id=?',[id]);return}
                 const result = await bot.mirrorWebUI(message)
                 await store.run('UPDATE inbox SET telegramStatus=? WHERE id=?',[result.success ? 'synced' : result.deliveryUncertain || result.skipRetry ? 'unknown' : 'failed',id])
             }catch(error){await store.run('UPDATE inbox SET telegramStatus=? WHERE id=?',[error?.code === 'messageExcluded' ? 'excluded' : 'failed',id])}

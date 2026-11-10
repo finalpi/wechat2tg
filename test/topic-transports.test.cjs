@@ -243,8 +243,8 @@ for (const kind of ['bot', 'gram']) {
   })
 }
 
-function persistence() {
-  const rows = [
+function persistence(extra = []) {
+  const rows = [...extra,
     {id: 6, chatId: -200, threadId: 42, tgBotMsgId: 106, wxMsgId: 'other-chat'},
     {id: 5, chatId: -100, threadId: 43, tgBotMsgId: 105},
     {id: 4, chatId: -100, threadId: 43, tgBotMsgId: 104},
@@ -262,6 +262,7 @@ function persistence() {
         .slice(0, options.take)
     },
     findOneBy: async where => {queries.push(plain(where)); return rows.find(row => matches(row, where)) ?? null},
+    findOne: async options => {queries.push(plain(options));return rows.filter(row=>matches(row,options.where)).sort((a,b)=>b.tgBotMsgId - a.tgBotMsgId || b.id - a.id)[0] ?? null},
   }
   const repositoryModule = load('repository/MessageRepository.ts', {
     '../data-sourse': {AppDataSource: {getRepository: () => store}},
@@ -295,5 +296,10 @@ test('quoted message lookup enforces supplied thread and chat, while legacy and 
   assert.deepEqual(queries.at(-1), {chatId: -100, tgBotMsgId: 103})
   assert.equal((await service.getByBotMsgId(-100, 101)).threadId, null)
   assert.equal((await service.getByWxMsgId('other-chat')).chatId, -200)
-  assert.deepEqual(queries.at(-1), {wxMsgId: 'other-chat'})
+  assert.deepEqual(queries.at(-1), {where:{wxMsgId:'other-chat'},order:{tgBotMsgId:'DESC',id:'DESC'}})
+})
+
+test('WeChat receipt lookup prefers a confirmed delivery over earlier or later failed attempts', async()=>{
+  const {service} = persistence([{id:7,wxMsgId:'quoted',tgBotMsgId:0},{id:0,wxMsgId:'quoted',tgBotMsgId:0}])
+  assert.equal((await service.getByWxMsgId('quoted')).tgBotMsgId,103)
 })

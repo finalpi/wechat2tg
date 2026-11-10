@@ -18,6 +18,10 @@ function loadClient({getTranscript = async () => '转写文本', calls = [], sta
   const stubs = {
     'node:async_hooks': require('node:async_hooks'),
     '../webui/delivery': require('../dist/webui/delivery'),
+    '../util/FormatUtils': {FormatUtils:{transformIdentityBodyStr:(_template,_sender,content)=>content}},
+    '../util/WechatCustomEmoji': require('../dist/util/WechatCustomEmoji'),
+    '../util/TelegramTextUtils': require('../dist/util/TelegramTextUtils'),
+    '../entity/Message': {Message:class {}},
     '../webui/message-store': {WebMessageStore: {getInstance: () => ({
       setTelegramStatus: async (id, status) => {statuses?.push({id, status})},
     })}},
@@ -58,7 +62,7 @@ function queueFixture(Client) {
     telegramNextGlobalSendAt: 0,
     telegramNextSendAtByChat: new Map(),
     logger: {info: noop, warn: noop, error: noop, debug: noop},
-    messageBufferService: {markMessageAsSent: noop, markMessageAsFailed: noop},
+    messageBufferService: {beginAttempt:async()=>true, markMessageAsSent: noop, markMessageAsFailed: noop},
     sendBufferedMessage: async message => {
       started.push(message.id)
       if (message.id === 'slow') await gate.promise
@@ -69,6 +73,19 @@ function queueFixture(Client) {
   const item = (id, chatId, type = 0) => ({message: {id, chatId, type}, messageId: id, isRetry: false})
   return {client, started, finished, release: gate.resolve, item}
 }
+
+test('concurrent duplicate arrivals are not acknowledged before durable acceptance succeeds', async()=>{
+  const q = queueFixture(loadClient())
+  let rejectWrite,completed = 0
+  const write = new Promise((_resolve,reject)=>{rejectWrite = reject})
+  q.client.messageBufferService = {addMessage:()=>write}
+  const first = q.client.sendMessage({id:'same',chatId:-1,type:0}).then(result=>{completed++;return result})
+  const second = q.client.sendMessage({id:'same',chatId:-1,type:0}).then(result=>{completed++;return result})
+  await settle();assert.equal(completed,0)
+  rejectWrite(Object.assign(new Error('synthetic storage full'),{code:'ENOSPC'}))
+  assert.deepEqual(await Promise.all([first,second]),[false,false])
+  assert.equal(q.started.length,0)
+})
 
 test('Telegram startup announces connection attempts before waiting for getMe', async () => {
   const stop = new Error('stop the synthetic retry loop')
@@ -207,10 +224,11 @@ test('parallel lanes isolate uncertainty and FloodWait while sharing the flood d
     [['rejected', 'failed'], ['healthy', 'synced'], ['uncertain', 'unknown'], ['flood', 'failed']])
 })
 
-test('unknown, partial and skipRetry delivery are terminal on initial sends and buffer retries', async () => {
+test('unknown, partial and skipRetry delivery never masquerade as successful buffer retries', async () => {
   const q = queueFixture(loadClient())
   const sent = [], failed = []
   q.client.messageBufferService = {
+    beginAttempt:async()=>true,
     markMessageAsSent: id => sent.push(id),
     markMessageAsFailed: (...args) => failed.push(args),
   }
@@ -229,15 +247,114 @@ test('unknown, partial and skipRetry delivery are terminal on initial sends and 
   }
   for (const id of ['unknown', 'partial', 'skip']) q.client.enqueueTelegramMessage(q.item(id, -1))
   await settle()
-  assert.deepEqual(sent, ['unknown', 'partial', 'skip'])
+  assert.deepEqual(sent, [], 'unknown outcomes must not be marked sent')
   assert.deepEqual(failed, [], 'initial uncertainty never schedules an automatic retry')
   for (const id of ['unknown-retry', 'partial-retry', 'skip-retry']) {
     const result = await q.client.enqueueTelegramRetry({id, chatId: -1, type: 0}, id)
-    assert.equal(result.success, true, 'MessageBufferService must terminate its retry chain')
+    assert.equal(result.success, false, 'the durable outbox retains uncertainty without lying about success')
     assert.equal(result.deliveryUncertain, true)
   }
   assert.equal(requests, 2, 'only explicitly queued attempts issue requests')
   assert.deepEqual(failed, [])
+})
+
+test('manual sync racing a new automatic entry cannot duplicate either success or uncertainty', async t=>{
+  const {TelegramOutbox} = require('../dist/repository/TelegramOutbox')
+  const {MessageBufferService} = require('../dist/util/MessageBufferService')
+  for(const uncertain of [false,true]){
+    const directory = fs.mkdtempSync(path.join(require('node:os').tmpdir(),'telegram-manual-race-'))
+    const store = new TelegramOutbox(path.join(directory,'outbox.db'))
+    const worker = new MessageBufferService(store,{intervalMs:0,logger:{info:noop,warn:noop,error:noop},notify:noop})
+    t.after(async()=>{await worker.destroy();fs.rmSync(directory,{recursive:true,force:true})})
+    const q = queueFixture(loadClient()),entered = deferred(),release = deferred()
+    let requests = 0
+    q.client.messageBufferService = worker;q.client.waitForTelegramSendSlot = async()=>undefined
+    q.client.sendBufferedMessage = async row=>{
+      try {
+        await q.client.sendTelegramRequest(row.chatId,async()=>{requests++;entered.resolve();await release.promise;if(uncertain)throw Object.assign(new Error('reset'),{code:'ECONNRESET'})})
+        return {success:true}
+      }catch{return {success:false}}
+    }
+    worker.configure(()=>'account',(row,key)=>q.client.enqueueTelegramRetry(row,key))
+    const row = {id:'same',wxId:'peer',conversationWxId:'peer',chatId:-100,type:0,content:'synthetic'}
+    const manual = q.client.mirrorWebUI(row);await entered.promise
+    const key = await worker.addMessage(row);await worker.drain();await worker.idle()
+    assert.equal(requests,1)
+    release.resolve();await manual
+    assert.equal((await store.row(key)).state,uncertain ? 'unknown' : 'sent')
+    await store.finish(key,'queued',1,0)
+    await worker.drain();await worker.idle()
+    assert.equal((await store.row(key)).state,uncertain ? 'unknown' : 'sent','late queued results cannot undo the manual outcome')
+    assert.equal(requests,1)
+  }
+})
+
+test('durable text retries resume after the confirmed prefix instead of duplicating or losing chunks', async t=>{
+  const {TelegramOutbox} = require('../dist/repository/TelegramOutbox')
+  const {MessageBufferService} = require('../dist/util/MessageBufferService')
+  const directory = fs.mkdtempSync(path.join(require('node:os').tmpdir(),'telegram-chunk-recovery-'))
+  const store = new TelegramOutbox(path.join(directory,'outbox.db'))
+  let now = 1000000,fail = true
+  const worker = new MessageBufferService(store,{intervalMs:0,now:()=>now,logger:{info:noop,warn:noop,error:noop},notify:noop})
+  t.after(async()=>{await worker.destroy();fs.rmSync(directory,{recursive:true,force:true})})
+  const q = queueFixture(loadClient()),calls = [],receipts = []
+  q.client.messageBufferService = worker
+  q.client.waitForTelegramSendSlot = async()=>undefined
+  q.client.bindGroupService = {isManagedForum:async()=>false}
+  q.client.messageService = {createOrUpdate:async row=>receipts.push({...row})}
+  q.client.messageSender = {sendText:async(_chat,text)=>{
+    calls.push(text)
+    if(fail && calls.length === 2)throw Object.assign(new Error('offline'),{code:'ECONNREFUSED'})
+    return {message_id:100 + calls.length}
+  }}
+  q.client.sendBufferedMessage = async row=>({success:await q.client.sendTextMsgSynchronously(row)})
+  worker.configure(()=>'account',(row,key)=>q.client.enqueueTelegramRetry(row,key))
+  const row = {id:'chunked',wxId:'peer',conversationWxId:'peer',senderId:'peer',sender:'Name',chatId:-100,threadId:77,type:0,content:'A'.repeat(4096) + 'B'.repeat(40)}
+  const key = await worker.addMessage(row)
+  await worker.drain();await worker.idle()
+  assert.deepEqual(calls.map(text=>text[0]),['A','B'])
+  assert.equal((await store.row(key)).state,'queued')
+  fail = false;now += 60000
+  await worker.drain();await worker.idle()
+  assert.deepEqual(calls.map(text=>text[0]),['A','B','B'],'only the rejected second chunk is retried')
+  assert.equal((await store.row(key)).state,'sent')
+  assert.equal(receipts.at(-1).tgBotMsgId,101,'reply mapping retains the first confirmed Telegram message')
+})
+
+test('real local Telegram HTTP connection refusal recovers through the durable queue', async t=>{
+  const http = require('node:http'),{once} = require('node:events'),{Telegram} = require('telegraf')
+  const {TelegramOutbox} = require('../dist/repository/TelegramOutbox')
+  const {MessageBufferService} = require('../dist/util/MessageBufferService')
+  const directory = fs.mkdtempSync(path.join(require('node:os').tmpdir(),'telegram-http-recovery-'))
+  const received = []
+  const server = http.createServer(async(req,res)=>{
+    const chunks = [];for await(const chunk of req)chunks.push(chunk)
+    received.push(JSON.parse(Buffer.concat(chunks).toString()))
+    res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:true,result:{message_id:11}}))
+  })
+  server.listen(0,'127.0.0.1');await once(server,'listening')
+  const port = server.address().port
+  await new Promise(resolve=>server.close(resolve))
+  const api = new Telegram('123:synthetic',{apiRoot:`http://127.0.0.1:${port}`})
+  const store = new TelegramOutbox(path.join(directory,'outbox.db'))
+  let now = 1000000
+  const worker = new MessageBufferService(store,{intervalMs:0,now:()=>now,logger:{info:noop,warn:noop,error:noop},notify:noop})
+  t.after(async()=>{await worker.destroy();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));fs.rmSync(directory,{recursive:true,force:true})})
+  const q = queueFixture(loadClient())
+  q.client.messageBufferService = worker;q.client.waitForTelegramSendSlot = async()=>undefined
+  q.client.sendBufferedMessage = async row=>{
+    try {await q.client.sendTelegramRequest(row.chatId,()=>api.sendMessage(row.chatId,row.content,{message_thread_id:77}));return {success:true}}
+    catch {return {success:false}}
+  }
+  worker.configure(()=>'account',(row,key)=>q.client.enqueueTelegramRetry(row,key))
+  const key = await worker.addMessage({id:'http',chatId:-100,wxId:'peer',type:0,content:'synthetic'})
+  await worker.drain();await worker.idle()
+  assert.equal((await store.row(key)).state,'queued')
+  server.listen(port,'127.0.0.1');await once(server,'listening')
+  now += 60000;await worker.drain();await worker.idle()
+  assert.equal((await store.row(key)).state,'sent')
+  assert.equal(received.length,1)
+  assert.equal(received[0].message_thread_id,77)
 })
 
 test('both lanes retain per-chat/global spacing and the shared flood deadline', async () => {

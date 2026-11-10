@@ -384,8 +384,8 @@ Starting with v6.0.15, directories use native Telegram RichMessage: click names 
 |`WX_PROXY_HOST`, `WX_PROXY_USERNAME`, `WX_PROXY_PASSWORD`| No | Independent WeChat SOCKS login proxy |
 |`TENCENT_SECRET_ID`, `TENCENT_SECRET_KEY`| No | Tencent Cloud ASR credentials |
 |`SEND_TO_WX_MAX_RETRIES`, `SEND_TO_WX_TIMEOUT`| No | Existing WeChat forwarding retries (`3`) and timeout (`30000` ms) |
-|`SEND_TO_TG_MAX_RETRIES`, `SEND_TO_TG_RETRY_DELAY`| No | Existing Telegram forwarding retries (`3`) and backoff base (`5000` ms) |
-|`MESSAGE_BUFFER_EXPIRE_TIME`| No | Message buffer lifetime (`300000` ms) |
+|`SEND_TO_TG_MAX_RETRIES`, `SEND_TO_TG_RETRY_DELAY`| No | Ordinary failure retry limit (`3`) and backoff base (`5000` ms); confirmed pre-connect failures and 429 keep retrying. Uncertain delivery requires review. See [durable forwarding](docs/diagnostics/telegram-forwarding.md). |
+|`MESSAGE_BUFFER_EXPIRE_TIME`| No | Legacy cleanup setting for completed forwarding records (at least 7 days); pending, failed and uncertain payloads never expire automatically. |
 |`AUTO_DELETE_OLD_MESSAGES`, `MESSAGE_RETENTION_DAYS`| No | Cleanup existing bot message history; defaults `false` / `7` days |
 |`LOG_LEVEL`, `DEBUG_MODE`| No | Logging level and debug mode; defaults `info` / `false` |
 |`DB_SQLITE_PATH`| No | Legacy compatibility setting; the current bot binding database is fixed at `storage/db/wx2tg.db` |

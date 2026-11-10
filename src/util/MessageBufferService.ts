@@ -1,369 +1,161 @@
-import BaseMessage from '../base/BaseMessage'
+import type BaseMessage from '../base/BaseMessage'
 import {LogUtils} from './LogUtil'
 import {config} from '../config'
 import {MqttNotifyService} from '../service/MqttNotifyService'
-
-interface BufferedMessage {
-    id: string
-    message: BaseMessage
-    timestamp: number
-    retryCount: number
-    status: 'pending' | 'sent' | 'failed'
-}
+import {TelegramOutbox,OutboxKind,OutboxRow,TextProgress} from '../repository/TelegramOutbox'
 
 export interface MessageRetryResult {
-    success: boolean
-    retryAfterMs?: number
+    success:boolean
+    retryAfterMs?:number
+    retryable?:boolean
+    deliveryUncertain?:boolean
+    skipRetry?:boolean
+    deferred?:boolean
 }
+type Dispatcher = (message:BaseMessage,key:string)=>Promise<MessageRetryResult>
+type Logger = Pick<Console,'info'|'warn'|'error'>
+interface Options {maxRetries?:number;retryDelay?:number;intervalMs?:number;now?:()=>number;logger?:Logger;notify?:()=>void}
 
-type RetryCallbackResult = boolean | MessageRetryResult
-type RetryCallback = (message: BaseMessage) => Promise<RetryCallbackResult>
-
+/** Durable outbox scheduler. Memory holds only bounded active deliveries, not the backlog. */
 export class MessageBufferService {
-    public hasScheduledMessage(wxMsgId:string) {
-        return Array.from(this.messageBuffer.values()).some(item=>item.message.id===wxMsgId&&(item.status==='pending'||this.retryTimeouts.has(item.id)))
+    private static instance:MessageBufferService
+    private account:()=>string|undefined = ()=>undefined
+    private dispatch?:Dispatcher
+    private status?:(remoteId:string,state:string)=>Promise<unknown>
+    private active = new Map<string,{kind:OutboxKind;task:Promise<void>}>()
+    private timer?:NodeJS.Timeout
+    private scanning?:Promise<void>
+    private requested = false
+    private stopped = false
+    private now:()=>number
+    private logger:Logger
+    private maxRetries:number
+    private retryDelay:number
+    private intervalMs:number
+    private nextCleanup = 0
+    private notify:()=>void
+    constructor(private store = new TelegramOutbox(),options:Options = {}) {
+        this.now = options.now || Date.now
+        this.logger = options.logger || LogUtils.config().getLogger('MessageBuffer')
+        this.maxRetries = Math.max(0,options.maxRetries ?? config.SEND_TO_TG_MAX_RETRIES ?? 3)
+        this.retryDelay = Math.max(1,options.retryDelay ?? config.SEND_TO_TG_RETRY_DELAY ?? 5000)
+        this.intervalMs = options.intervalMs ?? 5000
+        this.notify = options.notify || (()=>MqttNotifyService.getInstance().notify('Telegram 转发尚未完成','消息已保留；结果未知时请先核对 Telegram，再在 WebUI 手动同步。','error'))
     }
-    private static instance: MessageBufferService
-    private messageBuffer: Map<string, BufferedMessage> = new Map()
-    // 从配置读取，0 表示无限重试
-    private readonly MAX_RETRY_COUNT = config.SEND_TO_TG_MAX_RETRIES
-    // 重试延迟基数（毫秒）
-    private readonly RETRY_DELAY = config.SEND_TO_TG_RETRY_DELAY
-    private readonly BUFFER_CLEANUP_INTERVAL = 60000 // 1分钟
-    // 消息过期时间
-    private readonly MESSAGE_EXPIRE_TIME = config.MESSAGE_BUFFER_EXPIRE_TIME
-    private logger = LogUtils.config().getLogger('MessageBuffer')
-
-    // 添加定时器引用管理
-    private cleanupInterval: NodeJS.Timeout | null = null
-    private retryTimeouts: Map<string, NodeJS.Timeout> = new Map()
-    private deleteTimeouts: Map<string, NodeJS.Timeout> = new Map()
-    // 已发送过 MQTT 通知的消息 ID 集合（避免重复通知）
-    private notifiedMessages: Set<string> = new Set()
-
-    private constructor() {
-        // 定期清理过期消息
-        this.cleanupInterval = setInterval(() => {
-            this.cleanupExpiredMessages()
-        }, this.BUFFER_CLEANUP_INTERVAL)
+    static getInstance():MessageBufferService {
+        return this.instance ??= new MessageBufferService()
     }
-
-    static getInstance(): MessageBufferService {
-        if (!MessageBufferService.instance) {
-            MessageBufferService.instance = new MessageBufferService()
-        }
-        return MessageBufferService.instance
+    configure(account:()=>string|undefined,dispatch:Dispatcher,status?:(remoteId:string,state:string)=>Promise<unknown>) {
+        this.account = account;this.dispatch = dispatch;this.status = status
+        if(!this.timer && this.intervalMs > 0){this.timer = setInterval(()=>this.kick(),this.intervalMs);this.timer.unref()}
+        this.kick()
     }
-
-    /**
-     * 将消息添加到缓冲区
-     */
-    addMessage(message: BaseMessage): string {
-        const messageId = this.generateMessageId(message)
-        const bufferedMessage: BufferedMessage = {
-            id: messageId,
-            message,
-            timestamp: Date.now(),
-            retryCount: 0,
-            status: 'pending'
-        }
-
-        this.messageBuffer.set(messageId, bufferedMessage)
-        return messageId
+    private kick() {void this.drain().catch(()=>this.logger.error('Telegram outbox storage unavailable; queued data retained'))}
+    async addMessage(message:BaseMessage):Promise<string> {
+        const account = this.account()
+        if(!account)throw new Error('Forwarding account unavailable')
+        const key = await this.store.enqueue(account,message,this.now())
+        this.kick()
+        return key
     }
-
-    /**
-     * 标记消息为已发送
-     */
-    markMessageAsSent(messageId: string): void {
-        const bufferedMessage = this.messageBuffer.get(messageId)
-        if (bufferedMessage) {
-            bufferedMessage.status = 'sent'
-
-            // 清理可能存在的重试定时器
-            const retryTimeout = this.retryTimeouts.get(messageId)
-            if (retryTimeout) {
-                clearTimeout(retryTimeout)
-                this.retryTimeouts.delete(messageId)
-            }
-
-            // 发送成功后，延迟删除消息（防止重复发送）
-            const deleteTimeout = setTimeout(() => {
-                this.messageBuffer.delete(messageId)
-                this.deleteTimeouts.delete(messageId)
-            }, 10000) // 10秒后删除
-
-            this.deleteTimeouts.set(messageId, deleteTimeout)
+    async hasScheduledMessage(remoteId:string):Promise<boolean> {
+        const account = this.account()
+        return account ? this.store.active(account,remoteId) : false
+    }
+    /** Called immediately before a Telegram request, never after it. */
+    async beginAttempt(key:string):Promise<boolean> {
+        const account = this.account()
+        return Boolean(account && await this.store.begin(key,account))
+    }
+    textProgress(key:string,chunks:string[],message?:BaseMessage):Promise<TextProgress> {return this.store.textProgress(key,chunks,message)}
+    checkpoint(key:string,progress:TextProgress) {return this.store.checkpoint(key,progress)}
+    accountIdentity() {return this.account()}
+    async externallySent(message:BaseMessage,account = this.account()) {
+        if(account)await this.store.externallySent(account,message.id,message.conversationWxId || message.wxId || '')
+    }
+    async externallyUnknown(message:BaseMessage,account = this.account()) {
+        if(account)await this.store.externallyUnknown(account,message.id,message.conversationWxId || message.wxId || '')
+    }
+    async drain():Promise<void> {
+        this.requested = true
+        if(this.scanning)return this.scanning
+        if(this.stopped || !this.dispatch)return
+        const scan = this.scanRequested()
+        this.scanning = scan
+        try {await scan} finally {if(this.scanning === scan)this.scanning = undefined}
+    }
+    private async scanRequested():Promise<void> {
+        while(this.requested && !this.stopped){
+            this.requested = false
+            const account = this.account()
+            if(!account)return
+            await this.scan(account)
         }
     }
-
-    /**
-     * 标记消息发送失败并尝试重发
-     * @param messageId 消息ID
-     * @param sendCallback 发送回调函数
-     * @param isTimeoutError 是否是超时错误（超时时消息可能已成功发送）
-     */
-    markMessageAsFailed(messageId: string, sendCallback: RetryCallback, isTimeoutError = false, retryAfterMs?: number): void {
-        const bufferedMessage = this.messageBuffer.get(messageId)
-        if (!bufferedMessage) return
-
-        // 修改：超时错误也应该重试，但使用更长的重试延迟
-        // 只有在无限重试模式下才会继续重试超时错误
-        if (isTimeoutError && this.MAX_RETRY_COUNT !== 0) {
-            this.logger.warn(`消息可能已发送（超时），跳过重试并标记为已发送: ${messageId}`)
-            bufferedMessage.status = 'sent'
-            // 延迟删除
-            const deleteTimeout = setTimeout(() => {
-                this.messageBuffer.delete(messageId)
-                this.deleteTimeouts.delete(messageId)
-            }, 10000)
-            this.deleteTimeouts.set(messageId, deleteTimeout)
-            return
-        }
-
-        if (isTimeoutError) {
-            this.logger.warn(`消息发送超时，但在无限重试模式下将继续重试: ${messageId}`)
-        }
-
-        bufferedMessage.retryCount++
-        bufferedMessage.status = 'failed'
-
-        // MAX_RETRY_COUNT === 0 表示无限重试
-        const shouldRetry = this.MAX_RETRY_COUNT === 0 || bufferedMessage.retryCount <= this.MAX_RETRY_COUNT
-        const maxRetryDisplay = this.MAX_RETRY_COUNT === 0 ? '∞' : this.MAX_RETRY_COUNT
-
-        if (shouldRetry) {
-            this.logger.warn(`消息发送失败，准备重试 (${bufferedMessage.retryCount}/${maxRetryDisplay}): ${messageId}`)
-
-            // 失败次数达到阈值时发送 MQTT 通知（每条消息只通知一次）
-            if (bufferedMessage.retryCount >= config.MQTT_NOTIFY_FAIL_COUNT && !this.notifiedMessages.has(messageId)) {
-                this.notifiedMessages.add(messageId)
-                const contentPreview = bufferedMessage.message.content
-                    ? String(bufferedMessage.message.content).substring(0, 200)
-                    : '(无文本内容)'
-                MqttNotifyService.getInstance().notify(
-                    '消息发送失败',
-                    `消息发送失败已重试 ${bufferedMessage.retryCount} 次: ${contentPreview}`,
-                    'error'
-                )
-            }
-
-            // 指数退避重试，最大延迟 5 分钟（避免频繁重试加重 Flood Wait）
-            const exponentialDelay = Math.min(this.RETRY_DELAY * Math.pow(2, bufferedMessage.retryCount - 1), 300000)
-            const retryDelay = retryAfterMs || exponentialDelay
-
-            let retryTimeout: NodeJS.Timeout
-            retryTimeout = setTimeout(async () => {
-                try {
-                    bufferedMessage.status = 'pending'
-                    const result = await sendCallback(bufferedMessage.message)
-                    const success = typeof result === 'boolean' ? result : result.success
-                    const nextRetryAfterMs = typeof result === 'boolean' ? undefined : result.retryAfterMs
-                    if (success) {
-                        this.markMessageAsSent(messageId)
-                    } else {
-                        this.markMessageAsFailed(messageId, sendCallback, false, nextRetryAfterMs)
-                    }
-                } catch (error) {
-                    this.logger.error(`重试发送消息失败: ${messageId}`, error)
-                    // 检查是否是超时错误
-                    const isTimeout = error.code === 'ETIMEDOUT' ||
-                                     error.code === 'ECONNRESET' ||
-                                     error.code === 'ESOCKETTIMEDOUT' ||
-                                     (error.message && error.message.includes('timeout'))
-                    this.markMessageAsFailed(messageId, sendCallback, isTimeout, error?.retryAfterMs)
-                } finally {
-                    if (this.retryTimeouts.get(messageId) === retryTimeout) {
-                        this.retryTimeouts.delete(messageId)
-                    }
-                }
-            }, retryDelay)
-
-            // 存储定时器引用
-            this.retryTimeouts.set(messageId, retryTimeout)
-        } else {
-            this.logger.error(`消息重试次数已达上限，标记为永久失败: ${messageId}`)
-            bufferedMessage.status = 'failed'
-            // 可以选择将失败消息保存到数据库或文件
-            this.saveFailedMessage(bufferedMessage)
-
-            // 永久失败时发送 MQTT 通知
-            if (!this.notifiedMessages.has(messageId)) {
-                this.notifiedMessages.add(messageId)
-            }
-            const contentPreview = bufferedMessage.message.content
-                ? String(bufferedMessage.message.content).substring(0, 200)
-                : '(无文本内容)'
-            MqttNotifyService.getInstance().notify(
-                '消息永久发送失败',
-                `消息已达最大重试次数 ${bufferedMessage.retryCount}，放弃发送: ${contentPreview}`,
-                'error'
-            )
-        }
-    }
-
-    /**
-     * 获取待重发的消息
-     */
-    getPendingMessages(): BufferedMessage[] {
-        return Array.from(this.messageBuffer.values()).filter(
-            msg => msg.status === 'pending' || msg.status === 'failed'
-        )
-    }
-
-    /**
-     * 获取缓冲区统计信息
-     */
-    getBufferStats(): {
-        total: number
-        pending: number
-        sent: number
-        failed: number
-        activeTimeouts: number
-    } {
-        const messages = Array.from(this.messageBuffer.values())
-        return {
-            total: messages.length,
-            pending: messages.filter(m => m.status === 'pending').length,
-            sent: messages.filter(m => m.status === 'sent').length,
-            failed: messages.filter(m => m.status === 'failed').length,
-            activeTimeouts: this.retryTimeouts.size + this.deleteTimeouts.size
-        }
-    }
-
-    /**
-     * 重新发送所有失败的消息
-     */
-    async retryFailedMessages(sendCallback: RetryCallback): Promise<void> {
-        // MAX_RETRY_COUNT === 0 表示无限重试
-        const failedMessages = Array.from(this.messageBuffer.values()).filter(
-            msg => msg.status === 'failed' && (this.MAX_RETRY_COUNT === 0 || msg.retryCount < this.MAX_RETRY_COUNT)
-        )
-
-        this.logger.info(`开始重发 ${failedMessages.length} 条失败消息`)
-
-        for (const bufferedMessage of failedMessages) {
-            try {
-                bufferedMessage.status = 'pending'
-                const result = await sendCallback(bufferedMessage.message)
-                const success = typeof result === 'boolean' ? result : result.success
-                const retryAfterMs = typeof result === 'boolean' ? undefined : result.retryAfterMs
-                if (success) {
-                    this.markMessageAsSent(bufferedMessage.id)
-                } else {
-                    this.markMessageAsFailed(bufferedMessage.id, sendCallback, false, retryAfterMs)
-                }
-                // 添加延迟避免发送过快
-                await new Promise(resolve => setTimeout(resolve, 1000))
-            } catch (error) {
-                this.logger.error(`重发消息失败: ${bufferedMessage.id}`, error)
-                this.markMessageAsFailed(bufferedMessage.id, sendCallback, false, error?.retryAfterMs)
+    private async scan(account:string):Promise<void> {
+        // Separate budgets: stalled uploads cannot consume all text slots.
+        for(const [kind,capacity] of [['message',8],['media',2],['recall',2]] as const){
+            const free = capacity - [...this.active.values()].filter(job=>job.kind === kind).length
+            if(free <= 0)continue
+            const rows = await this.store.due(account,kind,this.now(),free)
+            for(const row of rows){
+                if(this.stopped || account !== this.account())return
+                if(!await this.store.claim(row.key,account))continue
+                const task = this.deliver(row).catch(()=>this.logger.error('Telegram outbox completion failed; record retained'))
+                this.active.set(row.key,{kind,task})
+                void task.finally(()=>{this.active.delete(row.key);this.kick()})
             }
         }
+        if(this.now() >= this.nextCleanup){
+            await this.store.cleanup(this.now() - Math.max(config.MESSAGE_BUFFER_EXPIRE_TIME || 0,7 * 86400000))
+            this.nextCleanup = this.now() + 3600000
+        }
     }
-
-    private generateMessageId(message: BaseMessage): string {
-        return `${message.chatId}_${message.id}_${Date.now()}`
-    }
-
-    private cleanupExpiredMessages(): void {
-        const now = Date.now()
-        let cleanupCount = 0
-        // 无限重试模式下的最大保留时间：过期时间的 6 倍（默认 30 分钟）
-        const MAX_RETAIN_TIME = this.MESSAGE_EXPIRE_TIME * 6
-
-        for (const [messageId, bufferedMessage] of this.messageBuffer.entries()) {
-            if (now - bufferedMessage.timestamp > this.MESSAGE_EXPIRE_TIME) {
-                // 在无限重试模式下，不清理还在重试的消息（pending 或 failed 状态）
-                if (this.MAX_RETRY_COUNT === 0 && (bufferedMessage.status === 'pending' || bufferedMessage.status === 'failed')) {
-                    // 超过最大保留时间则强制清理，防止内存泄漏和无意义的请求堆积
-                    if (now - bufferedMessage.timestamp > MAX_RETAIN_TIME) {
-                        this.logger.error(`消息在无限重试模式下已超过最大保留时间，强制清理: ${messageId}，重试次数: ${bufferedMessage.retryCount}`)
-                        this.saveFailedMessage(bufferedMessage)
-                    } else {
-                        this.logger.warn(`消息已过期但在无限重试模式下保留: ${messageId}，状态: ${bufferedMessage.status}，重试次数: ${bufferedMessage.retryCount}`)
-                        continue
-                    }
-                }
-
-                // 清理相关的定时器
-                const retryTimeout = this.retryTimeouts.get(messageId)
-                if (retryTimeout) {
-                    clearTimeout(retryTimeout)
-                    this.retryTimeouts.delete(messageId)
-                }
-
-                const deleteTimeout = this.deleteTimeouts.get(messageId)
-                if (deleteTimeout) {
-                    clearTimeout(deleteTimeout)
-                    this.deleteTimeouts.delete(messageId)
-                }
-
-                this.messageBuffer.delete(messageId)
-                this.notifiedMessages.delete(messageId)
-                cleanupCount++
+    private async deliver(row:OutboxRow):Promise<void> {
+        let result:MessageRetryResult
+        try {
+            if(row.account !== this.account())result = {success:false,deferred:true}
+            else result = await this.dispatch(await this.store.message(row.key),row.key)
+        } catch {
+            // A dispatcher can throw after a write: never assume it is safe to replay.
+            const current = await this.store.row(row.key)
+            result = {success:false,deliveryUncertain:current?.state === 'sending'}
+        }
+        const attempts = row.attempts + (result.deferred ? 0 : 1)
+        const uncertain = result.deliveryUncertain || result.skipRetry
+        const retry = result.deferred || result.retryable || this.maxRetries === 0 || attempts <= this.maxRetries
+        const state = uncertain ? 'unknown' : result.success ? 'sent' : retry ? 'queued' : 'failed'
+        const backoff = Math.min(this.retryDelay * 2 ** Math.min(attempts - 1,20),300000)
+        const delay = Math.max(backoff,Number.isFinite(result.retryAfterMs) ? result.retryAfterMs || 0 : 0)
+        // Retrying a local journal write is safe; re-running the Telegram request is not.
+        let saved = false
+        while(!saved){
+            try {await this.store.finish(row.key,state,attempts,state === 'queued' ? this.now() + delay : 0);saved = true}
+            catch {
+                if(this.stopped)return
+                this.logger.error('Telegram outbox checkpoint unavailable; delivery will not be repeated')
+                await new Promise(resolve=>setTimeout(resolve,5000))
             }
         }
-
-        if (cleanupCount > 0) {
-            this.logger.info(`清理了 ${cleanupCount} 条过期消息和相关定时器`)
+        // A simultaneous manual sync or recall can have completed this record.
+        if(this.stopped || (await this.store.row(row.key))?.state !== state)return
+        await this.status?.(row.remoteId,state === 'sent' ? 'synced' : state === 'queued' ? 'pending' : state).catch(()=>undefined)
+        if(state === 'unknown' || state === 'failed')this.logger.warn(`Telegram forwarding retained for review: ${state}`)
+        if(!result.success && attempts === (config.MQTT_NOTIFY_FAIL_COUNT || 5)){
+            this.notify()
         }
     }
-
-    private saveFailedMessage(bufferedMessage: BufferedMessage): void {
-        // 可以将失败的消息保存到文件或数据库中，供后续分析
-        this.logger.error(`永久失败的消息: ${JSON.stringify({
-            id: bufferedMessage.id,
-            chatId: bufferedMessage.message.chatId,
-            content: bufferedMessage.message.content?.substring(0, 100),
-            type: bufferedMessage.message.type,
-            retryCount: bufferedMessage.retryCount
-        })}`)
+    async getBufferStats() {
+        const account = this.account()
+        return account ? this.store.stats(account) : []
     }
-
-    /**
-     * 清空缓冲区并清理所有定时器
-     */
-    clearBuffer(): void {
-        const count = this.messageBuffer.size
-
-        // 清理所有重试定时器
-        for (const timeout of this.retryTimeouts.values()) {
-            clearTimeout(timeout)
-        }
-        this.retryTimeouts.clear()
-
-        // 清理所有删除定时器
-        for (const timeout of this.deleteTimeouts.values()) {
-            clearTimeout(timeout)
-        }
-        this.deleteTimeouts.clear()
-
-        // 清理消息缓冲区
-        this.messageBuffer.clear()
-        this.notifiedMessages.clear()
-
-        this.logger.info(`已清空缓冲区，删除了 ${count} 条消息和所有相关定时器`)
-    }
-
-    /**
-     * 销毁服务，清理所有资源
-     */
-    destroy(): void {
-        this.logger.info('正在销毁MessageBufferService...')
-
-        // 清理主清理定时器
-        if (this.cleanupInterval) {
-            clearInterval(this.cleanupInterval)
-            this.cleanupInterval = null
-        }
-
-        // 清理所有消息和定时器
-        this.clearBuffer()
-
-        // 重置实例
-        MessageBufferService.instance = undefined
-
-        this.logger.info('MessageBufferService已销毁')
+    async idle() {await Promise.all([...this.active.values()].map(job=>job.task))}
+    async destroy() {
+        this.stopped = true
+        if(this.timer)clearInterval(this.timer)
+        await this.scanning?.catch(()=>undefined)
+        await this.idle()
+        await this.store.close()
+        if(MessageBufferService.instance === this)MessageBufferService.instance = undefined
     }
 }

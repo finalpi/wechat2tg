@@ -14,8 +14,8 @@ import {Alert, AlertDescription} from '@/components/ui/alert'
 import {Spinner} from '@/components/ui/spinner'
 import {Tabs, TabsList, TabsTrigger} from '@/components/ui/tabs'
 import {Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription} from '@/components/ui/empty'
-import {Message, MessageContent, MessageHeader, MessageFooter} from '@/components/ui/message'
-import {Bubble, BubbleContent} from '@/components/ui/bubble'
+import {MessageFooter} from '@/components/ui/message'
+import {ChatMessageCard} from './chat-message-card'
 import {Marker, MarkerContent} from '@/components/ui/marker'
 import {MessageScrollerProvider, MessageScroller, MessageScrollerViewport, MessageScrollerContent, MessageScrollerItem, MessageScrollerButton, useMessageScroller} from '@/components/ui/message-scroller'
 import {ContactAvatar, MessageBody, useRefreshAvatars} from './message-content'
@@ -285,8 +285,8 @@ function Conversation({token, contact, online, draft, events, connection, onBack
     {error && <Alert variant="destructive" className="shrink-0 rounded-none border-x-0"><AlertDescription>{error}</AlertDescription></Alert>}
     {loading ? <div className="flex flex-1 items-center justify-center"><Spinner /></div> : !rows.length ? <Placeholder title={query ? '未找到消息' : '暂无消息'} detail="此处显示已保存的消息记录。" /> : (
       <MessageScrollerProvider key={`${contact.wxId}:${query}:${reload}:${located}`} defaultScrollPosition={located ? 'start' : 'end'} autoScroll={!located && visible}>
-        <MessageScroller className="flex-1 bg-muted/40">
-          <MessageScrollerViewport aria-label="消息记录"><MessageScrollerContent className="mx-auto w-full max-w-5xl gap-3 px-3 py-4 md:px-6">
+        <MessageScroller className="flex-1 bg-background">
+          <MessageScrollerViewport aria-label="消息记录"><MessageScrollerContent className="mx-auto w-full max-w-5xl gap-4 px-3 py-4 md:gap-5 md:px-6 md:py-6">
             {hasMore && <MessageScrollerItem messageId="load-older"><div className="flex justify-center"><Button variant="outline" size="sm" disabled={moreBusy} onClick={more}>{moreBusy && <Spinner />} 加载更早消息</Button></div></MessageScrollerItem>}
             {rows.map((row, index) => {
               const outgoing = row.direction === 'outgoing'
@@ -297,14 +297,10 @@ function Conversation({token, contact, online, draft, events, connection, onBack
               const canRevoke = row.canRevoke && (!row.revokeDeadline || row.revokeDeadline * 1000 > now + clockOffset.current)
               return <MessageScrollerItem key={row.id} messageId={String(row.id)}>
                 {newDay && <Marker variant="separator" className="mb-4"><MarkerContent>{date(row.timestamp)}</MarkerContent></Marker>}
-                <Message align={outgoing ? 'end' : 'start'}>
-                  <ContactAvatar token={token} wxId={row.senderId || (!outgoing?contact.wxId:'')} name={outgoing?'我':row.senderDisplayName || row.senderName || contact.name} available={row.senderHasAvatar || (!outgoing && contact.hasAvatar) || (contact.kind==='group' && Boolean(row.senderId))} roomId={contact.kind==='group'?contact.wxId:undefined} />
-                  <MessageContent className="gap-1">
-                    {!outgoing && (newDay || !row.senderId || rows[index-1].senderId!==row.senderId || rows[index-1].direction!==row.direction || row.timestamp-rows[index-1].timestamp>120) && <MessageHeader>{row.senderDisplayName || row.senderName || row.senderId || contact.name}</MessageHeader>}
-                    <Bubble variant={outgoing ? 'sent' : 'outline'} align={outgoing ? 'end' : 'start'} className={cn(targetId === row.id && 'rounded-xl ring-2 ring-ring')}>
-                      <BubbleContent><MessageBody token={token} message={row} onLocate={locate} /></BubbleContent>
-                    </Bubble>
-                    <MessageFooter className={cn('flex-wrap gap-2', outgoing && 'flex-row-reverse')}>
+                <ChatMessageCard outgoing={outgoing} publication={!outgoing && (contact.category==='official' || contact.category==='service')} highlighted={targetId===row.id}
+                  author={outgoing?'我':row.senderDisplayName || row.senderName || row.senderId || contact.name}
+                  avatar={<ContactAvatar token={token} wxId={row.senderId || (!outgoing?contact.wxId:'')} name={outgoing?'我':row.senderDisplayName || row.senderName || contact.name} available={row.senderHasAvatar || (!outgoing && contact.hasAvatar) || (contact.kind==='group' && Boolean(row.senderId))} roomId={contact.kind==='group'?contact.wxId:undefined} />}
+                  footer={<MessageFooter className="w-full flex-wrap justify-end gap-x-3 gap-y-2 px-0">
                       <time dateTime={new Date(row.timestamp * 1000).toISOString()}>{time(row.timestamp)}</time>
                       {outgoing && row.status !== 'submitted' && <span className={cn(['failed', 'unknown'].includes(row.status) && 'text-destructive')}>{sendLabels[row.status] || row.status}</span>}
                       {row.revokeStatus && revokeLabels[row.revokeStatus] && <Badge variant="secondary">{revokeLabels[row.revokeStatus]}</Badge>}
@@ -315,9 +311,9 @@ function Conversation({token, contact, online, draft, events, connection, onBack
                       {canSync && <Button variant="ghost" size="sm" disabled={busyIds.has(row.id)} onClick={() => action(row, 'sync')}><RefreshCw /> 同步 Telegram</Button>}
                       {canRevoke && <Button variant="ghost" size="sm" disabled={busyIds.has(row.id)} onClick={() => action(row, 'revoke')}><Undo2 /> 撤回</Button>}
                       </MessageActions>
-                    </MessageFooter>
-                  </MessageContent>
-                </Message>
+                    </MessageFooter>}>
+                  <MessageBody token={token} message={row} onLocate={locate} />
+                </ChatMessageCard>
               </MessageScrollerItem>
             })}
           </MessageScrollerContent></MessageScrollerViewport>

@@ -55,12 +55,13 @@ function MessageContent({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function MessageHeader({ className, ...props }: React.ComponentProps<"div">) {
+function MessageHeader({ className, variant = "default", ...props }: React.ComponentProps<"div"> & {variant?: "default" | "card"}) {
   return (
     <div
       data-slot="message-header"
       className={cn(
-        "flex max-w-full min-w-0 items-center px-3 text-xs font-medium text-muted-foreground group-has-data-[variant=ghost]/message:px-0",
+        "flex max-w-full min-w-0 items-center",
+        variant === "card" ? "text-sm font-semibold text-foreground" : "px-3 text-xs font-medium text-muted-foreground group-has-data-[variant=ghost]/message:px-0",
         className
       )}
       {...props}

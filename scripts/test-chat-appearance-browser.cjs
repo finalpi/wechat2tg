@@ -18,8 +18,13 @@ async function main() {
   const timestamp = Math.floor(Date.now() / 1000)
   const messages = ['甲','乙','甲','我'].map((name,index)=>({id:index + 1,wxId:'demo@chatroom',remoteId:String(index + 100),senderId:name,senderDisplayName:name,senderHasAvatar:true,
     direction:index === 3 ? 'outgoing' : 'incoming',type:'text',body:`清爽的消息 ${index + 1}`,timestamp:timestamp + index,status:index === 3 ? 'submitted' : 'received',telegramTracked:true,telegramStatus:'synced',canRevoke:index === 3}))
+  const publications = [
+    {id:31,type:'text',body:'26.11.10 的日志\n\n作者：示例作者\n\n科研与复盘\n给内容留出阅读空间，而不是把消息堆在一起。\n\n一条完整的消息就是一张卡片，作者、正文、时间和操作各在自己的位置。'.repeat(2)},
+    {id:32,type:'link',body:'今日精选',details:{articles:[{title:'如何整理一天的记录',description:'清晰的标题和摘要，保留文章原有链接。',url:'https://example.com/article'},{title:'第二篇文章',description:'多篇图文仍属于同一条消息。',url:'https://example.com/second'}]}},
+    {id:33,type:'text',body:'这是一条短消息，也使用相同的卡片容器。'},
+  ].map(row=>({...row,wxId:'publisher',remoteId:String(row.id),senderId:'publisher',senderDisplayName:'公众号示例',senderHasAvatar:true,direction:'incoming',timestamp:timestamp + row.id,status:'received',telegramTracked:true,telegramStatus:'synced'}))
   const avatarCalls = []
-  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=','base64')
+  const png = await require('sharp')(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" fill="#6366f1"/><rect x="26" y="23" width="44" height="50" rx="4" fill="none" stroke="white" stroke-width="4"/><path d="M34 36h28M34 48h28M34 60h18" stroke="white" stroke-width="4"/></svg>')).png().toBuffer()
   let sends = 0
   const server = createWebUIServer({environment:{},token,file:path.join(root,'config.json'),runtime:{read:async()=>({}),save:async()=>undefined},messages:{
     subscribe:listener=>events.subscribe(listener),
@@ -30,7 +35,7 @@ async function main() {
       all.forEach(row=>counts[row.category]++)
       return {contacts:all.filter(row=>kind === 'all' || row.category === kind),offset:offset + 60,hasMore:false,counts,countsScope:'cached',directoryAvailable:true}
     },
-    history:async wxId=>({messages:wxId === 'demo@chatroom' ? messages : [],before:0,hasMore:false,serverTime:timestamp}),
+    history:async wxId=>({messages:wxId === 'demo@chatroom' ? messages : wxId === 'publisher' ? publications : [],before:0,hasMore:false,serverTime:timestamp}),
     avatar:async(wxId,roomId)=>{avatarCalls.push({wxId,roomId});return png},
     groupMembers:async()=>({members:[{wxId:'甲',name:'甲',displayName:'甲',nickname:'甲',hasAvatar:true},{wxId:'乙',name:'乙',displayName:'乙',nickname:'乙',hasAvatar:true}],offset:100,hasMore:false,total:2}),
     send:async()=>{sends++;throw Error('No live sends permitted')},
@@ -56,11 +61,12 @@ async function main() {
     await first.hover()
     await page.waitForFunction(()=>getComputedStyle(document.querySelector('.message-actions-content')).opacity === '1')
     const assertActionsAfterBubble = async row=>assert(await row.evaluate(element=>{
-      const bubble = element.querySelector('[data-slot="bubble"]').getBoundingClientRect()
+      const body = element.querySelector('[data-slot="message-body"]').getBoundingClientRect()
+      const card = element.querySelector('[data-message-card]').getBoundingClientRect()
       const actions = element.querySelector('.message-actions-content').getBoundingClientRect()
       const style = getComputedStyle(element.querySelector('.message-actions-content'))
-      return style.position === 'static' && actions.top >= bubble.bottom && actions.left >= 0 && actions.right <= window.innerWidth
-    }),'status/actions must follow the bubble in normal layout, never overlap its content')
+      return style.position === 'static' && actions.top >= body.bottom && actions.bottom <= card.bottom && actions.left >= 0 && actions.right <= window.innerWidth
+    }),'status/actions must follow the body inside the card, never overlap its content')
     await assertActionsAfterBubble(first)
     assert.equal((await first.boundingBox()).height,heightBeforeHover,'hover reserves its own footer space without moving the messages')
     const outgoing = page.locator('[data-slot="message"][data-align="end"]').last()
@@ -97,7 +103,26 @@ async function main() {
     await page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:'聊天界面',exact:true}).click()
     await page.getByRole('button',{name:'显示全部分类',exact:true}).click()
     await page.getByRole('button',{name:'返回聊天',exact:true}).click()
-    await page.getByRole('button',{name:'分类：公众号',exact:true}).waitFor()
+    await page.getByRole('button',{name:'分类：公众号',exact:true}).click()
+    await page.getByRole('button',{name:'公众号示例',exact:true}).click()
+    await page.getByText('今日精选',{exact:true}).waitFor()
+    const assertCards = async target=>{
+      assert.equal(await target.locator('[data-message-card]').count(),3)
+      assert(await target.locator('[data-slot="message-body"]').first().innerText().then(text=>text.includes('作者：示例作者')))
+      assert.equal(await target.getByRole('link',{name:'如何整理一天的记录',exact:true}).getAttribute('href'),'https://example.com/article')
+      assert(await target.locator('[data-layout="publication"]').evaluateAll(rows=>rows.every((row,index)=>{
+        const card = row.querySelector('[data-message-card]').getBoundingClientRect(),rect = row.getBoundingClientRect()
+        const previous = index ? rows[index - 1].querySelector('[data-message-card]').getBoundingClientRect() : undefined
+        return card.width >= rect.width * 0.95 && (!previous || card.top - previous.bottom >= 15)
+      })),'publication cards use the reading width with at least 16px between messages')
+      assert(await target.evaluate(()=>document.documentElement.scrollWidth <= window.innerWidth))
+    }
+    await assertCards(page)
+    if(process.env.CHAT_SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.CHAT_SCREENSHOT_DIR,'publication-light.png')})
+    await page.getByRole('button',{name:'聊天菜单',exact:true}).click()
+    await page.getByRole('button',{name:'切换主题',exact:true}).click()
+    await page.keyboard.press('Escape');await page.waitForTimeout(250)
+    if(process.env.CHAT_SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.CHAT_SCREENSHOT_DIR,'publication-dark.png')})
     const touch = await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true})
     await touch.addInitScript(value=>localStorage.setItem('webui-access-token',value),token)
     const mobile = await touch.newPage()
@@ -110,6 +135,11 @@ async function main() {
     await mobileFirst.getByRole('button',{name:'引用回复',exact:true}).click()
     await mobile.getByRole('button',{name:'取消引用',exact:true}).waitFor()
     assert(await mobile.evaluate(()=>document.documentElement.scrollWidth <= window.innerWidth),'touch chat must not overflow')
+    await mobile.getByRole('button',{name:'返回会话列表',exact:true}).click()
+    await mobile.getByRole('button',{name:'公众号示例',exact:true}).click()
+    await mobile.getByText('今日精选',{exact:true}).waitFor()
+    await assertCards(mobile)
+    if(process.env.CHAT_SCREENSHOT_DIR)await mobile.screenshot({path:path.join(process.env.CHAT_SCREENSHOT_DIR,'publication-mobile.png')})
     assert.deepEqual(errors,[]);assert.equal(sends,0)
     console.log('Chat appearance browser passed: non-overlapping normal-flow hover/focus/touch actions, emoji status, all sender/member avatars with deduplication, visual hide/restore and reload persistence; no sends.')
   } finally {
