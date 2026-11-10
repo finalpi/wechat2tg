@@ -1,5 +1,15 @@
 # v6：单分支、双发行通道
 
+## 开发预览：v6.0.40-dev.11（非稳定版）
+
+- Telegram 转发改用私有 SQLite 持久队列：消息与媒体先落盘，再确认入队；不再因旧的 3 次重试 / 5 分钟清理而丢弃待发数据。按 Bot、微信账号、会话和消息 ID 去重，恢复后仅处理匹配账号的任务。
+- 明确未建立连接的网络失败及 429 持续退避，遵守服务端等待时间；普通错误用尽次数后仍保留。超时、连接重置等结果未知的请求不会冒充已发送，也不盲目重发。重启时区分未开始的任务与在途未知任务。
+- 长文本保存已确认分片及首次渲染内容，安全失败后从未确认部分继续；手动同步与自动转发的竞争不会造成重复，已撤回的待发消息不在恢复后重新发送。旧版本已经丢失的内容不能凭空恢复，入队前的路由失败也不在此保证内。详见 [持久转发说明](diagnostics/telegram-forwarding.md)。
+- WebUI 所有消息统一组合 shadcn Message / Bubble / Card：头像与发送者在顶部，正文与底部时间 / 操作分区；公众号 / 服务号采用完整阅读宽度，手机 / 桌面消息间距分别为 16px / 20px。保留正常流的悬停、键盘和触屏操作，以及原有滚动与引用行为。详见 [聊天界面](chat-appearance.md)。
+- 合并远端 dev.9 / dev.10 的登录二维码可靠投递、登录诊断及 SDK `6.0.18-dev.2` 更新，不覆盖旧 tag。Compose server 仍固定 `v6.0.16`，本次不发布 SDK 或 server。
+- 合并后按 lockfile 重新安装 SDK，在 Node 24 下通过版本校验、构建、585 项自动化测试及十组浏览器回归；覆盖真实本机 HTTP 断网恢复、重启保留、分片续传、并发同步和卡片布局，未向真实微信 / Telegram 发送消息。
+- 仅发布 Bot 开发 tag，不更新稳定通道、不部署、不重启、不修改私有配置。镜像可用性以 Actions 构建结果为准。
+
 ## 开发预览：v6.0.40-dev.8（非稳定版）
 
 - 精简 Telegram `/contacts` 与 `/members` 的个人详情：移除「资料来自本地缓存，未提供的字段不显示」等实现说明，保留已有资料字段及返回入口，中英文一致。
@@ -192,7 +202,7 @@ bot 工作流先验证版本并运行测试，再并行执行两个互不等待�
 
 ## 固定 puppet 制品
 
-当前开发工作区使用 `vendor/wx2tg-puppet-6.0.18-dev.1.tgz`，从 SDK 固定提交测试、构建并打包，包含登录 / 后台目录解耦修复和安全公众号元数据，作为 dev.4 的开发依赖；发布状态以工作流为准，来源与校验值见 [vendor 记录](../vendor/README.md)。Bot 的 `package.json` 精确声明 `6.0.18-dev.1`，lockfile 将其解析到本地制品并保存 npm 计算的 SHA-512 integrity。已发布 Bot 正式版和 `v6.0.40-dev.3` 的 SDK `6.0.17` 制品保持不变。
+当前开发工作区沿用 dev.9 引入的 `vendor/wx2tg-puppet-6.0.18-dev.2.tgz`，包含此前的后台目录修复及新的会话复用、二维码恢复和脱敏登录诊断。Bot 的 `package.json` 精确声明 `6.0.18-dev.2`，lockfile 解析到固定本地制品并保存 npm 计算的 SHA-512 integrity，来源见 [vendor 记录](../vendor/README.md)。dev.4–dev.8 使用的 `6.0.18-dev.1`、正式版及 dev.3 使用的 `6.0.17` 历史制品均保持不变。
 
 这使 Docker / `npm ci` 不依赖尚未发布的 npm registry 版本。保留 lockfile 和 vendor 文件；不要手填不存在的 registry URL 或伪造 integrity。puppet 的 tag 工作流会上传 npm 格式 `.tgz`；独立 `publish.yml` 在验证、测试后执行 npm 发布并核验 registry，正式版用 `latest`、开发版用 `v6-dev`。发布需要有效的 NPM_TOKEN 和对应免交互权限。
 
@@ -206,8 +216,8 @@ npm test
 npm pack --pack-destination ../wechat2tg/vendor
 
 # wechat2tg
-npm install --package-lock-only --ignore-scripts ./vendor/wx2tg-puppet-6.0.18-dev.1.tgz
-npm pkg set dependencies.wx2tg-puppet=6.0.18-dev.1
+npm install --package-lock-only --ignore-scripts ./vendor/wx2tg-puppet-6.0.18-dev.2.tgz
+npm pkg set dependencies.wx2tg-puppet=6.0.18-dev.2
 npm install --package-lock-only --ignore-scripts --offline
 npm ci
 npm run check:version
