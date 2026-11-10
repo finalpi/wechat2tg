@@ -1747,17 +1747,15 @@ export class TelegramBotClient extends AbstractClient {
         field('region', [contact?.country, contact?.province, contact?.city].filter(Boolean).join(' / '))
         field('signature', contact?.signature)
         field('description', contact?.description)
-        lines.push(this.i18n.t('directory.cache_notice'))
         const member = state.kind === 'gm' ? state.items.find(item => item.action === wxId) : undefined
         const avatarUrl = [member?.avatarUrl, contact?.smallHeadImgUrl, contact?.bigHeadImgUrl]
             .find(url => typeof url === 'string' && allowedAvatarURL(url))
-        const displayName = selectedName || contact?.remark || contact?.nickName || wxId
-        let avatar: {image: Buffer; name: string} | undefined
+        let avatar: {image: Buffer; label: string} | undefined
         if (avatarUrl) {
-            try {avatar = {image: await createDirectoryAvatar(avatarUrl, displayName), name: Array.from(displayName).slice(0, 200).join('')}}
+            try {avatar = {image: await createDirectoryAvatar(avatarUrl), label: this.i18n.t('directory.avatar')}}
             catch { /* Missing photos must not hide the person's name and profile. */ }
         }
-        // Thumbnail generation may involve a network read. Recheck account/scope
+        // Avatar generation may involve a network read. Recheck account/scope
         // before publishing any profile data after that asynchronous boundary.
         if (!TelegramBotClient.getSpyClient('wxClient')?.hasLogin
             || !this.getDirectoryPager().resolve(this.directoryScope(ctx), 'dl:' + state.token + ':b')) {

@@ -20,7 +20,7 @@ export type DirectoryCallbackContext = {
 };
 export type DirectoryDeliveryResult = 'sent' | 'edited' | 'unchanged' | 'failed';
 
-export type DirectoryDetailAvatar = {image: Buffer; name: string};
+export type DirectoryDetailAvatar = {image: Buffer; label: string};
 type RichPayload = {chat_id: number; rich_message: DirectoryRichMessage | string; reply_markup?: DirectoryMarkup; profile_avatar?: {source: Buffer; filename: string}};
 type DirectoryApiPayloads = {
     sendRichMessage: RichPayload & {message_thread_id?: number};
@@ -189,7 +189,8 @@ export async function replyDirectoryText(
         const content: DirectoryRichText = /^https?:\/\/[^\s<>]+$/i.test(text)
             ? {type: 'url', text, url: text} : text
         const rich_message: DirectoryRichMessage = {blocks: [{type: 'paragraph', text: content}], skip_entity_detection: true}
-        if (avatar) rich_message.blocks.push({type: 'photo', photo: {type: 'photo', media: 'attach://profile_avatar'}, caption: {text: avatar.name}})
+        if (avatar) rich_message.blocks.push({type: 'details', summary: avatar.label,
+            blocks: [{type: 'photo', photo: {type: 'photo', media: 'attach://profile_avatar'}}]})
         for (const row of reply_markup.inline_keyboard) {
             if (!row.length) continue
             const links: DirectoryRichText[] = []
@@ -203,7 +204,7 @@ export async function replyDirectoryText(
         }
         try {
             // Telegraf 4 does not know rich_message is a JSON form field. Serialize
-            // it explicitly when uploading the small avatar strip as an attachment.
+            // it explicitly when uploading the collapsed avatar as an attachment.
             await callDirectoryApi(ctx, 'sendRichMessage', {chat_id: chatId, rich_message: avatar ? JSON.stringify(rich_message) : rich_message,
                 ...(avatar ? {profile_avatar: {source: avatar.image, filename: 'profile-avatar.png'}} : {}), ...topic})
             return true

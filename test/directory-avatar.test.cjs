@@ -5,35 +5,32 @@ const http = require('node:http')
 const {once} = require('node:events')
 const sharp = require('sharp')
 const {Telegram} = require('telegraf')
-const {renderDirectoryAvatar,createDirectoryAvatar,DETAIL_AVATAR_LAYOUT} = require('../dist/util/DirectoryAvatar')
+const {renderDirectoryAvatar,createDirectoryAvatar,DETAIL_AVATAR_SIZE} = require('../dist/util/DirectoryAvatar')
 const {replyDirectoryText} = require('../dist/util/DirectoryPageDelivery')
 
 const redAvatar = ()=>sharp({create:{width:96,height:96,channels:4,background:'#ff0000'}}).png().toBuffer()
 
-test('profile uses a 48px thumbnail in a short name strip rather than an expanded square photo', async () => {
-  const image = await renderDirectoryAvatar(await redAvatar(),'小王 & Alice <管理员>')
+test('profile portrait is a circular crop without a name banner or stretched canvas', async () => {
+  const image = await renderDirectoryAvatar(await redAvatar())
   const {data,info} = await sharp(image).ensureAlpha().raw().toBuffer({resolveWithObject:true})
-  assert.equal(info.width,512)
-  assert.equal(info.height,88)
-  let count = 0
+  assert.equal(info.width,DETAIL_AVATAR_SIZE)
+  assert.equal(info.height,DETAIL_AVATAR_SIZE)
+  const pixel = (x,y)=>Array.from(data.subarray((y * info.width + x) * 4,(y * info.width + x) * 4 + 4))
+  for(const [x,y] of [[0,0],[255,0],[0,255],[255,255]])assert.deepEqual(pixel(x,y),[255,255,255,255])
+  assert.deepEqual(pixel(128,128),[255,0,0,255])
+  let red = 0
   for(let y = 0;y < info.height;y++)for(let x = 0;x < info.width;x++){
     const offset = (y * info.width + x) * 4
-    if(data[offset] === 255 && data[offset + 1] === 0 && data[offset + 2] === 0){
-      count++
-      assert(x >= 16 && x < 64 && y >= 20 && y < 68,'avatar pixels remain inside the thumbnail box')
-    }
+    if(data[offset] === 255 && data[offset + 1] === 0 && data[offset + 2] === 0)red++
   }
-  assert.equal(count,DETAIL_AVATAR_LAYOUT.size ** 2)
-  assert(info.width / info.height > 5,'wide aspect ratio keeps the image short when Telegram fits it to message width')
+  assert(red > info.width * info.height * 0.77 && red < info.width * info.height * 0.80,'only the circle contains the portrait')
 })
 
-test('long names, XML markup and control characters cannot escape the thumbnail text', async () => {
-  const image = await renderDirectoryAvatar(await redAvatar(),'\u0000<image href="file:///etc/passwd"/> & 😀'.repeat(30))
-  const metadata = await sharp(image).metadata()
-  assert.equal(metadata.width,512)
-  assert.equal(metadata.height,88)
-  assert.equal(metadata.format,'png')
-  await assert.rejects(createDirectoryAvatar('http://127.0.0.1/private','Name'),error=>error.code === 'avatarUnavailable')
+test('profile renderer rejects invalid or oversized images and non-allowlisted avatar sources', async () => {
+  await assert.rejects(renderDirectoryAvatar(Buffer.from('not an image')))
+  const oversized = await sharp({create:{width:2001,height:2000,channels:3,background:'red'}}).png().toBuffer()
+  await assert.rejects(renderDirectoryAvatar(oversized),/pixel limit/i)
+  await assert.rejects(createDirectoryAvatar('http://127.0.0.1/private'),error=>error.code === 'avatarUnavailable')
 })
 
 test('actual Telegraf sends the detail image as multipart with a parseable rich_message field', {timeout:10000}, async t => {
@@ -53,10 +50,10 @@ test('actual Telegraf sends the detail image as multipart with a parseable rich_
   t.after(()=>{clearTimeout(timer);controller.abort()})
   const callApi = telegram.callApi.bind(telegram)
   telegram.callApi = (method,payload)=>callApi(method,payload,{signal:controller.signal})
-  const image = await renderDirectoryAvatar(await redAvatar(),'小王')
+  const image = await renderDirectoryAvatar(await redAvatar())
   const ctx = {telegram,chat:{id:-100},callbackQuery:{message:{message_id:1,chat:{id:-100},message_thread_id:77,rich_message:{blocks:[]}}},reply:async()=>{throw Error('unexpected fallback')}}
   const markup = {inline_keyboard:[[{text:'返回列表',callback_data:'back'}]]}
-  assert.equal(await replyDirectoryText(ctx,'群内名称：小王',markup,{image,name:'小王'}),true)
+  assert.equal(await replyDirectoryText(ctx,'群内名称：小王',markup,{image,label:'头像'}),true)
   assert.equal(requests.length,1)
   const request = requests[0],body = request.body.toString('utf8')
   assert(request.url.endsWith('/sendRichMessage'))
@@ -64,8 +61,12 @@ test('actual Telegraf sends the detail image as multipart with a parseable rich_
   const json = body.match(/name="rich_message"\r\n\r\n([^\r]+)\r\n/)
   assert(json,'rich_message must be JSON text, not an unsupported nested file object')
   const rich = JSON.parse(json[1])
-  assert.equal(rich.blocks[1].photo.media,'attach://profile_avatar')
-  assert.equal(rich.blocks[1].caption.text,'小王')
+  assert.equal(rich.blocks[1].type,'details')
+  assert.equal(rich.blocks[1].summary,'头像')
+  assert.equal(rich.blocks[1].is_open,undefined)
+  assert.equal(rich.blocks[1].blocks[0].photo.media,'attach://profile_avatar')
+  assert.equal(rich.blocks[1].blocks[0].caption,undefined)
+  assert.equal(rich.blocks.filter(block=>block.type === 'photo').length,0)
   assert.match(body,/name="profile_avatar"; filename="profile-avatar.png"/)
   assert(request.body.includes(image))
   assert.match(body,/name="message_thread_id"\r\n\r\n77\r\n/)

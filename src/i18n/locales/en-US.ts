@@ -101,7 +101,7 @@ const enUS = {
   'directory.signature': 'Signature',
   'directory.description': 'Description',
   'directory.group_nickname': 'Name in group',
-  'directory.cache_notice': 'Details come from the local cache; unavailable fields are omitted.',
+  'directory.avatar': 'Avatar',
   'solitaire.join_button': 'Join solitaire',
   'solitaire.rejected': 'WeChat declined: {{reason}}',
   'solitaire.unknown': 'No confirmation from WeChat yet, please check the group.',

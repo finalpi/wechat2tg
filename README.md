@@ -1,6 +1,6 @@
 # wechat2tg (v6)
 
-> **Development preview: v6.0.40-dev.7.** Adds real server-cache contact refresh with progress/error feedback, isolated offline demo data for `dev:webui`, enterprise WeChat (`@openim`) search/classification/mentions fixes, and Telegram polling health with an 85-second deadline only for `getUpdates`. Upload timeouts, routing and proxies are unchanged. Contact refresh is not full WeChat synchronization. SDK stays at `6.0.18-dev.1`; see [release notes](docs/releases.md). **WebUI chat remains a limited, basic message viewer, not a complete WeChat client; see the limitations below.** Stable `v6` is unchanged. Do not run stable and dev instances against the same writable storage or account sessions.
+> **Development preview: v6.0.40-dev.8.** Cleans up Telegram contact/member details: removes cache notices, stretched avatar banners and duplicate names. Portraits are circular crops inside a collapsed Avatar section; Telegram controls their expanded size. SDK stays at `6.0.18-dev.1`; see [release notes](docs/releases.md). **WebUI chat remains a limited, basic message viewer, not a complete WeChat client; see the limitations below.** Stable `v6` is unchanged. Do not run stable and dev instances against the same writable storage or account sessions.
 
 [中文](README_zh.md) | English
 
@@ -196,7 +196,7 @@ Use Docker Engine with Docker Compose v2, or Node.js 18+ for local development. 
 
 ### Docker Compose
 
-This development checkout pins `finalpi/wechat2tg:v6.0.40-dev.7` in `docker-compose.yml`; no WebUI override is needed. For the current stable deployment, use the Compose file from tag `v6.0.39` instead. amd64 users may use the matching `-amd64` image once its build succeeds, without waiting for ARM.
+This development checkout pins `finalpi/wechat2tg:v6.0.40-dev.8` in `docker-compose.yml`; no WebUI override is needed. For the current stable deployment, use the Compose file from tag `v6.0.39` instead. amd64 users may use the matching `-amd64` image once its build succeeds, without waiting for ARM.
 
 The commands below initialize a new stack. For an existing deployment, preserve old images and private configuration; update only the bot with `docker compose pull wechat2tg` and `docker compose up -d --no-deps wechat2tg` after reviewing your local Compose. The `wx2tg-server` image, namespace, and version in this example are unchanged; do not replace or restart the existing production backend as part of this bot naming correction.
 
@@ -222,7 +222,7 @@ The default Compose file is:
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.40-dev.7
+    image: finalpi/wechat2tg:v6.0.40-dev.8
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"

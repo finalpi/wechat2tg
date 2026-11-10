@@ -22,14 +22,15 @@ export type DirectoryState = Readonly<{
 export type DirectoryButton = {text: string; callback_data: string};
 export type DirectoryMarkup = {inline_keyboard: Array<Array<DirectoryButton | {text: string; url: string}>>};
 export type DirectoryTranslate = (key: string, values?: Record<string, string | number>) => string;
-/** Lists use text only; an individual profile can include one photo. */
+/** Lists use text only; an individual profile can include one collapsed photo. */
 export type DirectoryRichText = string | DirectoryRichText[]
     | {type: 'bold' | 'code'; text: DirectoryRichText}
     | {type: 'url'; text: DirectoryRichText; url: string}
     | {type: 'button'; button: {text: string; callback_data: string; style: 'link'}};
 export type DirectoryRichParagraph = {type: 'paragraph'; text: DirectoryRichText};
-export type DirectoryRichPhoto = {type: 'photo'; photo: {type: 'photo'; media: string}; caption: {text: DirectoryRichText}};
-export type DirectoryRichMessage = {blocks: (DirectoryRichParagraph | DirectoryRichPhoto)[]; skip_entity_detection: true};
+export type DirectoryRichPhoto = {type: 'photo'; photo: {type: 'photo'; media: string}};
+export type DirectoryRichDetails = {type: 'details'; summary: DirectoryRichText; blocks: DirectoryRichPhoto[]};
+export type DirectoryRichMessage = {blocks: (DirectoryRichParagraph | DirectoryRichDetails)[]; skip_entity_detection: true};
 export type DirectoryView = {
     rich_message: DirectoryRichMessage;
     /** Only the escape hatch for clients that cannot display rich messages. */

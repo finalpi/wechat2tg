@@ -101,7 +101,7 @@ const zhCN = {
   'directory.signature': '个性签名',
   'directory.description': '描述',
   'directory.group_nickname': '群内名称',
-  'directory.cache_notice': '资料来自本地缓存，未提供的字段不显示。',
+  'directory.avatar': '头像',
   'solitaire.join_button': '参与接龙',
   'solitaire.rejected': '微信没有接受：{{reason}}',
   'solitaire.unknown': '没收到微信确认，请到微信看一眼。',

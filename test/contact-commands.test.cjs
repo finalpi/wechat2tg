@@ -6,6 +6,7 @@ const path = require('node:path')
 const vm = require('node:vm')
 const {Telegraf, Markup} = require('telegraf')
 const zh = require('../dist/i18n/locales/zh-CN').default
+const en = require('../dist/i18n/locales/en-US').default
 const {WechatAccountClassificationService} = require('../dist/service/WechatAccountClassificationService')
 const pagerModule = require('../dist/util/DirectoryPager')
 const deliveryModule = require('../dist/util/DirectoryPageDelivery')
@@ -39,12 +40,12 @@ const richButtons = message => richNodes(message.rich_message?.blocks, 'button')
 const messageButtons = message => [...richButtons(message), ...externalButtons(message)]
 const resultText = message => message.rich_message ? richText(message.rich_message.blocks[0]) : message.text
 
-function fixture({contacts = [], rooms = [], members = [], loggedIn = true, topic, managedForum = false, pagerOptions} = {}) {
+function fixture({contacts = [], rooms = [], members = [], loggedIn = true, topic, managedForum = false, pagerOptions, locale = zh} = {}) {
   const replies = [], edits = [], queries = [], menus = [], selected = [], bindings = [], creations = [], events = [], apiCalls = []
   const sources = new Map()
   const failures = {reply: [], edit: [], ack: []}
   const hooks = {}
-  const i18n = {t: (key, params = {}) => Object.entries(params).reduce((value, [name, replacement]) => value.replaceAll(`{{${name}}}`, replacement), zh[key] || key)}
+  const i18n = {t: (key, params = {}) => Object.entries(params).reduce((value, [name, replacement]) => value.replaceAll(`{{${name}}}`, replacement), locale[key] || key)}
   const classification = new WechatAccountClassificationService({getSession: async () => undefined, readFlags: async () => new Map(), backfillFlags: async () => undefined})
   const baseDependencies = {'../i18n': {getInstance: () => i18n}}
   const repository = (kind, rows) => ({
@@ -91,9 +92,9 @@ function fixture({contacts = [], rooms = [], members = [], loggedIn = true, topi
     '../util/DirectoryPager': pagerModule,
     '../util/DirectoryPageDelivery': deliveryModule,
     '../util/AvatarURL': require('../dist/util/AvatarURL'),
-    '../util/DirectoryAvatar': {createDirectoryAvatar: async (url,name) => {
+    '../util/DirectoryAvatar': {createDirectoryAvatar: async url => {
       events.push('avatar:' + url)
-      return hooks.avatar ? hooks.avatar(url,name) : Buffer.from('small profile avatar')
+      return hooks.avatar ? hooks.avatar(url) : Buffer.from('circular profile avatar')
     }},
     '../webui/mentions': {createGroupMentionService: () => ({members: async roomId => {
       events.push('members:' + roomId)
@@ -1021,7 +1022,25 @@ test('/members exposes enterprise group members and their read-only profile', as
   assert.equal(f.bindings.length + f.creations.length,0)
 })
 
-test('/members keeps avatars out of lists and shows only the chosen small named avatar in details', async () => {
+test('/contacts profiles omit cache notices and keep one portrait collapsed in either language', async () => {
+  for(const locale of [zh,en])for(const withAvatar of [false,true]){
+    const contact = {userName:'worker@openim',nickName:'Example contact',sex:2,smallHeadImgUrl:withAvatar ? 'https://wx.qlogo.cn/avatar/selected' : undefined}
+    const f = fixture({contacts:[contact],locale})
+    await f.command('/contacts')
+    await f.action(dataButtons(f.replies.at(-1))[0].callback_data)
+    const detail = f.replies.at(-1),text = resultText(detail)
+    assert.equal(text,[locale['directory.detail_title'],locale['directory.wxid'] + '：worker@openim',locale['directory.nickname'] + '：Example contact',locale['directory.sex'] + '：' + locale['directory.female']].join('\n'))
+    assert(!/缓存|未提供|local cache|unavailable fields/i.test(text))
+    assert.equal(detail.rich_message.blocks.filter(block=>block.type === 'photo').length,0)
+    const avatars = detail.rich_message.blocks.filter(block=>block.type === 'details')
+    assert.equal(avatars.length,withAvatar ? 1 : 0)
+    if(withAvatar){assert.equal(avatars[0].summary,locale['directory.avatar']);assert.equal(avatars[0].is_open,undefined)}
+    assert.equal(JSON.stringify(detail.rich_message).split('Example contact').length - 1,1)
+    assert(messageButtons(detail).some(button=>button.text === locale['pagination.back']))
+  }
+})
+
+test('/members keeps avatars out of lists and collapses the selected portrait in details', async () => {
   const members = groupMembers.map((member,index)=>({...member,avatarUrl:`https://wx.qlogo.cn/member/${index}`}))
   const f = fixture({members,topic:{type:1,wxId:'group@chatroom'}})
   const context = {type:'supergroup',threadId:77}
@@ -1034,10 +1053,15 @@ test('/members keeps avatars out of lists and shows only the chosen small named 
   await f.action(dataButtons(page)[0].callback_data,context)
   const detail = f.replies.at(-1)
   assert.match(resultText(detail),/群内名称：群名30/)
-  const photos = detail.rich_message.blocks.filter(block=>block.type === 'photo')
-  assert.equal(photos.length,1)
-  assert.equal(photos[0].caption.text,'群名30')
-  assert.equal(photos[0].photo.media,'attach://profile_avatar')
+  assert.equal(detail.rich_message.blocks.filter(block=>block.type === 'photo').length,0)
+  const portraits = detail.rich_message.blocks.filter(block=>block.type === 'details')
+  assert.equal(portraits.length,1)
+  assert.equal(portraits[0].summary,'头像')
+  assert.equal(portraits[0].is_open,undefined)
+  assert.equal(portraits[0].blocks[0].caption,undefined)
+  assert.equal(portraits[0].blocks[0].photo.media,'attach://profile_avatar')
+  assert(!resultText(detail).includes('缓存'))
+  assert.equal(JSON.stringify(detail.rich_message).split('群名30').length - 1,1)
   assert(Buffer.isBuffer(detail.payload.profile_avatar.source))
   assert.deepEqual(f.events.filter(event=>event.startsWith('avatar:')),['avatar:https://wx.qlogo.cn/member/30'])
   await f.action(button(detail,':b'),context)

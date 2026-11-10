@@ -109,16 +109,18 @@ test('member lists stay text-only and retain safe avatar metadata only for the s
   assert.equal(richNodes(render(pager,{items:members}).rich_message).filter(n=>n.type === 'photo').length,0,'other directories retain text-only layout')
 })
 
-test('profile thumbnails have a name caption and upload as an explicit multipart JSON field', async () => {
+test('profile photo is collapsed by default without a duplicate name or top-level image', async () => {
   const ctx = nativeContext()
   const markup = {inline_keyboard:[[{text:'Back',callback_data:'back'}]]}
-  const avatar = {image:Buffer.from('small named thumbnail'),name:'Alice <Bob> & 王'}
+  const avatar = {image:Buffer.from('circular portrait'),label:'Avatar'}
   assert.equal(await replyDirectoryText(ctx,'Name: Alice <Bob> & 王',markup,avatar),true)
   const payload = ctx.calls[0].payload
   assert.equal(typeof payload.rich_message,'string')
   const blocks = JSON.parse(payload.rich_message).blocks
   assert.equal(blocks[0].text,'Name: Alice <Bob> & 王')
-  assert.deepEqual(blocks[1],{type:'photo',photo:{type:'photo',media:'attach://profile_avatar'},caption:{text:avatar.name}})
+  assert.deepEqual(blocks[1],{type:'details',summary:'Avatar',blocks:[{type:'photo',photo:{type:'photo',media:'attach://profile_avatar'}}]})
+  assert.equal(blocks.filter(block=>block.type === 'photo').length,0)
+  assert.equal(JSON.stringify(blocks).split('Alice').length - 1,1)
   assert.equal(payload.profile_avatar.source,avatar.image)
   assert.equal(payload.message_thread_id,999)
   assert.equal(blocks.at(-1).text[0].button.callback_data,'back')
@@ -126,8 +128,8 @@ test('profile thumbnails have a name caption and upload as an explicit multipart
 
 test('explicit profile image rejection falls back to names and details without network-error retries', async () => {
   const markup = {inline_keyboard:[[{text:'Back',callback_data:'back'}]]}
-  const avatar = {image:Buffer.from('thumbnail'),name:'Member'}
-  for(const error of [apiError('Bad Request: IMAGE_PROCESS_FAILED'),unsupportedError()]) {
+  const avatar = {image:Buffer.from('portrait'),label:'Avatar'}
+  for(const error of [apiError('Bad Request: IMAGE_PROCESS_FAILED'),apiError('Bad Request: unsupported rich block type details'),unsupportedError()]) {
     const ctx = nativeContext([error])
     assert.equal(await replyDirectoryText(ctx,'Member details',markup,avatar),true)
     assert.deepEqual(ctx.calls.map(call=>call.method),['sendRichMessage','sendMessage'])
