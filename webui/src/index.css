@@ -4,6 +4,22 @@
 
 /* Keep routine controls quiet without taking them away from touch or keyboard users. */
 @layer components {
+  /* Group bounds are real layout boxes. No scroll listeners or floating clones:
+     CSS sticky keeps one avatar beside only this sender's contiguous run. */
+  .message-run { content-visibility: visible; contain-intrinsic-size: none; }
+  .chat-message-group { @apply flex-row items-stretch gap-2; }
+  .chat-avatar-rail { @apply flex w-9 shrink-0 flex-col justify-end; }
+  .chat-sticky-avatar { position: sticky; bottom: 8px; top: 8px; align-self: flex-start; }
+  .chat-group-messages { @apply flex min-w-0 flex-1 flex-col gap-1; }
+  .chat-group-messages > [data-slot="message-scroller-item"] { content-visibility: visible; contain-intrinsic-size: none; }
+  [data-layout="conversation"][data-group-first="false"][data-align="start"] .chat-bubble { border-top-left-radius: 6px; }
+  [data-layout="conversation"][data-group-last="false"][data-align="start"] .chat-bubble { border-bottom-left-radius: 6px; }
+  [data-layout="conversation"][data-group-first="false"][data-align="end"] .chat-bubble { border-top-right-radius: 6px; }
+  [data-layout="conversation"][data-group-last="false"][data-align="end"] .chat-bubble { border-bottom-right-radius: 6px; }
+  .chat-bubble [data-slot="message-footer"] { @apply mt-1 gap-x-1 text-[10px] font-normal leading-4; }
+  .chat-bubble [data-slot="message-footer"] time { @apply ml-auto tabular-nums; }
+  .chat-bubble .message-actions-toggle { @apply size-5; }
+  .chat-bubble .message-actions-toggle svg { @apply size-3; }
   .message-actions { @apply flex min-w-0 max-w-full flex-wrap items-center gap-1; }
   .message-actions-content { @apply hidden min-w-0 max-w-full flex-wrap items-center gap-2; }
   .message-actions[data-open="true"] .message-actions-content { @apply flex; }
@@ -14,6 +30,13 @@
          moves the reading position. Opacity keeps keyboard access intact. */
       display: flex; opacity: 0; pointer-events: none; transition: opacity 120ms ease;
     }
+    /* Compact bubbles expose an ellipsis on hover/focus; opening it is explicit
+       and uses normal flow, rather than reserving a wide toolbar on every line. */
+    .chat-bubble .message-actions .message-actions-toggle { display: inline-flex; opacity: 0; }
+    .chat-bubble .message-actions-content { display: none; }
+    .chat-bubble .message-actions[data-open="true"] .message-actions-content { display: flex; opacity: 1; pointer-events: auto; }
+    [data-slot="message"]:hover .chat-bubble .message-actions-toggle,
+    [data-slot="message"]:focus-within .chat-bubble .message-actions-toggle { opacity: 1; }
     [data-slot="message"]:hover .message-actions-content,
     [data-slot="message"]:focus-within .message-actions-content {
       opacity: 1;

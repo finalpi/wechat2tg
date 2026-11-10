@@ -58,10 +58,10 @@ async function main() {
     assert.equal(await page.getByRole('button',{name:'连接状态',exact:true}).innerText(),'🟢')
     const first = page.locator('[data-slot="message"]').first()
     await page.mouse.move(0,0)
-    await page.waitForFunction(()=>getComputedStyle(document.querySelector('.message-actions-content')).opacity === '0')
+    await page.waitForFunction(()=>getComputedStyle(document.querySelector('.message-actions-toggle')).opacity === '0')
     const heightBeforeHover = (await first.boundingBox()).height
     await first.hover()
-    await page.waitForFunction(()=>getComputedStyle(document.querySelector('.message-actions-content')).opacity === '1')
+    await page.waitForFunction(()=>getComputedStyle(document.querySelector('.message-actions-toggle')).opacity === '1')
     const assertActionsAfterBubble = async row=>assert(await row.evaluate(element=>{
       const body = element.querySelector('[data-slot="message-body"]').getBoundingClientRect()
       const card = element.querySelector('[data-message-card]').getBoundingClientRect()
@@ -69,19 +69,21 @@ async function main() {
       const style = getComputedStyle(element.querySelector('.message-actions-content'))
       return style.position === 'static' && actions.top >= body.bottom && actions.bottom <= card.bottom && actions.left >= 0 && actions.right <= window.innerWidth
     }),'status/actions must follow the body inside the card, never overlap its content')
+    assert.equal((await first.boundingBox()).height,heightBeforeHover,'hover does not move the messages')
+    await first.getByRole('button',{name:'消息操作',exact:true}).click()
     await assertActionsAfterBubble(first)
-    assert.equal((await first.boundingBox()).height,heightBeforeHover,'hover reserves its own footer space without moving the messages')
     const outgoing = page.locator('[data-slot="message"][data-align="end"]').last()
     await outgoing.hover()
+    await outgoing.getByRole('button',{name:'消息操作',exact:true}).click()
     await assertActionsAfterBubble(outgoing)
     await page.mouse.move(0,0)
     await first.getByRole('button',{name:'引用回复',exact:true}).focus()
     assert.equal(await first.locator('.message-actions-content').evaluate(el=>getComputedStyle(el).pointerEvents),'auto','keyboard focus exposes controls')
-    await page.waitForFunction(()=>[...document.querySelectorAll('[data-slot="message"] [role="img"] img')].every(img=>img.complete && img.naturalWidth > 0))
-    assert.equal(await page.locator('[data-slot="message"] [role="img"]').count(),3,'only incoming messages have sender avatars')
+    await page.waitForFunction(()=>[...document.querySelectorAll('.chat-message-group [role="img"] img')].every(img=>img.complete && img.naturalWidth > 0))
+    assert.equal(await page.locator('.chat-message-group [role="img"]').count(),3,'only incoming messages have sender avatars')
     assert.equal(await outgoing.locator('[role="img"], [data-slot="message-header"]').count(),0,'own messages have no self avatar or name header')
     assert(await first.evaluate(row=>{
-      const avatar = row.querySelector('[data-slot="message-avatar"]'),card = row.querySelector('[data-message-card]')
+      const avatar = row.closest('.chat-message-group').querySelector('[data-slot="message-avatar"]'),card = row.querySelector('[data-message-card]')
       return !card.contains(avatar) && avatar.getBoundingClientRect().right <= card.getBoundingClientRect().left
     }),'group avatar is outside the message card')
     assert.equal(avatarCalls.length,2,'repeated incoming sender avatars share requests; no self-avatar request')

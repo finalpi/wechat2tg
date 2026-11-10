@@ -136,8 +136,11 @@ async function main() {
     assert.equal(locates.at(-1).remoteId, '18446744073709551614')
     await page.getByRole('button', {name: '返回最新'}).click()
     const messageAction = async name => {
-      const button = page.getByRole('button', {name, exact:true}).first()
-      await button.locator('xpath=ancestor::*[@data-slot="message"]').hover()
+      const button = page.getByRole('button', {name, exact:true,includeHidden:true}).first()
+      const row = button.locator('xpath=ancestor::*[@data-slot="message"]')
+      await row.hover()
+      const toggle = row.getByRole('button',{name:'消息操作',exact:true})
+      if(await toggle.isVisible() && await toggle.getAttribute('aria-expanded') !== 'true')await toggle.click()
       await button.click()
     }
     await messageAction('同步 Telegram')

@@ -1,27 +1,31 @@
 import type {ReactNode} from 'react'
-import {Message,MessageContent,MessageHeader,MessageAvatar} from '@/components/ui/message'
+import {Message,MessageContent,MessageHeader} from '@/components/ui/message'
 import {Bubble,BubbleContent} from '@/components/ui/bubble'
 import {Card,CardHeader,CardTitle,CardContent,CardFooter} from '@/components/ui/card'
 import {cn} from '@/lib/utils'
 
-/** One shared container for text, articles, media, quotes and recalled messages. */
-export function ChatMessageCard({author,avatar,outgoing,publication,externalAvatar = false,highlighted,children,footer}:{
-  author:string;avatar:ReactNode;outgoing:boolean;publication:boolean;externalAvatar?:boolean;highlighted:boolean;children:ReactNode;footer:ReactNode
+/** Publications keep their article cards; ordinary chats use compact bubbles.
+ * The message-group parent owns the single sticky sender avatar. */
+export function ChatMessageCard({author,avatar,outgoing,publication,showAuthor = true,first = true,last = true,highlighted,children,footer}:{
+  author:string;avatar:ReactNode;outgoing:boolean;publication:boolean;showAuthor?:boolean;first?:boolean;last?:boolean;highlighted:boolean;children:ReactNode;footer:ReactNode
 }) {
-  return <Message align={outgoing?'end':'start'} data-layout={publication?'publication':'conversation'}>
-    {!outgoing && externalAvatar && <MessageAvatar position="start">{avatar}</MessageAvatar>}
-    <MessageContent>
+  return <Message align={outgoing?'end':'start'} data-layout={publication?'publication':'conversation'} data-group-first={first} data-group-last={last}>
+    <MessageContent className="gap-0">
       <Bubble variant={outgoing?'sent':'received'} layout={publication?'card':'chat'} align={outgoing?'end':'start'} className={cn(highlighted && 'rounded-2xl ring-2 ring-ring')}>
-        <BubbleContent asChild layout="card">
+        {publication ? <BubbleContent asChild layout="card">
           <Card data-message-card>
-            {!outgoing && <CardHeader className="flex-row items-center gap-3 px-4 py-3 md:px-5 md:py-4">
-              {!externalAvatar && avatar}
+            <CardHeader className="flex-row items-center gap-3 px-4 py-3 md:px-5 md:py-4">
+              {avatar}
               <MessageHeader variant="card" className="min-w-0 flex-1"><CardTitle className="truncate" title={author}>{author}</CardTitle></MessageHeader>
-            </CardHeader>}
-            <CardContent data-slot="message-body" className={cn('px-4 pb-3 md:px-5',outgoing?'pt-3 md:pt-4':'pt-0')}>{children}</CardContent>
+            </CardHeader>
+            <CardContent data-slot="message-body" className="px-4 pb-3 pt-0 md:px-5">{children}</CardContent>
             <CardFooter className="px-4 pb-3 pt-0 md:px-5">{footer}</CardFooter>
           </Card>
-        </BubbleContent>
+        </BubbleContent> : <BubbleContent layout="conversation" data-message-card>
+          {!outgoing && showAuthor && <MessageHeader variant="sender" title={author}>{author}</MessageHeader>}
+          <div data-slot="message-body" className="min-w-0">{children}</div>
+          {footer}
+        </BubbleContent>}
       </Bubble>
     </MessageContent>
   </Message>

@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useRef, useState, type ReactNode, type CSSProperties} from 'react'
+import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties} from 'react'
 import {createRequestId} from '@/lib/request-id'
 import {ArrowLeft, RefreshCw, Search, MessageSquare, Reply, Undo2, MoreHorizontal, PanelLeftClose, PanelLeftOpen} from 'lucide-react'
 import {ApiError} from '@/lib/api'
@@ -14,7 +14,8 @@ import {Alert, AlertDescription} from '@/components/ui/alert'
 import {Spinner} from '@/components/ui/spinner'
 import {Tabs, TabsList, TabsTrigger} from '@/components/ui/tabs'
 import {Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription} from '@/components/ui/empty'
-import {MessageFooter} from '@/components/ui/message'
+import {MessageFooter,MessageGroup} from '@/components/ui/message'
+import {groupChatMessages} from '@/lib/message-groups'
 import {ChatMessageCard} from './chat-message-card'
 import {Marker, MarkerContent} from '@/components/ui/marker'
 import {MessageScrollerProvider, MessageScroller, MessageScrollerViewport, MessageScrollerContent, MessageScrollerItem, MessageScrollerButton, useMessageScroller} from '@/components/ui/message-scroller'
@@ -27,8 +28,7 @@ import {isContactVisible, type ChatPreferences} from '@/lib/chat-preferences'
 const sendLabels: Record<string, string> = {received: '已接收', sending: '发送中', submitted: '已提交微信', unknown: '结果未知', failed: '发送失败'}
 const syncLabels: Record<string, string> = {pending: '待同步', syncing: '同步中', synced: '已同步', failed: '同步失败', unknown: '同步未知', unverified: '待核实', excluded: '不参与同步'}
 const revokeLabels: Record<string, string> = {revoking: '撤回中', revoked: '已撤回', failed: '撤回失败', unknown: '撤回结果未知'}
-const time = (timestamp: number) => new Date(timestamp * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
-const date = (timestamp: number) => new Date(timestamp * 1000).toLocaleDateString()
+const time = (timestamp: number) => new Date(timestamp * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hour12:false})
 
 function Placeholder({title, detail}: {title: string; detail?: string}) {
   return <Empty><EmptyHeader><EmptyMedia variant="icon"><MessageSquare /></EmptyMedia><EmptyTitle>{title}</EmptyTitle>{detail && <EmptyDescription>{detail}</EmptyDescription>}</EmptyHeader></Empty>
@@ -81,6 +81,36 @@ function JumpToMessage({targetId}: {targetId: number | null}) {
   return null
 }
 
+/** Group wrappers can grow during prepend. Keep the visible *message* anchor,
+ * using the scroller's own positioning API rather than managing scrollTop. */
+function GroupReadingPosition({viewport,capture,rows}:{viewport:{current:HTMLDivElement|null};capture:{current:()=>void};rows:ChatMessage[]}) {
+  const {scrollToMessage} = useMessageScroller()
+  const pending = useRef<{id:string;margin:number}|null>(null)
+  useLayoutEffect(()=>{
+    capture.current = ()=>{
+      const view = viewport.current
+      if(!view)return
+      const top = view.getBoundingClientRect().top
+      const item = [...view.querySelectorAll<HTMLElement>('[data-message-id]')].find(el=>/^\d+$/.test(el.dataset.messageId || '') && el.getBoundingClientRect().bottom>top)
+      // The scroller already accounts for its content padding in scrollToMessage.
+      const content = view.querySelector('[data-slot="message-scroller-content"]')
+      const padding = content ? parseFloat(getComputedStyle(content).paddingTop) || 0 : 0
+      if(item)pending.current = {id:item.dataset.messageId!,margin:item.getBoundingClientRect().top-top-padding}
+    }
+    return()=>{capture.current=()=>{};pending.current=null}
+  },[capture,viewport])
+  useLayoutEffect(()=>{
+    const position = pending.current
+    if(!position)return
+    pending.current=null
+    // Let the scroller process the group child-list change before restoring a
+    // nested message anchor; otherwise its own prepend adjustment wins later.
+    const frame=requestAnimationFrame(()=>scrollToMessage(position.id,{align:'start',scrollMargin:position.margin,behavior:'auto'}))
+    return()=>cancelAnimationFrame(frame)
+  },[rows,scrollToMessage])
+  return null
+}
+
 function Conversation({token, contact, online, draft, events, connection, onBack, onAuthError, focused, onFocus, controls, networkOnline, visible}: {
   token: string; contact: Contact; online: boolean; draft: ComposerDraft; events: MessageEventHub; connection: MessageConnectionState; onBack: () => void; onAuthError: (error: unknown) => void; focused:boolean;onFocus:()=>void;controls?:ReactNode;networkOnline:boolean;visible:boolean
 }) {
@@ -110,6 +140,8 @@ function Conversation({token, contact, online, draft, events, connection, onBack
   const mounted = useRef(true)
   const requests = useRef<AbortController | null>(null)
   const refreshHistory = useRef(() => {})
+  const messageViewport = useRef<HTMLDivElement|null>(null)
+  const captureReadingPosition = useRef<()=>void>(()=>{})
   useEffect(() => {mounted.current = true; return () => {mounted.current = false}}, [])
   useEffect(() => {const id = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(id)}, [])
 
@@ -210,6 +242,7 @@ function Conversation({token, contact, online, draft, events, connection, onBack
     try {
       const page = await messagesApi.history(token, contact.wxId, located ? '' : query, before, signal)
       if (!mounted.current || signal?.aborted || generation.current !== currentGeneration || contextGeneration.current !== currentContext) return
+      captureReadingPosition.current()
       applyPage(page, false, baseline); setBefore(page.before); setHasMore(page.hasMore)
       refreshHistory.current()
     } catch (e) {if (!signal?.aborted && generation.current === currentGeneration && contextGeneration.current === currentContext) {setError(messageError(e)); onAuthError(e)}}
@@ -266,6 +299,8 @@ function Conversation({token, contact, online, draft, events, connection, onBack
     events.emit({event: 'change', data: {type: 'messages', wxId: contact.wxId, ids: [row.id]}})
   }
   const clearQuote = useCallback(() => setQuote(null), [])
+  const publication = contact.category==='official' || contact.category==='service'
+  const messageGroups = useMemo(()=>groupChatMessages(rows,publication,contact.kind==='group'),[rows,publication,contact.kind])
 
   return <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col" aria-label={`与 ${contact.name} 的会话`}>
     <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-background px-2 md:gap-3 md:px-4">
@@ -286,18 +321,28 @@ function Conversation({token, contact, online, draft, events, connection, onBack
     {loading ? <div className="flex flex-1 items-center justify-center"><Spinner /></div> : !rows.length ? <Placeholder title={query ? '未找到消息' : '暂无消息'} detail="此处显示已保存的消息记录。" /> : (
       <MessageScrollerProvider key={`${contact.wxId}:${query}:${reload}:${located}`} defaultScrollPosition={located ? 'start' : 'end'} autoScroll={!located && visible}>
         <MessageScroller className="flex-1 bg-background">
-          <MessageScrollerViewport aria-label="消息记录"><MessageScrollerContent className="mx-auto w-full max-w-5xl gap-4 px-3 py-4 md:gap-5 md:px-6 md:py-6">
+          <MessageScrollerViewport ref={messageViewport} className="[overflow-anchor:none]" aria-label="消息记录"><MessageScrollerContent className="mx-auto w-full max-w-5xl gap-4 px-3 py-4 md:gap-5 md:px-6 md:py-6">
             {hasMore && <MessageScrollerItem messageId="load-older"><div className="flex justify-center"><Button variant="outline" size="sm" disabled={moreBusy} onClick={more}>{moreBusy && <Spinner />} 加载更早消息</Button></div></MessageScrollerItem>}
-            {rows.map((row, index) => {
+            {messageGroups.map((group,groupIndex)=>{
+              const first = group.messages[0]
+              const groupOutgoing = first.direction==='outgoing'
+              const groupAvatar = !publication && !groupOutgoing
+              const newDay = groupIndex===0 || messageGroups[groupIndex-1].day!==group.day
+              return <MessageScrollerItem key={group.id} messageId={group.id} className="message-run">
+                {newDay && <Marker variant="separator" className="mb-4"><MarkerContent>{group.day}</MarkerContent></Marker>}
+                <MessageGroup className="chat-message-group flex-row gap-2" data-sender={first.senderId || ''} data-outgoing={groupOutgoing}>
+                  {groupAvatar && <div className="chat-avatar-rail"><div className="chat-sticky-avatar" data-slot="message-avatar">
+                    <ContactAvatar token={token} wxId={first.senderId || contact.wxId} name={first.senderDisplayName || first.senderName || contact.name} available={first.senderHasAvatar || contact.hasAvatar || (contact.kind==='group' && Boolean(first.senderId))} roomId={contact.kind==='group'?contact.wxId:undefined} />
+                  </div></div>}
+                  <div className="chat-group-messages">
+                  {group.messages.map((row,index)=>{
               const outgoing = row.direction === 'outgoing'
-              const newDay = index === 0 || date(rows[index - 1].timestamp) !== date(row.timestamp)
               const revoked = row.revokeStatus === 'revoked'
               const canQuote = !revoked && ['received', 'submitted'].includes(row.status) && Boolean(row.remoteId)
               const canSync = row.telegramTracked && ['failed', 'unknown', 'unverified', 'pending'].includes(row.telegramStatus) && ['received', 'submitted'].includes(row.status)
               const canRevoke = row.canRevoke && (!row.revokeDeadline || row.revokeDeadline * 1000 > now + clockOffset.current)
               return <MessageScrollerItem key={row.id} messageId={String(row.id)}>
-                {newDay && <Marker variant="separator" className="mb-4"><MarkerContent>{date(row.timestamp)}</MarkerContent></Marker>}
-                <ChatMessageCard outgoing={outgoing} externalAvatar={contact.kind==='group'} publication={!outgoing && (contact.category==='official' || contact.category==='service')} highlighted={targetId===row.id}
+                <ChatMessageCard outgoing={outgoing} publication={!outgoing && publication} showAuthor={index===0 && contact.kind==='group'} first={index===0} last={index===group.messages.length-1} highlighted={targetId===row.id}
                   author={outgoing?'我':row.senderDisplayName || row.senderName || row.senderId || contact.name}
                   avatar={<ContactAvatar token={token} wxId={row.senderId || (!outgoing?contact.wxId:'')} name={outgoing?'我':row.senderDisplayName || row.senderName || contact.name} available={row.senderHasAvatar || (!outgoing && contact.hasAvatar) || (contact.kind==='group' && Boolean(row.senderId))} roomId={contact.kind==='group'?contact.wxId:undefined} />}
                   footer={<MessageFooter className="w-full flex-wrap justify-end gap-x-3 gap-y-2 px-0">
@@ -306,7 +351,7 @@ function Conversation({token, contact, online, draft, events, connection, onBack
                       {row.revokeStatus && revokeLabels[row.revokeStatus] && <Badge variant="secondary">{revokeLabels[row.revokeStatus]}</Badge>}
                       {row.telegramTracked && ['failed','unknown'].includes(row.telegramStatus) && <span className="text-destructive">{syncLabels[row.telegramStatus]}</span>}
                       <MessageActions>
-                      {row.telegramTracked && syncLabels[row.telegramStatus] && <span>{syncLabels[row.telegramStatus]}</span>}
+                      {row.telegramTracked && syncLabels[row.telegramStatus] && !['failed','unknown'].includes(row.telegramStatus) && <span>{syncLabels[row.telegramStatus]}</span>}
                       {canQuote && <Button variant="ghost" size="icon" className="size-6" aria-label="引用回复" onClick={() => setQuote(row)}><Reply /></Button>}
                       {canSync && <Button variant="ghost" size="sm" disabled={busyIds.has(row.id)} onClick={() => action(row, 'sync')}><RefreshCw /> 同步 Telegram</Button>}
                       {canRevoke && <Button variant="ghost" size="sm" disabled={busyIds.has(row.id)} onClick={() => action(row, 'revoke')}><Undo2 /> 撤回</Button>}
@@ -315,9 +360,14 @@ function Conversation({token, contact, online, draft, events, connection, onBack
                   <MessageBody token={token} message={row} onLocate={locate} />
                 </ChatMessageCard>
               </MessageScrollerItem>
+                  })}
+                  </div>
+                </MessageGroup>
+              </MessageScrollerItem>
             })}
           </MessageScrollerContent></MessageScrollerViewport>
           <MessageScrollerButton />{located && <JumpToMessage targetId={targetId} />}
+          <GroupReadingPosition viewport={messageViewport} capture={captureReadingPosition} rows={rows} />
         </MessageScroller>
       </MessageScrollerProvider>
     )}
