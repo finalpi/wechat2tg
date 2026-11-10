@@ -37,6 +37,8 @@ import {WechatAccountClassificationService} from '../service/WechatAccountClassi
 import {createGroupMemberNameResolver} from '../service/GroupMemberNameService'
 import {solitaireJoins} from '../service/SolitaireService'
 import {emitWechatAutomation} from '../automation/events'
+import {LoginQrDelivery} from '../util/LoginQrDelivery'
+import {loginEvent} from '../util/LoginDiagnostics'
 
 const TELEGRAM_BOT_API_UPLOAD_LIMIT = 50 * 1024 * 1024
 
@@ -50,6 +52,7 @@ export class WeChatClient extends AbstractClient {
     private bindGroupService: BindGroupService
     private sendQueueHelper: SimpleMessageSendQueueHelper
     private scanMsgId: number = undefined
+    private qrDelivery?: LoginQrDelivery
     private messageService: MessageService
     private friendshipList = []
     private _wxInfo
@@ -229,13 +232,15 @@ export class WeChatClient extends AbstractClient {
     }
 
     async loginSuccess() {
+        this.qrDelivery?.cancel()
+        loginEvent('login-succeeded', {source: 'bridge'})
         // Notifications and binding maintenance are not prerequisites for receiving messages.
         const config = await this.configurationService.getConfig()
         const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
         const i18n = I18n.getInstance()
-        tgBotClient.telegram.sendMessage(config.chatId, i18n.t('wechat.login_success'))
+        void tgBotClient.telegram.sendMessage(config.chatId, i18n.t('wechat.login_success')).catch(() => loginEvent('login-notification-failed', {source: 'bridge'}))
         if (this.scanMsgId) {
-            tgBotClient.telegram.deleteMessage(config.chatId, this.scanMsgId)
+            void tgBotClient.telegram.deleteMessage(config.chatId, this.scanMsgId).catch(() => loginEvent('qr-delete-failed', {source: 'bridge'}))
             this.scanMsgId = undefined
         }
 
@@ -411,27 +416,19 @@ export class WeChatClient extends AbstractClient {
     private init() {
         const i18n = I18n.getInstance()
 
+        this.client.on('login-state', detail => loginEvent(detail?.event, {...detail, source: 'sdk'}))
         this.client.on('scan', qr => { // 需要用户扫码时返回对象qrcode.content为二维码内容 qrcode.url为转化好的图片地址
             this.hasLogin = false
-            this.configurationService.getConfig().then(config => {
-                QRCode.toBuffer(qr.content, {
-                    width: 300
-                }, (error, buffer) => {
-                    if (!error) {
-                        const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
-                        if (this.scanMsgId) {
-                            tgBotClient.telegram.editMessageMedia(config.chatId, this.scanMsgId, undefined, {
-                                type: 'photo',
-                                media: {source: buffer}, caption: i18n.t('wechat.scan_qr_code')
-                            })
-                        } else {
-                            tgBotClient.telegram.sendPhoto(config.chatId, {source: buffer}, {caption: i18n.t('wechat.scan_qr_code')}).then(msg => {
-                                this.scanMsgId = msg.message_id
-                            })
-                        }
-                    }
-                })
+            this.qrDelivery ||= new LoginQrDelivery({
+                context: async () => ({chatId: (await this.configurationService.getConfig()).chatId,
+                    telegram: WeChatClient.getSpyClient('botClient').client.telegram}),
+                render: content => QRCode.toBuffer(content, {width: 300}),
+                getMessageId: () => this.scanMsgId,
+                setMessageId: id => {this.scanMsgId = id},
+                caption: () => i18n.t('wechat.scan_qr_code'),
+                event: (event, detail) => loginEvent(event, {...detail, source: 'bridge'})
             })
+            this.qrDelivery.show(qr.content, qr.expiresAt)
         })
 
         this.client.on('loginFail', content => {
@@ -472,8 +469,10 @@ export class WeChatClient extends AbstractClient {
         })
 
         this.client.on('logout', () => {
+            this.qrDelivery?.cancel()
             this.hasLogin = false
             this.loginReady = undefined
+            loginEvent('client-logged-out', {source: 'bridge'})
         })
 
         this.client.on('contacts-updated', () => {
@@ -483,6 +482,7 @@ export class WeChatClient extends AbstractClient {
         })
 
         this.client.on('login', () => {
+            this.qrDelivery?.cancel()
             messageEvents?.publish({type: 'contacts'})
             this.loginReady = undefined
             void this.waitForLogin().then(() => this.loginSuccess())

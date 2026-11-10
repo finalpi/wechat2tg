@@ -21,6 +21,9 @@ function clientClass(config = {}, spies = {}, schedule = callback => queueMicrot
       if (name === '../service/WechatAccountClassificationService') return {WechatAccountClassificationService: {getInstance: () => ({isOfficialAccount: async (_id, flag) => require('wx2tg-puppet').isOfficialAccountVerifyFlag(flag)})}}
       if (name === '../webui/message-visibility') return {isControlMessage: () => false}
       if (name === '../webui/message-events') return {messageEvents: spies.messageEvents}
+      if (name === '../util/LoginDiagnostics') return {loginEvent: (event, detail) => spies.loginEvents?.push({event, ...detail})}
+      if (name === '../util/LoginQrDelivery') return require('../dist/util/LoginQrDelivery')
+      if (name === 'qrcode') return {toBuffer: async () => Buffer.from('synthetic-image')}
       if (name === '../entity/BindGroup') return {BindGroup: class {}}
       if (name === '../util/TelegramTopicUtils') return require('../dist/util/TelegramTopicUtils')
       if (name === '../util/FormatUtils') return {FormatUtils: {transformTitleStr: () => '', escapeHtml: require('../dist/util/FormatUtils').FormatUtils.escapeHtml}}
@@ -43,6 +46,37 @@ function fixture(config, spies, schedule) {
 }
 
 const oldMessage = {date: () => 0, type: () => 1, text: () => 'synthetic', newMsgId: '1'}
+
+test('real scan event uses the QR sender and records delivery without exposing content', async () => {
+  const sent = [], loginEvents = []
+  const client = fixture({}, {loginEvents, botClient: {client: {telegram: {sendPhoto: async (...args) => {sent.push(args); return {message_id: 7}}}}}})
+  client.configurationService = {getConfig: async () => ({chatId: 1})}
+  client.init()
+  client.client.emit('scan', {content: 'synthetic-private-qr'})
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(sent.length, 1)
+  assert.equal(client.scanMsgId, 7)
+  assert.equal(client.hasLogin, false)
+  assert.ok(loginEvents.some(event => event.event === 'qr-delivery-succeeded'))
+  assert.ok(!JSON.stringify(loginEvents).includes('synthetic-private-qr'))
+})
+
+test('login cancels a real pending scan notification and removes a late photo', async () => {
+  const deleted = []
+  let finish
+  const client = fixture({}, {botClient: {client: {telegram: {sendPhoto: () => new Promise(resolve => {finish = resolve}), deleteMessage: async (...args) => deleted.push(args)}}}})
+  client.configurationService = {getConfig: async () => ({chatId: 1})}
+  client.waitForLogin = async () => undefined
+  client.loginSuccess = async () => undefined
+  client.init()
+  client.client.emit('scan', {content: 'synthetic-private-qr'})
+  await new Promise(resolve => setImmediate(resolve))
+  client.client.emit('login')
+  finish({message_id: 7})
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(deleted, [[1, 7]])
+  assert.equal(client.scanMsgId, undefined)
+})
 
 test('an immediate callback waits for asynchronous login initialization', async () => {
   const client = fixture()
