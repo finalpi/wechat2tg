@@ -196,7 +196,7 @@ Docker 部署使用 Docker Engine 和 Docker Compose v2；本地开发使用 Nod
 
 ### Docker Compose
 
-当前开发分支的 `docker-compose.yml` 固定 `finalpi/wechat2tg:v6.0.40-dev.8`，无需 WebUI 覆盖文件。正式部署请使用 `v6.0.39` 标签下的 Compose，不要直接用开发分支覆盖生产配置。amd64 用户可在对应构建成功后使用同版本 `-amd64` 镜像，无需等待 ARM。
+当前开发分支的 `docker-compose.yml` 固定 `finalpi/wechat2tg:v6.0.40-dev.10`，无需 WebUI 覆盖文件。正式部署请使用 `v6.0.39` 标签下的 Compose，不要直接用开发分支覆盖生产配置。amd64 用户可在对应构建成功后使用同版本 `-amd64` 镜像，无需等待 ARM。
 
 以下命令用于初始化全新整套服务。已有部署应保留旧镜像和私有配置，核对本地 Compose 后，仅用 `docker compose pull wechat2tg` 和 `docker compose up -d --no-deps wechat2tg` 更新 bot。本示例的 `wx2tg-server` 镜像、命名空间和版本保持不变；本次 bot 命名修正不能替换或重启已有生产后端。
 
@@ -222,7 +222,7 @@ docker compose restart wechat2tg
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.40-dev.8
+    image: finalpi/wechat2tg:v6.0.40-dev.10
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"
