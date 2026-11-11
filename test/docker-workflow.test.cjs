@@ -11,7 +11,7 @@ const workflow = yaml.load(fs.readFileSync(path.join(root, '.github/workflows/bu
 const commit = '0123456789abcdef0123456789abcdef01234567'
 const image = 'finalpi/wechat2tg'
 const channels = [
-  {version: 'v6.0.13', channel: 'stable', tagged: 'true', aliases: ['v6']},
+  {version: 'v6.0.13', channel: 'stable', tagged: 'true', aliases: ['v6'], manifestAliases: ['v6', 'latest']},
   {version: 'v6.0.13-dev.1', channel: 'dev', tagged: 'true', aliases: ['v6-dev']},
   {version: 'v6-dev-0123456', channel: 'dev', tagged: 'false', aliases: []},
 ]
@@ -159,12 +159,12 @@ for (const arch of ['amd64', 'arm64']) {
   }
 }
 
-for (const {version, channel, tagged, aliases} of channels) {
+for (const {version, channel, tagged, aliases, manifestAliases = aliases} of channels) {
   test(`manifest ${version} combines both images without crossing release channels`, () => {
     const result = runStep(step('publish', 'manifest').run,
       {IMAGE: image, APP_VERSION: version, CHANNEL: channel, IS_TAGGED: tagged})
     assert.equal(result.status, 0, result.stderr)
-    const tags = [version, ...aliases].map(tag => `-t ${image}:${tag}`).join(' ')
+    const tags = [version, ...manifestAliases].map(tag => `-t ${image}:${tag}`).join(' ')
     assert.equal(result.calls,
       `buildx imagetools create ${tags} ${image}:${version}-amd64 ${image}:${version}-arm64\n` +
       `buildx imagetools inspect ${image}:${version}\n`)

@@ -1,7 +1,5 @@
 # wechat2tg (v6)
 
-> **Development preview: v6.0.40-dev.13.** Refines Web chat into compact Telegram-style bubbles with distinct sender/body/time typography. Consecutive messages share one sender name and a sticky avatar bounded to their group, while history loading and quote navigation preserve reading position. Official-account article cards and covers remain unchanged. SDK remains pinned to `6.0.18-dev.2`; see [release notes](docs/releases.md). **WebUI chat remains a limited, basic message viewer, not a complete WeChat client; see the limitations below.** Stable `v6` is unchanged. Do not run stable and dev instances against the same writable storage or account sessions.
-
 [中文](README_zh.md) | English
 
 Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad, Mac, Car, Windows, Pad)
@@ -10,37 +8,6 @@ Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad
 
 > [!WARNING]
 > According to feedback, the Windows protocol has the risk of account suspension, please do not use this protocol
-
-## v6 versions and channels
-
-**Use one maintenance branch, `v6`; tags distinguish stable and development releases. There is no `v6-dev` maintenance branch.** The current stable Bot is `v6.0.39`, using puppet `v6.0.17` and wx2tg-server `v6.0.16`. Components release independently and need only share major version `v6`. Do not mix it with server v7.
-
-### Which WeChat version does each server release emulate?
-
-**`v6`, `v7`, and `v51` are this project's release versions, not WeChat 6.x, 7.x, or 5.1.** The table describes the **iPad / iPhone WeChat client protocol emulated by the server**, not a required WeChat version for your phone.
-
-| Server release / family | Origin | iPad / iPhone WeChat version | Selection for this Bot |
-| --- | --- | --- | --- |
-| **`finalpi/wx2tg-server:v6.0.16`** (`v6` family) | `875` → `v6` | **8.0.75.33** (`0x18004b21`) | **Used by the current Bot `v6.0.39`**; the server image supports `linux/amd64` only |
-| Historical `875` / server `v51.0.0`–`v51.0.13` | `875` protocol family | **8.0.75.33** | Historical releases; `v51` does not mean WeChat 5.1 |
-| Server Git tag **`v7`** | `878` protocol family | **8.0.78.34** (WeChat release 8.0.78, `0x18004e22`) | A separate release family, **not part of this deployment; do not mix it with or directly replace the existing v6 server** |
-
-- These versions apply to the iPad / iPhone main protocol only. **Windows, Mac, Car, and Android Pad have separate parameters**; this does not mean every protocol was upgraded to WeChat 8.0.75 / 8.0.78. The Bot's `pad` means Android Pad, not `ipad`.
-- The `v7` target client parameters and offline tests have been checked, but **real WeChat login and complete business compatibility have not thereby been verified**.
-- Historical Bot/SDK names such as `wx2tg-v3` and `860-v3` do not determine the WeChat version. The old `860` source also has a mismatch between an active value and its comment. See [fixed-tag evidence and historical limitations](docs/server-wechat-versions.md).
-
-Current Bot changes: [v6.0.39 Release](https://github.com/finalpi/wechat2tg/releases/tag/v6.0.39).
-
-### Release channels
-
-| Channel | Full Git / Docker version | Rolling bot alias |
-| --- | --- | --- |
-| Stable | `v6.X.Y` (no dev suffix) | `v6` |
-| Development | `v6.X.Y-dev.N` | `v6-dev` |
-
-Bot images use **`finalpi/wechat2tg`** with the full Git tag, including the leading `v`: `finalpi/wechat2tg:v6.0.13-dev.3` for development or `finalpi/wechat2tg:v6.0.39` for stable. Rolling aliases are major-scoped: `v6` for stable and `v6-dev` for development; this unversioned repository never receives global `latest` or `dev` aliases from this workflow. Manual snapshots from `v6` use `v6-dev-<short SHA>` with no rolling aliases. The old `finalpi/wechat2tg-v3` repository and its existing images/tags are preserved and never updated by this workflow.
-
-Native amd64 and arm64 builds publish independently as the Docker version plus `-amd64` / `-arm64`, with `v6-amd64` / `v6-arm64` for stable releases and `v6-dev-amd64` / `v6-dev-arm64` for development releases. Manual snapshots only add the architecture suffix, without updating aliases. amd64 is usable as soon as its job succeeds; the combined tag waits for both. Historical tags are never moved. Branch HEAD is not necessarily the latest stable release. See [release rules (Chinese)](docs/releases.md).
 
 ## Main Features
 
@@ -196,7 +163,7 @@ Use Docker Engine with Docker Compose v2, or Node.js 18+ for local development. 
 
 ### Docker Compose
 
-This development checkout pins `finalpi/wechat2tg:v6.0.40-dev.13` in `docker-compose.yml`; no WebUI override is needed. For the current stable deployment, use the Compose file from tag `v6.0.39` instead. amd64 users may use the matching `-amd64` image once its build succeeds, without waiting for ARM.
+The Compose example below uses `finalpi/wechat2tg:latest`. Save it as `docker-compose.yml`; no WebUI override is needed.
 
 The commands below initialize a new stack. For an existing deployment, preserve old images and private configuration; update only the bot with `docker compose pull wechat2tg` and `docker compose up -d --no-deps wechat2tg` after reviewing your local Compose. The `wx2tg-server` image, namespace, and version in this example are unchanged; do not replace or restart the existing production backend as part of this bot naming correction.
 
@@ -217,12 +184,12 @@ Open `http://<server-address>:17863/` and sign in with the token. Then use Teleg
 docker compose restart wechat2tg
 ```
 
-The default Compose file is:
+Example Compose configuration:
 
 ```yaml
 services:
   wechat2tg:
-    image: finalpi/wechat2tg:v6.0.40-dev.13
+    image: finalpi/wechat2tg:latest
     container_name: wechat2tg-v6
     environment:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"

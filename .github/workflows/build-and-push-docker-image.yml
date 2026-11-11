@@ -159,7 +159,7 @@ jobs:
           TAGS=(-t "$IMAGE:$APP_VERSION")
           if [[ "$IS_TAGGED" == "true" ]]; then
             if [[ "$CHANNEL" == "stable" ]]; then
-              TAGS+=(-t "$IMAGE:v6")
+              TAGS+=(-t "$IMAGE:v6" -t "$IMAGE:latest")
             else
               TAGS+=(-t "$IMAGE:v6-dev")
             fi

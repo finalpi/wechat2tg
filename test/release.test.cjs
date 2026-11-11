@@ -18,15 +18,15 @@ test('bot release metadata agrees and pinned puppet/server stay within v6', () =
   assert.equal(require('wx2tg-puppet/package.json').version, pkg.dependencies['wx2tg-puppet'])
   for (const name of ['docker-compose.yml', 'README.md', 'README_zh.md']) {
     const source = fs.readFileSync(path.join(root, name), 'utf8')
-    assert(source.includes(`image: finalpi/wechat2tg:v${pkg.version}`))
+    const botImage = name === 'docker-compose.yml' ? `finalpi/wechat2tg:v${pkg.version}` : 'finalpi/wechat2tg:latest'
+    assert(source.includes(`image: ${botImage}`))
     assert.match(source, /image: finalpi\/wx2tg-server:v6\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-dev\.[1-9]\d*)?\s*\n/)
     assert(!source.includes('image: finalpi/wechat2tg-v3:'))
-    assert(!source.includes('image: finalpi/wechat2tg:latest'))
     assert(!source.includes('image: finalpi/wechat2tg:dev'))
   }
 })
 
-test('README Compose schemas and callback hostname match the actual stack', () => {
+test('README Compose examples use latest and otherwise match the actual stack', () => {
   const compose = yaml.load(fs.readFileSync(path.join(root, 'docker-compose.yml'), 'utf8'))
   assert.equal(compose.services.wechat2tg.image, `finalpi/wechat2tg:v${pkg.version}`)
   assert.equal(compose.services.wechat2tg.container_name, 'wechat2tg-v6')
@@ -35,7 +35,10 @@ test('README Compose schemas and callback hostname match the actual stack', () =
     const source = fs.readFileSync(path.join(root, name), 'utf8')
     const blocks = [...source.matchAll(/```yaml\n(services:\n[\s\S]*?)```/g)]
     assert.equal(blocks.length, 1, `${name} must contain one complete Compose example`)
-    assert.deepEqual(yaml.load(blocks[0][1]), compose, `${name} Compose must match docker-compose.yml`)
+    const example = yaml.load(blocks[0][1])
+    assert.equal(example.services.wechat2tg.image, 'finalpi/wechat2tg:latest')
+    example.services.wechat2tg.image = compose.services.wechat2tg.image
+    assert.deepEqual(example, compose, `${name} Compose must otherwise match docker-compose.yml`)
     for (const command of ['exec', 'restart', 'logs --tail=100']) {
       assert(source.includes(`docker compose ${command} wechat2tg`))
     }
