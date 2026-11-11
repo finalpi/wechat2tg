@@ -33,7 +33,7 @@ test('README Compose examples use latest and otherwise match the actual stack', 
   assert.equal(compose.services['wx2tg-v3'], undefined)
   for (const name of ['README.md', 'README_zh.md']) {
     const source = fs.readFileSync(path.join(root, name), 'utf8')
-    const blocks = [...source.matchAll(/```yaml\n(services:\n[\s\S]*?)```/g)]
+    const blocks = [...source.matchAll(/```yaml\r?\n(services:\r?\n[\s\S]*?)```/g)]
     assert.equal(blocks.length, 1, `${name} must contain one complete Compose example`)
     const example = yaml.load(blocks[0][1])
     assert.equal(example.services.wechat2tg.image, 'finalpi/wechat2tg:latest')
