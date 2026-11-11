@@ -102,7 +102,7 @@ function richRejected(error: unknown): boolean {
  * Never retry an ambiguous transport error, 5xx, 429, or generic 403.
  */
 export async function deliverDirectoryPage(
-    ctx: DirectoryDeliveryContext, view: DirectoryView, edit = false, compatibility = false,
+    ctx: DirectoryDeliveryContext, view: DirectoryView, edit = false, compatibility = false, onRichRejected?:()=>void,
 ): Promise<DirectoryDeliveryResult> {
     const message = sourceMessage(ctx)
     const {chatId, threadId} = view.state.scope
@@ -160,6 +160,7 @@ export async function deliverDirectoryPage(
                 }
             }
             if (format === 'rich' && richRejected(error)) {
+                onRichRejected?.()
                 format = 'html'
                 continue
             }
@@ -180,10 +181,11 @@ export async function deliverDirectoryPage(
  */
 export async function replyDirectoryText(
     ctx: DirectoryDeliveryContext, text: string, reply_markup?: DirectoryMarkup, avatar?: DirectoryDetailAvatar,
+    compatibility = false, onRichRejected?:()=>void,
 ): Promise<boolean> {
     const message = sourceMessage(ctx)
     const topic = topicOptions(message?.message_thread_id)
-    if (reply_markup && (avatar || ctx.callbackQuery && isRichDirectoryMessage(ctx)) && typeof ctx.telegram?.callApi === 'function') {
+    if (!compatibility && reply_markup && (avatar || ctx.callbackQuery && isRichDirectoryMessage(ctx)) && typeof ctx.telegram?.callApi === 'function') {
         const chatId = message?.chat?.id ?? ctx.chat?.id
         if (chatId === undefined || (ctx.chat && ctx.chat.id !== chatId)) return false
         const content: DirectoryRichText = /^https?:\/\/[^\s<>]+$/i.test(text)
@@ -213,6 +215,7 @@ export async function replyDirectoryText(
             const avatarRejected = avatar && rejection?.code === 400
                 && /wrong file identifier\/HTTP URL specified|IMAGE_PROCESS_FAILED|PHOTO_INVALID|can't parse (?:input media|file)|failed to (?:process|decode) (?:image|photo)/i.test(rejection.description)
             if (!richRejected(error) && !avatarRejected) return false
+            if(richRejected(error))onRichRejected?.()
         }
         try {
             await callDirectoryApi(ctx, 'sendMessage', {chat_id: chatId, text, reply_markup, ...topic})

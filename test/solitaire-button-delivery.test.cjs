@@ -27,6 +27,7 @@ function senderFixture() {
       if (name === './MessageSender') return {MessageSender: class {sendAction() {}}}
       if (name === '../config') return {config: {WECHAT_CUSTOM_EMOJI_ENABLED: false}}
       if (name === '../util/WechatCustomEmoji') return {renderWechatCustomEmojiHtml: text => text}
+      if (name === '../util/TelegramPresentation') return require('./helpers/telegram-presentation')()
       return {}
     },
   })

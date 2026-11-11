@@ -117,6 +117,11 @@ const entries: ReadonlyArray<{aliases: readonly string[]; id: string; emoji: str
     {'aliases':['[耶]','[Yeah!]'],'id':'5460643711014672960','emoji':'✌️'},
 ]
 
+// Each canonical name has a checked-in WebP counterpart in the emoji manifest.
+export const WECHAT_EMOJI_IMAGE_NAMES: Readonly<Record<string,string>> = Object.freeze(
+    Object.fromEntries(entries.flatMap(({aliases}) => aliases.map(alias => [alias,aliases[0].slice(1,-1)])))
+)
+
 export const WECHAT_CUSTOM_EMOJI: Readonly<Record<string, {id: string; emoji: string}>> = Object.freeze(
     Object.fromEntries(entries.flatMap(({aliases, id, emoji}) =>
         aliases.map(alias => [alias, Object.freeze({id, emoji})])))

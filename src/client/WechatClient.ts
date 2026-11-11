@@ -28,6 +28,7 @@ import I18n from '../i18n'
 import {LogUtils} from '../util/LogUtil'
 import {WebMessageStore} from '../webui/message-store'
 import {isControlMessage} from '../webui/message-visibility'
+import {wechatRedPacketNotice} from '../util/WechatRedPacket'
 import {TelegramOutbox,TelegramOutboxEntry} from '../webui/telegram-outbox'
 import {quoteXML,sendQuote} from '../webui/quotes'
 import {withNativeWechatReceipt} from '../webui/wechat-receipt'
@@ -891,6 +892,10 @@ export class WeChatClient extends AbstractClient {
                 messageParam.type = 5
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
+            case WxMessage.Type.RedPacket:
+                messageParam.content = wechatRedPacketNotice('red_packet',String(msg.text() || ''))
+                await WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                break
             case WxMessage.Type.Transfer:
                 // 转账消息处理
                 msgJson = WxMessage.getXmlToJson(msg._xml)
@@ -928,6 +933,13 @@ export class WeChatClient extends AbstractClient {
                 break
             }
             default: {
+                const redPacket = wechatRedPacketNotice(String(msg.type()),String(msg.text() || ''))
+                if(redPacket){
+                    messageParam.source_type = WxMessage.Type.RedPacket
+                    messageParam.content = redPacket
+                    await WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                    break
+                }
                 const callStatus = getWechatCallStatus(msg._xml || msg.text())
                 if (callStatus) {
                     messageParam.source_type = WxMessage.Type.Voip

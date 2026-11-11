@@ -24,7 +24,9 @@ import {SimpleMessageSendQueueHelper} from '../util/SimpleMessageSendQueueHelper
 import {MessageSender, Option} from '../message/MessageSender'
 import {SenderFactory} from '../message/SenderFactory'
 import {FormatUtils} from '../util/FormatUtils'
-import {renderWechatCustomEmojiHtml, splitTelegramHtml} from '../util/WechatCustomEmoji'
+import {splitTelegramHtml} from '../util/WechatCustomEmoji'
+import {renderTelegramHtml as renderWechatCustomEmojiHtml,telegramDisplay,replyDirectoryText,useRichDirectory} from '../util/TelegramPresentation'
+import {handleTelegramDisplayCommand} from '../util/TelegramDisplayCommand'
 import {Message} from '../entity/Message'
 import {MessageService} from '../service/MessageService'
 import {FileUtils, LargeFileDownloadProgress} from '../util/FileUtils'
@@ -38,7 +40,7 @@ import {DirectoryKind, DirectoryPager, DirectoryScope, DirectoryState} from '../
 import {createGroupMentionService} from '../webui/mentions'
 import {createDirectoryAvatar} from '../util/DirectoryAvatar'
 import {allowedAvatarURL} from '../util/AvatarURL'
-import {answerDirectoryCallback, deliverDirectoryPage, isRichDirectoryMessage, replyDirectoryText} from '../util/DirectoryPageDelivery'
+import {answerDirectoryCallback, deliverDirectoryPage, isRichDirectoryMessage} from '../util/DirectoryPageDelivery'
 import {BindGroup} from '../entity/BindGroup'
 import {WxRoomRepository} from '../repository/WxRoomRepository'
 import {WeChatClient} from './WechatClient'
@@ -128,6 +130,7 @@ export class TelegramBotClient extends AbstractClient {
         this.startTime = new Date()
         const config = await this.configurationService.getConfig()
         const bot: Telegraf = this.client
+        telegramDisplay.configure(config.botId,config.chatId)
         bot.use(session())
         // Automation reads only owner-configured group scopes. This observer does
         // not bypass the existing command/forwarding authorization middleware.
@@ -144,6 +147,8 @@ export class TelegramBotClient extends AbstractClient {
             if (!chatId) {
                 return next()
             }
+            telegramDisplay.configure(ctx.botInfo.id,chatId)
+            telegramDisplay.observeOwner(ctx.from)
 
             if (ctx.chat && ctx.chat.type.includes('group') && ctx.message && ctx.message.from.id === chatId) {
                 return next()
@@ -289,7 +294,7 @@ export class TelegramBotClient extends AbstractClient {
         // fresh rich message on the next retry.
         const outboxId = this.telegramSendAttempt?.getStore()?.outboxId
         if(outboxId && await this.messageBufferService.hasTextCheckpoint(outboxId))return undefined
-        if(!message.chatId)return undefined
+        if(!message.chatId || !telegramDisplay.allows('richMessage',message.chatId))return undefined
         const payload = await prepareTelegramArticles(message.articles,decodeHTML(String(message.sender || '').replace(/<[^>]*>/g,'')))
         if(!payload)return undefined
         const stored = this.createMessageEntity(message)
@@ -304,7 +309,7 @@ export class TelegramBotClient extends AbstractClient {
                 ...(message.param?.reply_id ? {reply_parameters:{message_id:message.param.reply_id}} : {}),
             }))
         } catch(error){
-            if(articleMessageRejected(error))return undefined
+            if(articleMessageRejected(error)){telegramDisplay.reject('richMessage',message.chatId);return undefined}
             throw error // ambiguous failures must not trigger a second text send
         }
         if(!Number.isSafeInteger(sent?.message_id) || sent.message_id <= 0){this.currentDeliveryUncertain = true;return false}
@@ -473,7 +478,7 @@ export class TelegramBotClient extends AbstractClient {
                 totalSize,
                 async () => botMTPClient.client.sendFile(inputPeer, {
                     file: new CustomFile(fileName, totalSize, '', message.file.file),
-                    caption: renderWechatCustomEmojiHtml(message.sender, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024),
+                    caption: renderWechatCustomEmojiHtml(message.sender, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024, message.chatId),
                     replyTo: message.param?.reply_id ?? message.threadId,
                     topMsgId: message.threadId,
                     parseMode: 'html',
@@ -610,7 +615,7 @@ export class TelegramBotClient extends AbstractClient {
             const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
             const msgRes = await this.sendTelegramRequest(message.chatId, () => client.telegram.sendPhoto(message.chatId, {source: message.file.file, filename: message.file.fileName}, {
                 message_thread_id: message.threadId,
-                caption: renderWechatCustomEmojiHtml(message.content, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024),
+                caption: renderWechatCustomEmojiHtml(message.content, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024, message.chatId),
                 parse_mode: 'HTML',
                 reply_markup: {
                     inline_keyboard: [[Markup.button.callback('添加为好友', `af:${message.businessCardId}`)]]
@@ -1739,7 +1744,8 @@ export class TelegramBotClient extends AbstractClient {
                 notice: notice || (unknown ? this.i18n.t('contact.classification_pending', {count: String(unknown)}) : undefined),
                 emptyText: unknown ? '' : this.i18n.t(labels.empty)
             }, (key, params) => this.translateDirectory(key, params))
-            await deliverDirectoryPage(ctx, view, edit, compatibility)
+            await deliverDirectoryPage(ctx, view, edit, compatibility || !telegramDisplay.allows('richMessage',view.state.scope.chatId),
+                ()=>telegramDisplay.reject('richMessage',view.state.scope.chatId))
         } catch (error) {
             this.logger?.warn('Directory unavailable', error?.code || error?.name)
             await replyDirectoryText(ctx, this.i18n.t('pagination.unavailable'))
@@ -1785,7 +1791,7 @@ export class TelegramBotClient extends AbstractClient {
         const avatarUrl = [member?.avatarUrl, contact?.smallHeadImgUrl, contact?.bigHeadImgUrl]
             .find(url => typeof url === 'string' && allowedAvatarURL(url))
         let avatar: {image: Buffer; label: string} | undefined
-        if (avatarUrl) {
+        if (avatarUrl && useRichDirectory(ctx)) {
             try {avatar = {image: await createDirectoryAvatar(avatarUrl), label: this.i18n.t('directory.avatar')}}
             catch { /* Missing photos must not hide the person's name and profile. */ }
         }
@@ -1987,6 +1993,11 @@ ${this.i18n.t('help.instructions')}`))
             }
             const telegramGroupOperateService = new TelegramGroupOperateService(this.bindGroupService, TelegramBotClient.getSpyClient('userMTPClient').client)
             telegramGroupOperateService.quitChat(ctx.chat.id)
+        })
+
+        bot.command('display', async ctx => {
+            const settings = await this.configurationService.getConfig()
+            await handleTelegramDisplayCommand(ctx,settings.chatId,ctx.botInfo.id,telegramDisplay,this.i18n.getLanguage() === 'en-US')
         })
 
         bot.command('settings', async ctx => {
@@ -2438,6 +2449,17 @@ ${this.i18n.t('help.instructions')}`))
         }
     }
 
+    private refreshDisplayMembership():void {
+        // Reuse the already-authorized user account; never log in another account
+        // or treat getMe on the Bot API as evidence about the human owner.
+        const user = TelegramBotClient.getSpyClient('userMTPClient')
+        if(typeof user?.client?.getMe !== 'function')return
+        void user.client.getMe().then(me=>{
+            const id = Number(me?.id?.toString())
+            if(Number.isSafeInteger(id))telegramDisplay.observeOwner({id,is_bot:me.bot === true,is_premium:me.premium === true})
+        }).catch(()=>{this.logger.debug('Telegram 主人会员状态暂不可用，保留兼容展示')})
+    }
+
     public async loginUserClient() {
         if (!TelegramBotClient.getSpyClient('userMTPClient')) {
             const clientFactory = new ClientFactory()
@@ -2523,11 +2545,12 @@ ${this.i18n.t('help.instructions')}`))
         if (!TelegramBotClient.getSpyClient('userMTPClient').hasLogin) {
             TelegramBotClient.getSpyClient('userMTPClient').login(authParams).then(login => {
                 if (login) {
+                    this.refreshDisplayMembership()
                     this.client.telegram.sendMessage(this.chatId, this.i18n.t('login.success'))
                     this.loginWechatClient()
                 }
             })
-        }
+        } else this.refreshDisplayMembership()
     }
 
     private pollingHealth?: ReturnType<typeof installTelegramPollingHealth>
@@ -2560,6 +2583,7 @@ ${this.i18n.t('help.instructions')}`))
                             config.botId = botId
                             this.configurationService.saveConfig(config)
                         }
+                        telegramDisplay.configure(this.client.botInfo.id,config.chatId)
                         this.hasLogin = true
                         if (config.chatId > 0) {
                             void this.configureMiniAppMenu(config.chatId)
@@ -2812,7 +2836,7 @@ ${this.i18n.t('help.instructions')}`))
         let chunks: string[]
         try {
             const formatted = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, message.sender, message.content, message.memberName)
-            const html = renderWechatCustomEmojiHtml(formatted, config.WECHAT_CUSTOM_EMOJI_ENABLED)
+            const html = renderWechatCustomEmojiHtml(formatted, config.WECHAT_CUSTOM_EMOJI_ENABLED, undefined, targetChatId)
             chunks = splitTelegramHtml(html, 4096)
             if (!chunks.length) chunks = [html]
         } catch (error) {
@@ -2976,7 +3000,7 @@ ${this.i18n.t('help.instructions')}`))
             }
         }
 
-        const html = renderWechatCustomEmojiHtml(nestedRecord.content, config.WECHAT_CUSTOM_EMOJI_ENABLED)
+        const html = renderWechatCustomEmojiHtml(nestedRecord.content, config.WECHAT_CUSTOM_EMOJI_ENABLED, undefined, ctx.chat?.id)
         for (const chunk of splitTelegramHtml(html, 4096)) {
             await ctx.reply(chunk, replyOptions)
         }
@@ -3391,7 +3415,7 @@ ${this.i18n.t('help.instructions')}`))
         const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
         const sendOptions: any = {
             message_thread_id: options.threadId,
-            caption: options.caption === undefined ? undefined : renderWechatCustomEmojiHtml(options.caption, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024),
+            caption: options.caption === undefined ? undefined : renderWechatCustomEmojiHtml(options.caption, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024, chatId),
             parse_mode: 'HTML'
         }
         if (options.replyToMessageId) {

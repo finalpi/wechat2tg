@@ -22,6 +22,7 @@ function loadClient({getTranscript = async () => '转写文本', calls = [], sta
     '../util/TelegramArticleMessage':{...require('../dist/util/TelegramArticleMessage'),prepareTelegramArticles:prepareArticles},
     '../util/FormatUtils': {FormatUtils:{transformIdentityBodyStr:(_template,_sender,content)=>content}},
     '../util/WechatCustomEmoji': require('../dist/util/WechatCustomEmoji'),
+    '../util/TelegramPresentation': require('./helpers/telegram-presentation')(),
     '../util/TelegramTextUtils': require('../dist/util/TelegramTextUtils'),
     '../entity/Message': {Message:class {}},
     '../webui/message-store': {WebMessageStore: {getInstance: () => ({

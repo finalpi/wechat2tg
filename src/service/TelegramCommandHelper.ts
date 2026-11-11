@@ -21,6 +21,7 @@ export default class TgCommandHelper {
             {command: 'forward', description: i18n.t('command.forward')},
             {command: 'revoke', description: i18n.t('command.revoke')},
             {command: 'settings', description: i18n.t('command.settings')},
+            {command: 'display', description: i18n.t('command.display')},
             {command: 'ai', description: i18n.t('command.ai')},
             {command: 'user', description: i18n.t('command.user')},
             {command: 'official', description: i18n.t('command.official')},

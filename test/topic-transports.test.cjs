@@ -43,11 +43,13 @@ const [emojiAlias, customEmoji] = Object.entries(emojiData.WECHAT_CUSTOM_EMOJI)[
 const plain = value => JSON.parse(JSON.stringify(value))
 const media = fileType => ({buff: Buffer.from('test'), filename: 'test.bin', caption: 'caption', fileType})
 
-function transport(kind, failure, enabled = false) {
+function transport(kind, failure, enabled = false, displayOptions = {}) {
+  const presentation = require('./helpers/telegram-presentation')(displayOptions)
   const actions = [], calls = []
   const invoke = method => async (...args) => {
     calls.push({method, args})
-    if (failure) throw failure
+    const error = typeof failure === 'function' ? failure(calls.length) : failure
+    if (error) throw error
     return {id: 123, message_id: 123}
   }
   const base = load('message/MessageSender.ts', {
@@ -61,6 +63,7 @@ function transport(kind, failure, enabled = false) {
       './MessageSender': base,
       '../config': {config: {WECHAT_CUSTOM_EMOJI_ENABLED: enabled}},
       '../util/WechatCustomEmoji': emojiHtml,
+      '../util/TelegramPresentation': presentation,
       'abort-controller': AbortController,
     })
     sender = new TelegramBotApiMessageSender({telegram: Object.fromEntries(
@@ -71,6 +74,7 @@ function transport(kind, failure, enabled = false) {
       './MessageSender': base,
       '../config': {config: {WECHAT_CUSTOM_EMOJI_ENABLED: enabled}},
       '../util/WechatCustomEmoji': emojiHtml,
+      '../util/TelegramPresentation': presentation,
       'telegram/client/uploads': {CustomFile: class {
         constructor(name, size, filePath, buffer) {Object.assign(this, {name, size, filePath, buffer})}
       }},
@@ -240,6 +244,26 @@ for (const kind of ['bot', 'gram']) {
       await assert.rejects(f.sender.sendText(-100, emojiAlias, {parse_mode: 'HTML', message_thread_id: 42}), error => error === failure)
       assert.equal(f.calls.length, 1)
     }
+  })
+}
+
+for(const kind of ['bot','gram']){
+  test(`${kind} compatibility links and explicit rejection fallback preserve topic, reply and receipts`,async()=>{
+    const denied = kind === 'bot' ? {response:{error_code:400,description:'Bad Request: CUSTOM_EMOJI_NOT_ALLOWED'}} : {code:400,errorMessage:'CUSTOM_EMOJI_NOT_ALLOWED'}
+    const f = transport(kind,n=>n === 1 ? denied : undefined,true,{fallback:'links'})
+    const result = await f.sender.sendText(-100,emojiAlias,{parse_mode:'HTML',message_thread_id:42,reply_id:91})
+    assert.equal(result.message_id,123);assert.equal(f.calls.length,2)
+    const first = kind === 'bot' ? f.calls[0].args[1] : f.calls[0].args[1].message
+    const second = kind === 'bot' ? f.calls[1].args[1] : f.calls[1].args[1].message
+    assert.match(first,/<tg-emoji/);assert.match(second,/<a href=/)
+    const options = kind === 'bot' ? f.calls[1].args[2] : f.calls[1].args[1]
+    assert.equal(kind === 'bot' ? options.message_thread_id : options.topMsgId,42)
+    assert.equal(kind === 'bot' ? options.reply_parameters.message_id : options.replyTo,91)
+    await f.sender.sendFile(-100,{...media('photo'),caption:emojiAlias},{parse_mode:'HTML',message_thread_id:42})
+    assert.equal(f.calls.length,3);assert.match(f.calls[2].args[1].caption,/<a href=/,'subsequent captions use the cached compatibility decision')
+    const compatible = transport(kind,undefined,true,{mode:'compatible',fallback:'links'})
+    await compatible.sender.sendText(-100,emojiAlias,{parse_mode:'HTML'})
+    assert.match(kind === 'bot' ? compatible.calls[0].args[1] : compatible.calls[0].args[1].message,/<a href=/)
   })
 }
 

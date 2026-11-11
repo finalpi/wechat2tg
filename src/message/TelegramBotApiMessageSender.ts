@@ -1,7 +1,7 @@
 import {MessageSender, Option, SendResult} from './MessageSender'
 import {Telegraf, TelegramError} from 'telegraf'
 import {config} from '../config'
-import {renderWechatCustomEmojiHtml} from '../util/WechatCustomEmoji'
+import {sendTelegramHtml} from '../util/TelegramPresentation'
 import AbortController from 'abort-controller'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -27,13 +27,15 @@ export class TelegramBotApiMessageSender extends MessageSender {
             file.fileType = 'document'
         }
         return new Promise<SendResult>((resolve, reject) => {
-            this.sender.telegram.editMessageMedia(chatId, parseInt(msgId + ''), undefined, {
+            const send = (caption:string|undefined) => this.sender.telegram.editMessageMedia(chatId, parseInt(msgId + ''), undefined, {
                 type: file.fileType,
                 media: {source: file.buff, filename: file.filename},
-                caption: file.caption !== undefined && option?.parse_mode === 'HTML'
-                    ? renderWechatCustomEmojiHtml(file.caption, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024) : file.caption,
+                caption,
                 parse_mode: option?.parse_mode
-            }, {}).then(() => {
+            }, {})
+            const pending = file.caption !== undefined && option?.parse_mode === 'HTML'
+                ? sendTelegramHtml(chatId,file.caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,send) : send(file.caption)
+            pending.then(() => {
                 resolve({message_id: msgId})
             }).catch(e => reject(e))
         })
@@ -42,7 +44,8 @@ export class TelegramBotApiMessageSender extends MessageSender {
     editAudio(chatId: string | number, msgId: string | number, caption: string): Promise<SendResult> {
         this.sendAction(Number(chatId), 'typing')
         return new Promise<SendResult>((resolve, reject) => {
-            this.sender.telegram.editMessageCaption(chatId, parseInt(msgId + ''), undefined, renderWechatCustomEmojiHtml(caption, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024), {parse_mode: 'HTML'})
+            sendTelegramHtml(chatId,caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,
+                html=>this.sender.telegram.editMessageCaption(chatId,parseInt(msgId + ''),undefined,html,{parse_mode:'HTML'}))
                 .then(() => {
                 resolve({message_id: msgId})
             }).catch(e => reject(e))
@@ -86,12 +89,15 @@ export class TelegramBotApiMessageSender extends MessageSender {
             }
 
             // 创建超时定时器
+            let timedOut = false
             const timeoutId = setTimeout(() => {
+                timedOut = true
                 reject(new Error(`Request timeout after ${timeoutMs}ms`))
             }, timeoutMs)
-
-            this.sender.telegram.sendMessage(chatId, option?.parse_mode === 'HTML'
-                ? renderWechatCustomEmojiHtml(text, config.WECHAT_CUSTOM_EMOJI_ENABLED) : text, sendParam).then(res => {
+            const send = (html:string)=>this.sender.telegram.sendMessage(chatId,html,sendParam)
+            const pending = option?.parse_mode === 'HTML'
+                ? sendTelegramHtml(chatId,text,config.WECHAT_CUSTOM_EMOJI_ENABLED,4096,send,()=>!timedOut) : send(text)
+            pending.then(res => {
                 clearTimeout(timeoutId)
                 resolve({message_id: res.message_id})
             }).catch(e => {
@@ -144,13 +150,15 @@ export class TelegramBotApiMessageSender extends MessageSender {
             }
 
             const mediaParamName = this.getTelegramMediaParamName(file.fileType)
-            this.sender.telegram.callApi(`send${file.fileType.charAt(0).toUpperCase()}${file.fileType.slice(1)}` as any, {
+            const send = (caption:string|undefined)=>this.sender.telegram.callApi(`send${file.fileType.charAt(0).toUpperCase()}${file.fileType.slice(1)}` as any, {
                 chat_id: chatId,
                 [mediaParamName]: {source: file.buff, filename: file.filename},
-                caption: file.caption !== undefined && option?.parse_mode === 'HTML'
-                    ? renderWechatCustomEmojiHtml(file.caption, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024) : file.caption,
+                caption,
                 ...sendParam
-            }, {signal: abortController.signal}).then((msg: { message_id: number }) => {
+            }, {signal: abortController.signal})
+            const pending = file.caption !== undefined && option?.parse_mode === 'HTML'
+                ? sendTelegramHtml(chatId,file.caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,send,()=>!settled) : send(file.caption)
+            pending.then((msg: { message_id: number }) => {
                 settled = true
                 if (timeoutId) clearTimeout(timeoutId)
                 resolve({message_id: msg.message_id})

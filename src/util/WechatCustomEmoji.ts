@@ -1,6 +1,6 @@
 import {Parser} from 'htmlparser2'
 import {decodeHTML} from 'entities'
-import {WECHAT_CUSTOM_EMOJI} from './WechatCustomEmojiData'
+import {WECHAT_CUSTOM_EMOJI, WECHAT_EMOJI_IMAGE_NAMES} from './WechatCustomEmojiData'
 
 const CUSTOM_EMOJI_BUDGET = 100
 const PROTECTED_TAGS = new Set(['a', 'code', 'pre', 'tg-emoji', 'script', 'style'])
@@ -86,6 +86,38 @@ export function renderWechatCustomEmojiHtml(html: string, enabled: boolean, maxL
 /** Remove custom-emoji wrappers only; retain their fallback and all other bytes. */
 export function stripTelegramCustomEmoji(html: string): string {
     return tokenize(html).filter(token => token.name !== 'tg-emoji').map(token => token.raw).join('')
+}
+
+/** Compatibility renderer: ordinary HTML links need no Premium entitlement.
+ * Preserve original aliases and existing links/code; never replace inside attributes.
+ * Existing custom entities from a stored outbox are downgraded too. */
+export function renderWechatEmojiFallbackHtml(html:string,links = true):string {
+    const byId = new Map(Object.entries(WECHAT_CUSTOM_EMOJI).map(([alias,value])=>[value.id,alias]))
+    const tokens = tokenize(html)
+    const stack:HtmlToken[] = []
+    let remaining = Math.max(0,100 - tokens.filter(token=>token.kind === 'open' && token.name === 'a').length)
+    const render = (alias:string):string=>{
+        const name = WECHAT_EMOJI_IMAGE_NAMES[alias]
+        if(!links || !name || remaining <= 0)return alias
+        remaining--
+        return `<a href="https://raw.githubusercontent.com/finalpi/wechat-emoji/main/${encodeURIComponent(name)}.webp">${escapeText(alias)}</a>`
+    }
+    const output:string[] = []
+    for(let i = 0;i < tokens.length;i++){
+        const token = tokens[i]
+        if(token.kind === 'open' && token.name === 'tg-emoji'){
+            const id = token.raw.match(/emoji-id\s*=\s*["'](\d+)["']/)?.[1]
+            let fallback = ''
+            while(i + 1 < tokens.length){const child = tokens[++i];if(child.kind === 'close' && child.name === 'tg-emoji')break;fallback += child.raw}
+            const alias = byId.get(id)
+            output.push(alias && !stack.some(item=>PROTECTED_TAGS.has(item.name)) ? render(alias) : fallback)
+            continue
+        }
+        output.push(token.kind === 'text' && !stack.some(item=>PROTECTED_TAGS.has(item.name))
+            ? token.raw.replace(/\[[^[\]\r\n]+\]/g,render) : token.raw)
+        updateStack(stack,token)
+    }
+    return output.join('')
 }
 
 type TextUnit = {raw: string; length: number}

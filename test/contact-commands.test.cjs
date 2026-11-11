@@ -91,6 +91,7 @@ function fixture({contacts = [], rooms = [], members = [], loggedIn = true, topi
     '../service/WechatAccountClassificationService': {WechatAccountClassificationService: {getInstance: () => classification}},
     '../util/DirectoryPager': pagerModule,
     '../util/DirectoryPageDelivery': deliveryModule,
+    '../util/TelegramPresentation': require('./helpers/telegram-presentation')(),
     '../util/AvatarURL': require('../dist/util/AvatarURL'),
     '../util/DirectoryAvatar': {createDirectoryAvatar: async url => {
       events.push('avatar:' + url)
@@ -416,7 +417,7 @@ for (const failure of [
     assert.equal(f.resolve(dataButtons(f.edits.at(-1))[0].callback_data, context).state.page, 2)
     assert.equal(f.apiCalls.filter(call => call.payload.rich_message).length, 1)
     await f.command('/user 用户', context)
-    assert(f.replies.at(-1).rich_message)
+    assert.equal(f.replies.at(-1).rich_message,undefined,'known rejection remains cached for subsequent pages in this chat')
   })
 }
 
@@ -771,11 +772,11 @@ test('deleted-message and native/HTML/plain fallback failures are bounded and ne
   assert.equal(f.replies[2].options.parse_mode, 'HTML')
   assert.equal(f.replies[3].options.parse_mode, undefined)
   assert.equal(f.replies[3].rich_message, undefined)
-  f.failures.reply.push(unsupported, badRequest('can\'t parse entities'), new Error('plain failed'))
+  f.failures.reply.push(badRequest('can\'t parse entities'), new Error('plain failed'))
   await f.command('/official')
-  assert.equal(f.replies.length, 7)
-  assert(f.replies[4].rich_message)
-  assert.equal(f.replies[6].options.parse_mode, undefined)
+  assert.equal(f.replies.length, 6)
+  assert.equal(f.replies[4].rich_message,undefined,'do not retry a cached unsupported rich format')
+  assert.equal(f.replies[5].options.parse_mode, undefined)
 })
 
 for (const failure of [new Error('ETIMEDOUT'), {response: {error_code: 500}}, {response: {error_code: 429}}, {response: {error_code: 403}}]) {

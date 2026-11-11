@@ -82,6 +82,7 @@ function fixture(customEmojiEnabled = false) {
     '../util/SafeError': require('../dist/util/SafeError'),
     '../config': {config: {AI_API_KEY: 'synthetic', AI_API_URL: 'https://invalid.example', AI_CONTEXT_LIMIT: 2, WECHAT_CUSTOM_EMOJI_ENABLED: customEmojiEnabled}},
     '../util/WechatCustomEmoji': emojiHtml,
+    '../util/TelegramPresentation': require('./helpers/telegram-presentation')(),
     '../util/handleMsg': {getChatHistory: async () => history},
     'wx2tg-puppet': {Message: {Type: {}, getXmlToJson: () => ({msg: {appmsg: {recorditem: 'xml'}}})}},
     '../entity/Message': {Message: class {}},
@@ -300,6 +301,7 @@ test('formatted custom-emoji HTML splits at 4096 in order with first ID and raw 
     './MessageSender': base,
     '../config': {config: {WECHAT_CUSTOM_EMOJI_ENABLED: true}},
     '../util/WechatCustomEmoji': emojiHtml,
+    '../util/TelegramPresentation': require('./helpers/telegram-presentation')(),
     'abort-controller': AbortController,
   })
   f.client.messageSender = new TelegramBotApiMessageSender({telegram: {sendMessage: async (id, html, options) => {

@@ -23,6 +23,7 @@ function fixture() {
       if (name === '../util/EmojiUtils') return {EmojiConverter: class {convert(value) {return value}}}
       if (name === '../webui/message-visibility') return {isControlMessage: () => false}
       if (name === '../util/WechatCallStatus') return require('../dist/util/WechatCallStatus')
+      if (name === '../util/WechatRedPacket') return require('../dist/util/WechatRedPacket')
       if (name === '../util/MessageTypeUtils') return require('../dist/util/MessageTypeUtils')
       if (name === '../util/TelegramTopicUtils') return require('../dist/util/TelegramTopicUtils')
       if (name === '../service/SolitaireService') return require('../dist/service/SolitaireService')
@@ -132,6 +133,23 @@ test('an own solitaire update is forwarded even when self messages are disabled'
   assert.equal(sent.length, 1, 'the updated list must keep flowing so joining can continue')
   assert.equal(sent[0].source_type, 'solitaire')
   assert.equal(sent[0].param.inline_keyboard.length, 2)
+})
+
+test('red-packet SDK messages and legacy unknown placeholders retain group/topic routing without exposing payment XML', async () => {
+  for(const legacy of [false,true]){
+    const f = fixture()
+    const xml = '<msg><appmsg><type>2001</type><wcpayinfo><nativeurl>private-payment-url</nativeurl></wcpayinfo></appmsg></msg>'
+    const packet = new WxMessage({MsgType:49,Content:xml,xml,MsgId:'2',NewMsgId:'9007199254740993999',FromUserName:'sender',ToUserName:'self',CreateTime:2,RoomId:'room@chatroom'})
+    assert.equal(packet.type(),'red_packet')
+    if(legacy){packet.type = ()=>'unknown';packet.text = ()=>'收到红包，请在手机上查看'}
+    packet.from = f.message.from;packet.room = f.message.room;packet.self = ()=>false
+    f.client.bindGroupService.resolveWechat = async()=>({chatId:-100123,threadId:77,wxId:'room@chatroom',type:1,isReceive:true})
+    await f.client.onMessage(packet)
+    assert.equal(f.sent.length,1)
+    assert.equal(f.sent[0].content,'🧧 收到红包，请在微信客户端查看。')
+    assert.equal(f.sent[0].source_type,'red_packet');assert.equal(f.sent[0].threadId,77);assert.equal(f.sent[0].chatId,-100123)
+    assert(!f.sent[0].content.includes('private-payment-url'))
+  }
 })
 
 test('ordinary own messages stay filtered when self messages are disabled', async () => {

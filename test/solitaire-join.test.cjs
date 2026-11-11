@@ -125,6 +125,7 @@ function fixture({loggedIn = true, groupName = '我的群昵称', result = {stat
         return groupName
       }},
       '../util/DirectoryPageDelivery': require('../dist/util/DirectoryPageDelivery'),
+      '../util/TelegramPresentation': require('./helpers/telegram-presentation')(),
       // __importDefault wraps this object, so expose the methods directly.
       '../service/TelegramCommandHelper': {setCommand: noop, setSimpleCommandHandler: noop},
       '../util/TelegramTopicUtils': require('../dist/util/TelegramTopicUtils'),
