@@ -171,7 +171,7 @@ export async function createDemoMessageCenter(directory: string): Promise<Messag
             if (mentions?.all || mentions?.memberIds?.length) {
                 if (target.kind !== 'group') fail('mentionsGroupOnly')
                 const selected = (mentions.memberIds || []).map(id => members.find(member => member.wxId === id) || fail('mentionMemberMissing'))
-                body = (mentions.all ? '@所有人' : selected.map(member => '@' + member.name).join(' ')) + ' ' + body
+                if (!mentions.inline) body = (mentions.all ? '@所有人' : selected.map(member => '@' + member.name).join(' ')) + ' ' + body
             }
             const message = add(target, body, true)
             message.requestId = requestId

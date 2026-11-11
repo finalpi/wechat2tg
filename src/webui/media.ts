@@ -26,6 +26,7 @@ const classify = (name: string, head: Buffer): {kind: MediaKind; mime: string} =
 const ffmpeg = (args: string[]) => new Promise<void>((resolve,reject)=>execFile(ffmpegPath || 'ffmpeg', ['-hide_banner','-loglevel','error','-y',...args], {timeout:90000,maxBuffer:1024*1024}, error=>error?reject(Object.assign(new Error('mediaConversionFailed'),{code:'mediaConversionFailed',status:400})):resolve()))
 
 export class WebMediaStore {
+    private thumbnails = new Map<string,Promise<string>>()
     constructor(private store: WebMessageStore, private directory = 'storage/webui-media') {fs.mkdirSync(directory,{recursive:true})}
     async save(name: string, preference: string, stream: AsyncIterable<Uint8Array>, source: 'upload' | 'download' = 'upload'): Promise<MediaFile> {
         if (!['auto','voice'].includes(preference)) throw error('invalidMediaType')
@@ -57,6 +58,24 @@ export class WebMediaStore {
         const file=path.resolve(this.directory,id)
         if(!media||!fs.existsSync(file))throw error('mediaMissing',404)
         return {...media,path:file}
+    }
+    async thumbnail(id: string): Promise<string> {
+        const media = await this.get(id)
+        if(media.kind !== 'video')throw error('thumbnailUnavailable',404)
+        const file = path.resolve(this.directory,`${id}.thumb.jpg`)
+        if(fs.existsSync(file))return file
+        const pending = this.thumbnails.get(id)
+        if(pending)return pending
+        const operation = (async()=>{
+            const temporary = path.resolve(this.directory,`${id}.${randomUUID()}.thumb.jpg`)
+            try {
+                await ffmpeg(['-i',media.path,'-frames:v','1','-vf','scale=640:640:force_original_aspect_ratio=decrease','-q:v','4',temporary])
+                await fs.promises.rename(temporary,file)
+                return file
+            } finally {await fs.promises.unlink(temporary).catch(()=>{})}
+        })()
+        this.thumbnails.set(id,operation)
+        try {return await operation} finally {this.thumbnails.delete(id)}
     }
     async prepare(media: MediaFile) {
         const file=(await this.get(media.id)).path

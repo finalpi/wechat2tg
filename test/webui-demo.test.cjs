@@ -53,6 +53,8 @@ test('demo sends, mentions, idempotency, sync and recall only mutate the disposa
   const sent = await (await send()).json()
   assert.equal(sent.body,'@林小满 仅用于演示测试')
   assert.equal((await (await send()).json()).id,sent.id)
+  const inline = await (await f.request('/api/messages',{method:'POST',body:JSON.stringify({wxId:body.wxId,body:'你好 @林小满\u2005',requestId:'demo-inline-mention-001',mentions:{memberIds:['demo-lin'],inline:true}})})).json()
+  assert.equal(inline.body,'你好 @林小满\u2005','inline mentions are not prepended a second time')
   const changed = await f.request('/api/messages',{method:'POST',body:JSON.stringify({...body,body:'different'})})
   assert.equal(changed.status,409)
   const updates = await f.json(`/api/messages/updates?wxId=${body.wxId}&ids=${sent.id}`)

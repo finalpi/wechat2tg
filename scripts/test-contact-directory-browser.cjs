@@ -112,7 +112,7 @@ async function main(){
   assert.equal(reads,beforeIdle,'menu refresh is event-driven, not polling')
   await page.getByRole('button',{name:'分类：公众号',exact:true}).click()
   await page.getByRole('button',{name:'Pending publisher',exact:true}).click()
-  assert.equal(await page.getByLabel('消息内容',{exact:true}).inputValue(),'retain directory draft')
+  assert.equal(await page.getByLabel('消息内容',{exact:true}).innerText(),'retain directory draft')
   assert.equal(streams,1)
   if(process.env.DIRECTORY_SCREENSHOT_DIR){fs.mkdirSync(process.env.DIRECTORY_SCREENSHOT_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.DIRECTORY_SCREENSHOT_DIR,'desktop.png'),animations:'disabled'})}
   for(const width of [430,390,320]){

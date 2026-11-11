@@ -254,6 +254,15 @@ export function createWebUIServer(options: Options) {
                 void ignored // Filesystem paths are private; return metadata only.
                 return respond(res,200,file)
             }
+            const thumbnailRoute = route?.match(/^\/api\/media\/([a-f0-9-]{36})\/thumbnail$/)
+            if(thumbnailRoute) {
+                if(req.method !== 'GET' || !options.messages?.mediaThumbnail)return respond(res,404,{error:'thumbnailUnavailable'})
+                const file = await options.messages.mediaThumbnail(thumbnailRoute[1])
+                const stat = await fs.promises.stat(file)
+                res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':stat.size})
+                const stream = fs.createReadStream(file)
+                stream.on('error',()=>res.destroy());res.on('close',()=>stream.destroy());stream.pipe(res);return
+            }
             const binaryRoute = route?.match(/^\/api\/media\/([a-f0-9-]{36})$/)
             if(binaryRoute) {
                 if(req.method !== 'GET' || !options.messages?.media)return respond(res,405,{error:'messagesUnavailable'})

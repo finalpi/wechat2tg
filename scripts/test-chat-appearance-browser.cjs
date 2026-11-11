@@ -89,8 +89,8 @@ async function main() {
     assert.equal(avatarCalls.length,2,'repeated incoming sender avatars share requests; no self-avatar request')
     assert(avatarCalls.every(call=>call.roomId === 'demo@chatroom'))
     await page.getByRole('button',{name:'成员',exact:true}).click()
-    await page.getByLabel('搜索群成员',{exact:true}).waitFor()
-    await page.locator('label[for="member-甲"]').waitFor()
+    await page.getByRole('listbox',{name:'群成员',exact:true}).waitFor()
+    await page.getByRole('option',{name:/甲/}).waitFor()
     assert.equal(avatarCalls.length,2,'member chooser reuses incoming message avatars')
     if(process.env.CHAT_SCREENSHOT_DIR){fs.mkdirSync(process.env.CHAT_SCREENSHOT_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.CHAT_SCREENSHOT_DIR,'chat.png')})}
     await page.getByRole('button',{name:'聊天菜单',exact:true}).click()

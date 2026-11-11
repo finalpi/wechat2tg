@@ -44,6 +44,7 @@ export interface MessageCenterAdapter {
     sendStatus(requestId:string):Promise<unknown>
     upload?(name:string,preference:string,stream:AsyncIterable<Uint8Array>):Promise<unknown>
     media?(id:string):Promise<MediaFile>
+    mediaThumbnail?(id:string):Promise<string>
     attachment?(messageId:number):Promise<MediaFile>
     sync?(messageId:number,confirm:boolean):Promise<unknown>
     avatar?(wxId:string,roomId?:string):Promise<Buffer>
@@ -156,7 +157,15 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
             if(rows.length)await store.run(`UPDATE inbox SET telegramStatus='synced' WHERE remoteId IN (${rows.map(()=>'?').join(',')})`,rows.map(r=>r.wxMsgId))
         }
     }
-    const attachment = async(messageId:number)=>{
+    const attachmentDownloads = new Map<string,Promise<MediaFile>>()
+    const downloadOnce = (key:string,download:()=>Promise<MediaFile>)=>{
+        const pending = attachmentDownloads.get(key)
+        if(pending)return pending
+        const operation = download().finally(()=>attachmentDownloads.delete(key))
+        attachmentDownloads.set(key,operation)
+        return operation
+    }
+    const attachment = (messageId:number)=>downloadOnce(`message:${messageId}`,async()=>{
         const row = await store.byId(messageId)
         if(!row)throw new MessageCenterError('mediaMissing',404)
         if(row.attachmentId)return media.get(row.attachmentId)
@@ -168,8 +177,8 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         const result = await media.save(box.name || 'attachment.bin','auto',(async function*(){yield buffer})(),'download')
         await store.run('UPDATE inbox SET attachmentId=? WHERE id=?',[result.id,messageId])
         return media.get(result.id)
-    }
-    const transcriptDownload = async(messageId:number,nestedPath:string,attachmentId:string)=>{
+    })
+    const transcriptDownload = (messageId:number,nestedPath:string,attachmentId:string)=>downloadOnce(`transcript:${messageId}:${nestedPath}:${attachmentId}`,async()=>{
         const row = await store.byId(messageId)
         if(!row || row.hidden || !row.source)throw new MessageCenterError('mediaMissing',404)
         const cacheKey = `transcript:${messageId}:${nestedPath}:${attachmentId}`
@@ -187,7 +196,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         const file = await media.save(found.fileName || 'attachment.bin','auto',(async function*(){yield buffer})(),'download')
         await store.run('INSERT OR REPLACE INTO transcript_media(cacheKey,attachmentId) VALUES(?,?)',[cacheKey,file.id])
         return media.get(file.id)
-    }
+    })
     const sync = async(id:number,confirm = false)=>{
         await reconcile()
         const row = await store.byId(id)
@@ -443,6 +452,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         },
         upload:(name,preference,stream)=>media.save(name,preference,stream),
         media:id=>media.get(id),attachment,
+        mediaThumbnail:id=>media.thumbnail(id),
         avatar,
         articleCover:async(id,index)=>{
             if(!Number.isSafeInteger(id) || id < 1 || !Number.isSafeInteger(index) || index < 0 || index >= 20)throw new MessageCenterError('invalidRequest')

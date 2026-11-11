@@ -85,7 +85,7 @@ export interface SendMessage {
   requestId: string
   attachmentId?: string
   replyToId?: number
-  mentions?: {memberIds?: string[]; all?: boolean}
+  mentions?: {memberIds?: string[]; all?: boolean; inline?: boolean}
 }
 
 const query = (values: Record<string, string | number | boolean>) => new URLSearchParams(Object.entries(values).map(([key, value]) => [key, String(value)]))
@@ -110,9 +110,9 @@ export const messagesApi = {
   sync: (token: string, id: number, confirm = false) => request<{id: number; telegramStatus: string}>(`/api/messages/${id}/sync`, token, {method: 'POST', body: JSON.stringify({confirm})}),
   revoke: (token: string, id: number, requestId: string, confirmUncertain = false) =>
     request<{id: number; revokeStatus: string; revokeTelegramStatus: string}>(`/api/messages/${id}/revoke`, token, {method: 'POST', body: JSON.stringify({requestId, confirm: true, confirmUncertain})}),
-  media: (token: string, id: number) => request<MediaFile>(`/api/media/message/${id}`, token),
-  transcriptMedia: (token: string, id: number, path: string, attachment: string) =>
-    request<MediaFile>(`/api/media/transcript/${id}?${query({path, id: attachment})}`, token),
+  media: (token: string, id: number, signal?: AbortSignal) => request<MediaFile>(`/api/media/message/${id}`, token, {signal}),
+  transcriptMedia: (token: string, id: number, path: string, attachment: string, signal?: AbortSignal) =>
+    request<MediaFile>(`/api/media/transcript/${id}?${query({path, id: attachment})}`, token, {signal}),
   upload: async (token: string, file: File, voice: boolean): Promise<MediaFile> => {
     if (!file.size) throw new Error('文件为空。')
     if (file.size > 50 * 1024 * 1024) throw new Error('文件不能超过 50 MB。')

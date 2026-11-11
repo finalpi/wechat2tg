@@ -50,10 +50,10 @@ async function main(){
   await input.waitFor()
   await page.getByText('未识别成员甲',{exact:true}).waitFor()
   await page.getByText('未识别成员乙',{exact:true}).waitFor() // missing IDs must not merge distinct authors
-  assert.equal(await input.inputValue(),'切换模式保留草稿','browser back/forward retain the conversation draft')
+  assert.equal(await input.innerText(),'切换模式保留草稿','browser back/forward retain the conversation draft')
   await page.getByRole('button',{name:'专注当前会话'}).click()
   assert(await page.getByLabel('会话侧栏',{exact:true}).isHidden())
-  assert.equal(await input.inputValue(),'切换模式保留草稿')
+  assert.equal(await input.innerText(),'切换模式保留草稿')
   await page.getByRole('button',{name:'显示会话列表'}).click()
   assert(await page.getByLabel('会话侧栏',{exact:true}).isVisible())
   await page.getByRole('separator',{name:'调整侧栏宽度'}).focus()
@@ -77,7 +77,7 @@ async function main(){
   assert.equal(new URL(page.url()).pathname,'/manage')
   await page.getByRole('button',{name:'返回聊天',exact:true}).click()
   await input.waitFor()
-  assert.equal(await input.inputValue(),'切换模式保留草稿')
+  assert.equal(await input.innerText(),'切换模式保留草稿')
   const afterScroll = await viewport.evaluate(readingPosition)
   assert(beforeScroll.id && beforeScroll.id === afterScroll.id && Math.abs(afterScroll.offset - beforeScroll.offset) < 5,`management switch retains the visible reading position: ${JSON.stringify({beforeScroll,afterScroll})}`)
   assert.equal(streams,1,'switching shell must not create a second SSE connection')
@@ -120,7 +120,7 @@ async function main(){
   await page.getByRole('button',{name:'更新应用',exact:true}).click()
   await page.getByText('存在未保存或正在提交的编辑，请完成后再更新。',{exact:true}).waitFor()
   assert.equal(navigations,0)
-  assert.equal(await input.inputValue(),'更新前必须保留的草稿')
+  assert.equal(await input.innerText(),'更新前必须保留的草稿')
   await input.fill('')
   // Insert an edit after approval but before the real worker receives activation.
   // This deterministically exercises React draft guards during the worker race.
@@ -130,7 +130,7 @@ async function main(){
    worker.postMessage = function(...args){
     worker.postMessage = post
     const field = document.querySelector('#message-body')
-    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set.call(field,'激活期间的新草稿')
+    field.textContent = '激活期间的新草稿'
     field.dispatchEvent(new Event('input',{bubbles:true}))
     return post.apply(this,args)
    }
@@ -139,13 +139,13 @@ async function main(){
   await page.waitForFunction(async()=>!(await navigator.serviceWorker.getRegistration()).waiting)
   await page.getByText('存在未保存或正在提交的编辑，请完成后再更新。',{exact:true}).waitFor()
   assert.equal(navigations,0,'activation must recheck edits before reloading')
-  assert.equal(await input.inputValue(),'激活期间的新草稿')
+  assert.equal(await input.innerText(),'激活期间的新草稿')
   await input.fill('')
   await page.getByRole('button',{name:'更新应用',exact:true}).click()
   await page.waitForFunction(()=>!document.body.textContent.includes('新版本已就绪') && document.querySelector('[aria-label="会话列表"]'))
   assert.equal(navigations,1,'only the approving tab reloads')
   assert.equal(otherNavigations,0)
-  assert.equal(await other.getByLabel('消息内容',{exact:true}).inputValue(),'另一个窗口的草稿')
+  assert.equal(await other.getByLabel('消息内容',{exact:true}).innerText(),'另一个窗口的草稿')
   const cached = await page.evaluate(async()=>{
    const entries = []
    for(const name of await caches.keys())for(const r of await (await caches.open(name)).keys()){
