@@ -150,8 +150,7 @@ Docker 将 `./config` 挂载为 `/app/storage`；备份时同时保留 `save-fil
 
 ## 部署安装
 
-> [!IMPORTANT]
-> 当前 Bot 正式版为 **`v6.0.39`**：修复群聊 / 公众号历史接口 500，补齐安全异常日志与启动提示；升级 SDK 至 `v6.0.17`，修复联系人初始化异常刷屏。修复已通过用户验收；server 保持 `v6.0.16`。
+更新记录见[发行说明](docs/releases.md)。
 
 全新部署先复制一份 `.env.example` 为 `.env` 文件，然后配置环境变量。已有私有配置（包括用户的 `home_202.env`）绝不能覆盖，所需新增项应手动合并。
 
@@ -163,9 +162,9 @@ Docker 部署使用 Docker Engine 和 Docker Compose v2；本地开发使用 Nod
 
 ### Docker Compose
 
-下面的 Compose 示例使用 `finalpi/wechat2tg:latest`，保存为 `docker-compose.yml` 后即可使用，无需 WebUI 覆盖文件。
+下面的 Compose 示例使用主程序 `finalpi/wechat2tg:latest` 和服务端 `finalpi/wx2tg-server:v6-latest`，保存为 `docker-compose.yml` 后即可使用，无需 WebUI 覆盖文件。
 
-以下命令用于初始化全新整套服务。已有部署应保留旧镜像和私有配置，核对本地 Compose 后，仅用 `docker compose pull wechat2tg` 和 `docker compose up -d --no-deps wechat2tg` 更新 bot。本示例的 `wx2tg-server` 镜像、命名空间和版本保持不变；本次 bot 命名修正不能替换或重启已有生产后端。
+以下命令用于初始化全新整套服务。已有部署请核对本地 Compose 并保留私有配置，使用 `docker compose pull wechat2tg` 和 `docker compose up -d --no-deps wechat2tg` 更新主程序。
 
 ```bash
 test -e .env || cp .env.example .env
@@ -207,7 +206,7 @@ services:
       - wx2tg-server
 
   wx2tg-server:
-    image: finalpi/wx2tg-server:v6.0.16
+    image: finalpi/wx2tg-server:v6-latest
     container_name: wx2tg-server
     ports:
       - "8058:8058"

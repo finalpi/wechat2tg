@@ -150,8 +150,7 @@ Normal startup leaves the WebUI available if Telegram credentials are missing. F
 
 ## Installation & Deployment
 
-> [!IMPORTANT]
-> The current stable Bot is **`v6.0.39`**: fixes message-history HTTP 500 errors caused by SSE change tracking, adds safe error/startup diagnostics, and bundles SDK `v6.0.17` to handle contact initialization failures. The fixes have passed user verification. Server remains at `v6.0.16`.
+See the [release notes](docs/releases.md) for updates.
 
 For a new deployment, copy `.env.example` to `.env` and configure the environment variables. Never overwrite existing private configuration, including the user’s `home_202.env`; merge required changes manually.
 
@@ -163,9 +162,9 @@ Use Docker Engine with Docker Compose v2, or Node.js 18+ for local development. 
 
 ### Docker Compose
 
-The Compose example below uses `finalpi/wechat2tg:latest`. Save it as `docker-compose.yml`; no WebUI override is needed.
+The Compose example below uses `finalpi/wechat2tg:latest` and `finalpi/wx2tg-server:v6-latest`. Save it as `docker-compose.yml`; no WebUI override is needed.
 
-The commands below initialize a new stack. For an existing deployment, preserve old images and private configuration; update only the bot with `docker compose pull wechat2tg` and `docker compose up -d --no-deps wechat2tg` after reviewing your local Compose. The `wx2tg-server` image, namespace, and version in this example are unchanged; do not replace or restart the existing production backend as part of this bot naming correction.
+The commands below initialize a new stack. For an existing deployment, review your local Compose and preserve private configuration, then update the bot with `docker compose pull wechat2tg` and `docker compose up -d --no-deps wechat2tg`.
 
 ```bash
 test -e .env || cp .env.example .env
@@ -207,7 +206,7 @@ services:
       - wx2tg-server
 
   wx2tg-server:
-    image: finalpi/wx2tg-server:v6.0.16
+    image: finalpi/wx2tg-server:v6-latest
     container_name: wx2tg-server
     ports:
       - "8058:8058"

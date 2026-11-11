@@ -20,7 +20,11 @@ test('bot release metadata agrees and pinned puppet/server stay within v6', () =
     const source = fs.readFileSync(path.join(root, name), 'utf8')
     const botImage = name === 'docker-compose.yml' ? `finalpi/wechat2tg:v${pkg.version}` : 'finalpi/wechat2tg:latest'
     assert(source.includes(`image: ${botImage}`))
-    assert.match(source, /image: finalpi\/wx2tg-server:v6\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-dev\.[1-9]\d*)?\s*\n/)
+    if (name === 'docker-compose.yml') {
+      assert.match(source, /image: finalpi\/wx2tg-server:v6\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-dev\.[1-9]\d*)?\s*\n/)
+    } else {
+      assert(source.includes('image: finalpi/wx2tg-server:v6-latest'))
+    }
     assert(!source.includes('image: finalpi/wechat2tg-v3:'))
     assert(!source.includes('image: finalpi/wechat2tg:dev'))
   }
@@ -37,7 +41,9 @@ test('README Compose examples use latest and otherwise match the actual stack', 
     assert.equal(blocks.length, 1, `${name} must contain one complete Compose example`)
     const example = yaml.load(blocks[0][1])
     assert.equal(example.services.wechat2tg.image, 'finalpi/wechat2tg:latest')
+    assert.equal(example.services['wx2tg-server'].image, 'finalpi/wx2tg-server:v6-latest')
     example.services.wechat2tg.image = compose.services.wechat2tg.image
+    example.services['wx2tg-server'].image = compose.services['wx2tg-server'].image
     assert.deepEqual(example, compose, `${name} Compose must otherwise match docker-compose.yml`)
     for (const command of ['exec', 'restart', 'logs --tail=100']) {
       assert(source.includes(`docker compose ${command} wechat2tg`))
