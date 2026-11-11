@@ -1,6 +1,9 @@
 .git
 **/node_modules
 dist
+webui/dist
+.ovis
+.pi
 .env
 .env.*
 !.env.example
@@ -14,3 +17,5 @@ server-logs
 logs
 .idea
 .DS_Store
+home_*.env
+*.log
