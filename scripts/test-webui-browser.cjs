@@ -61,6 +61,10 @@ async function main() {
     locate: async (wxId, id, remoteId) => {locates.push({wxId, id, remoteId}); if (failLocate) throw Object.assign(new Error(), {status: 404, code: 'messageMissing'}); return {...history(wxId), targetId: 1, hasNewer: false}},
     groupMembers: async (_wxId, q, offset) => ({wxId: group, members: offset || q && !'小王'.includes(q) ? [] : [{wxId: 'member', name: '小王', nickname: '王', displayName: '小王', hasAvatar: false}], total: 1, hasMore: false, offset: offset + 100}),
     attachment: async () => file,
+    transcriptAttachment: async (messageId, transcriptPath, attachmentId) => {
+      assert.equal(messageId, 5); assert.equal(transcriptPath, 'root'); assert.equal(attachmentId, '2')
+      return file
+    },
     media: async () => file,
     upload: async (name, preference, stream) => {for await (const chunk of stream) {assert(Buffer.isBuffer(chunk))} uploads.push({name, preference}); return file},
     send: async (wxId, body, requestId, attachmentId, mentions, replyToId) => {
