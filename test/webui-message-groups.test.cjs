@@ -11,12 +11,21 @@ test('adjacent same-author messages group by identity, not text or display name'
   assert.deepEqual(groups.map(g=>g.messages.map(m=>m.id)),[[1,2],[3],[4]])
   assert.equal(groups[0].id,'group-1')
 })
-test('time gaps, direction, day, conversation, unknown authors and notices break groups',()=>{
-  const breaks = [{timestamp:now + 302},{timestamp:new Date(2026,10,11,12).getTime() / 1000},{timestamp:now - 1},{direction:'outgoing'},{wxId:'other@chatroom'},{senderId:''},{type:'revoke_notice'},{revokeStatus:'revoked'}]
+test('direction, day, conversation, unknown authors and notices break groups',()=>{
+  const breaks = [{timestamp:new Date(2026,10,11,12).getTime() / 1000},{timestamp:now - 1},{direction:'outgoing'},{wxId:'other@chatroom'},{senderId:''},{type:'revoke_notice'},{revokeStatus:'revoked'}]
   for(const extra of breaks)assert.equal(group([row(1),row(2,extra)],false,true).length,2,JSON.stringify(extra))
   assert.equal(group([row(1,{senderId:''}),row(2,{senderId:''})],false,true).length,2)
   assert.equal(group([row(1,{direction:'outgoing'}),row(2,{direction:'outgoing'})],false,true).length,1)
   assert.equal(group([row(1),row(2)],true,true).length,2,'publications retain separate article cards')
+})
+test('consecutive same-day messages retain one avatar group even hours apart',()=>{
+  const first = new Date(2026,10,6,18,9).getTime() / 1000
+  const second = new Date(2026,10,6,19,3).getTime() / 1000
+  const third = new Date(2026,10,6,23,59).getTime() / 1000
+  const nextDay = new Date(2026,10,7,0,0).getTime() / 1000
+  const groups = group([row(1,{timestamp:first}),row(2,{timestamp:second}),row(3,{timestamp:third}),row(4,{timestamp:nextDay})],false,true)
+  assert.deepEqual(groups.map(g=>g.messages.map(m=>m.id)),[[1,2,3],[4]])
+  assert.deepEqual(groups[0].messages.map(m=>m.timestamp),[first,second,third],'each message retains its real time')
 })
 test('prepend/append and status-only updates retain order without changing content or collapsing message IDs',()=>{
   const input = [row(1),row(2,{telegramStatus:'failed'}),row(3,{body:'different'})],snapshot = JSON.stringify(input)

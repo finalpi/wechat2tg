@@ -5,9 +5,9 @@ const {once} = require('node:events'),{chromium} = require('playwright-core')
 const {createWebUIServer} = require('../dist/webui/server'),{createMessageEvents} = require('../dist/webui/message-events')
 async function main(){
   const directory = fs.mkdtempSync(path.join(os.tmpdir(),'message-groups-')),events = createMessageEvents(),token = 'synthetic-group-token'
-  const now = new Date(2026,10,10,12).getTime() / 1000
+  const now = new Date(2026,10,6,18,9).getTime() / 1000 - 10
   const contact = {wxId:'group@chatroom',name:'讨论组',kind:'group',category:'group',hasAvatar:false}
-  const row = (id,sender = 'alice',extra = {})=>({id,wxId:contact.wxId,remoteId:String(1000 + id),senderId:sender,senderDisplayName:sender === 'alice' ? '林小满' : sender === 'bob' ? '周予安' : '我',senderHasAvatar:false,body:`消息 ${id}：连续对话的正文`,timestamp:now + id,direction:sender === 'self' ? 'outgoing' : 'incoming',status:sender === 'self' ? 'submitted' : 'received',type:'text',telegramTracked:true,telegramStatus:'synced',...extra})
+  const row = (id,sender = 'alice',extra = {})=>({id,wxId:contact.wxId,remoteId:String(1000 + id),senderId:sender,senderDisplayName:sender === 'alice' ? '林小满' : sender === 'bob' ? '周予安' : '我',senderHasAvatar:false,body:`消息 ${id}：连续对话的正文`,timestamp:now + id + (id >= 11 ? 54 * 60 - 1 : 0),direction:sender === 'self' ? 'outgoing' : 'incoming',status:sender === 'self' ? 'submitted' : 'received',type:'text',telegramTracked:true,telegramStatus:'synced',...extra})
   const rows = [...Array.from({length:18},(_,i)=>row(10 + i)),row(28,'bob'),row(29,'bob'),row(30,'alice'),row(31,'self'),row(32,'self'),row(33,'bob',{type:'quote',details:{replyTo:{id:18,remoteId:'1018',name:'林小满',preview:'定位组内消息 18'}}})]
   const older = [row(7),row(8),row(9)]
   let expanded = false,sends = 0
@@ -40,6 +40,8 @@ async function main(){
     assert.equal(await alice.locator('[data-slot="message-avatar"]').count(),1)
     assert.equal(await alice.locator('[data-slot="message-header"]').count(),1)
     assert.equal(await alice.locator('[data-slot="message"]').count(),18)
+    const firstTimes = await alice.locator('time').evaluateAll(nodes=>nodes.slice(0,2).map(el=>new Date(el.dateTime).getTime()))
+    assert.equal(firstTimes[1] - firstTimes[0],54 * 60000,'54-minute same-day gap must not duplicate the avatar or name')
     assert.equal(await page.locator('[data-outgoing="true"] [data-slot="message-avatar"], [data-outgoing="true"] [data-slot="message-header"]').count(),0)
     const style = await alice.locator('[data-slot="message"]').first().evaluate(row=>{
       const name = getComputedStyle(row.querySelector('[data-slot="message-header"]')),body = getComputedStyle(row.querySelector('[data-slot="message-body"]')),time = getComputedStyle(row.querySelector('time'))
@@ -120,7 +122,7 @@ async function main(){
     await page.getByRole('button',{name:'取消引用',exact:true}).waitFor()
     if(process.env.CHAT_SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.CHAT_SCREENSHOT_DIR,'group-mobile.png')})
     assert.deepEqual(errors,[]);assert.equal(sends,0)
-    console.log('Grouped chat browser passed: identity grouping, typography, sticky bounded avatars, compact spacing, same-group prepend anchoring, inner quote location, status updates and mobile controls; no sends.')
+    console.log('Grouped chat browser passed: identity grouping across a 54-minute gap, typography, sticky bounded avatars, compact spacing, same-group prepend anchoring, inner quote location, status updates and mobile controls; no sends.')
   } finally {if(browser)await browser.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));fs.rmSync(directory,{recursive:true,force:true})}
 }
 main().catch(error=>{console.error(error);process.exitCode = 1})
