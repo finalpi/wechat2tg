@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react'
+import {useEffect,useId,useRef,useState} from 'react'
 import {Button} from '@/components/ui/button'
 import {Card,CardHeader,CardTitle,CardDescription,CardContent,CardFooter} from '@/components/ui/card'
 import {Field,FieldGroup,FieldLabel,FieldDescription,FieldSet,FieldLegend,FieldError} from '@/components/ui/field'
@@ -11,8 +11,8 @@ import {Select,SelectContent,SelectGroup,SelectItem,SelectTrigger,SelectValue} f
 import {Alert,AlertDescription} from '@/components/ui/alert'
 import {Badge} from '@/components/ui/badge'
 import {Spinner} from '@/components/ui/spinner'
-import {request} from '@/lib/api'
-import type {AutomationEvent,AutomationRule,AutomationRun,AutomationScope,AutomationScript,Permission,RuleInput} from '../../../src/automation/contracts'
+import {ApiError,request} from '@/lib/api'
+import type {AutomationEvent,AutomationRule,AutomationRun,AutomationScope,AutomationScript,AutomationScopeIssue,Permission,RuleInput} from '../../../src/automation/contracts'
 
 type Scope = AutomationScope & {name?:string}
 interface Metadata {revision:string;scripts:AutomationScript[];rules:AutomationRule[];runs:AutomationRun[];samples:AutomationEvent[];scopes:Scope[];available:boolean;prompt:string;templates:{solitaire:string;reply:string}}
@@ -21,7 +21,20 @@ const cleanScope = ({source,accountId,groupId,topicId}:Scope):AutomationScope=>(
 const permissionNames:Record<Permission,string> = {reply:'回复当前群',send:'发送到授权目标群','solitaire.join':'参加微信接龙','solitaire.create':'创建微信接龙',state:'读写本规则持久状态'}
 const emptyRule:RuleInput = {name:'',scriptId:'',enabled:true,mode:'preview',scopes:[],targets:[],permissions:[],trigger:'all',keyword:'',senders:[],params:{},cooldownSeconds:10,maxActionsPerDay:20}
 const scopeRequired = '请选择至少一个监听群'
-const errorNames:Record<string,string> = {scopeRequired,scriptRequired:'请选择要执行的函数',scriptNotPublished:'这个函数还未发布，请先在函数库发布版本',scopeUnavailable:'所选群当前不可用，请刷新群列表并核对账号',automationRuntimeUnavailable:'机器人尚未连接，暂时不能实际执行',automationValidation:'配置格式不正确，请检查参数、冷却时间和每日限额',conflict:'配置已被另一页面修改，请刷新后核对；当前输入保留。',liveConfirmationRequired:'实际执行需要明确确认',scriptInUse:'该函数仍被监听规则使用，不能删除'}
+const scopeIncomplete = '监听范围中有未选择的账号或群，请取消无效项后重新选择'
+const targetScopeIncomplete = '目标范围中有未选择的账号或群，请取消无效项后重新选择'
+const completeScope = (scope:AutomationScope)=>Boolean(scope && ['wechat','telegram'].includes(scope.source)
+  && typeof scope.accountId==='string' && scope.accountId.trim() && typeof scope.groupId==='string' && scope.groupId.trim())
+function readScopeIssues(value:unknown):AutomationScopeIssue[] {
+  if(!Array.isArray(value))return []
+  return value.slice(0,60).filter((item):item is AutomationScopeIssue=>{
+    if(!item || typeof item!=='object')return false
+    const {path,code}=item
+    return code==='required' && Array.isArray(path) && path.length===3 && ['scopes','targets'].includes(path[0])
+      && Number.isInteger(path[1]) && path[1]>=0 && path[1]<30 && ['accountId','groupId'].includes(path[2])
+  })
+}
+const errorNames:Record<string,string> = {scopeRequired,scopeIncomplete,targetScopeIncomplete,scriptRequired:'请选择要执行的函数',scriptNotPublished:'这个函数还未发布，请先在函数库发布版本',scopeUnavailable:'所选群当前不可用，请刷新群列表并核对账号',automationRuntimeUnavailable:'机器人尚未连接，暂时不能实际执行',automationValidation:'配置格式不正确，请检查参数、冷却时间和每日限额',conflict:'配置已被另一页面修改，请刷新后核对；当前输入保留。',liveConfirmationRequired:'实际执行需要明确确认',scriptInUse:'该函数仍被监听规则使用，不能删除'}
 function newRule(script:AutomationScript|undefined,meta:Metadata):RuleInput {
   const code = script?.versions[script.versions.length-1]?.source
   // Only exact built-in templates get known defaults. Never infer permissions
@@ -50,16 +63,21 @@ function Parameters({raw,onChange}:{raw:string;onChange:(raw:string)=>void}) {
 function Dropdown({label,value,items,onChange}:{label:string;value:string;items:Array<{value:string;label:string}>;onChange:(value:string)=>void}) {
   return <Field><FieldLabel>{label}</FieldLabel><Select value={value || '__none__'} onValueChange={value=>onChange(value==='__none__'?'':value)}><SelectTrigger aria-label={label}><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="__none__">请选择</SelectItem>{items.map(item=><SelectItem value={item.value} key={item.value}>{item.label}</SelectItem>)}</SelectGroup></SelectContent></Select></Field>
 }
-function ScopePicker({label,scopes,value,onChange,invalid=false}:{label:string;scopes:Scope[];value:AutomationScope[];onChange:(scopes:AutomationScope[])=>void;invalid?:boolean}) {
+function ScopePicker({label,scopes,value,onChange,error,issues=[]}:{label:string;scopes:Scope[];value:AutomationScope[];onChange:(scopes:AutomationScope[])=>void;error?:string;issues?:AutomationScopeIssue[]}) {
   const [query,setQuery] = useState('')
-  const search = useRef<HTMLInputElement>(null)
-  useEffect(()=>{if(invalid)search.current?.focus()},[invalid])
-  const candidates = [...new Map<string,Scope>([...value,...scopes].map(s=>[key(s),s])).values()]
+  const invalidIndexes = value.flatMap((scope,index)=>completeScope(scope)?[]:[index+1])
+  const positions = [...new Set([...invalidIndexes,...issues.map(issue=>issue.path[1]+1)])].sort((a,b)=>a-b)
+  const search = useRef<HTMLInputElement>(null),errorId = useId(),invalid = Boolean(error) || positions.length>0
+  useEffect(()=>{if(error)search.current?.focus()},[error])
+  // Keep invalid existing selections removable, but never offer new incomplete rows.
+  const candidates = [...new Map<string,Scope>([...value,...scopes.filter(completeScope)].map(s=>[key(s),s])).values()]
   return <FieldSet className="gap-2" data-invalid={invalid}><FieldLegend className="mb-0" variant="label">{label}</FieldLegend><FieldDescription>只监听选中的群，Telegram 话题单独选择。</FieldDescription>
-    <Input ref={search} aria-label={'搜索'+label} aria-invalid={invalid} aria-describedby={invalid?'automation-scope-error':undefined} placeholder="搜索群名" value={query} onChange={e=>setQuery(e.target.value)} />
-    {invalid && <FieldError id="automation-scope-error">{scopeRequired}</FieldError>}
+    <Input ref={search} aria-label={'搜索'+label} aria-invalid={invalid} aria-describedby={invalid?errorId:undefined} placeholder="搜索群名" value={query} onChange={e=>setQuery(e.target.value)} />
+    {invalid && <FieldError id={errorId}>{error || '存在无效范围，请修复后保存'}</FieldError>}
+    {positions.length>0 && <FieldDescription>第 {positions.join('、')} 项范围不完整，请移除后重新选择。</FieldDescription>}
+    {invalidIndexes.length>0 && <Button type="button" variant="outline" size="sm" className="self-start" aria-label={'移除无效'+label} onClick={()=>onChange(value.filter(completeScope))}>移除无效范围（{invalidIndexes.length}）</Button>}
     {!candidates.length && <FieldDescription>暂无可选群。请先登录微信 / Telegram，确认群目录或绑定已加载，再刷新配置。</FieldDescription>}
-    <div className="flex max-h-52 flex-col gap-2 overflow-y-auto">{candidates.filter(s=>JSON.stringify(s).toLowerCase().includes(query.toLowerCase())).map(s=><Field orientation="horizontal" key={key(s)}><FieldLabel className="min-w-0 break-all">{s.source==='wechat'?'微信':'Telegram'} · {s.name || s.groupId}{s.topicId?` / 话题 ${s.topicId}`:''}{!scopes.some(current=>key(current)===key(s)) && <span className="text-xs text-muted-foreground">当前不可用，请核对账号或刷新目录</span>}</FieldLabel><Switch aria-label={`${label} ${s.name || s.groupId}`} checked={value.some(v=>key(v)===key(s))} onCheckedChange={checked=>onChange(checked?[...value,cleanScope(s)]:value.filter(v=>key(v)!==key(s)))} /></Field>)}</div>
+    <div className="flex max-h-52 flex-col gap-2 overflow-y-auto">{candidates.filter(s=>!completeScope(s) || JSON.stringify(s).toLowerCase().includes(query.toLowerCase())).map(s=><Field orientation="horizontal" key={key(s)}><FieldLabel className="min-w-0 break-all">{s.source==='wechat'?'微信':'Telegram'} · {s.name || s.groupId || '未选择群（无效范围）'}{s.topicId?` / 话题 ${s.topicId}`:''}{(!completeScope(s) || !scopes.some(current=>key(current)===key(s))) && <span className="text-xs text-muted-foreground">{completeScope(s)?'当前不可用，请核对账号或刷新目录':'范围不完整，请取消后重新选择'}</span>}</FieldLabel><Switch aria-label={`${label} ${s.name || s.groupId || '未选择群（无效范围）'}`} checked={value.some(v=>key(v)===key(s))} onCheckedChange={checked=>onChange(checked?[...value,cleanScope(s)]:value.filter(v=>key(v)!==key(s)))} /></Field>)}</div>
   </FieldSet>
 }
 export function AutomationPanel({token}:{token:string}) {
@@ -73,13 +91,19 @@ export function AutomationPanel({token}:{token:string}) {
   const [event,setEvent] = useState(''),[result,setResult] = useState('')
   const [requirement,setRequirement] = useState(''),[showPrompt,setShowPrompt] = useState(false)
   const [busy,setBusy] = useState(false),[error,setError] = useState(''),[notice,setNotice] = useState('')
+  const [scopeIssues,setScopeIssues] = useState<AutomationScopeIssue[]>([])
   const current = meta?.scripts.find(s=>s.id===scriptId)
   const dirty = !!source && (source!==current?.draft || name!==current?.name)
   const perform = async <T,>(action:()=>Promise<T>,message='')=>{
     if(busyRef.current)return
-    busyRef.current=true;setBusy(true);setError('');setNotice('')
+    busyRef.current=true;setBusy(true);setError('');setScopeIssues([]);setNotice('')
     try {const result=await action();if(message && result!==false)setNotice(message);return result}
-    catch(e){const message=e instanceof Error?e.message:'操作失败';setError(errorNames[message] || message)}
+    catch(e){
+      const message=e instanceof Error?e.message:'操作失败',issues=e instanceof ApiError?readScopeIssues(e.issues):[]
+      setError(errorNames[message] || message);setScopeIssues(issues)
+      if(issues.some(issue=>issue.path[0]==='scopes'))setTab('rules')
+      if(issues.some(issue=>issue.path[0]==='targets')){setTab('rules');setAdvanced(true)}
+    }
     finally {busyRef.current=false;setBusy(false)}
   }
   const reload = ()=>perform(async()=>{const next=await request<Metadata>('/api/automation',token);setMeta(next);return next})
@@ -96,7 +120,7 @@ export function AutomationPanel({token}:{token:string}) {
   }
   const chooseRule = (id:string)=>{
     const saved=meta?.rules.find(r=>r.id===id)
-    setRuleId(id);setError('');setNotice('');setResult('')
+    setRuleId(id);setError('');setScopeIssues([]);setNotice('');setResult('')
     if(saved){const {id:ignored,version,failures,lastRun,daily,...input}=saved;void ignored;void version;void failures;void lastRun;void daily;ruleBaseline.current=JSON.stringify(input);setRule(input);setParams(JSON.stringify(saved.params,null,2))}
     else if(meta){const fresh=newRule(meta.scripts.find(s=>s.id===scriptId && s.versions.length) || meta.scripts.find(s=>s.versions.length),meta);ruleBaseline.current=JSON.stringify(fresh);setRule(fresh);setParams(JSON.stringify(fresh.params,null,2))}
   }
@@ -107,6 +131,8 @@ export function AutomationPanel({token}:{token:string}) {
   }
   const prepareRule = ():RuleInput=>{
     if(!rule.scopes.length)throw Error(scopeRequired)
+    if(rule.scopes.some(scope=>!completeScope(scope)))throw Error(scopeIncomplete)
+    if(rule.targets.some(scope=>!completeScope(scope))){setAdvanced(true);throw Error(targetScopeIncomplete)}
     const script=meta?.scripts.find(s=>s.id===rule.scriptId)
     if(!script)throw Error('请选择要执行的函数')
     if(!script.versions.length)throw Error('这个函数还未发布，请先在函数库发布版本')
@@ -137,7 +163,7 @@ export function AutomationPanel({token}:{token:string}) {
     <CardHeader><div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>群消息自动化 <Badge variant="outline">开发版</Badge></CardTitle><Button variant="outline" disabled={busy} onClick={()=>void reload()}>刷新配置与记录</Button></div><CardDescription>选群 → 选择触发条件 → 执行函数。默认只预览，确认后再开启实际执行。</CardDescription></CardHeader>
     <CardContent className="flex min-w-0 flex-col gap-4">
       {!meta.available && <Alert><AlertDescription>当前为离线编辑：可以编写、发布函数和模拟，不能启用实际执行。请在 Bot 登录后刷新目录。</AlertDescription></Alert>}
-      {error && (error!==scopeRequired || tab!=='rules') && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {error && (![scopeRequired,scopeIncomplete].includes(error) || tab!=='rules') && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex h-auto flex-wrap"><TabsTrigger value="rules">群消息监听</TabsTrigger><TabsTrigger value="runs">运行记录</TabsTrigger><TabsTrigger value="scripts">函数库</TabsTrigger><TabsTrigger value="test">模拟测试</TabsTrigger></TabsList>
@@ -153,7 +179,7 @@ export function AutomationPanel({token}:{token:string}) {
         </TabsContent>
         <TabsContent value="rules"><FieldSet disabled={busy}><FieldGroup className="gap-4">
           <div className="flex flex-wrap items-end gap-3"><div className="min-w-0 flex-1"><Dropdown label="已有监听" value={ruleId} onChange={chooseRule} items={meta.rules.map(r=>({value:r.id,label:`${r.enabled?'●':'○'} ${r.name} · ${r.mode==='live'?'实际执行':'预览'}`}))} /></div><Button variant="outline" onClick={()=>chooseRule('')}>新建监听</Button></div>
-          <ScopePicker label="监听群组" invalid={error===scopeRequired} scopes={meta.available?meta.scopes:[{source:'wechat',accountId:'sample-account',groupId:'sample@chatroom',name:'离线模拟群（不会真实发送）'}]} value={rule.scopes} onChange={scopes=>{setRule({...rule,scopes});if(error===scopeRequired)setError('')}} />
+          <ScopePicker label="监听群组" issues={scopeIssues.filter(issue=>issue.path[0]==='scopes')} error={[scopeRequired,scopeIncomplete].includes(error)?error:undefined} scopes={meta.available?meta.scopes:[{source:'wechat',accountId:'sample-account',groupId:'sample@chatroom',name:'离线模拟群（不会真实发送）'}]} value={rule.scopes} onChange={scopes=>{setRule({...rule,scopes});setNotice('');setScopeIssues(current=>current.filter(issue=>issue.path[0]!=='scopes'));if([scopeRequired,scopeIncomplete].includes(error))setError('')}} />
           <Dropdown label="什么时候触发" value={rule.trigger} onChange={trigger=>setRule({...rule,trigger:trigger as RuleInput['trigger']})} items={[{value:'all',label:'收到文本或微信接龙'},{value:'message.received',label:'收到文本消息'},{value:'solitaire.received',label:'收到微信接龙'}]} />
           <Dropdown label="执行函数" value={rule.scriptId} onChange={selectRuleScript} items={meta.scripts.filter(s=>s.versions.length).map(s=>({value:s.id,label:s.name}))} />
           {!meta.scripts.some(s=>s.versions.length) && <Alert><AlertDescription>还没有可用函数。<Button variant="link" onClick={()=>setTab('scripts')}>去函数库创建</Button>可直接使用关键词回复或自动接龙模板，保存并发布后再选择。</AlertDescription></Alert>}
@@ -173,7 +199,7 @@ export function AutomationPanel({token}:{token:string}) {
                 <Field><FieldLabel htmlFor="automation-senders">指定发送者 ID（可选，逗号分隔）</FieldLabel><Input id="automation-senders" value={rule.senders.join(',')} onChange={e=>setRule({...rule,senders:e.target.value.split(',').map(s=>s.trim()).filter(Boolean)})} /></Field>
                 <Field><FieldLabel htmlFor="automation-params">完整函数参数（JSON）</FieldLabel><Textarea id="automation-params" className="font-mono" value={params} onChange={e=>setParams(e.target.value)} /></Field>
                 <FieldSet><FieldLegend variant="label">能力授权</FieldLegend><FieldDescription>只授予函数需要的操作。跨群发送还必须选择目标群；原生接龙缺少稳定标识时停止。</FieldDescription>{(Object.keys(permissionNames) as Permission[]).map(p=><Field orientation="horizontal" key={p}><FieldLabel htmlFor={'automation-permission-'+p}>{permissionNames[p]}</FieldLabel><Switch id={'automation-permission-'+p} checked={rule.permissions.includes(p)} onCheckedChange={checked=>setRule({...rule,permissions:checked?[...rule.permissions,p]:rule.permissions.filter(v=>v!==p)})} /></Field>)}</FieldSet>
-                {rule.permissions.includes('send') && <ScopePicker label="允许发送的目标群" scopes={meta.scopes} value={rule.targets} onChange={targets=>setRule({...rule,targets})} />}
+                {(rule.permissions.includes('send') || rule.targets.some(scope=>!completeScope(scope)) || scopeIssues.some(issue=>issue.path[0]==='targets')) && <ScopePicker label="允许发送的目标群" issues={scopeIssues.filter(issue=>issue.path[0]==='targets')} error={error===targetScopeIncomplete?error:undefined} scopes={meta.scopes} value={rule.targets} onChange={targets=>{setRule({...rule,targets});setNotice('');setScopeIssues(current=>current.filter(issue=>issue.path[0]!=='targets'));if(error===targetScopeIncomplete)setError('')}} />}
                 <Field><FieldLabel htmlFor="automation-cooldown">冷却秒数</FieldLabel><Input id="automation-cooldown" type="number" min={0} max={86400} value={rule.cooldownSeconds} onChange={e=>setRule({...rule,cooldownSeconds:Number(e.target.value)})} /></Field>
                 <Field><FieldLabel htmlFor="automation-quota">每日最多动作数</FieldLabel><Input id="automation-quota" type="number" min={1} max={500} value={rule.maxActionsPerDay} onChange={e=>setRule({...rule,maxActionsPerDay:Number(e.target.value)})} /></Field>
               </FieldGroup></FieldSet>

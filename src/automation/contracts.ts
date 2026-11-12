@@ -35,7 +35,10 @@ export interface AutomationRun {
     event:AutomationEvent;actions:AutomationAction[];logs:string[];error?:string
 }
 export function scopeKey(scope:AutomationScope):string {return JSON.stringify([scope.source,scope.accountId,scope.groupId,scope.topicId || ''])}
-export class AutomationError extends Error {constructor(public code:string,public status = 400){super(code)}}
+export interface AutomationScopeIssue {path:['scopes'|'targets',number,'accountId'|'groupId'];code:'required'}
+export class AutomationError extends Error {
+    constructor(public code:string,public status = 400,public issues?:AutomationScopeIssue[]){super(code)}
+}
 export const TEMPLATE = `export default async function handler(event, api, params) {
   if (event.type !== "solitaire.received") return;
   if (!event.solitaire.title.includes(params.keyword || "接龙")) return;

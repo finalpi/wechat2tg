@@ -14,6 +14,7 @@ import {createMiniAppAuth, normalizeMiniAppUrl} from './mini-app-auth'
 import {createMessageStreamHandler} from './message-stream'
 import {safeErrorDetails} from '../util/SafeError'
 import {AutomationEngine} from '../automation/engine'
+import {AutomationError} from '../automation/contracts'
 
 export interface RuntimeAdapter {
     read(): Promise<Record<string, unknown>>
@@ -179,7 +180,11 @@ export function createWebUIServer(options: Options) {
                     return respond(res,200,await ai('script',{requirement:body.requirement}))
                 }
                 try {return respond(res,200,route.endsWith('/test') ? await automationService().test(body) : await automationService().command(body))}
-                catch (error) {if (error?.name === 'ZodError') return respond(res,400,{error:'automationValidation'});throw error}
+                catch (error) {
+                    if(error instanceof AutomationError && error.issues)return respond(res,error.status,{error:error.code,issues:error.issues})
+                    if(error?.name === 'ZodError')return respond(res,400,{error:'automationValidation'})
+                    throw error
+                }
             }
             if (route === '/api/auth/logout') {
                 if (req.method !== 'POST') return respond(res, 405, {error: 'invalidRequest'})

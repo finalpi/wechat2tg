@@ -266,10 +266,6 @@ export function MessageComposer({token, contact, online, quote, draft, onClearQu
       <input ref={input} type="file" className="hidden" aria-label="选择附件" onChange={e => {chooseFile(e.target.files?.[0]); e.target.value = ''}} />
       <Button variant="ghost" size="icon" className="size-11 shrink-0" aria-label="附件" disabled={locked || !online || Boolean(quote) || all || selected.length > 0 || inlineMentions.length > 0} onClick={() => input.current?.click()}><Paperclip /></Button>
       <Button variant="ghost" size="icon" className="size-11 shrink-0" aria-label="微信表情" aria-expanded={showEmoji} disabled={locked} onClick={() => {setShowEmoji(value => !value); closeMembers()}}><Smile /></Button>
-      {contact.kind === 'group' && <Button variant="ghost" size="icon" className="size-11 shrink-0" aria-label="成员" aria-expanded={showMembers} disabled={locked || !online || Boolean(quote) || Boolean(file)} onClick={() => {
-        if (showMembers) {closeMembers(); return}
-        dismissedMention.current = ''; insertText(/[\w.+/-]$/.test(body.slice(0, selection.current.start)) ? ' @' : '@')
-      }}><AtSign /></Button>}
       <FieldGroup className="min-w-0 flex-1 gap-2"><Field>
         <FieldLabel htmlFor="message-body" className="sr-only">消息内容</FieldLabel>
         <MessageEditor ref={textarea} value={body} disabled={locked} group={contact.kind === 'group'} expanded={showMembers}

@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {createHash,randomUUID} from 'node:crypto'
 import {z} from 'zod'
-import {AI_PROMPT,SandboxResult,AutomationAdapter,AutomationError,AutomationEvent,AutomationRule,AutomationRun,AutomationScript,eventSchema,permissions,REPLY_TEMPLATE,ruleInputSchema,scopeKey,scopeSchema,TEMPLATE} from './contracts'
+import {AI_PROMPT,SandboxResult,AutomationAdapter,AutomationError,AutomationEvent,AutomationRule,AutomationRun,AutomationScript,AutomationScopeIssue,eventSchema,permissions,REPLY_TEMPLATE,ruleInputSchema,scopeKey,scopeSchema,TEMPLATE} from './contracts'
 import {sandbox} from './sandbox'
 
 const clone = <T>(value:T):T => {
@@ -15,6 +15,12 @@ const validateRule = (input:unknown) => {
                 const required = error.issues.some(issue => issue.path.length === 1 && issue.path[0] === field
                     && (issue.code === 'too_small' || (issue.code === 'invalid_type' && issue.received === 'undefined')))
                 if (required) throw new AutomationError(field === 'scopes' ? 'scopeRequired' : 'scriptRequired')
+            }
+            for(const field of ['scopes','targets']){
+                const issues:AutomationScopeIssue[] = error.issues.filter(issue=>issue.path.length === 3 && issue.path[0] === field
+                    && typeof issue.path[1] === 'number' && ['accountId','groupId'].includes(String(issue.path[2])) && issue.code === 'too_small')
+                    .map(issue=>({path:[field as 'scopes'|'targets',Number(issue.path[1]),issue.path[2] as 'accountId'|'groupId'],code:'required'}))
+                if(issues.length)throw new AutomationError(field === 'scopes' ? 'scopeIncomplete' : 'targetScopeIncomplete',400,issues)
             }
         }
         throw error
@@ -77,9 +83,16 @@ export class AutomationEngine {
         return createHash('sha256').update(JSON.stringify({scripts:this.data.scripts,rules})).digest('hex')
     }
     private checkRevision(revision:unknown) {if (revision !== this.revision()) throw new AutomationError('conflict',409)}
+    private async currentScopes() {
+        return (await this.adapter?.scopes() || []).flatMap(value=>{
+            if(!value || typeof value !== 'object')return []
+            const {name,...scope} = value,parsed = scopeSchema.safeParse(scope)
+            return parsed.success ? [{...parsed.data,name:typeof name === 'string' ? name : parsed.data.groupId}] : []
+        })
+    }
     async snapshot() {
         let scopes = []
-        try {scopes = await this.adapter?.scopes() || []} catch { /* Offline directory is not permission to accept arbitrary destinations. */ }
+        try {scopes = await this.currentScopes()} catch { /* Offline directory is not permission to accept arbitrary destinations. */ }
         return clone({revision:this.revision(),scripts:this.data.scripts,rules:this.data.rules,runs:this.data.runs.slice(-100).reverse(),samples:[...this.data.samples].reverse(),scopes,available:Boolean(this.adapter),permissions,prompt:AI_PROMPT,templates:{solitaire:TEMPLATE,reply:REPLY_TEMPLATE}})
     }
     async command(body:any) {
@@ -137,7 +150,7 @@ export class AutomationEngine {
     }
     private async verifyScopes(scopes:Array<z.infer<typeof scopeSchema>>) {
         if (!this.adapter) throw new AutomationError('automationRuntimeUnavailable',503)
-        const current = new Set((await this.adapter.scopes()).map(scopeKey))
+        const current = new Set((await this.currentScopes()).map(scopeKey))
         if (scopes.some(s=>!current.has(scopeKey(s)))) throw new AutomationError('scopeUnavailable',409)
     }
     private matches(rule:AutomationRule,event:AutomationEvent) {

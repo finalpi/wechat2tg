@@ -165,8 +165,8 @@ test('authenticated rule validation reports required selections without weakenin
  assert.equal(initial.scripts[0].versions.length,1)
  const rule = {name:'新应用规则',scriptId:initial.scripts[0].id,enabled:false,mode:'preview',scopes:[],targets:[],permissions:[],trigger:'all',keyword:'',senders:[],params:{keyword:'午餐',entry:'我的报名内容'},cooldownSeconds:10,maxActionsPerDay:20}
  const save = candidate=>post({operation:'saveRule',revision:initial.revision,rule:candidate,confirmLive:true})
- const expectError = async(response,error,status = 400)=>{
-  assert.equal(response.status,status);assert.deepEqual(await response.json(),{error})
+ const expectError = async(response,error,status = 400,issues)=>{
+  assert.equal(response.status,status);assert.deepEqual(await response.json(),{error,...(issues ? {issues} : {})})
  }
  // The original disabled/preview payload must identify the missing scope, not automationValidation.
  await expectError(await post({operation:'saveRule',rule,confirmLive:false,revision:initial.revision}),'scopeRequired')
@@ -180,6 +180,14 @@ test('authenticated rule validation reports required selections without weakenin
   const candidate = {...rule,scopes:[scope],scriptId}
   await expectError(await save(candidate),'scriptRequired')
   await expectError(await post({rule:candidate,event:event(),source:TEMPLATE},'/test'),'scriptRequired')
+ }
+ // A valid selection plus an empty second row is not an empty-list error and must never be silently dropped.
+ for(const field of ['scopes','targets'])for(const missing of [{groupId:''},{groupId:'   '},{accountId:''}]){
+  const candidate = {...rule,mode:'live',scopes:[scope],[field]:[scope,{...scope,...missing}]}
+  const expected = field === 'scopes' ? 'scopeIncomplete' : 'targetScopeIncomplete'
+  const issues = [{path:[field,1,Object.keys(missing)[0]],code:'required'}]
+  await expectError(await post({operation:'saveRule',revision:initial.revision,rule:candidate,confirmLive:false}),expected,400,issues)
+  await expectError(await post({rule:candidate,event:event(),source:TEMPLATE},'/test'),expected,400,issues)
  }
  // Wrong types, malformed nested scopes, unknown fields and bounds still use strict Zod validation.
  for(const patch of [{scopes:null},{scopes:{}},{scopes:[{}]},{scriptId:123},{scriptId:'x'.repeat(201)},{extra:true},{cooldownSeconds:-1}]){
@@ -198,6 +206,16 @@ test('authenticated rule validation reports required selections without weakenin
  assert.notEqual(saved.revision,initial.revision)
  await expectError(await save({...rule,scopes:[scope]}),'conflict',409)
  assert.equal(f.calls.length,0);assert.deepEqual(saved.runs,[])
+})
+test('automation directory excludes incomplete identities while disabled live rules save without confirmation',async t=>{
+ const f = await fixture(t)
+ f.adapter.scopes = async()=>[{...scope,name:'有效群'},{...scope,groupId:'',name:'空群'},{...scope,accountId:' ',name:'空账号'},{...scope,source:'invalid',name:'无效来源'}]
+ const snapshot = await f.engine.snapshot()
+ assert.deepEqual(snapshot.scopes,[{...scope,name:'有效群'}])
+ const saved = await f.save({enabled:false,mode:'live',params:{targetPosition:5},permissions:['reply','solitaire.join']},{confirmLive:false})
+ assert.equal(saved.rules[0].enabled,false);assert.equal(saved.rules[0].mode,'live')
+ assert.deepEqual(saved.rules[0].params,{targetPosition:5});assert.deepEqual(saved.rules[0].scopes,[scope])
+ assert.equal(f.calls.length,0)
 })
 test('AI generation sends only capability prompt and requirements, never executes output',async()=>{
  let request

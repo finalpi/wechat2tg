@@ -12,7 +12,7 @@ async function main() {
  assert(executablePath,'Chromium is required')
  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'automation-browser-')),token = 'automation-browser-only'
  const scope = {source:'wechat',accountId:'self',groupId:'test@chatroom'},calls = []
- let availableScopes = [{...scope,name:'测试微信群'}]
+ let availableScopes = [{...scope,name:'测试微信群'},{...scope,groupId:'',name:'目录空群不应展示'}]
  const engine = new AutomationEngine(path.join(dir,'automations.json'),{scopes:async()=>availableScopes,execute:async(...args)=>{calls.push(args);return {status:'success'}}})
  const server = createWebUIServer({environment:{},token,file:path.join(dir,'settings.json'),automation:engine})
  server.listen(0,'127.0.0.1');await once(server,'listening')
@@ -28,6 +28,7 @@ async function main() {
   await page.getByRole('button',{name:'进入控制台'}).click()
   await page.locator('aside').getByRole('button',{name:'自动化',exact:true}).click()
   assert.equal(await page.getByRole('tab',{name:'群消息监听',exact:true}).getAttribute('aria-selected'),'true')
+  assert.equal(await page.getByRole('switch',{name:'监听群组 目录空群不应展示',exact:true}).count(),0)
   let mutations = 0
   page.on('request',r=>{if(r.method() === 'POST' && r.url().endsWith('/api/automation'))mutations++})
   await page.getByRole('button',{name:'保存监听',exact:true}).click()
@@ -124,6 +125,95 @@ async function main() {
   await page.getByText('已发布新版本，关联规则已暂停。').waitFor()
   meta = await engine.snapshot();assert.equal(meta.rules[0].enabled,false);assert.equal(meta.rules[0].mode,'preview')
   await page.getByRole('tab',{name:'群消息监听',exact:true}).click()
+  // Reproduce a paused live rule with one valid group and an invalid second selection.
+  const currentMeta = await engine.snapshot()
+  const {id:existingId,version:ignoredVersion,failures:ignoredFailures,lastRun:ignoredRun,daily:ignoredDaily,...existingRule} = currentMeta.rules[0]
+  void ignoredVersion;void ignoredFailures;void ignoredRun;void ignoredDaily
+  await engine.command({operation:'saveRule',id:existingId,revision:currentMeta.revision,confirmLive:false,
+   rule:{...existingRule,enabled:false,mode:'live',scopes:[scope],targets:[],permissions:['reply','solitaire.join'],params:{targetPosition:5}}})
+  let malformedField = 'scopes',onlyInvalid = false
+  const malformedMetadata = async route=>{
+   if(route.request().method() !== 'GET')return route.continue()
+   const response = await route.fetch(),data = await response.json()
+   if(onlyInvalid)data.rules[0][malformedField] = [{...scope,groupId:''}]
+   else data.rules[0][malformedField].push({...scope,groupId:''})
+   data.scopes.push({...scope,groupId:'',name:'空白候选不应展示'})
+   await route.fulfill({response,json:data})
+  }
+  await page.route('**/api/automation',malformedMetadata)
+  await page.getByRole('button',{name:'刷新配置与记录',exact:true}).click()
+  await page.getByRole('button',{name:'新建监听',exact:true}).click()
+  assert.equal(await page.getByRole('switch',{name:'监听群组 空白候选不应展示',exact:true}).count(),0)
+  await page.getByRole('combobox',{name:'已有监听',exact:true}).click()
+  await page.getByRole('option',{name:'○ 工作群午餐 · 实际执行',exact:true}).click()
+  await page.getByLabel('搜索监听群组',{exact:true}).fill('测试')
+  const beforeIncomplete = mutations
+  await page.getByRole('button',{name:'保存监听',exact:true}).click()
+  await page.getByText('监听范围中有未选择的账号或群，请取消无效项后重新选择',{exact:true}).waitFor()
+  assert.equal(mutations,beforeIncomplete,'incomplete scope never reaches saveRule')
+  assert.equal(await page.getByLabel('搜索监听群组',{exact:true}).getAttribute('aria-invalid'),'true')
+  assert.equal(await page.getByLabel('targetPosition',{exact:true}).inputValue(),'5')
+  await page.getByText('第 2 项范围不完整，请移除后重新选择。',{exact:true}).waitFor()
+  await page.getByRole('button',{name:'移除无效监听群组',exact:true}).click()
+  assert.equal(await page.getByRole('switch',{name:'监听群组 未选择群（无效范围）',exact:true}).count(),0)
+  assert(await page.getByRole('switch',{name:'监听群组 测试微信群',exact:true}).isChecked())
+  await page.getByRole('button',{name:'保存监听',exact:true}).click()
+  await page.getByText('监听已保存。',{exact:true}).waitFor()
+  const repaired = (await engine.snapshot()).rules[0]
+  assert.deepEqual(repaired.scopes,[scope]);assert.equal(repaired.enabled,false);assert.equal(repaired.mode,'live')
+  assert.deepEqual(repaired.params,{targetPosition:5});assert.deepEqual(repaired.permissions,['reply','solitaire.join'])
+  assert.equal(calls.length,0,'saving a paused live rule must not execute it')
+  await page.unroute('**/api/automation',malformedMetadata)
+  // Exercise real backend validation and ApiError propagation, not a fabricated error response.
+  const rejectedRevision = (await engine.snapshot()).revision
+  const malformedRequest = async route=>{
+   if(route.request().method() !== 'POST')return route.continue()
+   const payload = route.request().postDataJSON()
+   payload.rule.scopes.push({...scope,groupId:''})
+   const response = await route.fetch({postData:JSON.stringify(payload)})
+   assert.equal(response.status(),400)
+   assert.deepEqual(await response.json(),{error:'scopeIncomplete',issues:[{path:['scopes',1,'groupId'],code:'required'}]})
+   await route.fulfill({response})
+  }
+  await page.route('**/api/automation',malformedRequest)
+  await page.getByRole('button',{name:'保存监听',exact:true}).click()
+  await page.getByText('第 2 项范围不完整，请移除后重新选择。',{exact:true}).waitFor()
+  assert.equal((await engine.snapshot()).revision,rejectedRevision)
+  assert.equal(await page.getByLabel('targetPosition',{exact:true}).inputValue(),'5')
+  assert.equal(await page.getByRole('button',{name:'移除无效监听群组',exact:true}).count(),0,'server error positions alone must not delete a valid local selection')
+  await page.unroute('**/api/automation',malformedRequest)
+  await page.getByRole('button',{name:'保存监听',exact:true}).click()
+  await page.getByText('监听已保存。',{exact:true}).waitFor()
+  // A bad optional target is repairable even when send permission is not enabled.
+  malformedField = 'targets'
+  await page.route('**/api/automation',malformedMetadata)
+  await page.getByRole('button',{name:'刷新配置与记录',exact:true}).click()
+  await page.getByRole('button',{name:'新建监听',exact:true}).click()
+  await page.getByRole('combobox',{name:'已有监听',exact:true}).click()
+  await page.getByRole('option',{name:'○ 工作群午餐 · 实际执行',exact:true}).click()
+  const beforeTargetRepair = mutations
+  await page.getByRole('button',{name:'保存监听',exact:true}).click()
+  await page.getByRole('dialog').getByRole('button',{name:'移除无效允许发送的目标群',exact:true}).click()
+  assert.equal(mutations,beforeTargetRepair)
+  await page.getByRole('button',{name:'完成设置',exact:true}).click()
+  await page.getByRole('button',{name:'保存监听',exact:true}).click()
+  await page.getByText('监听已保存。',{exact:true}).waitFor()
+  const targetRepaired = (await engine.snapshot()).rules[0]
+  assert.deepEqual(targetRepaired.targets,[]);assert.deepEqual(targetRepaired.permissions,['reply','solitaire.join'])
+  assert.equal(targetRepaired.enabled,false);assert.deepEqual(targetRepaired.params,{targetPosition:5})
+  // Removing the only invalid scope must still require a real group, never imply all groups.
+  malformedField = 'scopes';onlyInvalid = true
+  await page.getByRole('button',{name:'刷新配置与记录',exact:true}).click()
+  await page.getByRole('button',{name:'新建监听',exact:true}).click()
+  await page.getByRole('combobox',{name:'已有监听',exact:true}).click()
+  await page.getByRole('option',{name:'○ 工作群午餐 · 实际执行',exact:true}).click()
+  await page.getByRole('button',{name:'移除无效监听群组',exact:true}).click()
+  const beforeAllInvalid = mutations
+  await page.getByRole('button',{name:'保存监听',exact:true}).click()
+  await page.getByText('请选择至少一个监听群',{exact:true}).waitFor()
+  assert.equal(mutations,beforeAllInvalid)
+  assert.equal(calls.length,0)
+  await page.unroute('**/api/automation',malformedMetadata)
   for(const width of [390,320]) {
    await page.setViewportSize({width,height:720})
    assert(await page.evaluate(()=>document.documentElement.scrollWidth <= window.innerWidth + 1),'No horizontal overflow on mobile')

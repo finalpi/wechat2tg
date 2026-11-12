@@ -40,7 +40,7 @@ export type ConfigUpdate = Omit<ConfigSnapshot, 'fields' | 'groups'>
 export class ApiError extends Error {
   code: string
   status: number
-  constructor(message: string, code = 'serverError', status = 500) {
+  constructor(message: string, code = 'serverError', status = 500, public issues?: unknown) {
     super(message)
     this.code = code
     this.status = status
@@ -64,7 +64,7 @@ export async function request<T>(path: string, token: string, init?: RequestInit
   if (response.status === 401) throw new ApiError('访问令牌不正确，请重试。', 'unauthorized', 401)
   let body: any = {}
   try { body = await response.json() } catch { /* ignore */ }
-  if (!response.ok) throw new ApiError(body?.error === 'demoReadOnly' ? '演示模式下此功能只读，不会调用真实服务。' : body?.error || 'serverError', body?.error || 'serverError', response.status)
+  if (!response.ok) throw new ApiError(body?.error === 'demoReadOnly' ? '演示模式下此功能只读，不会调用真实服务。' : body?.error || 'serverError', body?.error || 'serverError', response.status, body?.issues)
   return body as T
 }
 
