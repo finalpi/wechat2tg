@@ -14,11 +14,12 @@ const floodWait = () => Object.assign(new Error('A wait of 690 seconds is requir
 
 function fixture({avatar = false} = {}) {
   let now = 1000
-  const logs = {log: [], warn: [], error: []}, requests = [], downloads = [], photoReads = [], uploads = [], saves = [], rows = new Map(), hooks = {}
+  const logs = {log: [], warn: [], error: []}, requests = [], downloads = [], photoReads = [], uploads = [], deletions = [], saves = [], rows = new Map(), hooks = {}
   const client = {
     getEntity: async id => hooks.entity ? hooks.entity(id) : ({className: 'Channel', megagroup: true, id, title: 'Old title'}),
     uploadFile: async () => {uploads.push(1); return {id: returnBigInt(1)}},
     downloadProfilePhoto: async entity => {photoReads.push(entity.id);return hooks.photo ? hooks.photo(entity) : Buffer.from('old-avatar')},
+    deleteMessages: async (entity,ids,options) => {deletions.push({entity,ids,options});if(hooks.delete)await hooks.delete(entity,ids,options)},
     invoke: async request => {
       requests.push(request)
       return hooks.invoke ? hooks.invoke(request) : undefined
@@ -54,7 +55,7 @@ function fixture({avatar = false} = {}) {
     rows.set(id, {chatId: id, wxId: `room_${id}@chatroom`, type: 1, name: 'Old title', avatarLink: avatar ? 'old-avatar' : undefined})
     return {chatId: id, wxId: `room_${id}@chatroom`, type: 1, name: 'New title', avatarLink: avatar ? 'new-avatar' : undefined}
   }
-  return {client, service, input, rows, requests, downloads, photoReads, uploads, saves, logs, hooks, advance: ms => {now += ms}}
+  return {client, service, input, rows, requests, downloads, photoReads, uploads, deletions, saves, logs, hooks, advance: ms => {now += ms}}
 }
 
 test('a title FloodWait suppresses subsequent group metadata RPCs across service instances', async () => {
@@ -398,4 +399,85 @@ test('high-contrast line art survives the actual upload and Telegram resampling 
     const telegram=await sharp(uploaded.buffer).resize(640,640).jpeg({quality:85}).toBuffer()
     assert.equal(await sameGroupAvatar(uploaded.buffer,telegram),true,`same line art with spacing ${step}`)
   }
+})
+
+function photoReceipt(kind, id=101) {
+  const peer = kind==='Channel' ? new Api.PeerChannel({channelId:returnBigInt(12345)}) : new Api.PeerChat({chatId:returnBigInt(12345)})
+  const foreign = kind==='Channel' ? new Api.PeerChannel({channelId:returnBigInt(67890)}) : new Api.PeerChat({chatId:returnBigInt(67890)})
+  const notice = (messageId,target,action=new Api.MessageActionChatEditPhoto({photo:new Api.PhotoEmpty({id:returnBigInt(1)})}))=>new Api.MessageService({id:messageId,peerId:target,date:1,action})
+  const message = notice(id,peer)
+  return {updates:[
+    {message},{message},
+    {message:notice(102,foreign)},
+    {message:notice(103,peer,new Api.MessageActionChatEditTitle({title:'Other service notice'}))},
+    {message:new Api.Message({id:104,peerId:peer,date:1,message:'Normal chat message'})},
+    {message:notice(-1,peer)},
+    {message:notice(2147483648,peer)},
+  ]}
+}
+
+for(const kind of ['Chat','Channel']) {
+  test(`a successful ${kind} avatar update removes only its confirmed photo service notice`,async()=>{
+    const f=fixture({avatar:true}),input=f.input(-10001)
+    f.hooks.entity=async()=>({className:kind,megagroup:true,id:returnBigInt(12345),title:'Old title'})
+    f.hooks.invoke=async request=>{
+      if(request instanceof Api.channels.EditPhoto || request instanceof Api.messages.EditChatPhoto)return photoReceipt(kind)
+    }
+    await f.service().updateGroup(input)
+    assert.equal(f.uploads.length,1)
+    assert.equal(f.deletions.length,1)
+    assert.deepEqual([...f.deletions[0].ids],[101])
+    assert.equal(f.deletions[0].options.revoke,true)
+    assert.equal(String(f.deletions[0].entity.id),'12345')
+    assert.equal(f.rows.get(input.chatId).avatarNoticeIds,null)
+    assert.match(f.rows.get(input.chatId).avatarHash,/^[a-f0-9]{64}$/)
+  })
+}
+
+test('a failed avatar notice deletion is persisted and retried without another photo upload',async()=>{
+  const f=fixture({avatar:true}),input=f.input(-10001)
+  f.hooks.entity=async()=>({className:'Channel',megagroup:true,id:returnBigInt(12345),title:'Old title'})
+  f.hooks.invoke=async request=>{if(request instanceof Api.channels.EditPhoto)return photoReceipt('Channel')}
+  f.hooks.delete=async()=>{throw Error('temporary network error')}
+  await f.service().updateGroup(input)
+  assert.equal(f.uploads.length,1)
+  assert.equal(f.rows.get(input.chatId).avatarNoticeIds,'[101]')
+  assert.match(f.rows.get(input.chatId).avatarHash,/^[a-f0-9]{64}$/)
+  delete f.hooks.delete
+  await f.service().updateGroup(input)
+  assert.equal(f.deletions.length,2)
+  assert.equal(f.uploads.length,1)
+  assert.equal(f.rows.get(input.chatId).avatarNoticeIds,null)
+})
+
+test('notice deletion FloodWait preserves confirmed avatar metadata and retries after the shared cooldown',async()=>{
+  const f=fixture({avatar:true}),input=f.input(-10001)
+  f.hooks.entity=async()=>({className:'Channel',megagroup:true,id:returnBigInt(12345),title:'Old title'})
+  f.hooks.invoke=async request=>{if(request instanceof Api.channels.EditPhoto)return photoReceipt('Channel')}
+  f.hooks.delete=async()=>{throw floodWait()}
+  await f.service().updateGroup(input)
+  assert.equal(f.requests.length,1,'the title edit waits for the metadata cooldown')
+  assert.equal(f.rows.get(input.chatId).avatarNoticeIds,'[101]')
+  assert.equal(f.rows.get(input.chatId).avatarLink,'new-avatar')
+  await f.service().updateGroup(input)
+  assert.equal(f.deletions.length,1)
+  f.advance(690000);delete f.hooks.delete
+  await f.service().updateGroup(input)
+  assert.equal(f.uploads.length,1)
+  assert.equal(f.deletions.length,2)
+  assert.equal(f.rows.get(input.chatId).avatarNoticeIds,null)
+  assert.equal(f.rows.get(input.chatId).name,'New title')
+})
+
+test('short update receipts also identify the avatar service message for deletion',async()=>{
+  const f=fixture({avatar:true}),input=f.input(-10001)
+  f.hooks.entity=async()=>({className:'Channel',megagroup:true,id:returnBigInt(12345),title:'Old title'})
+  f.hooks.invoke=async request=>{
+    if(request instanceof Api.channels.EditPhoto)return new Api.UpdateShort({
+      update:new Api.UpdateNewChannelMessage({message:photoReceipt('Channel').updates[0].message,pts:1,ptsCount:1}),date:1,
+    })
+  }
+  await f.service().updateGroup(input)
+  assert.deepEqual([...f.deletions[0].ids],[101])
+  assert.equal(f.rows.get(input.chatId).avatarNoticeIds,null)
 })

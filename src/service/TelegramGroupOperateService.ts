@@ -18,6 +18,13 @@ interface GroupMetadataState {
     blockedUntil: number
 }
 
+function avatarNoticeIds(value?: string): number[] {
+    try {
+        const ids = JSON.parse(value || '[]')
+        return Array.isArray(ids) ? [...new Set<number>(ids.filter(id => Number.isSafeInteger(id) && id > 0 && id <= 2147483647))] : []
+    } catch {return []}
+}
+
 export class TelegramGroupOperateService {
     // Startup, manual updates and new service instances share one metadata lane per account client.
     private static readonly metadataStates = new WeakMap<GramClient, GroupMetadataState>()
@@ -77,7 +84,8 @@ export class TelegramGroupOperateService {
                         const current = await this.client.downloadProfilePhoto(entity, {isBig: true})
                         if (!Buffer.isBuffer(current)) throw new Error('Unable to read current group avatar')
                         if (!current.length || !await sameGroupAvatar(avatar.buffer, current)) {
-                            await this.updateGroupAvatar(entity, avatar.buffer)
+                            const notices = await this.updateGroupAvatar(entity, avatar.buffer)
+                            if (notices.length) updated.avatarNoticeIds = JSON.stringify([...new Set([...avatarNoticeIds(updated.avatarNoticeIds), ...notices])])
                         }
                     }
                     updated.avatarLink = input.avatarLink
@@ -87,6 +95,20 @@ export class TelegramGroupOperateService {
                     // An avatar FloodWait must also stop the following title edit.
                     if (this.isFloodWaitError(error)) throw error
                     console.warn('[TelegramGroupOperateService] 更新群头像失败，保留原头像:', error?.message)
+                }
+            }
+            const notices = avatarNoticeIds(updated.avatarNoticeIds)
+            if (notices.length) {
+                try {
+                    await this.client.deleteMessages(entity, notices, {revoke: true})
+                    updated.avatarNoticeIds = null
+                    changed = true
+                    console.log(`[TelegramGroupOperateService] 已清理 ${notices.length} 条头像系统通知`)
+                } catch (error) {
+                    // The confirmed avatar/hash and receipt IDs still get saved.
+                    // A later metadata sync can retry deletion without another upload.
+                    if (this.isFloodWaitError(error)) throw error
+                    console.warn('[TelegramGroupOperateService] 头像系统通知清理待重试:', error?.code || error?.name)
                 }
             }
             const alias = input.type === 0 && input.alias === input.name ? '' : input.alias
@@ -130,21 +152,32 @@ export class TelegramGroupOperateService {
             file: toUpload,
             workers: 3,
         })
-        if (entity.className === 'Channel' && entity.megagroup) {
-            await this.client?.invoke(new Api.channels.EditPhoto({
+        const result = entity.className === 'Channel' && entity.megagroup
+            ? await this.client.invoke(new Api.channels.EditPhoto({
                 channel: entity,
                 photo: new Api.InputChatUploadedPhoto({
                     file: file,
                 })
             }))
-        } else {
-            await this.client?.invoke(new Api.messages.EditChatPhoto({
+            : await this.client.invoke(new Api.messages.EditChatPhoto({
                 chatId: entity.id,
                 photo: new Api.InputChatUploadedPhoto({
                     file: file,
                 })
             }))
+        const notices: number[] = []
+        const updates = Array.isArray((result as any)?.updates) ? (result as any).updates
+            : result instanceof Api.UpdateShort ? [result.update] : []
+        for (const update of updates) {
+            const message = update.message
+            if (!(message instanceof Api.MessageService) || !(message.action instanceof Api.MessageActionChatEditPhoto)) continue
+            const peer = message.peerId
+            const samePeer = entity.className === 'Channel'
+                ? peer instanceof Api.PeerChannel && String(peer.channelId) === String(entity.id)
+                : peer instanceof Api.PeerChat && String(peer.chatId) === String(entity.id)
+            if (samePeer && Number.isSafeInteger(message.id) && message.id > 0 && message.id <= 2147483647) notices.push(message.id)
         }
+        return [...new Set(notices)]
     }
 
     private isFloodWaitError(e: any): boolean {
