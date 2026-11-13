@@ -52,6 +52,12 @@ export class Configuration {
     })
     syncWechat: boolean
 
+    @Column({default: false})
+    deleteAvatarNotices: boolean
+
+    @Column({default: false})
+    deleteTitleNotices: boolean
+
     // 语音转文字
     @Column({
         default: true

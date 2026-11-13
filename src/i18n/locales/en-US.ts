@@ -19,6 +19,8 @@ const enUS = {
   'settings.emoji_picture': 'Display WeChat emoji as image links',
   'settings.self_message': 'Forward messages sent by yourself in WeChat',
   'settings.sync_wechat': 'Sync group info on startup',
+  'settings.delete_avatar_notices': 'Automatically delete avatar change notices',
+  'settings.delete_title_notices': 'Automatically delete group name change notices',
   'settings.auto_transcript': 'Voice to text conversion',
   'settings.option_on': 'On',
   'settings.option_off': 'Off',

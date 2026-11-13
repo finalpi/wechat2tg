@@ -12,9 +12,10 @@ const floodWait = () => Object.assign(new Error('A wait of 690 seconds is requir
   code: 420, errorMessage: 'FLOOD', seconds: 690,
 })
 
-function fixture({avatar = false} = {}) {
+function fixture({avatar = false, deleteAvatarNotices = false, deleteTitleNotices = false} = {}) {
   let now = 1000
   const logs = {log: [], warn: [], error: []}, requests = [], downloads = [], photoReads = [], uploads = [], deletions = [], saves = [], rows = new Map(), hooks = {}
+  const preferences = {deleteAvatarNotices, deleteTitleNotices}
   const client = {
     getEntity: async id => hooks.entity ? hooks.entity(id) : ({className: 'Channel', megagroup: true, id, title: 'Old title'}),
     uploadFile: async () => {uploads.push(1); return {id: returnBigInt(1)}},
@@ -33,7 +34,7 @@ function fixture({avatar = false} = {}) {
     },
   }
   const modules = {
-    './ConfigurationService': {ConfigurationService: {getInstance: () => ({})}},
+    './ConfigurationService': {ConfigurationService: {getInstance: () => ({getConfig:async()=>({...preferences})})}},
     '../config': {config: {CREATE_CONTACT_NAME: 'contact', CREATE_ROOM_NAME: 'room'}},
     '../util/FormatUtils': {FormatUtils: {transformTitleStr: (_template, alias, name, room) => room || alias || name}},
     '../util/FileUtils': {FileUtils: {getInstance: () => ({downloadUrl2Buffer: async url => {downloads.push(url); return hooks.download ? hooks.download(url) : Buffer.from(url)}})}},
@@ -55,7 +56,7 @@ function fixture({avatar = false} = {}) {
     rows.set(id, {chatId: id, wxId: `room_${id}@chatroom`, type: 1, name: 'Old title', avatarLink: avatar ? 'old-avatar' : undefined})
     return {chatId: id, wxId: `room_${id}@chatroom`, type: 1, name: 'New title', avatarLink: avatar ? 'new-avatar' : undefined}
   }
-  return {client, service, input, rows, requests, downloads, photoReads, uploads, deletions, saves, logs, hooks, advance: ms => {now += ms}}
+  return {client, service, input, rows, requests, downloads, photoReads, uploads, deletions, saves, logs, hooks, preferences, advance: ms => {now += ms}}
 }
 
 test('a title FloodWait suppresses subsequent group metadata RPCs across service instances', async () => {
@@ -418,7 +419,7 @@ function photoReceipt(kind, id=101) {
 
 for(const kind of ['Chat','Channel']) {
   test(`a successful ${kind} avatar update removes only its confirmed photo service notice`,async()=>{
-    const f=fixture({avatar:true}),input=f.input(-10001)
+    const f=fixture({avatar:true,deleteAvatarNotices:true}),input=f.input(-10001)
     f.hooks.entity=async()=>({className:kind,megagroup:true,id:returnBigInt(12345),title:'Old title'})
     f.hooks.invoke=async request=>{
       if(request instanceof Api.channels.EditPhoto || request instanceof Api.messages.EditChatPhoto)return photoReceipt(kind)
@@ -435,7 +436,7 @@ for(const kind of ['Chat','Channel']) {
 }
 
 test('a failed avatar notice deletion is persisted and retried without another photo upload',async()=>{
-  const f=fixture({avatar:true}),input=f.input(-10001)
+  const f=fixture({avatar:true,deleteAvatarNotices:true}),input=f.input(-10001)
   f.hooks.entity=async()=>({className:'Channel',megagroup:true,id:returnBigInt(12345),title:'Old title'})
   f.hooks.invoke=async request=>{if(request instanceof Api.channels.EditPhoto)return photoReceipt('Channel')}
   f.hooks.delete=async()=>{throw Error('temporary network error')}
@@ -451,7 +452,7 @@ test('a failed avatar notice deletion is persisted and retried without another p
 })
 
 test('notice deletion FloodWait preserves confirmed avatar metadata and retries after the shared cooldown',async()=>{
-  const f=fixture({avatar:true}),input=f.input(-10001)
+  const f=fixture({avatar:true,deleteAvatarNotices:true}),input=f.input(-10001)
   f.hooks.entity=async()=>({className:'Channel',megagroup:true,id:returnBigInt(12345),title:'Old title'})
   f.hooks.invoke=async request=>{if(request instanceof Api.channels.EditPhoto)return photoReceipt('Channel')}
   f.hooks.delete=async()=>{throw floodWait()}
@@ -470,7 +471,7 @@ test('notice deletion FloodWait preserves confirmed avatar metadata and retries 
 })
 
 test('short update receipts also identify the avatar service message for deletion',async()=>{
-  const f=fixture({avatar:true}),input=f.input(-10001)
+  const f=fixture({avatar:true,deleteAvatarNotices:true}),input=f.input(-10001)
   f.hooks.entity=async()=>({className:'Channel',megagroup:true,id:returnBigInt(12345),title:'Old title'})
   f.hooks.invoke=async request=>{
     if(request instanceof Api.channels.EditPhoto)return new Api.UpdateShort({
@@ -480,4 +481,51 @@ test('short update receipts also identify the avatar service message for deletio
   await f.service().updateGroup(input)
   assert.deepEqual([...f.deletions[0].ids],[101])
   assert.equal(f.rows.get(input.chatId).avatarNoticeIds,null)
+})
+
+for(const kind of ['Chat','Channel'])for(const deleteAvatarNotices of [false,true])for(const deleteTitleNotices of [false,true]){
+  test(`${kind} notice settings are independent: avatar=${deleteAvatarNotices}, title=${deleteTitleNotices}`,async()=>{
+    const f=fixture({avatar:true,deleteAvatarNotices,deleteTitleNotices}),input=f.input(-10001)
+    f.hooks.entity=async()=>({className:kind,megagroup:true,id:returnBigInt(12345),title:'Old title'})
+    f.hooks.invoke=async()=>photoReceipt(kind)
+    await f.service().updateGroup(input)
+    const deleted=f.deletions.flatMap(call=>[...call.ids])
+    assert.deepEqual(deleted,[...(deleteAvatarNotices?[101]:[]),...(deleteTitleNotices?[103]:[])])
+    assert.equal(f.rows.get(input.chatId).name,'New title')
+    assert.equal(f.uploads.length,1)
+  })
+}
+
+test('runtime title setting changes stop pending cleanup and resume it without a repeated title edit',async()=>{
+  const f=fixture({deleteTitleNotices:true}),input=f.input(-10001)
+  f.hooks.entity=async()=>({className:'Channel',megagroup:true,id:returnBigInt(12345),title:'Old title'})
+  f.hooks.invoke=async()=>photoReceipt('Channel')
+  f.hooks.delete=async()=>{throw Error('temporary network error')}
+  await f.service().updateGroup(input)
+  assert.equal(f.rows.get(input.chatId).titleNoticeIds,'[103]')
+  assert.equal(f.rows.get(input.chatId).name,'New title')
+  f.preferences.deleteTitleNotices=false
+  delete f.hooks.delete
+  await f.service().updateGroup(input)
+  assert.equal(f.deletions.length,1,'disabled cleanup leaves pending notices alone')
+  assert.equal(f.requests.length,1,'the title already changed successfully')
+  f.preferences.deleteTitleNotices=true
+  await f.service().updateGroup(input)
+  assert.equal(f.deletions.length,2)
+  assert.equal(f.requests.length,1)
+  assert.equal(f.rows.get(input.chatId).titleNoticeIds,null)
+})
+
+test('a title notice deletion FloodWait preserves the confirmed name and its pending receipt',async()=>{
+  const f=fixture({deleteTitleNotices:true}),input=f.input(-10001)
+  f.hooks.entity=async()=>({className:'Channel',megagroup:true,id:returnBigInt(12345),title:'Old title'})
+  f.hooks.invoke=async()=>photoReceipt('Channel')
+  f.hooks.delete=async()=>{throw floodWait()}
+  await f.service().updateGroup(input)
+  assert.equal(f.rows.get(input.chatId).name,'New title')
+  assert.equal(f.rows.get(input.chatId).titleNoticeIds,'[103]')
+  f.advance(690000);delete f.hooks.delete
+  await f.service().updateGroup(input)
+  assert.equal(f.requests.length,1)
+  assert.equal(f.rows.get(input.chatId).titleNoticeIds,null)
 })

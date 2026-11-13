@@ -51,6 +51,8 @@ export const fields: Field[] = [
     field('forward', 'WECHAT_CUSTOM_EMOJI_ENABLED', '微信行内自定义表情', '默认开启并自动验证发送资格，未确认资格时使用兼容展示。手动关闭或 compatible 模式优先。保存后重启生效。', 'boolean', {defaultValue:true}),
     runtime('forward', 'emojiPicture', '表情显示为图片链接', '表情显示为图片链接。'),
     runtime('forward', 'syncWechat', '启动时同步联系人与群组', '启动时同步联系人与群组。'),
+    runtime('forward', 'deleteAvatarNotices', '自动删除头像更换通知', '删除程序更换 Telegram 群头像产生的系统消息。默认关闭，保存后生效。'),
+    runtime('forward', 'deleteTitleNotices', '自动删除名称更改通知', '删除程序更改 Telegram 群名称产生的系统消息。默认关闭，保存后生效。'),
     field('forward', 'language', '机器人语言', '机器人语言。', 'select', {source: 'runtime', options: ['zh-CN', 'en-US']}),
     ...['CONTACT_MESSAGE', 'OFFICIAL_MESSAGE', 'ROOM_MESSAGE', 'CONTACT_MESSAGE_GROUP', 'OFFICIAL_MESSAGE_GROUP', 'ROOM_MESSAGE_GROUP', 'CREATE_ROOM_NAME', 'CREATE_CONTACT_NAME', 'MESSAGE_DISPLAY'].map((key, i) => field('templates', key, ['联系人消息前缀', '公众号消息前缀', '群聊消息前缀', '联系人绑定群前缀', '公众号绑定群前缀', '群聊绑定群前缀', '自动创建微信群名称', '自动创建联系人群名称', '消息正文格式'][i], key.startsWith('CREATE_') ? '支持 #[…] 占位符。' : '支持 HTML 与 #[…] 占位符；留空用默认格式。', 'textarea')),
     field('proxy', 'PROXY_PROTOCOL', 'Telegram 代理协议', '不使用代理时选直连。', 'select', {options: ['', 'socks5', 'http', 'https']}),

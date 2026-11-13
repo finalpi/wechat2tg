@@ -18,7 +18,7 @@ interface GroupMetadataState {
     blockedUntil: number
 }
 
-function avatarNoticeIds(value?: string): number[] {
+function noticeIds(value?: string): number[] {
     try {
         const ids = JSON.parse(value || '[]')
         return Array.isArray(ids) ? [...new Set<number>(ids.filter(id => Number.isSafeInteger(id) && id > 0 && id <= 2147483647))] : []
@@ -73,6 +73,7 @@ export class TelegramGroupOperateService {
             updated = {...stored}
             const entity = await this.client.getEntity(returnBigInt(input.chatId))
             if (!entity || !(entity.className === 'Chat' || entity.className === 'Channel' && entity.megagroup)) return
+            const preferences = await this.configService.getConfig()
             if (input.avatarLink && (input.avatarLink !== stored.avatarLink || !stored.avatarHash)) {
                 try {
                     const buff = await FileUtils.getInstance().downloadUrl2Buffer(input.avatarLink)
@@ -84,8 +85,11 @@ export class TelegramGroupOperateService {
                         const current = await this.client.downloadProfilePhoto(entity, {isBig: true})
                         if (!Buffer.isBuffer(current)) throw new Error('Unable to read current group avatar')
                         if (!current.length || !await sameGroupAvatar(avatar.buffer, current)) {
-                            const notices = await this.updateGroupAvatar(entity, avatar.buffer)
-                            if (notices.length) updated.avatarNoticeIds = JSON.stringify([...new Set([...avatarNoticeIds(updated.avatarNoticeIds), ...notices])])
+                            const result = await this.updateGroupAvatar(entity, avatar.buffer)
+                            if (preferences.deleteAvatarNotices === true) {
+                                const notices = this.metadataNoticeIds(result, entity, 'avatar')
+                                if (notices.length) updated.avatarNoticeIds = JSON.stringify([...new Set([...noticeIds(updated.avatarNoticeIds), ...notices])])
+                            }
                         }
                     }
                     updated.avatarLink = input.avatarLink
@@ -97,35 +101,27 @@ export class TelegramGroupOperateService {
                     console.warn('[TelegramGroupOperateService] 更新群头像失败，保留原头像:', error?.message)
                 }
             }
-            const notices = avatarNoticeIds(updated.avatarNoticeIds)
-            if (notices.length) {
-                try {
-                    await this.client.deleteMessages(entity, notices, {revoke: true})
-                    updated.avatarNoticeIds = null
-                    changed = true
-                    console.log(`[TelegramGroupOperateService] 已清理 ${notices.length} 条头像系统通知`)
-                } catch (error) {
-                    // The confirmed avatar/hash and receipt IDs still get saved.
-                    // A later metadata sync can retry deletion without another upload.
-                    if (this.isFloodWaitError(error)) throw error
-                    console.warn('[TelegramGroupOperateService] 头像系统通知清理待重试:', error?.code || error?.name)
-                }
-            }
+            if (preferences.deleteAvatarNotices === true) changed = await this.cleanupNotices(entity, updated, 'avatarNoticeIds') || changed
             const alias = input.type === 0 && input.alias === input.name ? '' : input.alias
             const name = input.type === 0
                 ? FormatUtils.transformTitleStr(config.CREATE_CONTACT_NAME, alias, input.name, '') || '未命名'
                 : FormatUtils.transformTitleStr(config.CREATE_ROOM_NAME, alias, '', input.name) || '未命名群聊'
             // GramJS may return a stale cached entity after a successful edit.
             if (updated.name !== name && entity.title !== name) {
-                await this.client.invoke(entity.className === 'Channel'
+                const result = await this.client.invoke(entity.className === 'Channel'
                     ? new Api.channels.EditTitle({channel: entity, title: name})
                     : new Api.messages.EditChatTitle({chatId: entity.id, title: name}))
+                if (preferences.deleteTitleNotices === true) {
+                    const notices = this.metadataNoticeIds(result, entity, 'title')
+                    if (notices.length) updated.titleNoticeIds = JSON.stringify([...new Set([...noticeIds(updated.titleNoticeIds), ...notices])])
+                }
             }
             if (updated.name !== name || updated.alias !== alias) {
                 updated.name = name
                 updated.alias = alias
                 changed = true
             }
+            if (preferences.deleteTitleNotices === true) changed = await this.cleanupNotices(entity, updated, 'titleNoticeIds') || changed
         } catch (error) {
             if (this.isFloodWaitError(error)) {
                 const seconds = Number(error.seconds)
@@ -152,7 +148,7 @@ export class TelegramGroupOperateService {
             file: toUpload,
             workers: 3,
         })
-        const result = entity.className === 'Channel' && entity.megagroup
+        return entity.className === 'Channel' && entity.megagroup
             ? await this.client.invoke(new Api.channels.EditPhoto({
                 channel: entity,
                 photo: new Api.InputChatUploadedPhoto({
@@ -165,12 +161,18 @@ export class TelegramGroupOperateService {
                     file: file,
                 })
             }))
+    }
+
+    private metadataNoticeIds(result: any, entity: any, kind: 'avatar' | 'title'): number[] {
         const notices: number[] = []
         const updates = Array.isArray((result as any)?.updates) ? (result as any).updates
             : result instanceof Api.UpdateShort ? [result.update] : []
         for (const update of updates) {
             const message = update.message
-            if (!(message instanceof Api.MessageService) || !(message.action instanceof Api.MessageActionChatEditPhoto)) continue
+            if (!(message instanceof Api.MessageService)) continue
+            const matchingAction = kind === 'avatar' ? message.action instanceof Api.MessageActionChatEditPhoto
+                : message.action instanceof Api.MessageActionChatEditTitle
+            if (!matchingAction) continue
             const peer = message.peerId
             const samePeer = entity.className === 'Channel'
                 ? peer instanceof Api.PeerChannel && String(peer.channelId) === String(entity.id)
@@ -178,6 +180,22 @@ export class TelegramGroupOperateService {
             if (samePeer && Number.isSafeInteger(message.id) && message.id > 0 && message.id <= 2147483647) notices.push(message.id)
         }
         return [...new Set(notices)]
+    }
+
+    private async cleanupNotices(entity: any, updated: BindGroup, key: 'avatarNoticeIds' | 'titleNoticeIds'): Promise<boolean> {
+        const notices = noticeIds(updated[key])
+        if (!notices.length) return false
+        try {
+            await this.client.deleteMessages(entity, notices, {revoke: true})
+            updated[key] = null
+            console.log(`[TelegramGroupOperateService] 已清理 ${notices.length} 条群组元数据通知`)
+            return true
+        } catch (error) {
+            // Keep the confirmed edit and receipt IDs for the next metadata sync.
+            if (this.isFloodWaitError(error)) throw error
+            console.warn('[TelegramGroupOperateService] 群组元数据通知清理待重试:', error?.code || error?.name)
+            return false
+        }
     }
 
     private isFloodWaitError(e: any): boolean {

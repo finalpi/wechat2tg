@@ -55,6 +55,8 @@ export class ConfigurationService {
 
         // 启动时同步群组信息
         this.setBooleanOptions(settingMap, 'syncWechat', config.syncWechat, this.i18n.t('settings.sync_wechat'))
+        this.setBooleanOptions(settingMap, 'deleteAvatarNotices', config.deleteAvatarNotices, this.i18n.t('settings.delete_avatar_notices'))
+        this.setBooleanOptions(settingMap, 'deleteTitleNotices', config.deleteTitleNotices, this.i18n.t('settings.delete_title_notices'))
 
         // 语音转文字
         this.setBooleanOptions(settingMap, 'autoTranscript', config.autoTranscript, this.i18n.t('settings.auto_transcript'))
