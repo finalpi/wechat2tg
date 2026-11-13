@@ -4,6 +4,7 @@ import {Button} from '@/components/ui/button'
 import {Dialog,DialogTrigger,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogClose} from '@/components/ui/dialog'
 import {Alert,AlertDescription} from '@/components/ui/alert'
 import type {usePwa} from '@/lib/use-pwa'
+import {TelegramHomeScreen} from './telegram-home-screen'
 
 export function ChatMenu({theme,onToggleTheme,onManage,onLogout,miniApp,pwa}:{
   theme:'light'|'dark';onToggleTheme:()=>void;onManage:()=>void;onLogout:()=>void;miniApp:boolean;pwa:ReturnType<typeof usePwa>
@@ -22,6 +23,7 @@ export function ChatMenu({theme,onToggleTheme,onManage,onLogout,miniApp,pwa}:{
         <DialogClose asChild><Button variant="outline" onClick={onManage}><Settings data-icon="inline-start" />管理设置</Button></DialogClose>
         <Button variant="outline" aria-label="切换主题" onClick={onToggleTheme}>{theme==='dark'?<Sun data-icon="inline-start" />:<Moon data-icon="inline-start" />}切换主题</Button>
         {!miniApp && document.fullscreenEnabled && <Button variant="outline" onClick={()=>void toggleFullscreen()}>{fullscreen?<Minimize />:<Maximize />}{fullscreen?'退出浏览器全屏':'浏览器全屏'}</Button>}
+        {miniApp && <TelegramHomeScreen />}
         {!miniApp && !pwa.installed && <Button variant="outline" onClick={()=>{setHelp(true);void pwa.install().then(ok=>{if(ok)setHelp(false)})}}><Download data-icon="inline-start" />安装应用</Button>}
         {!miniApp && pwa.installed && <p className="text-sm text-muted-foreground">已在独立应用窗口中打开</p>}
         {!miniApp && pwa.updateReady && <Button onClick={()=>void pwa.applyUpdate()}><RefreshCw data-icon="inline-start" />更新应用</Button>}

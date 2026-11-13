@@ -26,6 +26,7 @@ function fixture() {
       if (name === '../webui/message-visibility') return {isControlMessage: () => false}
       if (name === '../util/WechatCallStatus') return require('../dist/util/WechatCallStatus')
       if (name === '../util/WechatRedPacket') return require('../dist/util/WechatRedPacket')
+      if (name === '../util/RedPacketMessage') return require('../dist/util/RedPacketMessage')
       if (name === '../util/MessageTypeUtils') return require('../dist/util/MessageTypeUtils')
       if (name === '../util/TelegramTopicUtils') return require('../dist/util/TelegramTopicUtils')
       if (name === '../service/SolitaireService') return require('../dist/service/SolitaireService')

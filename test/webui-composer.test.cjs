@@ -91,7 +91,7 @@ test('WeChat emoji picker uses the existing local WebP catalog and sends support
   }
   assert(emoji.wechatEmojiByText.get('[微笑]'))
   const {MessageText} = load('features/message-content.tsx',{
-    '@/lib/wechat-emoji':emoji,'@/lib/messages-api':{},'@/components/ui/button':{},'./article-cards':{},'./media-attachment':{},
+    '@/lib/wechat-emoji':emoji,'@/lib/messages-api':{},'@/components/ui/button':{},'./article-cards':{},'./media-attachment':{},'./red-packet':{},
   })
   const html = require('react-dom/server').renderToStaticMarkup(require('react').createElement(MessageText,{body:'你好[微笑][不存在的表情]<script>plain</script>'}))
   assert(html.includes(`src="${emoji.wechatEmojiByText.get('[微笑]').url}"`))

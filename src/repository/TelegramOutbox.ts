@@ -48,7 +48,7 @@ export class TelegramOutbox {
         if(!account || !message.id)throw new Error('Forwarding account/message identity unavailable')
         const conversation = message.conversationWxId || message.wxId || ''
         const key = createHash('sha256').update(JSON.stringify([account,conversation,message.id,message.type])).digest('hex')
-        const kind:OutboxKind = message.type === 1 || message.articles?.some(article=>article.coverUrl) ? 'media' : message.type === 6 ? 'recall' : 'message'
+        const kind:OutboxKind = message.type === 1 || message.redPacket?.coverUrl || message.articles?.some(article=>article.coverUrl) ? 'media' : message.type === 6 ? 'recall' : 'message'
         const {file,...rest} = message
         if(file && !Buffer.isBuffer(file.file))throw new Error('Invalid forwarding media')
         const payload = JSON.stringify({...rest,...(file ? {file:{fileName:file.fileName,sendType:file.sendType,duration:file.duration}} : {})})

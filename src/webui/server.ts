@@ -242,6 +242,34 @@ export function createWebUIServer(options: Options) {
                 const image = await options.messages.avatar(wxId,roomId)
                 res.writeHead(200,{'Content-Type':'image/png','Content-Length':image.length});res.end(image);return
             }
+            const redPacketCoverRoute = route?.match(/^\/api\/media\/red-packet\/([1-9]\d*)$/)
+            if(redPacketCoverRoute){
+                const id = Number(redPacketCoverRoute[1])
+                if(req.method !== 'GET' || !options.messages?.redPacketCover)return respond(res,404,{error:'coverUnavailable'})
+                if(!Number.isSafeInteger(id))return respond(res,400,{error:'invalidRequest'})
+                const image = await options.messages.redPacketCover(id)
+                res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':image.length,'Cache-Control':'no-store'});res.end(image);return
+            }
+            const redPacketRoute = route?.match(/^\/api\/messages\/([1-9]\d*)\/red-packet$/)
+            if(redPacketRoute){
+                const id = Number(redPacketRoute[1])
+                if(!Number.isSafeInteger(id))return respond(res,400,{error:'invalidRequest'})
+                if(options.demo)return respond(res,403,{error:'demoReadOnly'})
+                if(req.method === 'GET'){
+                    if(!options.messages?.redPacketStatus)return respond(res,503,{error:'redPacketUnavailable'})
+                    return respond(res,200,await options.messages.redPacketStatus(id))
+                }
+                if(req.method !== 'POST')return respond(res,405,{error:'methodNotAllowed'})
+                if(!req.headers['content-type']?.startsWith('application/json'))return respond(res,415,{error:'jsonRequired'})
+                let size = 0,raw = ''
+                for await(const chunk of req){size += chunk.length;if(size > 256)return respond(res,413,{error:'tooLarge'});raw += chunk.toString()}
+                let body
+                try{body = JSON.parse(raw)}catch{return respond(res,400,{error:'invalidJson'})}
+                if(!body || body.confirm !== true || typeof body.confirmation !== 'string' || !/^[a-f0-9]{32}$/.test(body.confirmation)
+                    || Object.keys(body).some(key=>!['confirm','confirmation'].includes(key)))return respond(res,400,{error:'invalidRequest'})
+                if(!options.messages?.openRedPacket)return respond(res,503,{error:'redPacketUnavailable'})
+                return respond(res,200,await options.messages.openRedPacket(id,body.confirmation))
+            }
             const articleCoverRoute = route?.match(/^\/api\/media\/article\/([1-9]\d*)\/(\d+)$/)
             if(articleCoverRoute){
                 if(req.method !== 'GET' || !options.messages?.articleCover)return respond(res,404,{error:'coverUnavailable'})

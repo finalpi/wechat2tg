@@ -70,6 +70,8 @@ import {getTelegramThreadId, isSameTelegramDestination} from '../util/TelegramTo
 import {WechatAccountClassificationService} from '../service/WechatAccountClassificationService'
 import {createGroupMemberNameResolver} from '../service/GroupMemberNameService'
 import {sendSolitaireCreate, sendSolitaireJoin, solitaireCreateBody, solitaireJoinBody, solitaireJoins} from '../service/SolitaireService'
+import {handleRedPacketCallback} from '../service/RedPacketTelegram'
+import {loadRedPacketCover} from '../util/RedPacketCover'
 
 interface LargeFileProgressEditor {
     update(text: string, force?: boolean, inlineKeyboard?: Array<{ text: string, callback_data: string }>): Promise<void>
@@ -202,7 +204,7 @@ export class TelegramBotClient extends AbstractClient {
         this.telegramMessageQueue.push(item)
         // Media stays ordered without holding up later text in the same chat.
         const chat = item.message.chatId ?? 0
-        const kind = item.message.type === 1 || item.message.articles?.some(article=>article.coverUrl) ? 'media' : item.message.type === 6 ? 'recall' : 'message'
+        const kind = item.message.type === 1 || item.message.redPacket?.coverUrl || item.message.articles?.some(article=>article.coverUrl) ? 'media' : item.message.type === 6 ? 'recall' : 'message'
         const chatKey = `${chat}:${kind}`
         // A recall must follow earlier deliveries, but must not hold later text.
         const previous = kind === 'recall'
@@ -266,6 +268,10 @@ export class TelegramBotClient extends AbstractClient {
         if (message.type !== 6 && message.chatId && (!message.threadId || message.threadId === 1)
             && await this.bindGroupService.isManagedForum(message.chatId)) return {success: false}
         if (message.type === 0) {
+            if(message.redPacket?.coverUrl){
+                const result = await this.sendRedPacketMessage(message)
+                if(result !== undefined)return {success:result}
+            }
             if(message.articles?.length){
                 const result = await this.sendArticleMessage(message)
                 if(result !== undefined)return {success:result}
@@ -290,6 +296,31 @@ export class TelegramBotClient extends AbstractClient {
         }
 
         return {success: true}
+    }
+
+    private async sendRedPacketMessage(message:BaseMessage):Promise<boolean|undefined> {
+        const outboxId = this.telegramSendAttempt?.getStore()?.outboxId
+        if(outboxId && await this.messageBufferService.hasTextCheckpoint(outboxId))return undefined
+        if(!message.chatId)return undefined
+        let image:Buffer
+        try {image = await loadRedPacketCover(message.redPacket.coverUrl)} catch {return undefined}
+        const html = renderWechatCustomEmojiHtml(FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY,message.sender,message.content,message.memberName),config.WECHAT_CUSTOM_EMOJI_ENABLED,undefined,message.chatId)
+        if(splitTelegramHtml(html,1024).length !== 1)return undefined
+        const stored = this.createMessageEntity(message)
+        await this.messageService.createOrUpdate(stored)
+        let sent
+        try {
+            sent = await this.sendTelegramRequest(message.chatId,()=>this.messageSender.sendFile(message.chatId,{buff:image,filename:'red-packet-cover.jpg',fileType:'photo',caption:html},
+                {parse_mode:'HTML',message_thread_id:message.threadId,reply_id:message.param?.reply_id,inline_keyboard:message.param?.inline_keyboard}))
+        } catch(error) {
+            if(!this.currentDeliveryUncertain && !this.telegramSendAttempt?.getStore()?.accepted && articleMessageRejected(error))return undefined
+            throw error
+        }
+        const id = Number(sent?.message_id)
+        if(!Number.isSafeInteger(id) || id <= 0){this.currentDeliveryUncertain = true;return false}
+        stored.tgBotMsgId = id
+        await this.messageService.createOrUpdate(stored)
+        return true
     }
 
     private async sendArticleMessage(message:BaseMessage):Promise<boolean|undefined> {
@@ -987,6 +1018,8 @@ export class TelegramBotClient extends AbstractClient {
     private onBotAction(bot: Telegraf) {
         bot.action(/^dl:/, ctx => this.handleDirectoryCallback(ctx, ctx.match.input))
         bot.action(/^(?:us|of|ro):/, ctx => this.handleDirectoryCallback(ctx, ctx.match.input))
+        bot.action(/^rp(?:c|x)?:/, async ctx => handleRedPacketCallback(ctx,ctx.match.input,(await this.configurationService.getConfig()).chatId,
+            (chatId,threadId)=>this.bindGroupService.resolveTelegram(chatId,threadId)))
         bot.action(/^sl:/, ctx => this.handleSolitaireJoin(ctx, ctx.match.input))
         bot.action(/^slc:/, ctx => this.handleSolitaireCustom(ctx, ctx.match.input))
 

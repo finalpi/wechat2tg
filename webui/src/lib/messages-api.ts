@@ -37,6 +37,7 @@ export interface Transcript {
   truncated: boolean
 }
 export interface Article {title?:string;description?:string;url?:string;coverPath?:string}
+export interface RedPacketResult {state:'ready'|'opening'|'received'|'unavailable'|'unknown';canOpen:boolean;amountFen?:number;reason?:string;confirmation?:string}
 export interface ChatMessage {
   id: number
   requestId?: string
@@ -62,6 +63,7 @@ export interface ChatMessage {
   details?: {
     title?: string; description?: string; url?: string; coverPath?:string; mime?: string; size?: number
     articles?: Article[]
+    redPacket?: {title:string;coverPath?:string;canOpen:boolean}
     replyTo?: {id?: number; remoteId: string; wxId?: string; name?: string; preview?: string; type?: string}
     attachmentUnavailable?: boolean
   } | null
@@ -107,6 +109,8 @@ export const messagesApi = {
   members: (token: string, wxId: string, q = '', offset = 0, refresh = false, signal?: AbortSignal) =>
     request<MembersPage>(`/api/groups/members?${query({wxId, q, offset, refresh})}`, token, {signal}),
   send: (token: string, body: SendMessage) => request<ChatMessage>('/api/messages', token, {method: 'POST', body: JSON.stringify(body)}),
+  redPacket: (token:string,id:number) => request<RedPacketResult>(`/api/messages/${id}/red-packet`,token),
+  openRedPacket: (token:string,id:number,confirmation:string) => request<RedPacketResult>(`/api/messages/${id}/red-packet`,token,{method:'POST',body:JSON.stringify({confirm:true,confirmation})}),
   sync: (token: string, id: number, confirm = false) => request<{id: number; telegramStatus: string}>(`/api/messages/${id}/sync`, token, {method: 'POST', body: JSON.stringify({confirm})}),
   revoke: (token: string, id: number, requestId: string, confirmUncertain = false) =>
     request<{id: number; revokeStatus: string; revokeTelegramStatus: string}>(`/api/messages/${id}/revoke`, token, {method: 'POST', body: JSON.stringify({requestId, confirm: true, confirmUncertain})}),
@@ -137,6 +141,8 @@ export const messagesApi = {
 
 const errors: Record<string, string> = {
   networkError: '无法连接服务，请检查网络。',
+  redPacketUnavailable:'红包已失效、原始数据不足或不属于当前微信账号，请在微信查看。',
+  redPacketConfirmationExpired:'确认已过期，请重新查看红包后确认。',
   demoReadOnly: '演示模式不支持上传附件或修改服务配置；可以预览示例附件、模拟发送文字。', demoLimit: '本次演示消息已达上限，请重启 dev:webui 重置。',
   wechatOffline: '微信未连接，暂时无法发送。', messagesUnavailable: '消息服务未连接。', telegramOffline: 'Telegram 未连接。',
   sendQueueFull: '发送队列已满，请稍后重试。', mediaMissing: '附件暂不可用。', downloadTooLarge: '附件超过下载限制。',

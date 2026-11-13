@@ -14,12 +14,13 @@ function deferred() {
 }
 
 /** Loads the compiled client with only the collaborators each test needs. */
-function loadClient({getTranscript = async () => '转写文本', calls = [], statuses, clock, prepareArticles = async()=>undefined} = {}) {
+function loadClient({getTranscript = async () => '转写文本', calls = [], statuses, clock, prepareArticles = async()=>undefined, loadCover = async()=>Buffer.from('synthetic-cover')} = {}) {
   const stubs = {
     'node:async_hooks': require('node:async_hooks'),
     '../webui/delivery': require('../dist/webui/delivery'),
     'entities':require('entities'),
     '../util/TelegramArticleMessage':{...require('../dist/util/TelegramArticleMessage'),prepareTelegramArticles:prepareArticles},
+    '../util/RedPacketCover': {loadRedPacketCover:loadCover},
     '../util/FormatUtils': {FormatUtils:{transformIdentityBodyStr:(_template,_sender,content)=>content}},
     '../util/WechatCustomEmoji': require('../dist/util/WechatCustomEmoji'),
     '../util/TelegramPresentation': require('./helpers/telegram-presentation')(),
@@ -391,6 +392,39 @@ test('an existing text checkpoint prevents switching a partially sent article to
   q.client.sendTextMsgSynchronously = async()=>{texts++;return true}
   const result = await q.client.enqueueTelegramRetry({id:'article',type:0,chatId:-100,articles:[{title:'Title',coverUrl:'https://mmbiz.qpic.cn/a'}]},'stored-key')
   assert.equal(result.success,true);assert.equal(preparations,0);assert.equal(texts,1)
+})
+
+test('red-packet photos preserve templates, replies and action buttons with no fallback after ambiguous sends',async()=>{
+  for(const failure of [null,{response:{error_code:400,description:'Bad Request: PHOTO_INVALID'}},Object.assign(new Error('timeout'),{code:'ETIMEDOUT'}),{response:{error_code:429,parameters:{retry_after:1}}}]){
+    const q = queueFixture(loadClient());delete q.client.sendBufferedMessage
+    q.client.bindGroupService = {isManagedForum:async()=>false}
+    q.client.waitForTelegramSendSlot = async()=>undefined
+    const requests = [],saved = [];let texts = 0
+    q.client.messageService = {createOrUpdate:async value=>saved.push({...value})}
+    q.client.sendTextMsgSynchronously = async()=>{texts++;return true}
+    q.client.messageSender = {sendFile:async(...args)=>{requests.push(args);if(failure)throw failure;return {message_id:314}}}
+    const keyboard = [{text:'打开红包',callback_data:'rp:' + 'a'.repeat(32)}]
+    const result = await q.client.mirrorWebUI({id:'packet',type:0,chatId:-100,threadId:77,wxId:'room@chatroom',sender:'Sender',content:'红包说明',redPacket:{coverUrl:'https://wx.gtimg.com/cover.png'},param:{reply_id:44,inline_keyboard:keyboard}})
+    assert.equal(requests.length,1)
+    assert.equal(requests[0][1].fileType,'photo');assert.equal(requests[0][1].caption,'红包说明')
+    assert.equal(requests[0][2].message_thread_id,77);assert.equal(requests[0][2].reply_id,44)
+    assert.equal(requests[0][2].inline_keyboard,keyboard)
+    assert.equal(texts,failure?.response?.error_code === 400 ? 1 : 0)
+    if(!failure)assert.equal(saved.at(-1).tgBotMsgId,314)
+    if(failure?.code === 'ETIMEDOUT')assert.equal(result.deliveryUncertain,true)
+  }
+})
+
+test('missing red-packet covers and text checkpoints fall back before making any photo request',async()=>{
+  for(const checkpoint of [false,true]){
+    let loads = 0,texts = 0
+    const q = queueFixture(loadClient({loadCover:async()=>{loads++;throw Error('unavailable')}}));delete q.client.sendBufferedMessage
+    q.client.bindGroupService = {isManagedForum:async()=>false}
+    q.client.messageBufferService.hasTextCheckpoint = async()=>checkpoint
+    q.client.sendTextMsgSynchronously = async()=>{texts++;return true}
+    const result = await q.client.enqueueTelegramRetry({id:'packet',type:0,chatId:-100,redPacket:{coverUrl:'https://wx.gtimg.com/a.png'}},'packet-key')
+    assert.equal(result.success,true);assert.equal(texts,1);assert.equal(loads,checkpoint ? 0 : 1)
+  }
 })
 
 test('both lanes retain per-chat/global spacing and the shared flood deadline', async () => {

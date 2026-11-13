@@ -35,6 +35,19 @@ async function main(){
     assert.equal((await prepareGroupAvatar(png)).dHash,'0000000000000000')
     assert.equal(sameGroupAvatarDHash('0000000000000000','f000000000000000'),true)
     assert.equal(sameGroupAvatarDHash('0000000000000000','f800000000000000'),false)
+    const {RedPacketService} = app('./dist/service/RedPacketService')
+    let claims = 0
+    const packets = new RedPacketService(async()=>({accountId:'synthetic-self',ownerId:1,baseURL:'unused'}),async()=>{
+      claims++;return {status:200,data:{Code:0,Success:true,Data:{retcode:0,sendId:'synthetic-packet',receiveId:'synthetic-receipt',amount:1}}}
+    },path.join(directory,'packets.db'))
+    try {
+      const entry = await packets.register({accountId:'synthetic-self',conversation:'synthetic@chatroom',remoteId:'1',source:'<msg><appmsg><type>2001</type><wcpayinfo><paymsgid>synthetic-packet</paymsgid><nativeurl>wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=synthetic-packet</nativeurl></wcpayinfo></appmsg></msg>'})
+      const preview = await packets.prepare(entry.token,'smoke')
+      assert.equal(claims,0)
+      assert.equal((await packets.open(entry.token,preview.confirmation,'smoke')).state,'received')
+      assert.equal((await packets.open(entry.token,preview.confirmation,'smoke')).state,'received')
+      assert.equal(claims,1)
+    } finally {await packets.close()}
     const {sandbox} = app('./dist/automation/sandbox')
     const plan = await sandbox('export default function(e,api){api.log("runtime-ok")}',{}, {},[])
     assert.deepEqual(plan.logs,['runtime-ok'])
@@ -73,7 +86,7 @@ async function main(){
     for(const asset of assets)assert.equal((await fetch(origin + asset)).status,200,asset)
     assert(fs.readdirSync('/app/dist/webui/public/emoji').some(name=>/\.(png|webp)$/.test(name)))
     assert.equal((await fetch(origin + '/api/config',{headers:{Authorization:`Bearer ${token}`}})).status,200)
-    console.log('Runtime smoke passed: production-only dependencies, SQLite, sharp/dHash, QuickJS worker, FFmpeg, SILK roundtrip, TGS/GIF, WebUI/PWA and authenticated config; no real accounts.')
+    console.log('Runtime smoke passed: production-only dependencies, SQLite, synthetic red-packet journal, sharp/dHash, QuickJS worker, FFmpeg, SILK roundtrip, TGS/GIF, WebUI/PWA and authenticated config; no real accounts.')
   } finally {
     if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve))}
     fs.rmSync(directory,{recursive:true,force:true})

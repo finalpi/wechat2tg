@@ -14,6 +14,7 @@ export default interface BaseMessage {
     // Plain group display name, independent of the owner's contact remark.
     memberName?: string,
     articles?: PublicArticle[],
+    redPacket?: {coverUrl:string},
     // 消息类型 0:文本消息，1:文件消息，4: 名片消息,5: 位置消息,6:撤回消息
     type: 0 | 1 | 2 | 3 | 4 | 5 | 6,
     // 文件传输助手的 msgId

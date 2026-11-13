@@ -30,6 +30,7 @@ import {LogUtils} from '../util/LogUtil'
 import {WebMessageStore} from '../webui/message-store'
 import {isControlMessage} from '../webui/message-visibility'
 import {wechatRedPacketNotice} from '../util/WechatRedPacket'
+import {decorateRedPacketMessage} from '../util/RedPacketMessage'
 import {TelegramOutbox,TelegramOutboxEntry} from '../webui/telegram-outbox'
 import {quoteXML,sendQuote} from '../webui/quotes'
 import {withNativeWechatReceipt} from '../webui/wechat-receipt'
@@ -498,7 +499,8 @@ export class WeChatClient extends AbstractClient {
         await this.waitForLogin()
         if(isControlMessage(String(msg.type()),String(msg._xml || msg.text() || '')))return
         if(process.env.WEBUI_ENABLED !== 'false' && await WebMessageStore.getInstance().isManagedEcho(msg))return
-        this.logger.debug(`收到微信消息: type=${msg.type()}, msgId=${msg.newMsgId}, toId=${msg.toId}, text=${msg.text()?.substring(0, 100)}, xml=${msg._xml}`)
+        if(msg.type() === WxMessage.Type.RedPacket || /<wcpayinfo\b/i.test(String(msg._xml || '')))this.logger.debug('收到微信支付消息（隐藏支付载荷）')
+        else this.logger.debug(`收到微信消息: type=${msg.type()}, msgId=${msg.newMsgId}, toId=${msg.toId}, text=${msg.text()?.substring(0, 100)}, xml=${msg._xml}`)
 
         // TODO: 只处理新消息，丢弃历史消息（未来可以增加选项更好的保存聊天记录）
         if (msg.date() < this.startTime) {
@@ -877,7 +879,7 @@ export class WeChatClient extends AbstractClient {
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.RedPacket:
-                messageParam.content = wechatRedPacketNotice('red_packet',String(msg.text() || ''))
+                await decorateRedPacketMessage(messageParam,String(msg._xml || ''),this._wxInfo?.wxid || '',msg.self())
                 await WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.Transfer:

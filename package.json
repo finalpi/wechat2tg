@@ -1,6 +1,6 @@
 {
   "name": "wechat2tg",
-  "version": "6.0.41-dev.14",
+  "version": "6.0.41-dev.15",
   "description": "simple kit send wechat message to telegram",
   "main": "app.ts",
   "esModuleInterop": true,
@@ -15,7 +15,7 @@
     "test:mcp": "npm run build && node --test test/mcp.test.cjs",
     "mcp": "node scripts/wechat-mcp.cjs",
     "build:webui": "tsc -p webui/tsconfig.json && vite build --config webui/vite.config.ts",
-    "test:webui:browser": "npm run build && node scripts/test-webui-browser.cjs && node scripts/test-webui-config-browser.cjs && node scripts/test-mini-app-browser.cjs && node scripts/test-automation-browser.cjs && node scripts/test-pwa-chat-browser.cjs && node scripts/test-contact-directory-browser.cjs && node scripts/test-contact-refresh-browser.cjs && node scripts/test-chat-appearance-browser.cjs && node scripts/test-message-groups-browser.cjs && node scripts/test-webui-demo-browser.cjs && node scripts/test-telegram-health-browser.cjs",
+    "test:webui:browser": "npm run build && node scripts/test-webui-browser.cjs && node scripts/test-webui-config-browser.cjs && node scripts/test-mini-app-browser.cjs && node scripts/test-automation-browser.cjs && node scripts/test-pwa-chat-browser.cjs && node scripts/test-contact-directory-browser.cjs && node scripts/test-contact-refresh-browser.cjs && node scripts/test-chat-appearance-browser.cjs && node scripts/test-message-groups-browser.cjs && node scripts/test-webui-demo-browser.cjs && node scripts/test-telegram-health-browser.cjs && node scripts/test-red-packet-browser.cjs",
     "dev:webui": "node scripts/dev-webui.cjs"
   },
   "keywords": [],
@@ -27,6 +27,7 @@
     "crypto": "^1.0.1",
     "dotenv": "^16.0.3",
     "entities": "2.2.0",
+    "fast-xml-parser": "5.5.9",
     "ffmpeg-static": "^5.2.0",
     "file-box": "^1.4.15",
     "fluent-ffmpeg": "^2.1.2",

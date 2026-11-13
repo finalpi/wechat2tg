@@ -4,6 +4,7 @@ import {Button} from '@/components/ui/button'
 import {messagesApi, type ChatMessage, type Transcript} from '@/lib/messages-api'
 import {ArticleCards} from './article-cards'
 import {MediaAttachment} from './media-attachment'
+import {RedPacket} from './red-packet'
 import {wechatEmojiByText} from '@/lib/wechat-emoji'
 
 function emojiText(text: string): ReactNode {
@@ -122,7 +123,8 @@ export function MessageBody({token, message, onLocate}: {token: string; message:
     {quote && <Button variant="outline" size="sm" className="h-auto min-w-0 justify-start whitespace-normal py-2 text-left" onClick={() => onLocate(quote)}>
       <span className="flex min-w-0 flex-col gap-1"><span>{quote.name || '引用消息'}</span><span className="line-clamp-2 break-words">{quote.preview || '查看原消息'}</span></span>
     </Button>}
-    {message.body && !message.transcript && !(message.type==='link' && articles.length) && <MessageText body={message.body} format={message.bodyFormat} />}
+    {message.type === 'red_packet' && <RedPacket key={message.id} token={token} message={message} />}
+    {message.body && message.type !== 'red_packet' && !message.transcript && !(message.type==='link' && articles.length) && <MessageText body={message.body} format={message.bodyFormat} />}
     {articles.length > 0 && <ArticleCards token={token} articles={articles} />}
     {message.transcript ? <TranscriptView token={token} messageId={message.id} transcript={message.transcript} />
       : message.type === 'chat_histroy' && <span className="text-xs text-muted-foreground">聊天记录暂不可用。</span>}

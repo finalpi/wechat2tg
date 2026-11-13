@@ -27,6 +27,18 @@
 
 关闭配置后 Mini App 登录立即在下次应用启动时禁用；Telegram 中旧菜单可能仍显示，可用 BotFather 清除，但旧入口无法换取会话。所有需要重启生效的原 WebUI 配置，在 Mini App 中仍然需要重启，不会自动部署。
 
+## 添加到手机主屏幕
+
+聊天菜单 → **添加到主屏幕** 使用 Telegram Mini App 的 `addToHomeScreen()`，不是浏览器的 PWA 安装事件。客户端需支持 Bot API 8.0+ 对应的 Mini App 接口，实际是否支持由 `checkHomeScreenStatus()` 判断。
+
+- `missed`：可点击添加；`unknown`：设备支持，但无法判断是否已添加，仍允许用户主动操作。
+- `added` 或 `homeScreenAdded` 事件：显示已添加；`unsupported` / 旧版客户端：保留禁用入口并说明原因。
+- 打开菜单和状态检查不会自动弹安装提示。仅点击按钮才调用原生接口，不把“调用成功”当作“已添加”；部分设备不会回传添加结果，需自行查看手机主屏幕。
+- Mini App 不注册 PWA Service Worker，也不将 Telegram 启动凭据或短期会话写入快捷方式 URL / localStorage。普通浏览器仍使用原有 PWA 安装入口。
+- 此入口位于应用内的聊天菜单，不能强制改变 Telegram 客户端右上角原生菜单的项目；桌面端及部分手机环境可能不支持。
+
+官方依据：[Mini App 主屏幕接口](https://core.telegram.org/bots/webapps#initializing-mini-apps)。
+
 ## 反向代理示例
 
 在**已有 HTTPS server 块**中配置（证书、域名和鉴权策略由部署者管理）：

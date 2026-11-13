@@ -32,6 +32,11 @@ import {formatMessageIdentity, formatMessageQuote, formatMessageText, messageIde
 import {createGroupMemberNameResolver} from '../service/GroupMemberNameService'
 import {getChatHistory} from '../util/handleMsg'
 import {decodeHTML} from 'entities'
+import {readWechatRedPacket} from '../util/WechatRedPacket'
+import {loadRedPacketCover} from '../util/RedPacketCover'
+import {decorateRedPacketMessage} from '../util/RedPacketMessage'
+import {redPacketService} from '../service/RedPacketService'
+import {redPacketOwnedBy} from './red-packets'
 
 export interface MessageCenterAdapter {
     telegramDisplayStatus?():Promise<unknown>
@@ -56,10 +61,18 @@ export interface MessageCenterAdapter {
     sync?(messageId:number,confirm:boolean):Promise<unknown>
     avatar?(wxId:string,roomId?:string):Promise<Buffer>
     articleCover?(messageId:number,index:number):Promise<Buffer>
+    redPacketCover?(messageId:number):Promise<Buffer>
+    redPacketStatus?(messageId:number):Promise<unknown>
+    openRedPacket?(messageId:number,confirmation:string):Promise<unknown>
     transcriptAttachment?(messageId:number,path:string,id:string):Promise<MediaFile>
 }
 export class MessageCenterError extends Error {
     constructor(public code: string, public status = 400) {super(code)}
+}
+
+function parsePrivateMessageJSON(value:string) {
+    try {return JSON.parse(value)}
+    catch {throw new MessageCenterError('messageDataUnavailable',409)}
 }
 
 export function createMessageCenter(store = WebMessageStore.getInstance(),media = new WebMediaStore(store)): MessageCenterAdapter {
@@ -182,7 +195,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         if(!row)throw new MessageCenterError('mediaMissing',404)
         if(row.attachmentId)return media.get(row.attachmentId)
         if(!row.source)throw new MessageCenterError('mediaMissing',404)
-        const msg = new WxMessage(JSON.parse(row.source))
+        const msg = new WxMessage(parsePrivateMessageJSON(row.source))
         const box = await msg.toFileBox()
         if(!box)throw new MessageCenterError('mediaMissing',404)
         const buffer = await box.toBuffer()
@@ -202,7 +215,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         if(Number(found.payload?.dataLen) > MAX_DOWNLOAD_BYTES)throw new MessageCenterError('downloadTooLarge',413)
         const bot = AbstractClient.getSpyClient('botClient') as any
         if(!bot?.downloadChatHistoryAttachment)throw new MessageCenterError('messagesUnavailable',503)
-        const source = JSON.parse(row.source)
+        const source = parsePrivateMessageJSON(row.source)
         const stored = Object.assign(new Message(),{wxMsgId:row.remoteId,msgId:String(source.MsgId || ''),toWxid:source.ToUserName,wxSenderId:row.senderId,source_text:source.Content})
         const buffer = await bot.downloadChatHistoryAttachment(found,stored)
         const file = await media.save(found.fileName || 'attachment.bin','auto',(async function*(){yield buffer})(),'download')
@@ -269,6 +282,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
                 const senderId = row.senderId || (row.direction === 'outgoing' ? self?.wxid || '' : room ? '' : row.wxId)
                 const identity = await identityFor(senderId,row.direction === 'outgoing' ? ownName : row.senderName,row.bodyFormat === 'telegram_html')
                 const message:BaseMessage = {id:row.remoteId,wxId:row.wxId,conversationWxId:row.wxId,chatId:binding.chatId,threadId:binding.threadId,senderId,sender:formatMessageIdentity(config,identity),memberName:identity.memberName,content:escape(row.body),type:0,createTime:row.timestamp,toWxid:row.wxId,msgId:String(source?.ClientMsgId || source?.MsgId || row.remoteId)}
+                if(row.type === 'red_packet')await decorateRedPacketMessage(message,row.source || '',redPacketOwnedBy(row.source,self?.wxid || '') ? self.wxid : '',row.direction === 'outgoing')
                 if (row.type === 'solitaire' || row.type === 'quote') {
                     message.source_type = row.type
                     message.source_text = source?.xml || source?.Content
@@ -296,7 +310,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
                     message.content = history.content
                     message.param = {...message.param,nestedChatHistories:history.nestedRecords,chatHistoryAttachments:history.attachments}
                 }
-                else if(!['text','quote','solitaire'].includes(row.type)){
+                else if(!['text','quote','solitaire','red_packet'].includes(row.type)){
                     const details = await detailsFor(row)
                     if(row.type === 'link'){
                         message.articles = linkArticles(details)
@@ -314,7 +328,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         return {id:row.id,telegramStatus:'syncing'}
     }
     const detailsFor = async(row:any)=>{
-        const saved = row.details ? JSON.parse(row.details) : null
+        const saved = row.details ? parsePrivateMessageJSON(row.details) : null
         if(row.type === 'solitaire'){
             try {
                 const message = new WxMessage(JSON.parse(row.source || '{}'))
@@ -407,9 +421,9 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         for(const row of journal){try { const d = JSON.parse(row.details || '{}');if(d.origin === 'telegram' && d.telegram)covered.add(`${d.telegram.chatId}:${d.telegram.messageId}:${d.telegram.part}`) } catch { /* Malformed optional metadata leaves the existing fallback in place. */ }}
         return rows.filter(m=>m.type !== 6 && !(selfId && m.wxSenderId === selfId && covered.has(`${m.chatId}:${m.tgBotMsgId}:${m.type === 0 ? 'text' : 'media'}`))).map(m=>{
             const outgoing = Boolean(selfId && m.wxSenderId === selfId)
-            const kindMap = {image:'image',voice:'voice',video:'video',emoji:'emoji',file:'file',location:'location',contact:'contact',link:'link',quote:'quote',solitaire:'solitaire',chat_histroy:'chat_histroy',function_msg:'function_msg',unknown:'unknown',file_start:'file_start',new_monment_timeline:'new_monment_timeline'}
+            const kindMap = {image:'image',voice:'voice',video:'video',emoji:'emoji',file:'file',location:'location',contact:'contact',link:'link',quote:'quote',solitaire:'solitaire',red_packet:'red_packet',chat_histroy:'chat_histroy',function_msg:'function_msg',unknown:'unknown',file_start:'file_start',new_monment_timeline:'new_monment_timeline'}
             const type = kindMap[m.source_type] || ({3:'image',34:'voice',43:'video',47:'emoji',49:'file',48:'location',42:'contact'}[Number(m.source_type)]) || (m.type === 0 ? 'text' : 'file')
-            const typeCodes = {image:3,voice:34,video:43,emoji:47,file:49,link:49,quote:49,solitaire:49,location:48,contact:42,text:1}
+            const typeCodes = {image:3,voice:34,video:43,emoji:47,file:49,link:49,quote:49,solitaire:49,red_packet:49,location:48,contact:42,text:1}
             return {wxId,remoteId:m.wxMsgId && m.wxMsgId !== '0' ? m.wxMsgId : `legacy:${m.id}`,senderId:m.wxSenderId || '',senderName:m.sender || '',body:cleanMediaBody(type,String(m.content || (m.type === 0 && type === 'text' ? m.source_text : '') || '').slice(0,8000),m.source_text),direction:outgoing ? 'outgoing' : 'incoming',type,status:outgoing ? 'submitted' : 'received',timestamp:m.createTime || 0,telegramStatus:m.tgBotMsgId > 0 ? 'synced' : 'unverified',bodyFormat:'telegram_html',source:m.source_text ? JSON.stringify({MsgId:String(m.msgId || 0),FromUserName:wxId.endsWith('@chatroom') ? wxId : m.wxSenderId,ToUserName:m.toWxid,NewMsgId:m.wxMsgId,CreateTime:m.createTime,MsgType:Number(m.source_type) || typeCodes[type],Content:m.source_text,xml:m.source_text}) : null}
         })
     }
@@ -469,13 +483,53 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
             if(item.type === 'chat_histroy')item.details = {title:item.transcript?.title || ''}
             else if((!item.details || ['quote','link'].includes(item.type)) && item.type !== 'text')item.details = await detailsFor(row)
             if(item.type === 'link')item.details = item.revokeStatus === 'revoked' ? {} : publicLinkDetails(item.details,item.id)
+            if(item.type === 'red_packet'){
+                const packet = readWechatRedPacket(row.source,item.direction === 'outgoing')
+                item.body = '';item.bodyFormat = 'plain'
+                item.details = {redPacket:{title:packet?.title || '微信红包',
+                    ...(packet?.coverUrl && item.revokeStatus !== 'revoked' ? {coverPath:`/api/media/red-packet/${item.id}`} : {}),
+                    canOpen:Boolean(packet?.claimable && client()?.hasLogin && item.revokeStatus !== 'revoked' && redPacketOwnedBy(row.source,(client() as any)?.wxInfo?.wxid || ''))}}
+            }
             const sender = directory.get(item.senderId)
             item.senderDisplayName = sender?.remark || sender?.nickName || String(item.senderName || item.senderId || '').replace(/<[^>]*>/g,'').replace(/^👤\s*/,'').trim()
             item.senderHasAvatar = Boolean(sender?.smallHeadImgUrl || sender?.bigHeadImgUrl)
         }
         return {...result,serverTime:Math.floor(Date.now() / 1000)}
     }
+    const packetTarget = async(id:number,claim = false)=>{
+        if(!Number.isSafeInteger(id) || id < 1)throw new MessageCenterError('invalidRequest')
+        const owner = (client() as any)?.wxInfo?.wxid || '',row = await store.byId(id)
+        if(!row || row.hidden || row.type !== 'red_packet' || row.revokeStatus === 'revoked')throw new MessageCenterError('redPacketUnavailable',404)
+        const packet = readWechatRedPacket(row.source,row.direction === 'outgoing')
+        if(!packet || claim && (!client()?.hasLogin || !packet.claimable || !redPacketOwnedBy(row.source,owner)))throw new MessageCenterError('redPacketUnavailable',409)
+        await recipient(row.wxId)
+        if(owner !== ((client() as any)?.wxInfo?.wxid || ''))throw new MessageCenterError('redPacketUnavailable',409)
+        const guard = async()=>{
+            const current = await store.byId(id)
+            return Boolean(client()?.hasLogin && owner === (client() as any)?.wxInfo?.wxid && current && !current.hidden && current.revokeStatus !== 'revoked'
+                && current.wxId === row.wxId && current.remoteId === row.remoteId && current.source === row.source)
+        }
+        return {row,owner,packet,guard}
+    }
     return {
+        redPacketCover:async(id)=>{
+            const target = await packetTarget(id)
+            if(!target.packet.coverUrl)throw new MessageCenterError('coverUnavailable',404)
+            const image = await loadRedPacketCover(target.packet.coverUrl)
+            if(!await target.guard())throw new MessageCenterError('coverUnavailable',404)
+            return image
+        },
+        redPacketStatus:async(id)=>{
+            const target = await packetTarget(id,true),service = redPacketService()
+            const entry = await service.register({accountId:target.owner,conversation:target.row.wxId,remoteId:target.row.remoteId,source:target.row.source})
+            if(!await target.guard())throw new MessageCenterError('redPacketUnavailable',409)
+            return service.prepare(entry.token,`webui:${id}`)
+        },
+        openRedPacket:async(id,confirmation)=>{
+            const target = await packetTarget(id,true),service = redPacketService()
+            const entry = await service.register({accountId:target.owner,conversation:target.row.wxId,remoteId:target.row.remoteId,source:target.row.source})
+            return service.open(entry.token,confirmation,`webui:${id}`,target.guard)
+        },
         telegramDisplayStatus:async()=>{
             const bot = AbstractClient.getSpyClient('botClient') as any
             if(!bot?.getTelegramDisplayStatus)throw new MessageCenterError('telegramOffline',503)
@@ -651,7 +705,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
             const operation = accepting.then(async () => {
             const previous = await store.byRequest(requestId)
             if (previous) {
-                const details = previous.details ? JSON.parse(previous.details) : {},oldMentions = normalizeMentions(details.mentions ? {all:details.mentions.all,memberIds:details.mentions.members.map(m=>m.wxId),inline:details.mentions.inline} : undefined)
+                const details = previous.details ? parsePrivateMessageJSON(previous.details) : {},oldMentions = normalizeMentions(details.mentions ? {all:details.mentions.all,memberIds:details.mentions.members.map(m=>m.wxId),inline:details.mentions.inline} : undefined)
                 if (previous.wxId !== wxId || (details.mentions ? details.text : previous.body) !== body || (previous.attachmentId || '') !== (attachmentId || '') || JSON.stringify(oldMentions) !== JSON.stringify(mentions) || (details.replyTo?.id || 0) !== (replyToId || 0)) throw new MessageCenterError('requestConflict', 409)
                 return previous
             }

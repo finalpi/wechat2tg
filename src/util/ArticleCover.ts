@@ -21,7 +21,7 @@ interface CoverResponse {status:number;headers:{location?:string};data:unknown}
 type Request = (url:string,options:Record<string,unknown>)=>Promise<CoverResponse>
 
 /** Shared by Telegram and the authenticated WebUI: bounded fetches and private JPEG cache. */
-export function createArticleCoverLoader(directory = 'storage/webui-article-covers',request:Request = (url,options)=>axios.get(url,options)) {
+export function createArticleCoverLoader(directory = 'storage/webui-article-covers',request:Request = (url,options)=>axios.get(url,options), normalizeURL:(value:unknown)=>string = articleCoverURL) {
     const pending = new Map<string,Promise<Buffer>>(),failed = new Map<string,number>()
     const waiting:Array<()=>void> = []
     let active = 0
@@ -31,7 +31,7 @@ export function createArticleCoverLoader(directory = 'storage/webui-article-cove
             for(let hop = 0;hop < 4;hop++){
                 const response = await request(url,{responseType:'arraybuffer',timeout:8000,signal:controller.signal,maxContentLength:MAX_BYTES,maxBodyLength:MAX_BYTES,maxRedirects:0,validateStatus:()=>true})
                 if(response.status >= 300 && response.status < 400 && response.headers.location){
-                    url = articleCoverURL(new URL(response.headers.location,url).href)
+                    url = normalizeURL(new URL(response.headers.location,url).href)
                     if(!url)throw missing()
                     continue
                 }
@@ -70,7 +70,7 @@ export function createArticleCoverLoader(directory = 'storage/webui-article-cove
         } finally {const next = waiting.shift();if(next)next();else active--}
     }
     return (value:string):Promise<Buffer>=>{
-        const url = articleCoverURL(value)
+        const url = normalizeURL(value)
         if(!url || (failed.get(url) || 0) > Date.now())return Promise.reject(missing())
         const previous = pending.get(url)
         if(previous)return previous
