@@ -29,7 +29,7 @@ Optionally set `OFFICIAL_ACCOUNT_TOPICS_ENABLED=true` and restart. The first off
 
 ## Inline WeChat custom emoji
 
-`WECHAT_CUSTOM_EMOJI_ENABLED=true` renders native `[微笑]` / `[Facepalm]` tokens inline using [WeChatPack](https://t.me/addemoji/WeChatPack), preserving rich text and ordinary Unicode emoji. Requires a Premium bot owner or eligible Fragment username. Defaults off and takes priority over legacy image links; unknown tokens remain unchanged. See [mapping, coverage and limits (Chinese)](docs/wechat-custom-emoji.md). Available starting with `v6.0.13-dev.3`.
+`WECHAT_CUSTOM_EMOJI_ENABLED=true` renders native `[微笑]` / `[Facepalm]` tokens inline using [WeChatPack](https://t.me/addemoji/WeChatPack), preserving rich text and ordinary Unicode emoji. Sending eligibility includes a Premium bot owner or an eligible Fragment username. Enabled by default in auto mode, with button-icon eligibility checks before delivery and compatible output when eligibility is unknown or unavailable. The WebUI shows detection results and supports rechecking or explicit disable. Unknown tokens remain unchanged. See [mapping, coverage and limits (Chinese)](docs/wechat-custom-emoji.md). Available starting with `v6.0.13-dev.3`.
 
 ## WebUI and message center
 

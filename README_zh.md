@@ -29,7 +29,7 @@
 
 ## 微信行内自定义表情
 
-设置 `WECHAT_CUSTOM_EMOJI_ENABLED=true` 后，将 `[微笑]`、`[捂脸]` 等原生表情替换为 [WeChatPack](https://t.me/addemoji/WeChatPack) 行内自定义表情，保留富文本和普通 Unicode Emoji。需机器人创建者 Premium 或 Fragment 资格。默认关闭，开启后优先于旧图片链接；未知标记保留原文。详见 [映射、覆盖范围与限制](docs/wechat-custom-emoji.md)。自 `v6.0.13-dev.3` 起提供。
+设置 `WECHAT_CUSTOM_EMOJI_ENABLED=true` 后，将 `[微笑]`、`[捂脸]` 等原生表情替换为 [WeChatPack](https://t.me/addemoji/WeChatPack) 行内自定义表情，保留富文本和普通 Unicode Emoji。发送资格支持机器人持有者 Premium 或 Fragment 授权。默认开启并使用自动模式，在发送前通过按钮图标预检测资格；未知或不支持时使用兼容展示。WebUI 可查看检测结果、重新检测或手动关闭；未知标记保留原文。详见 [映射、覆盖范围与限制](docs/wechat-custom-emoji.md)。自 `v6.0.13-dev.3` 起提供。
 
 ## WebUI 配置与消息管理
 
