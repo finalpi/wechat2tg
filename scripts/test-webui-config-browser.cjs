@@ -13,9 +13,15 @@ async function main() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'wx2tg-config-browser-'))
   const file = path.join(directory, 'settings.json')
   let runtime = {autoTranscript: false, chatId: 1}
+  let probes = 0
+  const emojiStatus = {available:true,enabled:true,mode:'auto',effective:true,state:'unknown',reason:'notChecked',checkedAt:null,expiresAt:null,probing:false,retryAfter:0,lastProbeFailed:false}
   const server = createWebUIServer({file, token: 'local-config-test-token', environment: {},
     runtime: {read: async () => runtime, save: async patch => {runtime = {...runtime, ...patch}}},
     mcpTokens: {write: 'w'.repeat(32), read: 'r'.repeat(32)},
+    messages: {
+      telegramDisplayStatus: async()=>emojiStatus,
+      probeTelegramCustomEmoji: async()=>{probes++;return {...emojiStatus,state:'supported',reason:'buttonConfirmed',checkedAt:Date.now(),expiresAt:Date.now()+86400000}},
+    },
   })
   server.listen(0, '127.0.0.1'); await once(server, 'listening')
   let browser
@@ -90,6 +96,18 @@ async function main() {
     assert.equal(runtime.autoTranscript, true)
     assert.deepEqual(patches.map(item => item.source), ['environment', 'runtime', 'runtime'])
     assert.equal(patches[1].revision, patches[2].revision)
+    await page.getByRole('button',{name:'消息转发',exact:true}).click()
+    await page.getByText('尚未确认',{exact:true}).waitFor()
+    await page.getByRole('button',{name:'刷新状态',exact:true}).click()
+    assert.equal(probes,0,'reading capability never sends a control message')
+    await page.getByRole('button',{name:'重新检测',exact:true}).click()
+    await page.getByRole('dialog').getByRole('button',{name:'取消',exact:true}).click()
+    assert.equal(probes,0,'cancelling the confirmation performs no probe')
+    await page.getByRole('button',{name:'重新检测',exact:true}).click()
+    await page.getByRole('button',{name:'开始预检测',exact:true}).click()
+    await page.getByText('已确认支持',{exact:true}).waitFor()
+    assert.equal(probes,1)
+    await page.getByText('按钮图标预检测已确认当前机器人具备自定义表情发送资格。',{exact:true}).waitFor()
     assert.deepEqual(errors, [])
     console.log('Config browser checks passed: conflict recovery keeps inputs, successful saves keep schema, mixed-source saves work.')
   } finally {

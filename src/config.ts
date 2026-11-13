@@ -35,7 +35,7 @@ export const config = {
     AUTO_CREATE_GROUPS: process.env.AUTO_CREATE_GROUPS !== 'false',
     OFFICIAL_ACCOUNT_TOPICS_ENABLED: process.env.OFFICIAL_ACCOUNT_TOPICS_ENABLED?.trim().toLowerCase() === 'true',
     OFFICIAL_ACCOUNT_FORUM_CHAT_ID: process.env.OFFICIAL_ACCOUNT_FORUM_CHAT_ID || '',
-    WECHAT_CUSTOM_EMOJI_ENABLED: process.env.WECHAT_CUSTOM_EMOJI_ENABLED?.trim().toLowerCase() === 'true',
+    WECHAT_CUSTOM_EMOJI_ENABLED: (process.env.WECHAT_CUSTOM_EMOJI_ENABLED?.trim().toLowerCase() || 'true') === 'true',
     TELEGRAM_DISPLAY_MODE: process.env.TELEGRAM_DISPLAY_MODE?.trim().toLowerCase() || 'auto',
     TELEGRAM_EMOJI_FALLBACK: process.env.TELEGRAM_EMOJI_FALLBACK?.trim().toLowerCase() || 'links',
     WX_PROXY_HOST: process.env.WX_PROXY_HOST?.toString() || '',

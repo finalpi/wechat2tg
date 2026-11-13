@@ -63,7 +63,8 @@ export class TelegramApiMessageSender extends MessageSender {
             if (sendParam.message) {
                 const pending = file.caption !== undefined && option?.parse_mode === 'HTML'
                     ? sendTelegramHtml(chatId,file.caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,
-                        text=>this.sender.editMessage(inputPeerChannelFromMessage,{...sendParam,text}))
+                        text=>this.sender.editMessage(inputPeerChannelFromMessage,{...sendParam,text}),()=>true,'mtproto',
+                        (_message,text)=>this.sender.editMessage(inputPeerChannelFromMessage,{...sendParam,text}))
                     : this.sender.editMessage(inputPeerChannelFromMessage,sendParam)
                 pending.then(res => {
                     if (tempFilePath) {
@@ -93,7 +94,8 @@ export class TelegramApiMessageSender extends MessageSender {
         }
         return new Promise((resolve, reject) => {
             sendTelegramHtml(chatId,caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,
-                text=>this.sender.editMessage(inputPeerChannelFromMessage,{...sendParam,text})).then(res => {
+                text=>this.sender.editMessage(inputPeerChannelFromMessage,{...sendParam,text}),()=>true,'mtproto',
+                        (_message,text)=>this.sender.editMessage(inputPeerChannelFromMessage,{...sendParam,text})).then(res => {
                 resolve({
                     message_id: res.id
                 })
@@ -129,7 +131,8 @@ export class TelegramApiMessageSender extends MessageSender {
             }
             const pending = option?.parse_mode === 'HTML'
                 ? sendTelegramHtml(chatId,text,config.WECHAT_CUSTOM_EMOJI_ENABLED,4096,
-                    html=>this.sender.sendMessage(inputPeerChannelFromMessage,{...sendParam,message:html}))
+                    html=>this.sender.sendMessage(inputPeerChannelFromMessage,{...sendParam,message:html}),()=>true,'mtproto',
+                    (message,text)=>this.sender.editMessage(inputPeerChannelFromMessage,{message:message.id,text,parseMode:'html'}))
                 : this.sender.sendMessage(inputPeerChannelFromMessage,sendParam)
             pending.then(res => {
                 resolve({
@@ -178,7 +181,8 @@ export class TelegramApiMessageSender extends MessageSender {
             }
             const pending = file.caption !== undefined && option?.parse_mode === 'HTML'
                 ? sendTelegramHtml(chatId,file.caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,
-                    caption=>this.sender.sendFile(inputPeerChannelFromMessage,{...sendParam,caption}))
+                    caption=>this.sender.sendFile(inputPeerChannelFromMessage,{...sendParam,caption}),()=>true,'mtproto',
+                    (message,text)=>this.sender.editMessage(inputPeerChannelFromMessage,{message:message.id,text,parseMode:'html'}))
                 : this.sender.sendFile(inputPeerChannelFromMessage,sendParam)
             pending.then(res => {
                 resolve({

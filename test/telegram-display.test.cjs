@@ -15,11 +15,11 @@ function fixture(t,mode = 'auto'){
   return {file,policy,...presentation({policy,fallback:'links'})}
 }
 
-test('auto uses only configured owner updates, expires membership and isolates bot/owner changes',t=>{
+test('auto probes emoji independently of owner membership and isolates bot/owner changes',t=>{
   const {file} = fixture(t)
   let now = 1000
   const p = new TelegramDisplayPolicy(file,'auto',()=>now);p.configure(100,200)
-  assert.equal(p.ownerPremium(),undefined);assert.equal(p.allows('customEmoji',-10),false)
+  assert.equal(p.ownerPremium(),undefined);assert.equal(p.allows('customEmoji',-10),true);assert.equal(p.allows('richMessage',-10),false)
   p.observeOwner({id:201,is_premium:true});assert.equal(p.ownerPremium(),undefined)
   p.observeOwner({id:200,is_bot:true,is_premium:true});assert.equal(p.ownerPremium(),undefined)
   p.observeOwner({id:200,is_premium:true});assert.equal(p.allows('customEmoji',-10),true)
@@ -108,19 +108,19 @@ test('all link aliases reference verified WebP names and preserve English/Chines
   assert.equal(renderWechatEmojiFallbackHtml(rendered),rendered,'idempotent final rendering')
   assert.equal((renderWechatEmojiFallbackHtml('[微笑]'.repeat(105)).match(/<a /g) || []).length,100)
 })
-test('non-premium/unknown owners get links even with custom emoji enabled; premium and explicit compatibility select correctly',t=>{
+test('auto tries native emoji independently of user membership while explicit compatibility and disable win',t=>{
   const f = fixture(t)
-  assert.match(f.renderTelegramHtml('[微笑]',true,undefined,-10),/<a href=/)
+  assert.match(f.renderTelegramHtml('[微笑]',true,undefined,-10),/<tg-emoji/);assert.match(f.renderTelegramHtml('[微笑]',false,undefined,-10),/<a href=/)
   f.policy.observeOwner({id:200,is_premium:true})
   const native = f.renderTelegramHtml('[微笑]',true,undefined,-10)
   assert.match(native,/<tg-emoji/)
   f.policy.setMode('compatible',-10)
   assert.match(f.renderTelegramHtml(native,true,undefined,-10),/<a href=/)
   assert(!f.renderTelegramHtml(native,true,undefined,-10).includes('tg-emoji'))
-  f.policy.observeOwner({id:200});assert.match(f.renderTelegramHtml('[Facepalm]',true,undefined,-11),/<a href=/)
+  f.policy.observeOwner({id:200});assert.match(f.renderTelegramHtml('[Facepalm]',true,undefined,-11),/<tg-emoji/)
 })
 test('caption fallback does not expand already-rendered emoji beyond Telegram limits',t=>{
-  const f = fixture(t)
+  const f = fixture(t,'compatible')
   const native = renderWechatCustomEmojiHtml('x'.repeat(1022) + '[微笑]',true)
   const html = f.renderTelegramHtml(native,true,1024,-10)
   assert.equal(splitTelegramHtml(html,1024).length,1)

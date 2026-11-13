@@ -14,6 +14,7 @@ import {cn} from '@/lib/utils'
 import {McpPanel} from '@/features/mcp-panel'
 import {AutomationPanel} from '@/features/automation-panel'
 import {AITools} from '@/features/ai-tools'
+import {TelegramEmojiStatus} from '@/features/telegram-emoji-status'
 import {TemplatePreview} from '@/features/template-preview'
 import {MessagesPanel} from '@/features/messages-panel'
 import {ChatMenu} from '@/features/chat-menu'
@@ -324,6 +325,7 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
                 <CardTitle>{activeGroup?.label}</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-6">
+                {active === 'forward' && !snapshot.demo && <TelegramEmojiStatus token={token} />}
                 {environment.length > 0 && (
                   <Section title="环境配置" fields={environment} currentValue={currentValue} setField={setField} busy={busy || Boolean(snapshot.demo)} />
                 )}

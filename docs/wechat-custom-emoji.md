@@ -4,13 +4,13 @@
 
 ## 开启与关闭
 
-默认关闭。在 `.env` 设置以下值并重建 bot，或在 WebUI「消息转发」中开启「微信行内自定义表情」、保存后重启：
+默认开启并使用自动检测。在 `.env` 或 WebUI「消息转发」中可调整，环境配置保存后重启生效：
 
 ```dotenv
 WECHAT_CUSTOM_EMOJI_ENABLED=true
 ```
 
-开启表示允许使用原生自定义表情，实际是否使用由 [Telegram 展示策略](telegram-display.md) 决定：默认 `auto`，参考已绑定主人的近期 Premium 状态；未知或非会员时默认使用图片超链接。`/display compatible` 可让单个聊天始终兼容，`/display enhanced` 为主动启用增强（仍受 Telegram 真实权限限制）。
+开启表示允许使用原生自定义表情，实际是否使用由 [Telegram 展示策略](telegram-display.md) 决定：默认 `auto`，通过自定义表情按钮图标预检测发送资格，正式消息返回的实体继续校验；未知或不支持时使用兼容展示。`/display compatible` 可让单个聊天始终兼容，`/display enhanced` 为主动启用增强（仍受 Telegram 真实权限限制）。
 
 兼容展示默认 `TELEGRAM_EMOJI_FALLBACK=links`，无需会员；设为 `text` 可保留微信文字编码。旧 `emojiPicture` 设置及既有链接仍保留，不重复嵌套转换；如需完全保留文字，应同时关闭旧图片链接开关。不会修改微信服务配置、数据库 schema、论坛设置或会话绑定；安装更新本身不会自动修改部署端 `.env`。WebUI 保存的同名配置优先于环境变量。
 

@@ -69,6 +69,8 @@ export async function request<T>(path: string, token: string, init?: RequestInit
 }
 
 export const api = {
+  emojiCapability: (token: string, signal?: AbortSignal) => request<EmojiCapabilityStatus>('/api/telegram/emoji-capability', token, {signal}),
+  probeEmojiCapability: (token: string) => request<EmojiCapabilityStatus>('/api/telegram/emoji-capability', token, {method:'POST',body:JSON.stringify({confirm:true})}),
   getConfig: (token: string) => request<ConfigSnapshot>('/api/config', token),
   patchConfig: (token: string, source: FieldSource, revision: string, values: Record<string, unknown>) =>
     request<ConfigUpdate>('/api/config', token, {method: 'PATCH', body: JSON.stringify({source, revision, values})}),
@@ -81,6 +83,20 @@ export const api = {
     request<AiModelsResult>('/api/ai/models', token, {method: 'POST', body: JSON.stringify(body)}),
   aiTest: (token: string, body: Record<string, unknown>) =>
     request<AiTestResult>('/api/ai/test', token, {method: 'POST', body: JSON.stringify(body)}),
+}
+
+export interface EmojiCapabilityStatus {
+  available: boolean
+  enabled: boolean
+  mode: 'auto' | 'compatible' | 'enhanced'
+  effective: boolean
+  state: 'unknown' | 'supported' | 'unsupported'
+  reason: 'notChecked' | 'confirmed' | 'buttonConfirmed' | 'buttonMissing' | 'missingEntities' | 'rejected' | 'requestFailed' | 'expired'
+  checkedAt: number | null
+  expiresAt: number | null
+  probing: boolean
+  retryAfter: number
+  lastProbeFailed: boolean
 }
 
 export interface McpMetadata {

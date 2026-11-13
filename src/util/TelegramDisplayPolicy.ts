@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import {TelegramEmojiCapability, EmojiTransport} from './TelegramEmojiCapability'
 
 export type TelegramDisplayMode = 'auto' | 'compatible' | 'enhanced'
 export type DisplayFeature = 'customEmoji' | 'richMessage'
@@ -9,23 +10,25 @@ const PREMIUM_TTL = 24 * 60 * 60 * 1000
 const REJECTION_TTL = 6 * 60 * 60 * 1000
 interface Preferences {global?:TelegramDisplayMode;chats:Record<string,TelegramDisplayMode>}
 
-/** Membership is evidence about the configured owner, never client-version detection.
+/** Membership guides rich layouts; emoji capability is learned from real delivery.
  * Persistent preferences are isolated by BOTH bot and owner. Observations expire and
  * are deliberately memory-only, so a restart never trusts stale Premium entitlement. */
 export class TelegramDisplayPolicy {
+    prepareEmoji?: (chatId:number|string)=>Promise<boolean>
+    readonly emoji: TelegramEmojiCapability
     private botId = 0
     private ownerId = 0
     private premium?:{value:boolean;at:number}
     private rejected = new Map<string,number>()
     private preferences:Preferences = {chats:{}}
-    constructor(private file:string,private defaultMode:TelegramDisplayMode = 'auto',private now = Date.now) {}
+    constructor(private file:string,private defaultMode:TelegramDisplayMode = 'auto',private now = Date.now) {this.emoji = new TelegramEmojiCapability(now)}
     configure(botId:number,ownerId:number):void {
         if(!validId(botId) || botId < 0 || !validId(ownerId) || ownerId < 0){
-            this.botId = 0;this.ownerId = 0;this.premium = undefined;this.rejected.clear();this.preferences = {chats:{}}
+            this.botId = 0;this.ownerId = 0;this.premium = undefined;this.rejected.clear();this.preferences = {chats:{}};this.emoji.clear()
             return
         }
         if(this.botId === botId && this.ownerId === ownerId)return
-        this.botId = botId;this.ownerId = ownerId;this.premium = undefined;this.rejected.clear();this.preferences = {chats:{}}
+        this.botId = botId;this.ownerId = ownerId;this.premium = undefined;this.rejected.clear();this.preferences = {chats:{}};this.emoji.clear()
         if(!fs.existsSync(this.file))return
         // Invalid preferences fail closed to compatible instead of silently enabling rich output.
         try {
@@ -53,14 +56,16 @@ export class TelegramDisplayPolicy {
         const key = String(chatId)
         return (Object.prototype.hasOwnProperty.call(this.preferences.chats,key) ? this.preferences.chats[key] : undefined) || this.preferences.global || this.defaultMode
     }
-    allows(feature:DisplayFeature,chatId?:number|string):boolean {
+    allows(feature:DisplayFeature,chatId?:number|string,transport:EmojiTransport = 'botApi'):boolean {
         const mode = this.mode(chatId)
         if(mode === 'compatible' || (this.rejected.get(`${feature}:${chatId}`) || 0) > this.now())return false
-        // Enhanced is an explicit opt-in, also supporting Fragment-authorized bots.
-        // Auto is conservative until an authenticated owner update confirms Premium.
+        // Auto attempts the real message when capability is unknown. The separate
+        // custom-emoji switch and explicit compatible overrides remain authoritative.
+        if(feature === 'customEmoji')return this.emoji.snapshot(chatId,transport).state !== 'unsupported'
         return mode === 'enhanced' || this.ownerPremium() === true
     }
-    reject(feature:DisplayFeature,chatId?:number|string):void {
+    reject(feature:DisplayFeature,chatId?:number|string,transport:EmojiTransport = 'botApi'):void {
+        if(feature === 'customEmoji'){this.emoji.record(chatId,'unsupported','rejected',transport);return}
         for(const [key,until] of this.rejected)if(until <= this.now())this.rejected.delete(key)
         if(this.rejected.size >= 1000)this.rejected.delete(this.rejected.keys().next().value)
         this.rejected.set(`${feature}:${chatId}`,this.now() + REJECTION_TTL)

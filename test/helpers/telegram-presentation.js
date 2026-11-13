@@ -7,6 +7,7 @@ module.exports = function presentationFixture({mode = 'enhanced',fallback = 'tex
   const source = fs.readFileSync(path.join(__dirname,'../../src/util/TelegramPresentation.ts'),'utf8')
   const compiled = ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2021,module:ts.ModuleKind.CommonJS}}).outputText
   const dependencies = {
+    'node:timers':require('node:timers'),
     '../config':{config:{TELEGRAM_DISPLAY_MODE:mode,TELEGRAM_EMOJI_FALLBACK:fallback}},
     './TelegramDisplayPolicy':{...require('../../dist/util/TelegramDisplayPolicy'),
       ...(policy ? {TelegramDisplayPolicy:class {constructor(){return policy}}} : {})},

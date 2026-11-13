@@ -34,6 +34,8 @@ import {getChatHistory} from '../util/handleMsg'
 import {decodeHTML} from 'entities'
 
 export interface MessageCenterAdapter {
+    telegramDisplayStatus?():Promise<unknown>
+    probeTelegramCustomEmoji?():Promise<unknown>
     subscribe?(listener:(event:MessageChange)=>void):()=>void
     updates?(wxId:string,ids:number[],query?:string):Promise<unknown>
     status(): Promise<unknown>
@@ -474,6 +476,16 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         return {...result,serverTime:Math.floor(Date.now() / 1000)}
     }
     return {
+        telegramDisplayStatus:async()=>{
+            const bot = AbstractClient.getSpyClient('botClient') as any
+            if(!bot?.getTelegramDisplayStatus)throw new MessageCenterError('telegramOffline',503)
+            return bot.getTelegramDisplayStatus()
+        },
+        probeTelegramCustomEmoji:async()=>{
+            const bot = AbstractClient.getSpyClient('botClient') as any
+            if(!bot?.probeTelegramCustomEmoji)throw new MessageCenterError('telegramOffline',503)
+            return bot.probeTelegramCustomEmoji()
+        },
         subscribe:listener=>{
             const unsubscribeStore = store.subscribe(listener),unsubscribeShared = messageEvents.subscribe(listener)
             return ()=>{unsubscribeStore();unsubscribeShared()}

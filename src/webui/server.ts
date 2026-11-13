@@ -56,7 +56,7 @@ export function createWebUIServer(options: Options) {
     const digest = (value: string) => createHash('sha256').update(value).digest()
     const snapshot = async () => {
         const overrides = readOverrides(file)
-        const environment = Object.fromEntries(fields.filter(f => f.source === 'environment').map(f => [f.key, overrides[f.key] ?? options.environment[aliases[f.key] || f.key] ?? '']))
+        const environment = Object.fromEntries(fields.filter(f => f.source === 'environment').map(f => [f.key, overrides[f.key] ?? options.environment[aliases[f.key] || f.key] ?? f.defaultValue ?? '']))
         // Blank or missing message templates always behave like their defaults.
         Object.assign(environment, resolveMessageTemplates(environment))
         const runtime = options.runtime ? await options.runtime.read() : {}
@@ -80,7 +80,7 @@ export function createWebUIServer(options: Options) {
         const restartRequired = Object.entries(overrides).some(([key, value]) =>
             Object.prototype.hasOwnProperty.call(MESSAGE_TEMPLATE_DEFAULTS, key)
                 ? startupTemplates[key] !== savedTemplates[key]
-                : String(options.environment[aliases[key] || key] ?? '') !== value)
+                : String(options.environment[aliases[key] || key] ?? fields.find(field=>field.key === key)?.defaultValue ?? '') !== value)
         return {revision, values, secrets, restartRequired, runtimeAvailable: Boolean(options.runtime), startedAt, templateDefaults: MESSAGE_TEMPLATE_DEFAULTS, ...(options.demo ? {demo: true} : {})}
     }
     const respond = (res: ServerResponse, status: number, data: unknown) => {
@@ -161,11 +161,25 @@ export function createWebUIServer(options: Options) {
         attempts.delete(ip)
         // A dev preview may simulate chat mutations, never configuration writes,
         // automation, AI requests, MCP access or calls to real external services.
-        if (options.demo && (route.startsWith('/api/ai/') || route.startsWith('/api/automation')
+        if (options.demo && (route.startsWith('/api/telegram/') || route.startsWith('/api/ai/') || route.startsWith('/api/automation')
             || route.startsWith('/api/mcp/') || route === '/api/config' && req.method !== 'GET')) {
             return respond(res, 403, {error: 'demoReadOnly'})
         }
         try {
+            if(route === '/api/telegram/emoji-capability') {
+                if(req.method === 'GET') {
+                    if(!options.messages?.telegramDisplayStatus)return respond(res,503,{error:'telegramOffline'})
+                    return respond(res,200,await options.messages.telegramDisplayStatus())
+                }
+                if(req.method !== 'POST')return respond(res,405,{error:'methodNotAllowed'})
+                let size = 0,raw = ''
+                for await(const chunk of req){size += chunk.length;if(size > 256)return respond(res,413,{error:'tooLarge'});raw += chunk.toString()}
+                let body
+                try{body = JSON.parse(raw)}catch{return respond(res,400,{error:'invalidJson'})}
+                if(!body || body.confirm !== true || Object.keys(body).some(key=>key !== 'confirm'))return respond(res,400,{error:'invalidRequest'})
+                if(!options.messages?.probeTelegramCustomEmoji)return respond(res,503,{error:'telegramOffline'})
+                return respond(res,200,await options.messages.probeTelegramCustomEmoji())
+            }
             if (route === '/api/automation' || route === '/api/automation/test' || route === '/api/automation/generate') {
                 if (route === '/api/automation' && req.method === 'GET') return respond(res,200,await automationService().snapshot())
                 if (req.method !== 'POST') return respond(res,405,{error:'invalidRequest'})

@@ -34,7 +34,8 @@ export class TelegramBotApiMessageSender extends MessageSender {
                 parse_mode: option?.parse_mode
             }, {})
             const pending = file.caption !== undefined && option?.parse_mode === 'HTML'
-                ? sendTelegramHtml(chatId,file.caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,send) : send(file.caption)
+                ? sendTelegramHtml(chatId,file.caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,send,()=>true,'botApi',
+                    (_message,caption)=>this.sender.telegram.editMessageCaption(chatId,parseInt(msgId + ''),undefined,caption,{parse_mode:option.parse_mode})) : send(file.caption)
             pending.then(() => {
                 resolve({message_id: msgId})
             }).catch(e => reject(e))
@@ -45,7 +46,8 @@ export class TelegramBotApiMessageSender extends MessageSender {
         this.sendAction(Number(chatId), 'typing')
         return new Promise<SendResult>((resolve, reject) => {
             sendTelegramHtml(chatId,caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,
-                html=>this.sender.telegram.editMessageCaption(chatId,parseInt(msgId + ''),undefined,html,{parse_mode:'HTML'}))
+                html=>this.sender.telegram.editMessageCaption(chatId,parseInt(msgId + ''),undefined,html,{parse_mode:'HTML'}),()=>true,'botApi',
+                (_message,html)=>this.sender.telegram.editMessageCaption(chatId,parseInt(msgId + ''),undefined,html,{parse_mode:'HTML'}))
                 .then(() => {
                 resolve({message_id: msgId})
             }).catch(e => reject(e))
@@ -94,9 +96,14 @@ export class TelegramBotApiMessageSender extends MessageSender {
                 timedOut = true
                 reject(new Error(`Request timeout after ${timeoutMs}ms`))
             }, timeoutMs)
-            const send = (html:string)=>this.sender.telegram.sendMessage(chatId,html,sendParam)
+            const send = (html:string)=>this.sender.telegram.sendMessage(chatId,html,sendParam).then(message=>{clearTimeout(timeoutId);return message})
             const pending = option?.parse_mode === 'HTML'
-                ? sendTelegramHtml(chatId,text,config.WECHAT_CUSTOM_EMOJI_ENABLED,4096,send,()=>!timedOut) : send(text)
+                ? sendTelegramHtml(chatId,text,config.WECHAT_CUSTOM_EMOJI_ENABLED,4096,send,()=>!timedOut,'botApi',
+                    (message,html)=>{
+                        const extra:tt.ExtraEditMessageText = {parse_mode:'HTML'}
+                        if(sendParam.reply_markup && 'inline_keyboard' in sendParam.reply_markup)extra.reply_markup = sendParam.reply_markup
+                        return this.sender.telegram.editMessageText(chatId,message.message_id,undefined,html,extra)
+                    }) : send(text)
             pending.then(res => {
                 clearTimeout(timeoutId)
                 resolve({message_id: res.message_id})
@@ -155,9 +162,10 @@ export class TelegramBotApiMessageSender extends MessageSender {
                 [mediaParamName]: {source: file.buff, filename: file.filename},
                 caption,
                 ...sendParam
-            }, {signal: abortController.signal})
+            }, {signal: abortController.signal}).then(message=>{if(timeoutId)clearTimeout(timeoutId);return message})
             const pending = file.caption !== undefined && option?.parse_mode === 'HTML'
-                ? sendTelegramHtml(chatId,file.caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,send,()=>!settled) : send(file.caption)
+                ? sendTelegramHtml(chatId,file.caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,send,()=>!settled,'botApi',
+                    (message,caption)=>this.sender.telegram.editMessageCaption(chatId,message.message_id,undefined,caption,{parse_mode:'HTML'})) : send(file.caption)
             pending.then((msg: { message_id: number }) => {
                 settled = true
                 if (timeoutId) clearTimeout(timeoutId)

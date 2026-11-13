@@ -26,7 +26,9 @@ import {SenderFactory} from '../message/SenderFactory'
 import {FormatUtils} from '../util/FormatUtils'
 import {messageIdentityKind} from '../util/MessageTemplates'
 import {splitTelegramHtml} from '../util/WechatCustomEmoji'
-import {renderTelegramHtml as renderWechatCustomEmojiHtml,telegramDisplay,replyDirectoryText,useRichDirectory} from '../util/TelegramPresentation'
+import {renderTelegramHtml as renderWechatCustomEmojiHtml,sendTelegramHtml,telegramDisplay,replyDirectoryText,useRichDirectory} from '../util/TelegramPresentation'
+import {TelegramEmojiProbe} from '../util/TelegramEmojiProbe'
+import {customEmojiRejected} from '../util/TelegramDisplayPolicy'
 import {handleTelegramDisplayCommand} from '../util/TelegramDisplayCommand'
 import {Message} from '../entity/Message'
 import {MessageService} from '../service/MessageService'
@@ -474,12 +476,12 @@ export class TelegramBotClient extends AbstractClient {
 
         try {
             const inputPeer = await botMTPClient.client.getInputEntity(message.chatId)
-            const result = await this.sendTelegramRequest(message.chatId, () => this.runTelegramUploadWithTimeout(
+            const result = await this.sendTelegramRequest(message.chatId, () => sendTelegramHtml(message.chatId,message.sender,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,caption=>this.runTelegramUploadWithTimeout(
                 fileName,
                 totalSize,
                 async () => botMTPClient.client.sendFile(inputPeer, {
                     file: new CustomFile(fileName, totalSize, '', message.file.file),
-                    caption: renderWechatCustomEmojiHtml(message.sender, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024, message.chatId),
+                    caption,
                     replyTo: message.param?.reply_id ?? message.threadId,
                     topMsgId: message.threadId,
                     parseMode: 'html',
@@ -491,7 +493,7 @@ export class TelegramBotClient extends AbstractClient {
                         await progressEditor.update(this.formatTelegramUploadProgress(fileName, uploaded, totalSize))
                     }
                 })
-            ))
+            ),()=>true,'mtproto',(message,caption)=>botMTPClient.client.editMessage(inputPeer,{message:message.id,text:caption,parseMode:'html'})))
             await this.deleteTelegramMessage(message.chatId, progressNoticeMessageId)
             setTimeout(() => {
                 void this.deleteTelegramMessage(message.chatId, progressNoticeMessageId)
@@ -614,14 +616,14 @@ export class TelegramBotClient extends AbstractClient {
     private async sendBusinessCardMessage(message: BaseMessage, messageEntity: Message): Promise<boolean> {
         try {
             const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
-            const msgRes = await this.sendTelegramRequest(message.chatId, () => client.telegram.sendPhoto(message.chatId, {source: message.file.file, filename: message.file.fileName}, {
+            const msgRes = await this.sendTelegramRequest(message.chatId, () => sendTelegramHtml(message.chatId,message.content,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,caption=>client.telegram.sendPhoto(message.chatId, {source: message.file.file, filename: message.file.fileName}, {
                 message_thread_id: message.threadId,
-                caption: renderWechatCustomEmojiHtml(message.content, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024, message.chatId),
+                caption,
                 parse_mode: 'HTML',
                 reply_markup: {
                     inline_keyboard: [[Markup.button.callback('添加为好友', `af:${message.businessCardId}`)]]
                 },
-            }))
+            }),()=>true,'botApi',(sent,caption)=>client.telegram.editMessageCaption(message.chatId,sent.message_id,undefined,caption,{parse_mode:'HTML'})))
 
             messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
             await this.messageService.createOrUpdate(messageEntity)
@@ -759,6 +761,7 @@ export class TelegramBotClient extends AbstractClient {
             this.client = new Telegraf(config.BOT_TOKEN)
         }
         this.hasReady = true
+        telegramDisplay.prepareEmoji = chatId=>this.prepareTelegramEmoji(chatId)
         // 加载配置
         this.configurationService.getConfig().then(config => {
             this.chatId = config.chatId
@@ -2450,6 +2453,66 @@ ${this.i18n.t('help.instructions')}`))
         }
     }
 
+    private emojiProbe?:TelegramEmojiProbe
+    private emojiGroupExceptions = new Map<string,{at:number;allowed:boolean}>()
+
+    private async prepareTelegramEmoji(chatId:number|string):Promise<boolean> {
+        if(!this.hasLogin || !this.chatId)return false
+        this.emojiProbe ||= new TelegramEmojiProbe(telegramDisplay.emoji,Date.now,15000,'storage/telegram-emoji-probe.json')
+        let status = this.emojiProbe.status(this.chatId)
+        if(status.state === 'unknown' && ((!status.retryAfter && !status.lastProbeFailed) || status.probing)){
+            await this.probeTelegramCustomEmoji()
+            status = this.emojiProbe.status(this.chatId)
+        }
+        if(status.state === 'supported')return true
+        // A boosted supergroup's own emoji pack is an independent entitlement.
+        if(status.state === 'unsupported' && Number(chatId) < 0){
+            const key = `${telegramDisplay.emoji.generation}:${chatId}`,cached = this.emojiGroupExceptions.get(key)
+            if(cached && Date.now() - cached.at < 60000)return cached.allowed
+            const chat = await this.client.telegram.getChat(chatId)
+            const allowed = chat.type === 'supergroup' && Boolean((chat as {custom_emoji_sticker_set_name?:string}).custom_emoji_sticker_set_name)
+            if(this.emojiGroupExceptions.size >= 100)this.emojiGroupExceptions.delete(this.emojiGroupExceptions.keys().next().value)
+            this.emojiGroupExceptions.set(key,{at:Date.now(),allowed})
+            return allowed
+        }
+        return false
+    }
+
+    public async getTelegramDisplayStatus() {
+        const settings = await this.configurationService.getConfig()
+        const available = Boolean(this.hasLogin && this.client.botInfo?.id && settings?.chatId > 0)
+        if(available)telegramDisplay.configure(this.client.botInfo.id,settings.chatId)
+        this.emojiProbe ||= new TelegramEmojiProbe(telegramDisplay.emoji,Date.now,15000,'storage/telegram-emoji-probe.json')
+        return {...this.emojiProbe.status(settings?.chatId),available,enabled:config.WECHAT_CUSTOM_EMOJI_ENABLED,
+            mode:telegramDisplay.mode(settings?.chatId),
+            effective:available && config.WECHAT_CUSTOM_EMOJI_ENABLED && telegramDisplay.allows('customEmoji',settings.chatId)}
+    }
+
+    public async probeTelegramCustomEmoji() {
+        const settings = await this.configurationService.getConfig()
+        if(!this.hasLogin || !this.client.botInfo?.id || !Number.isSafeInteger(settings?.chatId) || settings.chatId <= 0)
+            throw Object.assign(new Error('telegramOffline'),{code:'telegramOffline',status:503})
+        telegramDisplay.configure(this.client.botInfo.id,settings.chatId)
+        const botId = this.client.botInfo.id,telegram = this.client.telegram
+        this.emojiProbe ||= new TelegramEmojiProbe(telegramDisplay.emoji,Date.now,15000,'storage/telegram-emoji-probe.json')
+        await this.emojiProbe.run(settings.chatId,async(iconId,signal)=>{
+            const reply_markup = {inline_keyboard:[[{text:'原生表情检测',icon_custom_emoji_id:iconId,copy_text:{text:`原生表情检测 ${Date.now()}`}}]]}
+            const id = this.emojiProbe.messageId(botId,settings.chatId)
+            if(id){
+                try {return await telegram.callApi('editMessageReplyMarkup',{chat_id:settings.chatId,message_id:id,reply_markup},{signal})}
+                catch(error){
+                    if(error?.response?.error_code !== 400 || !/message (?:to edit not found|can't be edited)/i.test(error.response.description || ''))throw error
+                }
+            }
+            const message = await telegram.callApi('sendMessage',{
+                chat_id:settings.chatId,text:'Telegram 原生表情能力检测\n此消息用于自动选择微信表情的展示方式。',disable_notification:true,reply_markup,
+            },{signal})
+            this.emojiProbe.remember(botId,settings.chatId,message.message_id)
+            return message
+        })
+        return this.getTelegramDisplayStatus()
+    }
+
     private refreshDisplayMembership():void {
         // Reuse the already-authorized user account; never log in another account
         // or treat getMe on the Bot API as evidence about the human owner.
@@ -2654,9 +2717,17 @@ ${this.i18n.t('help.instructions')}`))
         if (bot.telegram) {
             const originalCallApi = bot.telegram.callApi.bind(bot.telegram)
             bot.telegram.callApi = async function(...args) {
+                const payload = args[1] as {chat_id?:number|string;parse_mode?:string;text?:string;caption?:string}
+                const html = payload?.parse_mode === 'HTML' ? payload.text ?? payload.caption : undefined
+                const generation = telegramDisplay.emoji.generation
                 try {
-                    return await originalCallApi(...args)
+                    const result = await originalCallApi(...args)
+                    if(html && payload.chat_id !== undefined && generation === telegramDisplay.emoji.generation && !args[2]?.signal?.aborted)
+                        telegramDisplay.emoji.observe(payload.chat_id,html,result)
+                    return result
                 } catch (error) {
+                    if(html?.includes('<tg-emoji') && payload.chat_id !== undefined && generation === telegramDisplay.emoji.generation && !args[2]?.signal?.aborted)
+                        telegramDisplay.emoji.record(payload.chat_id,customEmojiRejected(error) ? 'unsupported' : 'unknown',customEmojiRejected(error) ? 'rejected' : 'requestFailed')
                     errorHandler(error)
                     throw error
                 }
@@ -3012,7 +3083,8 @@ ${this.i18n.t('help.instructions')}`))
 
         const html = renderWechatCustomEmojiHtml(nestedRecord.content, config.WECHAT_CUSTOM_EMOJI_ENABLED, undefined, ctx.chat?.id)
         for (const chunk of splitTelegramHtml(html, 4096)) {
-            await ctx.reply(chunk, replyOptions)
+            await sendTelegramHtml(ctx.chat.id,chunk,config.WECHAT_CUSTOM_EMOJI_ENABLED,4096,text=>ctx.reply(text,replyOptions),()=>true,'botApi',
+                (sent,text)=>ctx.telegram.editMessageText(ctx.chat.id,sent.message_id,undefined,text,replyOptions))
         }
         await ctx.answerCbQuery('已展开')
     }
@@ -3423,7 +3495,6 @@ ${this.i18n.t('help.instructions')}`))
         const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
         const sendOptions: any = {
             message_thread_id: options.threadId,
-            caption: options.caption === undefined ? undefined : renderWechatCustomEmojiHtml(options.caption, config.WECHAT_CUSTOM_EMOJI_ENABLED, 1024, chatId),
             parse_mode: 'HTML'
         }
         if (options.replyToMessageId) {
@@ -3432,24 +3503,18 @@ ${this.i18n.t('help.instructions')}`))
             }
         }
 
-        if (options.fileType === 'photo') {
-            await client.telegram.sendPhoto(chatId, {source: fileBuffer, filename: options.fileName}, sendOptions)
-            return
+        const send = async (caption?:string):Promise<{message_id:number}> => {
+            const extra = {...sendOptions,caption}
+            const file = {source:fileBuffer,filename:options.fileName}
+            if(options.fileType === 'photo')return client.telegram.sendPhoto(chatId,file,extra)
+            if(options.fileType === 'video')return client.telegram.sendVideo(chatId,file,extra)
+            if(options.fileType === 'voice')return client.telegram.sendVoice(chatId,file,extra)
+            if(options.fileType === 'animation')return client.telegram.sendAnimation(chatId,file,extra)
+            return client.telegram.sendDocument(chatId,file,extra)
         }
-        if (options.fileType === 'video') {
-            await client.telegram.sendVideo(chatId, {source: fileBuffer, filename: options.fileName}, sendOptions)
-            return
-        }
-        if (options.fileType === 'voice') {
-            await client.telegram.sendVoice(chatId, {source: fileBuffer, filename: options.fileName}, sendOptions)
-            return
-        }
-        if (options.fileType === 'animation') {
-            await client.telegram.sendAnimation(chatId, {source: fileBuffer, filename: options.fileName}, sendOptions)
-            return
-        }
-
-        await client.telegram.sendDocument(chatId, {source: fileBuffer, filename: options.fileName}, sendOptions)
+        if(options.caption === undefined)await send()
+        else await sendTelegramHtml(chatId,options.caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,send,()=>true,'botApi',
+            (sent,caption)=>client.telegram.editMessageCaption(chatId,sent.message_id,undefined,caption,{parse_mode:'HTML'}))
     }
 
     private async editWechatMediaRetryMessage(ctx: Context, text: string, keepRetryButton = true) {

@@ -11,6 +11,7 @@ export interface Field {
     min?: number
     max?: number
     required?: boolean
+    defaultValue?: string | boolean
 }
 
 export const groups = [
@@ -45,9 +46,9 @@ export const fields: Field[] = [
     runtime('forward', 'receivePublicAccount', '接收公众号消息', '接收公众号消息。'),
     runtime('forward', 'onlyReceiveOfficialNotify', '公众号仅接收通知', '仅接收公众号通知。'),
     runtime('forward', 'selfMessage', '转发自己发送的消息', '转发自己发送的消息。'),
-    field('forward', 'TELEGRAM_DISPLAY_MODE', 'Telegram 默认展示', 'auto：参考主人会员状态；compatible：普通消息；enhanced：主动启用增强。/display 可覆盖单个聊天，无法检测客户端版本。', 'select', {options:['auto','compatible','enhanced']}),
+    field('forward', 'TELEGRAM_DISPLAY_MODE', 'Telegram 默认展示', 'auto：默认在发送前预检测原生表情资格，其他富媒体参考主人会员状态；compatible：普通消息；enhanced：主动启用增强。/display 可覆盖单个聊天。', 'select', {options:['auto','compatible','enhanced'],defaultValue:'auto'}),
     field('forward', 'TELEGRAM_EMOJI_FALLBACK', '兼容表情展示', 'links：微信表情图片超链接；text：保留文字编码。无需会员。', 'select', {options:['links','text']}),
-    field('forward', 'WECHAT_CUSTOM_EMOJI_ENABLED', '微信行内自定义表情', '允许有权限时使用原生自定义表情；非会员或权限未知时使用兼容展示。', 'boolean'),
+    field('forward', 'WECHAT_CUSTOM_EMOJI_ENABLED', '微信行内自定义表情', '默认开启并自动验证发送资格，未确认资格时使用兼容展示。手动关闭或 compatible 模式优先。保存后重启生效。', 'boolean', {defaultValue:true}),
     runtime('forward', 'emojiPicture', '表情显示为图片链接', '表情显示为图片链接。'),
     runtime('forward', 'syncWechat', '启动时同步联系人与群组', '启动时同步联系人与群组。'),
     field('forward', 'language', '机器人语言', '机器人语言。', 'select', {source: 'runtime', options: ['zh-CN', 'en-US']}),

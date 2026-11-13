@@ -26,7 +26,8 @@ export async function handleTelegramDisplayCommand(ctx:DisplayContext,ownerId:nu
     const premium = policy.ownerPremium()
     const status = premium === undefined ? (english ? 'unknown' : '未知') : premium ? 'Premium' : (english ? 'non-Premium' : '非会员')
     const rich = policy.allows('richMessage',ctx.chat.id)
+    const emoji = policy.emoji.snapshot(ctx.chat.id).state
     await ctx.reply(english
-        ? `Display mode: ${policy.mode(ctx.chat.id)}\nConfigured owner: ${status}\nRich layout: ${rich ? 'enabled' : 'compatible'}\nAuto uses recent owner membership evidence; enhanced explicitly opts in. Client versions cannot be detected. Compatibility does not replay old messages.\n${usage}`
-        : `当前会话展示：${policy.mode(ctx.chat.id)}\n已绑定主人：${status}\n富媒体布局：${rich ? '增强' : '兼容'}\n自动模式参考主人近期会员信息；增强模式为主动启用。无法识别接收端版本，旧客户端可选 compatible。设置只影响后续展示，不重发历史消息。\n${usage}`)
+        ? `Display mode: ${policy.mode(ctx.chat.id)}\nConfigured owner: ${status}\nCustom emoji capability: ${emoji}\nRich layout: ${rich ? 'enabled' : 'compatible'}\nAuto detects custom emoji from delivery results; other rich layouts use recent owner membership evidence. Client versions cannot be detected.\n${usage}`
+        : `当前会话展示：${policy.mode(ctx.chat.id)}\n已绑定主人：${status}\n原生表情能力：${({supported:'已确认支持',unsupported:'当前不支持',unknown:'尚未确认'})[emoji]}\n富媒体布局：${rich ? '增强' : '兼容'}\n自动模式按发送结果识别表情能力，其他富媒体参考主人会员状态。手动关闭与 compatible 优先。无法识别接收端版本。\n${usage}`)
 }
