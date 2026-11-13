@@ -31,6 +31,10 @@ async function main(){
     const sharp = app('sharp')
     const png = await sharp({create:{width:32,height:32,channels:3,background:'#6688aa'}}).png().toBuffer()
     assert.equal((await sharp(png).metadata()).width,32)
+    const {prepareGroupAvatar,sameGroupAvatarDHash} = app('./dist/util/GroupAvatar')
+    assert.equal((await prepareGroupAvatar(png)).dHash,'0000000000000000')
+    assert.equal(sameGroupAvatarDHash('0000000000000000','f000000000000000'),true)
+    assert.equal(sameGroupAvatarDHash('0000000000000000','f800000000000000'),false)
     const {sandbox} = app('./dist/automation/sandbox')
     const plan = await sandbox('export default function(e,api){api.log("runtime-ok")}',{}, {},[])
     assert.deepEqual(plan.logs,['runtime-ok'])
@@ -69,7 +73,7 @@ async function main(){
     for(const asset of assets)assert.equal((await fetch(origin + asset)).status,200,asset)
     assert(fs.readdirSync('/app/dist/webui/public/emoji').some(name=>/\.(png|webp)$/.test(name)))
     assert.equal((await fetch(origin + '/api/config',{headers:{Authorization:`Bearer ${token}`}})).status,200)
-    console.log('Runtime smoke passed: production-only dependencies, SQLite, sharp, QuickJS worker, FFmpeg, SILK roundtrip, TGS/GIF, WebUI/PWA and authenticated config; no real accounts.')
+    console.log('Runtime smoke passed: production-only dependencies, SQLite, sharp/dHash, QuickJS worker, FFmpeg, SILK roundtrip, TGS/GIF, WebUI/PWA and authenticated config; no real accounts.')
   } finally {
     if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve))}
     fs.rmSync(directory,{recursive:true,force:true})

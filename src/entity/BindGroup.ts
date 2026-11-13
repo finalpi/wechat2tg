@@ -27,6 +27,10 @@ export class BindGroup {
     @Column({nullable: true})
     avatarHash: string
 
+    // Confirmed large-source 64-bit dHash; kept separate from the legacy SHA-256.
+    @Column({nullable: true})
+    avatarDHash: string
+
     @Column({nullable: true})
     avatarNoticeIds: string
 

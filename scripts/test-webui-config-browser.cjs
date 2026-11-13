@@ -19,8 +19,9 @@ async function main() {
     runtime: {read: async () => runtime, save: async patch => {runtime = {...runtime, ...patch}}},
     mcpTokens: {write: 'w'.repeat(32), read: 'r'.repeat(32)},
     messages: {
+      status: async()=>({available:false,wechatOnline:false,telegramOnline:false,directoryAvailable:false}),
       telegramDisplayStatus: async()=>emojiStatus,
-      probeTelegramCustomEmoji: async()=>{probes++;return {...emojiStatus,state:'supported',reason:'buttonConfirmed',checkedAt:Date.now(),expiresAt:Date.now()+86400000}},
+      probeTelegramCustomEmoji: async()=>{probes++;return {...emojiStatus,state:'supported',reason:'buttonConfirmed',checkedAt:Date.now(),expiresAt:Date.now() + 86400000}},
     },
   })
   server.listen(0, '127.0.0.1'); await once(server, 'listening')
@@ -112,14 +113,14 @@ async function main() {
     assert.equal(await page.locator('#deleteTitleNotices').getAttribute('data-state'),'unchecked')
     await page.locator('#deleteAvatarNotices').click()
     await page.locator('#deleteTitleNotices').click()
-    let noticeSaved=page.waitForResponse(r=>r.url().endsWith('/api/config') && r.request().method()==='PATCH')
+    let noticeSaved = page.waitForResponse(r=>r.url().endsWith('/api/config') && r.request().method() === 'PATCH')
     await page.getByRole('button',{name:'保存',exact:true}).click()
     assert.equal((await noticeSaved).status(),200)
     assert.equal(runtime.deleteAvatarNotices,true)
     assert.equal(runtime.deleteTitleNotices,true)
     await page.locator('#deleteAvatarNotices').click()
     await page.locator('#deleteTitleNotices').click()
-    noticeSaved=page.waitForResponse(r=>r.url().endsWith('/api/config') && r.request().method()==='PATCH')
+    noticeSaved = page.waitForResponse(r=>r.url().endsWith('/api/config') && r.request().method() === 'PATCH')
     await page.getByRole('button',{name:'保存',exact:true}).click()
     assert.equal((await noticeSaved).status(),200)
     assert.equal(runtime.deleteAvatarNotices,false)

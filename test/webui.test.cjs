@@ -56,6 +56,7 @@ test('additive SQLite upgrade preserves legacy messages and bindings', async t =
   await old.query('ALTER TABLE message DROP COLUMN threadId')
   await old.query('ALTER TABLE message DROP COLUMN conversationWxId')
   await old.query('ALTER TABLE bind_group DROP COLUMN avatarHash')
+  await old.query('ALTER TABLE bind_group DROP COLUMN avatarDHash')
   await old.query('ALTER TABLE bind_group DROP COLUMN avatarNoticeIds')
   await old.query('ALTER TABLE bind_group DROP COLUMN titleNoticeIds')
   await old.destroy()
@@ -69,6 +70,9 @@ test('additive SQLite upgrade preserves legacy messages and bindings', async t =
     const binding = await upgraded.getRepository(BindGroup).findOneBy({chatId: -10})
     assert.equal(binding.name, 'old group')
     assert.equal(binding.avatarHash, null)
+    assert.equal(binding.avatarDHash, null)
+    await upgraded.getRepository(BindGroup).save({...binding,avatarDHash:'f800000000000000'})
+    assert.equal((await upgraded.getRepository(BindGroup).findOneBy({chatId:-10})).avatarDHash,'f800000000000000')
     assert.equal(binding.avatarNoticeIds, null)
     assert.equal(binding.titleNoticeIds, null)
     assert.equal(await upgraded.getRepository(BindGroup).count(), 1)
@@ -160,65 +164,65 @@ test('blank message templates save as defaults and never report a spurious resta
 })
 
 test('existing configuration databases gain independent, disabled notice-cleanup preferences',async t=>{
-  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'notice-settings-upgrade-'))
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(),'notice-settings-upgrade-'))
   t.after(()=>fs.rmSync(directory,{recursive:true}))
-  const file=path.join(directory,'fixture.db')
-  const old=new DataSource({type:'sqlite',database:file,entities:[Configuration],synchronize:true})
+  const file = path.join(directory,'fixture.db')
+  const old = new DataSource({type:'sqlite',database:file,entities:[Configuration],synchronize:true})
   await old.initialize()
   await old.getRepository(Configuration).save({id:1,syncWechat:true,compression:false,language:'en-US'})
   await old.query('ALTER TABLE configuration DROP COLUMN deleteAvatarNotices')
   await old.query('ALTER TABLE configuration DROP COLUMN deleteTitleNotices')
   await old.destroy()
-  const upgraded=new DataSource({type:'sqlite',database:file,entities:[Configuration],synchronize:true})
+  const upgraded = new DataSource({type:'sqlite',database:file,entities:[Configuration],synchronize:true})
   await upgraded.initialize()
   try{
-    const row=await upgraded.getRepository(Configuration).findOneBy({id:1})
+    const row = await upgraded.getRepository(Configuration).findOneBy({id:1})
     assert.equal(row.deleteAvatarNotices,false)
     assert.equal(row.deleteTitleNotices,false)
     assert.equal(row.syncWechat,true)
     assert.equal(row.compression,false)
     assert.equal(row.language,'en-US')
     await upgraded.getRepository(Configuration).save({...row,deleteTitleNotices:true})
-    const saved=await upgraded.getRepository(Configuration).findOneBy({id:1})
+    const saved = await upgraded.getRepository(Configuration).findOneBy({id:1})
     assert.equal(saved.deleteAvatarNotices,false)
     assert.equal(saved.deleteTitleNotices,true)
   } finally {await upgraded.destroy()}
 })
 
 test('WebUI exposes notice-cleanup switches off by default and saves runtime changes without a restart',async t=>{
-  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'notice-settings-http-'))
-  let runtime={selfMessage:true}
-  const saves=[]
-  const token='synthetic-notice-settings-token'
-  const server=createWebUIServer({environment:{},file:path.join(directory,'settings.json'),token,
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(),'notice-settings-http-'))
+  let runtime = {selfMessage:true}
+  const saves = []
+  const token = 'synthetic-notice-settings-token'
+  const server = createWebUIServer({environment:{},file:path.join(directory,'settings.json'),token,
     runtime:{
       read:async()=>runtime,
-      save:async patch=>{saves.push({...patch});runtime={...runtime,...patch}},
+      save:async patch=>{saves.push({...patch});runtime = {...runtime,...patch}},
     },
   })
   server.listen(0,'127.0.0.1');await once(server,'listening')
   t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));fs.rmSync(directory,{recursive:true})})
-  const url=`http://127.0.0.1:${server.address().port}/api/config`,headers={Authorization:`Bearer ${token}`,'Content-Type':'application/json'}
-  const get=async()=>{const response=await fetch(url,{headers});assert.equal(response.status,200);return response.json()}
-  let current=await get()
+  const url = `http://127.0.0.1:${server.address().port}/api/config`,headers = {Authorization:`Bearer ${token}`,'Content-Type':'application/json'}
+  const get = async()=>{const response = await fetch(url,{headers});assert.equal(response.status,200);return response.json()}
+  let current = await get()
   for(const key of ['deleteAvatarNotices','deleteTitleNotices']){
     assert.equal(current.values[key],false)
-    assert(current.fields.some(field=>field.key===key && field.group==='forward' && field.source==='runtime' && field.type==='boolean'))
+    assert(current.fields.some(field=>field.key === key && field.group === 'forward' && field.source === 'runtime' && field.type === 'boolean'))
   }
-  let response=await fetch(url,{method:'PATCH',headers,body:JSON.stringify({source:'runtime',revision:current.revision,values:{deleteAvatarNotices:true,deleteTitleNotices:false}})})
+  let response = await fetch(url,{method:'PATCH',headers,body:JSON.stringify({source:'runtime',revision:current.revision,values:{deleteAvatarNotices:true,deleteTitleNotices:false}})})
   assert.equal(response.status,200)
-  current=await response.json()
+  current = await response.json()
   assert.equal(current.restartRequired,false)
   assert.equal(current.values.deleteAvatarNotices,true)
   assert.equal(current.values.deleteTitleNotices,false)
-  response=await fetch(url,{method:'PATCH',headers,body:JSON.stringify({source:'runtime',revision:current.revision,values:{deleteAvatarNotices:false,deleteTitleNotices:true}})})
+  response = await fetch(url,{method:'PATCH',headers,body:JSON.stringify({source:'runtime',revision:current.revision,values:{deleteAvatarNotices:false,deleteTitleNotices:true}})})
   assert.equal(response.status,200)
-  current=await response.json()
+  current = await response.json()
   assert.equal(current.restartRequired,false)
   assert.equal(current.values.deleteAvatarNotices,false)
   assert.equal(current.values.deleteTitleNotices,true)
   assert.equal(runtime.selfMessage,true)
   assert.equal(saves.length,2)
-  response=await fetch(url,{method:'PATCH',headers,body:JSON.stringify({source:'runtime',revision:current.revision,values:{deleteTitleNotices:'true'}})})
+  response = await fetch(url,{method:'PATCH',headers,body:JSON.stringify({source:'runtime',revision:current.revision,values:{deleteTitleNotices:'true'}})})
   assert.equal(response.status,400)
 })

@@ -4,9 +4,8 @@ import {ConfigurationService} from './ConfigurationService'
 import {TelegramClient as GramClient} from 'telegram/client/TelegramClient'
 import {Api} from 'telegram'
 import {CustomFile} from 'telegram/client/uploads'
-import axios from 'axios'
 import {returnBigInt} from 'telegram/Helpers'
-import {prepareGroupAvatar, sameGroupAvatar} from '../util/GroupAvatar'
+import {groupAvatarDHash, largeGroupAvatarURL, prepareGroupAvatar, sameGroupAvatar, sameGroupAvatarDHash} from '../util/GroupAvatar'
 import {FormatUtils} from '../util/FormatUtils'
 import {config} from '../config'
 import {FileUtils} from '../util/FileUtils'
@@ -76,27 +75,38 @@ export class TelegramGroupOperateService {
             const preferences = await this.configService.getConfig()
             const deleteAvatarNotices = stored.type === 1 || stored.wxId?.endsWith('@chatroom') === true
                 || preferences.deleteAvatarNotices === true
-            if (input.avatarLink && (input.avatarLink !== stored.avatarLink || !stored.avatarHash)) {
+            // A stable URL can serve new bytes. Recheck the large source during
+            // metadata sync; URL/MD5/SHA changes alone never trigger a photo edit.
+            if (input.avatarLink) {
                 try {
-                    const buff = await FileUtils.getInstance().downloadUrl2Buffer(input.avatarLink)
+                    const buff = await FileUtils.getInstance().downloadUrl2Buffer(largeGroupAvatarURL(input.avatarLink))
                     if (!buff?.length) throw new Error('Empty group avatar')
                     const avatar = await prepareGroupAvatar(buff)
-                    if (avatar.hash !== stored.avatarHash) {
-                        // The old source URL can expire or change its bytes. The
-                        // existing Telegram photo is the authoritative baseline.
+                    let baseline = stored.avatarDHash
+                    if (!sameGroupAvatarDHash(avatar.dHash, baseline)) {
+                        // Bootstrap old bindings and recover a photo edit whose DB
+                        // save failed by checking the actual large Telegram photo.
                         const current = await this.client.downloadProfilePhoto(entity, {isBig: true})
                         if (!Buffer.isBuffer(current)) throw new Error('Unable to read current group avatar')
-                        if (!current.length || !await sameGroupAvatar(avatar.buffer, current)) {
+                        const matchesCurrent = current.length && (sameGroupAvatarDHash(avatar.dHash, await groupAvatarDHash(current))
+                            || await sameGroupAvatar(avatar.buffer, current))
+                        if (!matchesCurrent) {
                             const result = await this.updateGroupAvatar(entity, avatar.buffer)
                             if (deleteAvatarNotices) {
                                 const notices = this.metadataNoticeIds(result, entity, 'avatar')
                                 if (notices.length) updated.avatarNoticeIds = JSON.stringify([...new Set([...noticeIds(updated.avatarNoticeIds), ...notices])])
                             }
                         }
+                        baseline = avatar.dHash
                     }
-                    updated.avatarLink = input.avatarLink
-                    updated.avatarHash = avatar.hash
-                    changed = true
+                    // Similar candidates must not move the confirmed baseline:
+                    // otherwise repeated <5-bit steps can hide a cumulative change.
+                    if (updated.avatarLink !== input.avatarLink || updated.avatarHash !== avatar.hash || updated.avatarDHash !== baseline) {
+                        updated.avatarLink = input.avatarLink
+                        updated.avatarHash = avatar.hash
+                        updated.avatarDHash = baseline
+                        changed = true
+                    }
                 } catch (error) {
                     // An avatar FloodWait must also stop the following title edit.
                     if (this.isFloodWaitError(error)) throw error
