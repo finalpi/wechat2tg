@@ -19,7 +19,7 @@ const zhCN = {
   'settings.emoji_picture': '微信emoji以图片链接显示',
   'settings.self_message': '转发自己在微信发送的消息',
   'settings.sync_wechat': '启动时同步群组信息',
-  'settings.delete_avatar_notices': '自动删除头像更换通知',
+  'settings.delete_avatar_notices': '自动删除联系人头像更换通知',
   'settings.delete_title_notices': '自动删除名称更改通知',
   'settings.auto_transcript': '语音转文字',
   'settings.option_on': '开启',

@@ -74,6 +74,8 @@ export class TelegramGroupOperateService {
             const entity = await this.client.getEntity(returnBigInt(input.chatId))
             if (!entity || !(entity.className === 'Chat' || entity.className === 'Channel' && entity.megagroup)) return
             const preferences = await this.configService.getConfig()
+            const deleteAvatarNotices = stored.type === 1 || stored.wxId?.endsWith('@chatroom') === true
+                || preferences.deleteAvatarNotices === true
             if (input.avatarLink && (input.avatarLink !== stored.avatarLink || !stored.avatarHash)) {
                 try {
                     const buff = await FileUtils.getInstance().downloadUrl2Buffer(input.avatarLink)
@@ -86,7 +88,7 @@ export class TelegramGroupOperateService {
                         if (!Buffer.isBuffer(current)) throw new Error('Unable to read current group avatar')
                         if (!current.length || !await sameGroupAvatar(avatar.buffer, current)) {
                             const result = await this.updateGroupAvatar(entity, avatar.buffer)
-                            if (preferences.deleteAvatarNotices === true) {
+                            if (deleteAvatarNotices) {
                                 const notices = this.metadataNoticeIds(result, entity, 'avatar')
                                 if (notices.length) updated.avatarNoticeIds = JSON.stringify([...new Set([...noticeIds(updated.avatarNoticeIds), ...notices])])
                             }
@@ -101,7 +103,7 @@ export class TelegramGroupOperateService {
                     console.warn('[TelegramGroupOperateService] 更新群头像失败，保留原头像:', error?.message)
                 }
             }
-            if (preferences.deleteAvatarNotices === true) changed = await this.cleanupNotices(entity, updated, 'avatarNoticeIds') || changed
+            if (deleteAvatarNotices) changed = await this.cleanupNotices(entity, updated, 'avatarNoticeIds') || changed
             const alias = input.type === 0 && input.alias === input.name ? '' : input.alias
             const name = input.type === 0
                 ? FormatUtils.transformTitleStr(config.CREATE_CONTACT_NAME, alias, input.name, '') || '未命名'

@@ -12,7 +12,7 @@ const floodWait = () => Object.assign(new Error('A wait of 690 seconds is requir
   code: 420, errorMessage: 'FLOOD', seconds: 690,
 })
 
-function fixture({avatar = false, deleteAvatarNotices = false, deleteTitleNotices = false} = {}) {
+function fixture({avatar = false, group = true, deleteAvatarNotices = false, deleteTitleNotices = false} = {}) {
   let now = 1000
   const logs = {log: [], warn: [], error: []}, requests = [], downloads = [], photoReads = [], uploads = [], deletions = [], saves = [], rows = new Map(), hooks = {}
   const preferences = {deleteAvatarNotices, deleteTitleNotices}
@@ -53,8 +53,9 @@ function fixture({avatar = false, deleteAvatarNotices = false, deleteTitleNotice
   })
   const service = (current = client) => new exports.TelegramGroupOperateService(bindings, current)
   const input = id => {
-    rows.set(id, {chatId: id, wxId: `room_${id}@chatroom`, type: 1, name: 'Old title', avatarLink: avatar ? 'old-avatar' : undefined})
-    return {chatId: id, wxId: `room_${id}@chatroom`, type: 1, name: 'New title', avatarLink: avatar ? 'new-avatar' : undefined}
+    const wxId = group ? `room_${id}@chatroom` : `contact_${id}`, type = group ? 1 : 0
+    rows.set(id, {chatId: id, wxId, type, name: 'Old title', avatarLink: avatar ? 'old-avatar' : undefined})
+    return {chatId: id, wxId, type, name: 'New title', avatarLink: avatar ? 'new-avatar' : undefined}
   }
   return {client, service, input, rows, requests, downloads, photoReads, uploads, deletions, saves, logs, hooks, preferences, advance: ms => {now += ms}}
 }
@@ -485,7 +486,7 @@ test('short update receipts also identify the avatar service message for deletio
 
 for(const kind of ['Chat','Channel'])for(const deleteAvatarNotices of [false,true])for(const deleteTitleNotices of [false,true]){
   test(`${kind} notice settings are independent: avatar=${deleteAvatarNotices}, title=${deleteTitleNotices}`,async()=>{
-    const f=fixture({avatar:true,deleteAvatarNotices,deleteTitleNotices}),input=f.input(-10001)
+    const f=fixture({avatar:true,group:false,deleteAvatarNotices,deleteTitleNotices}),input=f.input(-10001)
     f.hooks.entity=async()=>({className:kind,megagroup:true,id:returnBigInt(12345),title:'Old title'})
     f.hooks.invoke=async()=>photoReceipt(kind)
     await f.service().updateGroup(input)
@@ -514,6 +515,27 @@ test('runtime title setting changes stop pending cleanup and resume it without a
   assert.equal(f.deletions.length,2)
   assert.equal(f.requests.length,1)
   assert.equal(f.rows.get(input.chatId).titleNoticeIds,null)
+})
+
+for(const kind of ['Chat','Channel']) {
+  test(`WeChat group avatar notices are cleaned automatically in ${kind} with both preferences disabled`,async()=>{
+    const f=fixture({avatar:true}),input=f.input(-10001)
+    f.hooks.entity=async()=>({className:kind,megagroup:true,id:returnBigInt(12345),title:'Old title'})
+    f.hooks.invoke=async()=>photoReceipt(kind)
+    await f.service().updateGroup(input)
+    assert.deepEqual(f.deletions.flatMap(call=>[...call.ids]),[101])
+    assert.equal(f.rows.get(input.chatId).name,'New title')
+  })
+}
+
+test('a legacy group binding is recognized by its WeChat room ID even when its stored type is contact',async()=>{
+  const f=fixture({avatar:true}),input=f.input(-10001)
+  f.rows.get(input.chatId).type=0
+  input.type=0
+  f.hooks.entity=async()=>({className:'Channel',megagroup:true,id:returnBigInt(12345),title:'Old title'})
+  f.hooks.invoke=async()=>photoReceipt('Channel')
+  await f.service().updateGroup(input)
+  assert.deepEqual(f.deletions.flatMap(call=>[...call.ids]),[101])
 })
 
 test('a title notice deletion FloodWait preserves the confirmed name and its pending receipt',async()=>{
