@@ -24,6 +24,9 @@ export class BindGroup {
     @Column({nullable: true})
     avatarLink: string
 
+    @Column({nullable: true})
+    avatarHash: string
+
     // 类型：0-contact，1-room
     @Column()
     type: number

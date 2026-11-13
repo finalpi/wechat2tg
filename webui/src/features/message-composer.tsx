@@ -35,6 +35,7 @@ export function MessageComposer({token, contact, online, quote, draft, onClearQu
   const [voice, setVoice] = useState(draft.voice || false)
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
+  const [focusAfterSend, setFocusAfterSend] = useState(false)
   const [error, setError] = useState('')
   const [pending, setPending] = useState(Boolean(draft.attempt))
   const attempt = useRef<ComposerDraft['attempt']>(draft.attempt)
@@ -170,6 +171,7 @@ export function MessageComposer({token, contact, online, quote, draft, onClearQu
   const submit = async () => {
     if (busyRef.current || draft.inFlight || !online || (!attempt.current && !body.trim() && !file)) return
     busyRef.current = true; draft.inFlight = true; setBusy(true); setError('')
+    setFocusAfterSend(false)
     try {
       if (!attempt.current) {
         const id = createRequestId()
@@ -194,6 +196,7 @@ export function MessageComposer({token, contact, online, quote, draft, onClearQu
       Object.assign(draft, {body: '', quote: null, file: null, voice: false, selected: [], all: false, inlineMentions: [], attempt: null})
       if (!mounted.current) return
       selection.current = {start: 0, end: 0}
+      setFocusAfterSend(true)
       setPending(false); setBody(''); setFile(null); setVoice(false); setSelected([]); setAll(false); setInlineMentions([]); setShowMembers(false); setMentionTarget(null); setShowEmoji(false); onClearQuote()
     } catch (e) {
       if (mounted.current) {setError(messageError(e)); setPending(Boolean(attempt.current)); onAuthError(e)}
@@ -215,6 +218,16 @@ export function MessageComposer({token, contact, online, quote, draft, onClearQu
     return () => window.clearInterval(timer)
   }, [draft])
   const locked = busy || pending || Boolean(draft.inFlight)
+  useLayoutEffect(() => {
+    if (locked || !focusAfterSend) return
+    setFocusAfterSend(false)
+    const editor = textarea.current, element = editor?.element
+    if (!editor || !element?.isConnected || !element.getClientRects().length || document.visibilityState === 'hidden') return
+    const active = document.activeElement
+    if (active && active !== document.body && !composer.current?.contains(active)) return
+    editor.focus()
+    editor.setSelectionRange(0, 0)
+  }, [locked, focusAfterSend])
   useEffect(() => {
     if (locked || !online || quote || file) {setShowMembers(false); setMentionTarget(null)}
     if (locked) setShowEmoji(false)

@@ -1,10 +1,11 @@
 import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties} from 'react'
 import {createRequestId} from '@/lib/request-id'
-import {ArrowLeft, RefreshCw, Search, MessageSquare, Reply, Undo2, MoreHorizontal, PanelLeftClose, PanelLeftOpen} from 'lucide-react'
+import {ArrowDown, ArrowLeft, RefreshCw, Search, MessageSquare, Reply, Undo2, MoreHorizontal, PanelLeftClose, PanelLeftOpen} from 'lucide-react'
 import {ApiError} from '@/lib/api'
 import {messagesApi, mergeMessages, messageError, type Contact, type ChatMessage, type MessageStatus, type MessageUpdates, type ContactCategory, type ContactCounts} from '@/lib/messages-api'
 import {cn} from '@/lib/utils'
 import {fillMessageGap} from '@/lib/message-history'
+import {findLoadedMessage, revealMessage, type MessageLocation} from '@/lib/message-location'
 import {createMessageEventHub, createRefreshQueue, startMessageEvents, type MessageEventHub, type MessageConnectionState} from '@/lib/message-events'
 import {Button} from '@/components/ui/button'
 import {Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger} from '@/components/ui/dialog'
@@ -75,9 +76,11 @@ function ConnectionDetails({state, status}: {state: MessageConnectionState; stat
   </DialogContent></Dialog>
 }
 
-function JumpToMessage({targetId}: {targetId: number | null}) {
+function JumpToMessage({location, viewport}: {location: MessageLocation | null; viewport: {current: HTMLDivElement | null}}) {
   const {scrollToMessage} = useMessageScroller()
-  useEffect(() => {if (targetId) scrollToMessage(String(targetId), {align: 'center'})}, [targetId, scrollToMessage])
+  useEffect(() => {
+    if (location && viewport.current) return revealMessage(location, viewport.current, scrollToMessage)
+  }, [location, viewport, scrollToMessage])
   return null
 }
 
@@ -125,7 +128,7 @@ function Conversation({token, contact, online, draft, events, connection, onBack
   const [quote, setQuote] = useState<ChatMessage | null>(draft.quote || null)
   useEffect(() => {draft.quote = quote}, [draft, quote])
   const [located, setLocated] = useState(false)
-  const [targetId, setTargetId] = useState<number | null>(null)
+  const [location, setLocation] = useState<MessageLocation | null>(null)
   const [reload, setReload] = useState(0)
   const [busyIds, setBusyIds] = useState<Set<number>>(new Set())
   const [now, setNow] = useState(Date.now())
@@ -167,7 +170,7 @@ function Conversation({token, contact, online, draft, events, connection, onBack
     const currentGeneration = ++generation.current
     contextGeneration.current++
     updateRows(() => [])
-    setLoading(true); setError(''); setLocated(false); setTargetId(null); setBefore(0); setHasMore(false); setMoreBusy(false)
+    setLoading(true); setError(''); setLocated(false); setLocation(null); setBefore(0); setHasMore(false); setMoreBusy(false)
     locating.current = false; locatePending.current = false
     let initial = true, all = false
     const ids = new Set<number>()
@@ -256,10 +259,16 @@ function Conversation({token, contact, online, draft, events, connection, onBack
     const baseline = liveRows.current
     const signal = requests.current?.signal
     locating.current = true; locatePending.current = true; setError('')
+    const loaded = findLoadedMessage(baseline, target)
+    if (loaded) {
+      setLocated(true); setLocation({id: loaded.id}); locatePending.current = false
+      refreshHistory.current()
+      return
+    }
     try {
       const page = await messagesApi.locate(token, contact.wxId, target, signal)
       if (!mounted.current || signal?.aborted || generation.current !== currentGeneration || contextGeneration.current !== currentContext) return
-      applyPage(page, true, baseline); setBefore(page.before); setHasMore(page.hasMore); setLocated(true); setTargetId(page.targetId)
+      applyPage(page, true, baseline); setBefore(page.before); setHasMore(page.hasMore); setLocated(true); setLocation({id: page.targetId})
       locatePending.current = false; refreshHistory.current()
     } catch (e) {if (!signal?.aborted && mounted.current && generation.current === currentGeneration && contextGeneration.current === currentContext) {locating.current = located; locatePending.current = false; setError(messageError(e)); onAuthError(e); refreshHistory.current()}}
   }
@@ -309,17 +318,17 @@ function Conversation({token, contact, online, draft, events, connection, onBack
       <ContactAvatar token={token} wxId={contact.wxId} name={contact.name} available={contact.hasAvatar} group={contact.kind === 'group'} />
       <div className="min-w-0 flex-1"><h2 className="truncate font-semibold" title={contact.name || contact.wxId}>{contact.name || contact.wxId}</h2></div>
       {connection !== 'connected' && <ConnectionBadge state={connection} className="md:hidden" />}
-      <Button variant="ghost" size="icon" aria-label="展开消息搜索" aria-expanded={showSearch || Boolean(query) || located} onClick={() => setShowSearch(value => !value)}><Search /></Button>
+      <Button variant="ghost" size="icon" aria-label="展开消息搜索" aria-expanded={showSearch || Boolean(query)} onClick={() => setShowSearch(value => !value)}><Search /></Button>
       <Button variant="ghost" size="icon" className="hidden md:inline-flex" aria-label={focused?'显示会话列表':'专注当前会话'} aria-pressed={focused} onClick={onFocus}>{focused?<PanelLeftOpen />:<PanelLeftClose />}</Button>
       <Button variant="ghost" size="icon" aria-label="刷新消息" onClick={() => refreshHistory.current()}><RefreshCw /></Button>
     </header>
-    <div className={cn('shrink-0 items-center gap-2 border-b p-2 md:p-3', showSearch || query || located ? 'flex' : 'hidden')}>
+    <div className={cn('shrink-0 items-center gap-2 border-b p-2 md:p-3', showSearch || query ? 'flex' : 'hidden')}>
       <Search className="size-4 shrink-0 text-muted-foreground" /><Input aria-label="搜索消息" placeholder="搜索此会话的消息" maxLength={100} value={query} onChange={e => setQuery(e.target.value)} />
       {(located || query) && <Button variant="outline" size="sm" onClick={() => {setQuery(''); setReload(value => value + 1)}}>返回最新</Button>}
     </div>
     {error && <Alert variant="destructive" className="shrink-0 rounded-none border-x-0"><AlertDescription>{error}</AlertDescription></Alert>}
     {loading ? <div className="flex flex-1 items-center justify-center"><Spinner /></div> : !rows.length ? <Placeholder title={query ? '未找到消息' : '暂无消息'} detail="此处显示已保存的消息记录。" /> : (
-      <MessageScrollerProvider key={`${contact.wxId}:${query}:${reload}:${located}`} defaultScrollPosition={located ? 'start' : 'end'} autoScroll={!located && visible}>
+      <MessageScrollerProvider key={`${contact.wxId}:${query}:${reload}`} defaultScrollPosition="end" autoScroll={!located && visible}>
         <MessageScroller className="flex-1 bg-background">
           <MessageScrollerViewport ref={messageViewport} className="[overflow-anchor:none]" aria-label="消息记录"><MessageScrollerContent className="mx-auto w-full max-w-5xl gap-4 px-3 py-4 md:gap-5 md:px-6 md:py-6">
             {hasMore && <MessageScrollerItem messageId="load-older"><div className="flex justify-center"><Button variant="outline" size="sm" disabled={moreBusy} onClick={more}>{moreBusy && <Spinner />} 加载更早消息</Button></div></MessageScrollerItem>}
@@ -342,7 +351,7 @@ function Conversation({token, contact, online, draft, events, connection, onBack
               const canSync = row.telegramTracked && ['failed', 'unknown', 'unverified', 'pending'].includes(row.telegramStatus) && ['received', 'submitted'].includes(row.status)
               const canRevoke = row.canRevoke && (!row.revokeDeadline || row.revokeDeadline * 1000 > now + clockOffset.current)
               return <MessageScrollerItem key={row.id} messageId={String(row.id)}>
-                <ChatMessageCard outgoing={outgoing} publication={!outgoing && publication} showAuthor={index===0 && contact.kind==='group'} first={index===0} last={index===group.messages.length-1} highlighted={targetId===row.id}
+                <ChatMessageCard outgoing={outgoing} publication={!outgoing && publication} showAuthor={index===0 && contact.kind==='group'} first={index===0} last={index===group.messages.length-1}
                   author={outgoing?'我':row.senderDisplayName || row.senderName || row.senderId || contact.name}
                   avatar={<ContactAvatar token={token} wxId={row.senderId || (!outgoing?contact.wxId:'')} name={outgoing?'我':row.senderDisplayName || row.senderName || contact.name} available={row.senderHasAvatar || (!outgoing && contact.hasAvatar) || (contact.kind==='group' && Boolean(row.senderId))} roomId={contact.kind==='group'?contact.wxId:undefined} />}
                   footer={<MessageFooter className="w-full flex-wrap justify-end gap-x-3 gap-y-2 px-0">
@@ -366,7 +375,10 @@ function Conversation({token, contact, online, draft, events, connection, onBack
               </MessageScrollerItem>
             })}
           </MessageScrollerContent></MessageScrollerViewport>
-          <MessageScrollerButton />{located && <JumpToMessage targetId={targetId} />}
+          {!located ? <MessageScrollerButton /> : !showSearch && !query && <Button variant="secondary" size="sm"
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 gap-2 rounded-full border bg-background shadow-sm"
+            onClick={() => {setQuery(''); setReload(value => value + 1)}}><ArrowDown className="size-4" />返回最新</Button>}
+          <JumpToMessage location={location} viewport={messageViewport} />
           <GroupReadingPosition viewport={messageViewport} capture={captureReadingPosition} rows={rows} />
         </MessageScroller>
       </MessageScrollerProvider>

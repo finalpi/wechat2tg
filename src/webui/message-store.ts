@@ -4,6 +4,7 @@ import path from 'node:path'
 import {isControlMessage,isNoiseMessage} from './message-visibility'
 import {getWechatCallStatus} from '../util/WechatCallStatus'
 import {cleanMediaBody} from './message-body'
+import {quoteReplyText} from './quote-reply'
 import {createMessageEvents,MessageChange} from './message-events'
 
 export interface InboxMessage {
@@ -234,7 +235,8 @@ export class WebMessageStore {
             }
             if(this.managedReceipts.has(`${wxId}:${msg.newMsgId}`))return
         }
-        const body = callStatus || (['text', '1', 'solitaire'].includes(type.toLowerCase()) ? String(msg.text() || '') : '')
+        const body = callStatus || (type === 'quote' ? quoteReplyText(msg._xml || msg.text()) ?? String(msg.text() ?? '')
+            : ['text', '1', 'solitaire'].includes(type.toLowerCase()) ? String(msg.text() || '') : '')
         const codes = {image:3,voice:34,video:43,emoji:47,file:49,link:49,contact:42,location:48,text:1,quote:49,solitaire:49,voip:callStatus ? 50 : 10002}
         const createdAt = Number(msg._createTime ?? msg.date()) || Math.floor(Date.now() / 1000)
         const source = JSON.stringify({MsgId:String(msg._msgId || 0),FromUserName:msg.fromId,ToUserName:msg.toId,NewMsgId:msg.newMsgId,CreateTime:createdAt,MsgType:codes[type] || 0,Content:msg._xml || msg.text(),xml:msg._xml})

@@ -22,6 +22,7 @@ import {quoteReference,quoteXML,sendQuote} from './quotes'
 import {revokePayload,revokeWechat,revokePolicy} from './revoke'
 import {annotateTelegramRecall} from './telegram-recall'
 import {cleanMediaBody} from './message-body'
+import {quoteReplyText} from './quote-reply'
 import {readLinkDetails,linkArticles,publicLinkDetails,articleText} from './articles'
 import {loadArticleCover} from '../util/ArticleCover'
 import {OfficialAccountTopic} from '../entity/OfficialAccountTopic'
@@ -123,6 +124,10 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
     const synchronization = new Map<number,Promise<void>>()
     const publicMessage = (row: {id: number; source?: string; details?: string; [key: string]: unknown}) => {
         const safe = {...row}
+        if (row.type === 'quote' && !row.body) {
+            const reply = quoteReplyText(row.source)
+            if (reply !== undefined) {safe.body = reply; safe.bodyFormat = 'plain'}
+        }
         delete safe.source
         let details: unknown = null
         try { if (row.details) details = JSON.parse(row.details) }
@@ -396,6 +401,10 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         for(const item of result.messages){
             const row = sources.get(item.id)
             item.body = cleanMediaBody(item.type,item.body,row.source)
+            if (item.type === 'quote' && !item.body) {
+                const reply = quoteReplyText(row.source)
+                if (reply !== undefined) {item.body = reply; item.bodyFormat = 'plain'}
+            }
             const policy = revokePolicy(row);item.revokeDeadline = policy.deadline;item.revokeWindowSeconds = policy.windowSeconds
             try{revokePayload(row,(client() as any)?.wxInfo?.wxid || '');item.canRevoke = !['revoking','revoked'].includes(row.revokeStatus)}catch(e){item.canRevoke = false;item.revokeUnavailableReason = e?.code || 'revokeUnavailable'}
             if(item.type === 'chat_histroy' || row.source && /\[聊天记录\]/.test(item.body || '')){

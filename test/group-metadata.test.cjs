@@ -6,6 +6,7 @@ const path = require('node:path')
 const vm = require('node:vm')
 const {Api} = require('telegram')
 const {returnBigInt} = require('telegram/Helpers')
+const {createHash} = require('node:crypto')
 
 const floodWait = () => Object.assign(new Error('A wait of 690 seconds is required'), {
   code: 420, errorMessage: 'FLOOD', seconds: 690,
@@ -33,8 +34,8 @@ function fixture({avatar = false} = {}) {
     './ConfigurationService': {ConfigurationService: {getInstance: () => ({})}},
     '../config': {config: {CREATE_CONTACT_NAME: 'contact', CREATE_ROOM_NAME: 'room'}},
     '../util/FormatUtils': {FormatUtils: {transformTitleStr: (_template, alias, name, room) => room || alias || name}},
-    '../util/FileUtils': {FileUtils: {getInstance: () => ({downloadUrl2Buffer: async url => {downloads.push(url); return Buffer.from('avatar')}})}},
-    sharp: () => ({toFormat() {return this}, resize() {return this}, toBuffer: async () => Buffer.from('png')}),
+    '../util/FileUtils': {FileUtils: {getInstance: () => ({downloadUrl2Buffer: async url => {downloads.push(url); return hooks.download ? hooks.download(url) : Buffer.from(url)}})}},
+    '../util/GroupAvatar': {prepareGroupAvatar: async buffer => ({buffer, hash: createHash('sha256').update(buffer).digest('hex')})},
     telegram: {Api}, 'telegram/Helpers': {returnBigInt},
     'telegram/client/uploads': {CustomFile: class {}},
   }
@@ -70,7 +71,7 @@ test('an avatar FloodWait also stops title edits and later avatar uploads during
   for (const id of [-10001, -10002, -10003]) await f.service().updateGroup(f.input(id))
   assert.equal(f.requests.length, 1, 'Avatar throttling must also stop EditTitle')
   assert(f.requests[0] instanceof Api.channels.EditPhoto)
-  assert.equal(f.downloads.length, 1)
+  assert.equal(f.downloads.length, 2, 'Read the new avatar and establish the legacy content baseline')
   assert.equal(f.uploads.length, 1)
   assert.equal(f.saves.length, 0, 'Failed avatar/title updates must remain pending locally')
   assert.equal(f.rows.get(-10001).avatarLink, 'old-avatar')
@@ -221,3 +222,81 @@ for (const entity of ['Chat', 'Channel']) {
     assert.equal(input.name, 'New title', 'Do not mutate caller input')
   })
 }
+
+test('changed URLs with identical content update the local URL without changing the Telegram photo', async () => {
+  const f = fixture({avatar: true}), input = f.input(-10001)
+  f.hooks.download = async () => Buffer.from('same pixels')
+  await f.service().updateGroup(input)
+  assert.equal(f.uploads.length, 0)
+  assert.equal(f.requests.filter(request => request instanceof Api.channels.EditPhoto).length, 0)
+  assert.equal(f.rows.get(input.chatId).avatarLink, 'new-avatar')
+  const hash = f.rows.get(input.chatId).avatarHash
+  assert.match(hash, /^[a-f0-9]{64}$/)
+  assert.equal(f.rows.get(input.chatId).name, 'New title', 'Avatar deduplication still allows title changes')
+  f.downloads.splice(0)
+  await f.service().updateGroup({...input, avatarLink: 'rotated-token-url'})
+  assert.deepEqual(f.downloads, ['rotated-token-url'], 'Persisted hashes survive new service instances')
+  assert.equal(f.rows.get(input.chatId).avatarHash, hash)
+  assert.equal(f.uploads.length, 0)
+  await f.service().updateGroup({...input, avatarLink: 'rotated-token-url'})
+  assert.equal(f.downloads.length, 1, 'The confirmed URL is not downloaded again')
+})
+
+test('legacy matching URLs gain a content baseline without uploading', async () => {
+  const f = fixture({avatar: true}), input = f.input(-10001)
+  input.avatarLink = 'old-avatar'
+  await f.service().updateGroup(input)
+  assert.equal(f.uploads.length, 0)
+  assert.deepEqual(f.downloads, ['old-avatar'])
+  assert.match(f.rows.get(input.chatId).avatarHash, /^[a-f0-9]{64}$/)
+})
+
+test('real avatar changes upload once and concurrent alternate URLs with the same pixels are deduplicated', async () => {
+  const f = fixture({avatar: true}), input = f.input(-10001)
+  await f.service().updateGroup(input)
+  assert.equal(f.uploads.length, 1)
+  const previousHash = f.rows.get(input.chatId).avatarHash
+  f.hooks.download = async () => Buffer.from('actual replacement pixels')
+  await Promise.all(['url-a', 'url-b', 'url-c'].map(avatarLink => f.service().updateGroup({...input, avatarLink})))
+  assert.equal(f.uploads.length, 2)
+  assert.notEqual(f.rows.get(input.chatId).avatarHash, previousHash)
+  assert.equal(f.rows.get(input.chatId).avatarLink, 'url-c')
+})
+
+test('an expired legacy URL establishes a baseline only after the new photo update succeeds', async () => {
+  const f = fixture({avatar: true}), input = f.input(-10001)
+  f.hooks.download = async url => {if (url === 'old-avatar') throw Error('expired');return Buffer.from('new pixels')}
+  f.hooks.invoke = async request => {if (request instanceof Api.channels.EditPhoto) throw Error('upload failed')}
+  await f.service().updateGroup(input)
+  assert.equal(f.rows.get(input.chatId).avatarLink, 'old-avatar')
+  assert.equal(f.rows.get(input.chatId).avatarHash, undefined)
+  delete f.hooks.invoke
+  await f.service().updateGroup(input)
+  assert.equal(f.uploads.length, 2)
+  assert.equal(f.rows.get(input.chatId).avatarLink, 'new-avatar')
+  assert.match(f.rows.get(input.chatId).avatarHash, /^[a-f0-9]{64}$/)
+})
+
+test('failed downloads preserve the saved hash and can be retried', async () => {
+  const f = fixture({avatar: true}), input = f.input(-10001)
+  await f.service().updateGroup(input)
+  const hash = f.rows.get(input.chatId).avatarHash
+  f.hooks.download = async () => {throw Error('network unavailable')}
+  await f.service().updateGroup({...input, avatarLink: 'newer-url'})
+  assert.equal(f.rows.get(input.chatId).avatarHash, hash)
+  assert.equal(f.rows.get(input.chatId).avatarLink, 'new-avatar')
+  assert.equal(f.uploads.length, 1)
+})
+
+test('avatar pixel hashes ignore encoding and metadata while detecting visible changes', async () => {
+  const sharp = require('sharp'), {prepareGroupAvatar} = require('../dist/util/GroupAvatar')
+  const pixels = Buffer.from([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0])
+  const image = sharp(pixels, {raw: {width: 2, height: 2, channels: 3}})
+  const first = await image.clone().png({compressionLevel: 0}).toBuffer()
+  const second = await image.clone().withMetadata().png({compressionLevel: 9}).toBuffer()
+  assert.notDeepEqual(first, second)
+  assert.equal((await prepareGroupAvatar(first)).hash, (await prepareGroupAvatar(second)).hash)
+  const changed = await sharp({create: {width: 2, height: 2, channels: 3, background: '#ff00ff'}}).png().toBuffer()
+  assert.notEqual((await prepareGroupAvatar(first)).hash, (await prepareGroupAvatar(changed)).hash)
+  await assert.rejects(prepareGroupAvatar(Buffer.from('invalid image')))
+})

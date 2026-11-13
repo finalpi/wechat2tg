@@ -6,7 +6,7 @@ import {Api} from 'telegram'
 import {CustomFile} from 'telegram/client/uploads'
 import axios from 'axios'
 import {returnBigInt} from 'telegram/Helpers'
-import sharp from 'sharp'
+import {prepareGroupAvatar} from '../util/GroupAvatar'
 import {FormatUtils} from '../util/FormatUtils'
 import {config} from '../config'
 import {FileUtils} from '../util/FileUtils'
@@ -66,13 +66,24 @@ export class TelegramGroupOperateService {
             updated = {...stored}
             const entity = await this.client.getEntity(returnBigInt(input.chatId))
             if (!entity || !(entity.className === 'Chat' || entity.className === 'Channel' && entity.megagroup)) return
-            if (input.avatarLink && input.avatarLink !== stored.avatarLink) {
+            if (input.avatarLink && (input.avatarLink !== stored.avatarLink || !stored.avatarHash)) {
                 try {
                     const buff = await FileUtils.getInstance().downloadUrl2Buffer(input.avatarLink)
                     if (!buff?.length) throw new Error('Empty group avatar')
-                    const avatarBuff = await sharp(buff).toFormat('png').resize(200).toBuffer()
-                    await this.updateGroupAvatar(entity, avatarBuff)
+                    const avatar = await prepareGroupAvatar(buff)
+                    let previousHash = stored.avatarHash
+                    if (!previousHash && stored.avatarLink) {
+                        if (stored.avatarLink === input.avatarLink) previousHash = avatar.hash
+                        else {
+                            try {
+                                const previous = await FileUtils.getInstance().downloadUrl2Buffer(stored.avatarLink)
+                                previousHash = (await prepareGroupAvatar(previous)).hash
+                            } catch { /* An expired legacy URL cannot establish the last uploaded content. */ }
+                        }
+                    }
+                    if (avatar.hash !== previousHash) await this.updateGroupAvatar(entity, avatar.buffer)
                     updated.avatarLink = input.avatarLink
+                    updated.avatarHash = avatar.hash
                     changed = true
                 } catch (error) {
                     // An avatar FloodWait must also stop the following title edit.

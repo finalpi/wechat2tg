@@ -4,6 +4,7 @@
 
 /* Keep routine controls quiet without taking them away from touch or keyboard users. */
 @layer components {
+  .message-location-highlight { box-shadow: 0 0 0 4px hsl(var(--primary) / .16); }
   /* Group bounds are real layout boxes. No scroll listeners or floating clones:
      CSS sticky keeps one avatar beside only this sender's contiguous run. */
   .message-run { content-visibility: visible; contain-intrinsic-size: none; }

@@ -82,10 +82,20 @@ async function main(){
     assert(Math.abs(after - before) < 3,`prepend reading anchor shifted: ${before} -> ${after}`)
     // Registration remains per message, not just per group, for quote lookup.
     await page.getByRole('button',{name:/林小满.*定位组内消息 18/}).click()
-    await page.waitForTimeout(200)
+    await page.waitForFunction(()=>Boolean(document.querySelector('[data-message-id="18"] [data-locate-active="true"]')))
     const located = await page.locator('[data-message-id="18"]').boundingBox(),view = await viewport.boundingBox()
     assert(located.y + located.height > view.y && located.y < view.y + view.height,'quote target inside a group is located')
-    assert(await page.locator('[data-message-id="18"] [data-slot="bubble"]').evaluate(el=>el.className.includes('ring-2')))
+    assert.equal(await page.locator('[data-message-id="18"] [data-slot="bubble"]').getAttribute('data-locate-active'),'true')
+    const viewportBeforeRepeat = await viewport.elementHandle()
+    await viewport.evaluate(el=>{el.scrollTop=el.scrollHeight})
+    await page.getByRole('button',{name:/林小满.*定位组内消息 18/}).click()
+    await page.waitForFunction(()=>{
+      const row=document.querySelector('[data-message-id="18"]'),view=document.querySelector('[data-slot="message-scroller-viewport"]')
+      const r=row.getBoundingClientRect(),v=view.getBoundingClientRect()
+      return r.bottom>v.top && r.top<v.bottom && row.querySelector('[data-locate-active="true"]')
+    })
+    assert(await viewport.evaluate((el,previous)=>el===previous,viewportBeforeRepeat),'repeat location preserves the scroll viewport')
+    await page.waitForFunction(()=>!document.querySelector('[data-message-id="18"] [data-locate-active="true"]'))
     // A status update must not split groups or replace the sticky avatar.
     await page.locator('[data-slot="message-group"]').first().locator('[data-slot="message-avatar"]').evaluate(el=>el.setAttribute('data-test-stable','yes'))
     rows[2].telegramStatus = 'failed';events.publish({type:'messages',wxId:contact.wxId,ids:[12]})

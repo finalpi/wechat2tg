@@ -2,16 +2,15 @@ import type {ReactNode} from 'react'
 import {Message,MessageContent,MessageHeader} from '@/components/ui/message'
 import {Bubble,BubbleContent} from '@/components/ui/bubble'
 import {Card,CardHeader,CardTitle,CardContent,CardFooter} from '@/components/ui/card'
-import {cn} from '@/lib/utils'
 
 /** Publications keep their article cards; ordinary chats use compact bubbles.
  * The message-group parent owns the single sticky sender avatar. */
-export function ChatMessageCard({author,avatar,outgoing,publication,showAuthor = true,first = true,last = true,highlighted,children,footer}:{
-  author:string;avatar:ReactNode;outgoing:boolean;publication:boolean;showAuthor?:boolean;first?:boolean;last?:boolean;highlighted:boolean;children:ReactNode;footer:ReactNode
+export function ChatMessageCard({author,avatar,outgoing,publication,showAuthor = true,first = true,last = true,children,footer}:{
+  author:string;avatar:ReactNode;outgoing:boolean;publication:boolean;showAuthor?:boolean;first?:boolean;last?:boolean;children:ReactNode;footer:ReactNode
 }) {
   return <Message align={outgoing?'end':'start'} data-layout={publication?'publication':'conversation'} data-group-first={first} data-group-last={last}>
     <MessageContent className="gap-0">
-      <Bubble variant={outgoing?'sent':'received'} layout={publication?'card':'chat'} align={outgoing?'end':'start'} className={cn(highlighted && 'rounded-2xl ring-2 ring-ring')}>
+      <Bubble variant={outgoing?'sent':'received'} layout={publication?'card':'chat'} align={outgoing?'end':'start'} className="rounded-2xl">
         {publication ? <BubbleContent asChild layout="card">
           <Card data-message-card>
             <CardHeader className="flex-row items-center gap-3 px-4 py-3 md:px-5 md:py-4">

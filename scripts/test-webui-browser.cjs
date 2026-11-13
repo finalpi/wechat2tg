@@ -112,6 +112,13 @@ async function main() {
     await page.waitForFunction(() => document.querySelector('#message-body').textContent === '' || document.querySelector('[role="alert"]'))
     assert.equal(await page.locator('[role="alert"]').count(), 0, await page.locator('[role="alert"]').allTextContents())
     assert.equal(sends.at(-1).body, '缺少 randomUUID 时也能发送')
+    await page.waitForFunction(() => document.activeElement === document.querySelector('#message-body'))
+    await page.keyboard.type('焦点恢复后继续输入')
+    assert.equal(await page.getByLabel('消息内容').innerText(), '焦点恢复后继续输入')
+    await page.getByLabel('消息内容').fill('快捷键发送并恢复焦点')
+    await page.getByLabel('消息内容').press('Control+Enter')
+    await page.waitForFunction(() => document.querySelector('#message-body').textContent === '' && document.activeElement === document.querySelector('#message-body'))
+    assert.equal(sends.at(-1).body, '快捷键发送并恢复焦点')
     assert.match(sends.at(-1).requestId, /^[a-zA-Z0-9-]{16,80}$/)
     await page.getByRole('button', {name: '加载更早消息'}).click()
     await page.getByText('更早的消息').waitFor()
@@ -137,7 +144,7 @@ async function main() {
     await page.getByText('欢迎测试', {exact: false}).waitFor()
     await page.getByRole('button', {name: /小王.*查看原文/}).click()
     await page.getByRole('button', {name: '返回最新'}).waitFor()
-    assert.equal(locates.at(-1).remoteId, '18446744073709551614')
+    assert.equal(locates.length, 0, 'loaded originals are located without a new history request')
     await page.getByRole('button', {name: '返回最新'}).click()
     const messageAction = async name => {
       const button = page.getByRole('button', {name, exact:true,includeHidden:true}).first()
@@ -176,7 +183,9 @@ async function main() {
     await page.getByRole('button', {name: '预览 image.png'}).click()
     await page.keyboard.press('Escape')
     failLocate = true
-    await page.getByRole('button', {name: /小王.*查看原文/}).click()
+    rows[2].details.replyTo = {...rows[2].details.replyTo, id:99999, remoteId:'99999', preview:'定位未缓存的原文'}
+    events.publish({type:'messages',wxId:group,ids:[3]})
+    await page.getByRole('button', {name: /小王.*定位未缓存的原文/}).click()
     await page.getByText('操作失败（messageMissing）。', {exact: true}).waitFor()
     rows.push({...rows[0], id: 100, timestamp: stamp + 1, body: '定位失败后继续更新', bodyFormat: 'plain'})
     events.publish({type: 'messages', wxId: group, ids: [100]})
@@ -204,6 +213,7 @@ async function main() {
     assert.equal(sends.at(-2).body, '附件说明')
     assert.equal(sends.at(-1).attachmentId, file.id)
     assert.equal(sends.at(-1).body, '')
+    await page.waitForFunction(() => document.activeElement === document.querySelector('#message-body'))
     // Lost response after acceptance: the retry must reuse the exact idempotency key.
     let dropResponse = true
     await page.route('**/api/messages', async route => {
