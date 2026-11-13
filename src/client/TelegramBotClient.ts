@@ -24,6 +24,7 @@ import {SimpleMessageSendQueueHelper} from '../util/SimpleMessageSendQueueHelper
 import {MessageSender, Option} from '../message/MessageSender'
 import {SenderFactory} from '../message/SenderFactory'
 import {FormatUtils} from '../util/FormatUtils'
+import {messageIdentityKind} from '../util/MessageTemplates'
 import {splitTelegramHtml} from '../util/WechatCustomEmoji'
 import {renderTelegramHtml as renderWechatCustomEmojiHtml,telegramDisplay,replyDirectoryText,useRichDirectory} from '../util/TelegramPresentation'
 import {handleTelegramDisplayCommand} from '../util/TelegramDisplayCommand'
@@ -2968,15 +2969,24 @@ ${this.i18n.t('help.instructions')}`))
         return attachment.type === 'image' ? '下载图片' : attachment.type === 'video' ? '下载视频' : '下载文件'
     }
 
+    private async loadStoredChatHistory(storedMessage: Message) {
+        const msgJson = WxMessage.getXmlToJson(storedMessage.source_text)
+        const recordJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.recorditem)
+        const wxId = storedMessage.conversationWxId || storedMessage.toWxid
+        const binding = wxId ? await this.bindGroupService.getByWxId(wxId) : undefined
+        const official = wxId && !wxId.endsWith('@chatroom') && !storedMessage.threadId
+            ? await WechatAccountClassificationService.getInstance().isOfficialAccount(wxId) : false
+        const kind = wxId ? messageIdentityKind(wxId, official === true, storedMessage.threadId) : 'room'
+        return getChatHistory(recordJson, {type: () => storedMessage.source_type, text: () => storedMessage.source_text}, WxMessage.Type, WxMessage.getXmlToJson, '', {kind,topic:binding?.name || ''})
+    }
+
     private async replyNestedChatHistory(ctx: Context, storedMessage: Message | undefined, replyToMessageId: number, nestedId: string) {
         if (!this.belongsToContext(storedMessage, ctx) || !storedMessage?.source_text) {
             await ctx.answerCbQuery('聊天记录已过期')
             return
         }
 
-        const msgJson = WxMessage.getXmlToJson(storedMessage.source_text)
-        const recordJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.recorditem)
-        const chatHistory = await getChatHistory(recordJson, {type: () => storedMessage.source_type, text: () => storedMessage.source_text}, WxMessage.Type, WxMessage.getXmlToJson)
+        const chatHistory = await this.loadStoredChatHistory(storedMessage)
         const nestedRecord = this.findNestedChatHistory(chatHistory.nestedRecords, nestedId)
         if (!nestedRecord) {
             await ctx.answerCbQuery('没有找到内层聊天记录')
@@ -3008,9 +3018,7 @@ ${this.i18n.t('help.instructions')}`))
     }
 
     private async findChatHistoryAttachment(storedMessage: Message, nestedId: string, attachmentId: string): Promise<ChatHistoryAttachment | undefined> {
-        const msgJson = WxMessage.getXmlToJson(storedMessage.source_text)
-        const recordJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.recorditem)
-        const chatHistory = await getChatHistory(recordJson, {type: () => storedMessage.source_type, text: () => storedMessage.source_text}, WxMessage.Type, WxMessage.getXmlToJson)
+        const chatHistory = await this.loadStoredChatHistory(storedMessage)
         if (nestedId === 'root') {
             return chatHistory.attachments.find(attachment => attachment.id === attachmentId)
         }

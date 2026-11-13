@@ -142,13 +142,15 @@ function forwardingFixture() {
       if (name === '../base/BaseClient') return {AbstractClient: class {static getSpyClient() {return bot}}}
       if (name === '../config') return {config: configuration}
       if (name === '../util/FormatUtils') return {FormatUtils}
+      if (name === '../util/MessageTemplates') return require('../dist/util/MessageTemplates')
+      if (name === '../util/TelegramTopicUtils') return require('../dist/util/TelegramTopicUtils')
       if (name === '../service/GroupMemberNameService') return {createGroupMemberNameResolver}
       if (name === '../service/WechatAccountClassificationService') return {WechatAccountClassificationService: {getInstance:()=>new WechatAccountClassificationService({
         getSession:async()=>{throw Error('Enterprise classification must not query the server')},readFlags:async()=>{throw Error('Enterprise classification must not require VerifyFlag')},backfillFlags:async()=>undefined,
       })}}
       if (name === '../webui/message-visibility') return {isControlMessage: () => false}
       if (name === '../util/EmojiUtils') return {EmojiConverter: class {convert(value) {return value}}}
-      if (name === 'wx2tg-puppet') return {Message: {Type: {Text: 1}}}
+      if (name === 'wx2tg-puppet') return {Message: {Type: {Text: 1, Quote:49}, getXmlToJson:require('wx2tg-puppet').Message.getXmlToJson}}
       return {}
     },
   })
@@ -210,4 +212,23 @@ test('custom group templates that do not use member_name need no enrichment RPC'
   await f.client.onMessage(f.message)
   assert.equal(f.sent[0].sender, '<b>微信昵称</b>')
   assert.equal(calls, 0)
+})
+
+test('native WeChat quote fallback honors the same templates, escapes XML titles and ignores unconfirmed Telegram IDs', async t => {
+  t.mock.method(groupApi, 'GetChatRoomMemberDetail', async () => result([member('sender','当前群昵称')]))
+  for(const type of [1,49]){
+    const f = forwardingFixture()
+    f.configuration.ROOM_MESSAGE_GROUP = '<u>#[member_name]</u>'
+    f.configuration.MESSAGE_DISPLAY = '#[body] / #[identity]'
+    f.message.type = () => 49
+    f.message.refer = {svrid:'100'}
+    f.client.messageService.getByWxMsgId = async id => id === '100' ? {chatId:-123,tgBotMsgId:0} : null
+    const content = type === 1 ? '<b>原文</b> & [微笑]' : '<msg><appmsg><title><![CDATA[<b>原文</b> & [微笑]]]></title></appmsg></msg>'
+    f.message._xml = `<msg><appmsg><refermsg><type>${type}</type><displayname><![CDATA[引用人 <&>]]></displayname><content><![CDATA[${content.replaceAll(']]>',']]]]><![CDATA[>')}]]></content></refermsg></appmsg></msg>`
+    await f.client.onMessage(f.message)
+    assert.equal(f.sent.length,1)
+    assert.equal(f.sent[0].sender,'<u>当前群昵称</u>')
+    assert.equal(f.sent[0].content,'<blockquote>&lt;b&gt;原文&lt;/b&gt; &amp; [微笑] / <u>引用人 &lt;&amp;&gt;</u></blockquote>\n正文 😀 [微笑]')
+    assert.equal(f.sent[0].param?.reply_id,undefined)
+  }
 })

@@ -27,6 +27,7 @@ function clientClass(config = {}, spies = {}, schedule = callback => queueMicrot
       if (name === '../entity/BindGroup') return {BindGroup: class {}}
       if (name === '../util/TelegramTopicUtils') return require('../dist/util/TelegramTopicUtils')
       if (name === '../util/FormatUtils') return {FormatUtils: {transformTitleStr: () => '', escapeHtml: require('../dist/util/FormatUtils').FormatUtils.escapeHtml}}
+      if (name === '../util/MessageTemplates') return require('../dist/util/MessageTemplates')
       if (name === '../util/EmojiUtils') return {EmojiConverter: class {convert(value) {return value}}}
       if (name === 'wx2tg-puppet') return {Message: {Type: {Text: 1, Quote: 99}, getXmlToJson: () => ({msg: {appmsg: {refermsg: {type: 1, content: 'quoted preview'}}}})}}
       return {}

@@ -8,6 +8,7 @@ import {BindGroupService} from '../service/BindGroupService'
 import {UserMTProtoClient} from './UserMTProtoClient'
 import {BindGroup} from '../entity/BindGroup'
 import {FormatUtils} from '../util/FormatUtils'
+import {formatMessageIdentity, formatMessageQuote, messageIdentityTemplate, messageIdentityKind} from '../util/MessageTemplates'
 import {AbstractClient} from '../base/BaseClient'
 import BaseMessage from '../base/BaseMessage'
 import {ClientFactory} from './factory/ClientFactory'
@@ -633,28 +634,16 @@ export class WeChatClient extends AbstractClient {
             return
         }
         // 身份
-        let identityType
-        if (bindGroup.type === 0) {
-            if (official === true || bindGroup.threadId) {
-                identityType = config.OFFICIAL_MESSAGE_GROUP
-            } else {
-                identityType = config.CONTACT_MESSAGE_GROUP
-            }
-        } else {
-            identityType = config.ROOM_MESSAGE_GROUP
-        }
+        const identityKind = messageIdentityKind(wxId, official === true, bindGroup.threadId)
+        const identityType = messageIdentityTemplate(config, identityKind)
         let memberName = fromContact.name() || fromContact._wxid
         if (room && (identityType?.includes('member_name') || config.MESSAGE_DISPLAY?.includes('member_name'))) {
             this.groupMemberName ??= createGroupMemberNameResolver(() => this._wxInfo?.wxid || '')
             memberName = await this.groupMemberName(room.chatroomId, fromContact._wxid, memberName)
         }
-        let identity
-        if (wxId && wxId === 'app') {
-            identity = FormatUtils.transformTitleStr(config.OFFICIAL_MESSAGE_GROUP, '', '服务通知', topic)
-        } else {
-            identity = FormatUtils.transformTitleStr(identityType, fromContact._alias !== fromContact.name() ? fromContact._alias : '',
-                fromContact.name(), topic, FormatUtils.escapeHtml(memberName))
-        }
+        const identity = formatMessageIdentity(config, {kind:identityKind,
+            alias:wxId !== 'app' && fromContact._alias !== fromContact.name() ? fromContact._alias : '',
+            name:wxId === 'app' ? '服务通知' : fromContact.name(), topic, memberName})
         const messageParam: BaseMessage = {
             id: msg.newMsgId,
             senderId: contact._wxid,
@@ -756,7 +745,7 @@ export class WeChatClient extends AbstractClient {
                     // emoji 转换
                     messageParam.content = emojiConverter.convert(messageParam.content, configuration, config.WECHAT_CUSTOM_EMOJI_ENABLED)
 
-                    if (isSameTelegramDestination(referMsg, bindGroup.chatId, bindGroup.threadId)) {
+                    if (referMsg?.tgBotMsgId > 0 && isSameTelegramDestination(referMsg, bindGroup.chatId, bindGroup.threadId)) {
                         messageParam.param = {
                             reply_id: referMsg.tgBotMsgId
                         }
@@ -768,17 +757,10 @@ export class WeChatClient extends AbstractClient {
                             const referType = Number(msgJson.msg.appmsg.refermsg.type)
                             let quoteContent = ''
 
-                            // 除了 type=49，其他类型都打印日志
-                            if (referType !== 49) {
-                                this.logger.info(`引用消息类型: refermsg.type=${referType}, content=${JSON.stringify(msgJson.msg.appmsg.refermsg.content).substring(0, 200)}`)
-                            }
-
                             // 根据引用消息类型进行不同处理
                             switch (referType) {
                                 case 1: // 文本消息
                                     quoteContent = String(msgJson.msg.appmsg.refermsg.content || '')
-                                        .replaceAll(/</g, '&lt;')
-                                        .replaceAll(/>/g, '&gt;')
                                     break
                                 case 3: // 图片消息
                                     quoteContent = '[图片]'
@@ -794,7 +776,7 @@ export class WeChatClient extends AbstractClient {
                                     break
                                 case 49: { // 应用消息（链接、嵌套引用等）- 保持原有处理方式
                                     const newJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.refermsg.content)
-                                    quoteContent = newJson.msg.appmsg.title
+                                    quoteContent = String(newJson.msg?.appmsg?.title || newJson.appmsg?.title || '[消息]')
                                     break
                                 }
                                 default:
@@ -803,7 +785,9 @@ export class WeChatClient extends AbstractClient {
                             }
 
                             if (quoteContent) {
-                                messageParam.content = `<blockquote>${quoteContent}</blockquote>${messageParam.content}`
+                                const ref = msgJson.msg.appmsg.refermsg
+                                const name = String(ref.displayname || ref.chatusr || '')
+                                messageParam.content = `${formatMessageQuote(config, {kind:identityKind,name,memberName:name,topic}, FormatUtils.escapeHtml(quoteContent))}\n${messageParam.content}`
                             }
                         } else {
                             this.logger.warn(`引用消息 XML 解析失败，refermsg 不存在: msgId=${msg.newMsgId}`)
@@ -913,7 +897,7 @@ export class WeChatClient extends AbstractClient {
             case WxMessage.Type.ChatHistroy: {
                 msgJson = WxMessage.getXmlToJson(msg._xml)
                 const recordJson = WxMessage.getXmlToJson(msgJson.msg.appmsg.recorditem)
-                const chatHistory = await getChatHistory(recordJson, msg, WxMessage.Type, WxMessage.getXmlToJson)
+                const chatHistory = await getChatHistory(recordJson, msg, WxMessage.Type, WxMessage.getXmlToJson, '', {kind:identityKind,topic})
                 messageParam.content = chatHistory.content
                 if (chatHistory.nestedRecords.length > 0 || chatHistory.attachments.length > 0) {
                     messageParam.param = {

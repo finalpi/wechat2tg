@@ -48,6 +48,7 @@ function fixture(customEmojiEnabled = false) {
       ? enabled && thread === 77 ? {...binding} : undefined
       : {chatId: id, wxId: 'wxid_legacy', isForwardOthers: true},
     resolveWechat: async () => ({...binding}),
+    getByWxId: async id => id === binding.wxId ? {...binding} : undefined,
     createOrUpdate: async value => saved.push({...value}),
     removeByChatIdOrWxId: async () => {throw Error('must not unbind forum')},
   }
@@ -83,7 +84,9 @@ function fixture(customEmojiEnabled = false) {
     '../config': {config: {AI_API_KEY: 'synthetic', AI_API_URL: 'https://invalid.example', AI_CONTEXT_LIMIT: 2, WECHAT_CUSTOM_EMOJI_ENABLED: customEmojiEnabled}},
     '../util/WechatCustomEmoji': emojiHtml,
     '../util/TelegramPresentation': require('./helpers/telegram-presentation')(),
-    '../util/handleMsg': {getChatHistory: async () => history},
+    '../util/handleMsg': {getChatHistory: async (_record, _message, _types, _parser, _prefix, context) => {history.context = context; return history}},
+    '../util/MessageTemplates': require('../dist/util/MessageTemplates'),
+    '../service/WechatAccountClassificationService': {WechatAccountClassificationService:{getInstance:()=>({isOfficialAccount:async()=>false})}},
     'wx2tg-puppet': {Message: {Type: {}, getXmlToJson: () => ({msg: {appmsg: {recorditem: 'xml'}}})}},
     '../entity/Message': {Message: class {}},
     '../util/FormatUtils': {FormatUtils: formatting},
@@ -366,6 +369,8 @@ test('nested history renders and splits HTML without losing callback topic, repl
     assert(HTMLParser.parse(reply.args[1])[0].length <= 4096)
   }
   assert.equal(f.history.nestedRecords[0].content, content)
+  assert.equal(f.history.context.kind,'official')
+  assert.equal(f.history.context.topic,'')
 })
 
 test('upload recovery rejects an identical filename in another topic', async () => {

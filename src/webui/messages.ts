@@ -28,6 +28,10 @@ import {loadArticleCover} from '../util/ArticleCover'
 import {OfficialAccountTopic} from '../entity/OfficialAccountTopic'
 import {conversationMessages, originalTelegramMessage, telegramConversationRecents} from './telegram-history'
 import {isSameTelegramDestination} from '../util/TelegramTopicUtils'
+import {formatMessageIdentity, formatMessageQuote, formatMessageText, messageIdentityTemplate, messageIdentityKind} from '../util/MessageTemplates'
+import {createGroupMemberNameResolver} from '../service/GroupMemberNameService'
+import {getChatHistory} from '../util/handleMsg'
+import {decodeHTML} from 'entities'
 
 export interface MessageCenterAdapter {
     subscribe?(listener:(event:MessageChange)=>void):()=>void
@@ -58,6 +62,7 @@ export class MessageCenterError extends Error {
 
 export function createMessageCenter(store = WebMessageStore.getInstance(),media = new WebMediaStore(store)): MessageCenterAdapter {
     const mentionService = createGroupMentionService(()=>client()?.hasLogin ? (client() as any)?.wxInfo?.wxid || '' : '')
+    let groupMemberName: ReturnType<typeof createGroupMemberNameResolver>
     const revoking = new Map<number,Promise<any>>(),revokeSync = new Map<number,Promise<void>>()
     const syncRevocation = (id:number,confirm = false)=>{
         if(revokeSync.has(id))return
@@ -237,24 +242,59 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
                 if (!binding.isReceive) throw new MessageCenterError('messageExcluded', 409)
                 const source = row.source ? JSON.parse(row.source) : null
                 const language = (await ConfigurationService.getInstance().getConfig()).language
-                const ownName = (client() as any)?.wxInfo?.nickName || (language === 'en-US' ? 'Me' : '我')
-                const message:BaseMessage = {id:row.remoteId,wxId:row.wxId,conversationWxId:row.wxId,chatId:binding.chatId,threadId:binding.threadId,senderId:row.senderId || (client() as any)?.wxInfo?.wxid || '',sender:`<b>👤${escape(row.direction === 'outgoing' ? ownName : row.senderName)}${row.requestId ? ' · WebUI' : ''}</b>`,content:escape(row.body),type:0,createTime:row.timestamp,toWxid:row.wxId,msgId:String(source?.ClientMsgId || source?.MsgId || row.remoteId)}
-                if (row.type === 'solitaire') {
-                    message.source_type = 'solitaire'
+                const self = (client() as any)?.wxInfo
+                const ownName = self?.nickName || (language === 'en-US' ? 'Me' : '我')
+                const room = row.wxId.endsWith('@chatroom')
+                const kind = messageIdentityKind(row.wxId, isOfficialAccountVerifyFlag(directory?.verifyFlag) === true, binding.threadId)
+                const roomInfo = room && getGeWeChatDataSource().isInitialized
+                    ? await getGeWeChatDataSource().getRepository(WxRoom).findOneBy({chatroomId:row.wxId}) : null
+                const topic = roomInfo?.nickName || binding.name || ''
+                const identityFor = async(senderId:string, fallback:string, legacyHtml = false)=>{
+                    const contact = senderId && getGeWeChatDataSource().isInitialized
+                        ? await getGeWeChatDataSource().getRepository(WxContact).findOneBy({userName:senderId}) : null
+                    // Only old imports contain rendered prefixes; plain names may legitimately include '<'.
+                    let fallbackName = String(fallback || senderId)
+                    if(legacyHtml)fallbackName = decodeHTML(fallbackName.replace(/<[^>]*>/g,'')).replace(/^👤\s*/,'').replace(/ · WebUI$/,'').trim()
+                    const name = senderId === self?.wxid ? ownName : contact?.nickName || fallbackName
+                    const alias = senderId === self?.wxid ? '' : contact?.remark || ''
+                    let memberName = name
+                    if(room && (messageIdentityTemplate(config,kind).includes('member_name') || config.MESSAGE_DISPLAY?.includes('member_name'))){
+                        groupMemberName ??= createGroupMemberNameResolver(()=>client()?.hasLogin ? (client() as any)?.wxInfo?.wxid || '' : '')
+                        memberName = await groupMemberName(row.wxId,senderId,name)
+                    }
+                    return {kind,name,alias:alias !== name ? alias : '',topic,memberName}
+                }
+                const senderId = row.senderId || (row.direction === 'outgoing' ? self?.wxid || '' : room ? '' : row.wxId)
+                const identity = await identityFor(senderId,row.direction === 'outgoing' ? ownName : row.senderName,row.bodyFormat === 'telegram_html')
+                const message:BaseMessage = {id:row.remoteId,wxId:row.wxId,conversationWxId:row.wxId,chatId:binding.chatId,threadId:binding.threadId,senderId,sender:formatMessageIdentity(config,identity),memberName:identity.memberName,content:escape(row.body),type:0,createTime:row.timestamp,toWxid:row.wxId,msgId:String(source?.ClientMsgId || source?.MsgId || row.remoteId)}
+                if (row.type === 'solitaire' || row.type === 'quote') {
+                    message.source_type = row.type
                     message.source_text = source?.xml || source?.Content
                 }
-                const detail = row.details ? JSON.parse(row.details) : {}
+                const detail = row.type === 'quote' ? await detailsFor(row) : row.details ? JSON.parse(row.details) : {}
                 if(detail.replyTo){
                     const original = await AppDataSource.getRepository(Message).findOneBy({wxMsgId:detail.replyTo.remoteId,chatId:binding.chatId})
                     if(original?.tgBotMsgId > 0 && isSameTelegramDestination(original, binding.chatId, binding.threadId))message.param = {reply_id:original.tgBotMsgId}
-                    else message.content = `<blockquote>${escape(detail.replyTo.name)}: ${escape(detail.replyTo.preview)}</blockquote>\n${message.content}`
+                    else {
+                        const quotedIdentity = await identityFor(detail.replyTo.senderId || '',detail.replyTo.name || '')
+                        message.content = `${formatMessageQuote(config,quotedIdentity,escape(detail.replyTo.preview))}\n${message.content}`
+                    }
                 }
                 if(row.attachmentId || ['image','video','voice','audio','emoji','file'].includes(row.type)){
                     const file = await attachment(id),prepared = await media.prepare(file)
-                    message.type = 1;message.file = {file:prepared.buffer,fileName:prepared.name,duration:prepared.duration,sendType:prepared.sendType};message.sender += row.body ? '\n' + escape(row.body) : ''
+                    message.type = 1;message.file = {file:prepared.buffer,fileName:prepared.name,duration:prepared.duration,sendType:prepared.sendType}
+                    message.sender = formatMessageText(config,identity,message.content)
                 }else if(source && row.type === 'location'){message.type = 5;message.source_text = source.Content}
                 else if(source && row.type === 'contact'){message.type = 4;message.source_text = source.Content;message.businessCardId = (await detailsFor(row)).wxId}
-                else if(!['text','solitaire'].includes(row.type)){
+                else if(source && row.type === 'chat_histroy'){
+                    const xml = source.xml || source.Content
+                    const record = WxMessage.getXmlToJson(WxMessage.getXmlToJson(xml).msg.appmsg.recorditem)
+                    const history = await getChatHistory(record,{type:()=>WxMessage.Type.ChatHistroy,text:()=>row.body},WxMessage.Type,WxMessage.getXmlToJson,'',{kind,topic})
+                    message.source_type = WxMessage.Type.ChatHistroy;message.source_text = xml
+                    message.content = history.content
+                    message.param = {...message.param,nestedChatHistories:history.nestedRecords,chatHistoryAttachments:history.attachments}
+                }
+                else if(!['text','quote','solitaire'].includes(row.type)){
                     const details = await detailsFor(row)
                     if(row.type === 'link'){
                         message.articles = linkArticles(details)
