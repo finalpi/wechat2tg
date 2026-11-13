@@ -13,8 +13,11 @@ export async function prepareGroupAvatar(source: Buffer): Promise<{buffer: Buffe
 /** Telegram re-encodes profile photos. Compare the visible square crop with a
  * small error budget for JPEG/resizing noise, including local changes. */
 export async function sameGroupAvatar(left: Buffer, right: Buffer): Promise<boolean> {
+    // Compare the low-frequency image, so Telegram's 200 -> 640 JPEG resampling
+    // does not turn high-contrast line edges into a false content change.
+    const size = 32, tileSize = size / 8
     const pixels = (buffer: Buffer) => sharp(buffer, {limitInputPixels: 40000000})
-        .rotate().resize(64, 64, {fit: 'cover'}).flatten({background: '#ffffff'})
+        .rotate().resize(size, size, {fit: 'cover'}).flatten({background: '#ffffff'})
         .toColourspace('srgb').removeAlpha().raw().toBuffer()
     const [first, second] = await Promise.all([pixels(left), pixels(right)])
     let total = 0, squared = 0
@@ -24,9 +27,9 @@ export async function sameGroupAvatar(left: Buffer, right: Buffer): Promise<bool
         total += difference
         squared += difference * difference
         const pixel = Math.floor(offset / 3)
-        const tile = Math.floor(pixel / (64 * 8)) * 8 + Math.floor(pixel % 64 / 8)
+        const tile = Math.floor(pixel / (size * tileSize)) * 8 + Math.floor(pixel % size / tileSize)
         tiles[tile] += difference
     }
-    return total / first.length <= 3 && Math.sqrt(squared / first.length) <= 6
-        && tiles.every(value => value / (8 * 8 * 3) <= 10)
+    return total / first.length <= 4 && Math.sqrt(squared / first.length) <= 6
+        && tiles.every(value => value / (tileSize * tileSize * 3) <= 10)
 }

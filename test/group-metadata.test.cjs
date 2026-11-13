@@ -373,3 +373,29 @@ test('current Telegram avatars match through JPEG compression and size changes w
   assert.equal(await sameGroupAvatar(translucent,white),true,'transparent backgrounds compare using the same white flattening')
   await assert.rejects(sameGroupAvatar(original,Buffer.from('invalid image')))
 })
+
+test('minor grayscale re-encoding differences around the mean-error boundary keep the existing avatar',async()=>{
+  const sharp=require('sharp'),{sameGroupAvatar}=require('../dist/util/GroupAvatar')
+  const image=level=>sharp({create:{width:64,height:64,channels:3,background:{r:level,g:level,b:level}}}).png().toBuffer()
+  const original=await image(128)
+  assert.equal(await sameGroupAvatar(original,await image(132)),true,'a four-level tone difference stays inside the recompression budget')
+  assert.equal(await sameGroupAvatar(original,await image(137)),false,'larger whole-image changes still update the avatar')
+  const patch=await image(180)
+  const localEdit=await sharp(original).composite([{input:await sharp(patch).resize(8,8).toBuffer(),left:24,top:24}]).png().toBuffer()
+  assert.equal(await sameGroupAvatar(original,localEdit),false,'a local change is rejected even with a small global average')
+})
+
+test('high-contrast line art survives the actual upload and Telegram resampling chain',async()=>{
+  const sharp=require('sharp'),{prepareGroupAvatar,sameGroupAvatar}=require('../dist/util/GroupAvatar')
+  for(const step of [7,14,15,18,19,20,21,22]){
+    const lines=[]
+    for(let position=15;position<630;position+=step){
+      lines.push(`<path d="M${position} 15V630M15 ${position}H630" stroke="#111" stroke-width="2"/>`)
+    }
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="646" height="646"><rect width="646" height="646" fill="#fff"/>${lines.join('')}</svg>`
+    const source=await sharp(Buffer.from(svg)).jpeg({quality:90}).toBuffer()
+    const uploaded=await prepareGroupAvatar(source)
+    const telegram=await sharp(uploaded.buffer).resize(640,640).jpeg({quality:85}).toBuffer()
+    assert.equal(await sameGroupAvatar(uploaded.buffer,telegram),true,`same line art with spacing ${step}`)
+  }
+})
