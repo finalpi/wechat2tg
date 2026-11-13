@@ -14,10 +14,11 @@ const floodWait = () => Object.assign(new Error('A wait of 690 seconds is requir
 
 function fixture({avatar = false} = {}) {
   let now = 1000
-  const logs = {log: [], warn: [], error: []}, requests = [], downloads = [], uploads = [], saves = [], rows = new Map(), hooks = {}
+  const logs = {log: [], warn: [], error: []}, requests = [], downloads = [], photoReads = [], uploads = [], saves = [], rows = new Map(), hooks = {}
   const client = {
     getEntity: async id => hooks.entity ? hooks.entity(id) : ({className: 'Channel', megagroup: true, id, title: 'Old title'}),
     uploadFile: async () => {uploads.push(1); return {id: returnBigInt(1)}},
+    downloadProfilePhoto: async entity => {photoReads.push(entity.id);return hooks.photo ? hooks.photo(entity) : Buffer.from('old-avatar')},
     invoke: async request => {
       requests.push(request)
       return hooks.invoke ? hooks.invoke(request) : undefined
@@ -35,7 +36,10 @@ function fixture({avatar = false} = {}) {
     '../config': {config: {CREATE_CONTACT_NAME: 'contact', CREATE_ROOM_NAME: 'room'}},
     '../util/FormatUtils': {FormatUtils: {transformTitleStr: (_template, alias, name, room) => room || alias || name}},
     '../util/FileUtils': {FileUtils: {getInstance: () => ({downloadUrl2Buffer: async url => {downloads.push(url); return hooks.download ? hooks.download(url) : Buffer.from(url)}})}},
-    '../util/GroupAvatar': {prepareGroupAvatar: async buffer => ({buffer, hash: createHash('sha256').update(buffer).digest('hex')})},
+    '../util/GroupAvatar': {
+      prepareGroupAvatar: async buffer => ({buffer, hash: createHash('sha256').update(buffer).digest('hex')}),
+      sameGroupAvatar: async (left,right) => hooks.compare ? hooks.compare(left,right) : left.equals(right),
+    },
     telegram: {Api}, 'telegram/Helpers': {returnBigInt},
     'telegram/client/uploads': {CustomFile: class {}},
   }
@@ -50,7 +54,7 @@ function fixture({avatar = false} = {}) {
     rows.set(id, {chatId: id, wxId: `room_${id}@chatroom`, type: 1, name: 'Old title', avatarLink: avatar ? 'old-avatar' : undefined})
     return {chatId: id, wxId: `room_${id}@chatroom`, type: 1, name: 'New title', avatarLink: avatar ? 'new-avatar' : undefined}
   }
-  return {client, service, input, rows, requests, downloads, uploads, saves, logs, hooks, advance: ms => {now += ms}}
+  return {client, service, input, rows, requests, downloads, photoReads, uploads, saves, logs, hooks, advance: ms => {now += ms}}
 }
 
 test('a title FloodWait suppresses subsequent group metadata RPCs across service instances', async () => {
@@ -71,7 +75,8 @@ test('an avatar FloodWait also stops title edits and later avatar uploads during
   for (const id of [-10001, -10002, -10003]) await f.service().updateGroup(f.input(id))
   assert.equal(f.requests.length, 1, 'Avatar throttling must also stop EditTitle')
   assert(f.requests[0] instanceof Api.channels.EditPhoto)
-  assert.equal(f.downloads.length, 2, 'Read the new avatar and establish the legacy content baseline')
+  assert.equal(f.downloads.length, 1)
+  assert.equal(f.photoReads.length, 1, 'Compare the actual Telegram photo before replacing it')
   assert.equal(f.uploads.length, 1)
   assert.equal(f.saves.length, 0, 'Failed avatar/title updates must remain pending locally')
   assert.equal(f.rows.get(-10001).avatarLink, 'old-avatar')
@@ -226,6 +231,7 @@ for (const entity of ['Chat', 'Channel']) {
 test('changed URLs with identical content update the local URL without changing the Telegram photo', async () => {
   const f = fixture({avatar: true}), input = f.input(-10001)
   f.hooks.download = async () => Buffer.from('same pixels')
+  f.hooks.photo = async () => Buffer.from('same pixels')
   await f.service().updateGroup(input)
   assert.equal(f.uploads.length, 0)
   assert.equal(f.requests.filter(request => request instanceof Api.channels.EditPhoto).length, 0)
@@ -240,6 +246,7 @@ test('changed URLs with identical content update the local URL without changing 
   assert.equal(f.uploads.length, 0)
   await f.service().updateGroup({...input, avatarLink: 'rotated-token-url'})
   assert.equal(f.downloads.length, 1, 'The confirmed URL is not downloaded again')
+  assert.equal(f.photoReads.length, 1, 'Exact stored fingerprints avoid repeated Telegram photo reads')
 })
 
 test('legacy matching URLs gain a content baseline without uploading', async () => {
@@ -263,18 +270,65 @@ test('real avatar changes upload once and concurrent alternate URLs with the sam
   assert.equal(f.rows.get(input.chatId).avatarLink, 'url-c')
 })
 
-test('an expired legacy URL establishes a baseline only after the new photo update succeeds', async () => {
+test('an expired legacy URL is ignored when the actual Telegram photo already matches', async () => {
   const f = fixture({avatar: true}), input = f.input(-10001)
   f.hooks.download = async url => {if (url === 'old-avatar') throw Error('expired');return Buffer.from('new pixels')}
-  f.hooks.invoke = async request => {if (request instanceof Api.channels.EditPhoto) throw Error('upload failed')}
+  f.hooks.photo = async () => Buffer.from('new pixels')
   await f.service().updateGroup(input)
-  assert.equal(f.rows.get(input.chatId).avatarLink, 'old-avatar')
-  assert.equal(f.rows.get(input.chatId).avatarHash, undefined)
-  delete f.hooks.invoke
-  await f.service().updateGroup(input)
-  assert.equal(f.uploads.length, 2)
+  assert.deepEqual(f.downloads,['new-avatar'])
+  assert.equal(f.uploads.length,0)
   assert.equal(f.rows.get(input.chatId).avatarLink, 'new-avatar')
   assert.match(f.rows.get(input.chatId).avatarHash, /^[a-f0-9]{64}$/)
+})
+
+test('a failed Telegram comparison leaves the source pending and retries without a blind photo edit',async()=>{
+  const f=fixture({avatar:true}),input=f.input(-10001)
+  f.hooks.photo=async()=>{throw Error('network unavailable')}
+  await f.service().updateGroup(input)
+  assert.equal(f.uploads.length,0)
+  assert.equal(f.rows.get(input.chatId).avatarHash,undefined)
+  assert.equal(f.rows.get(input.chatId).avatarLink,'old-avatar')
+  delete f.hooks.photo
+  await f.service().updateGroup(input)
+  assert.equal(f.uploads.length,1)
+  assert.equal(f.rows.get(input.chatId).avatarLink, 'new-avatar')
+  assert.match(f.rows.get(input.chatId).avatarHash, /^[a-f0-9]{64}$/)
+})
+
+test('compression-only differences skip photo edits while an empty Telegram avatar is initialized',async()=>{
+  const f=fixture({avatar:true}),input=f.input(-10001)
+  f.hooks.compare=async()=>true
+  await f.service().updateGroup(input)
+  assert.equal(f.uploads.length,0)
+  f.hooks.photo=async()=>Buffer.alloc(0)
+  await f.service().updateGroup({...input,avatarLink:'different-image'})
+  assert.equal(f.uploads.length,1)
+})
+
+test('a Telegram photo-read FloodWait stops title edits and later metadata reads',async()=>{
+  const f=fixture({avatar:true})
+  f.hooks.photo=async()=>{throw floodWait()}
+  for(const id of [-10001,-10002])await f.service().updateGroup(f.input(id))
+  assert.equal(f.photoReads.length,1)
+  assert.equal(f.uploads.length,0)
+  assert.equal(f.requests.length,0)
+  assert.equal(f.saves.length,0)
+  assert.equal(f.logs.warn.length,1)
+})
+
+test('a database save failure after a photo update is retried against the current Telegram image',async()=>{
+  const f=fixture({avatar:true}),input=f.input(-10001)
+  f.hooks.save=async()=>{throw Error('database unavailable')}
+  f.hooks.invoke=async request=>{
+    if(request instanceof Api.channels.EditPhoto)f.hooks.photo=async()=>Buffer.from('new-avatar')
+  }
+  await f.service().updateGroup(input)
+  assert.equal(f.uploads.length,1)
+  assert.equal(f.rows.get(input.chatId).avatarHash,undefined)
+  delete f.hooks.save
+  await f.service().updateGroup(input)
+  assert.equal(f.uploads.length,1,'the already updated photo is not uploaded again')
+  assert.match(f.rows.get(input.chatId).avatarHash,/^[a-f0-9]{64}$/)
 })
 
 test('failed downloads preserve the saved hash and can be retried', async () => {
@@ -299,4 +353,23 @@ test('avatar pixel hashes ignore encoding and metadata while detecting visible c
   const changed = await sharp({create: {width: 2, height: 2, channels: 3, background: '#ff00ff'}}).png().toBuffer()
   assert.notEqual((await prepareGroupAvatar(first)).hash, (await prepareGroupAvatar(changed)).hash)
   await assert.rejects(prepareGroupAvatar(Buffer.from('invalid image')))
+})
+
+test('current Telegram avatars match through JPEG compression and size changes while real visual edits are detected',async()=>{
+  const sharp=require('sharp'),{sameGroupAvatar}=require('../dist/util/GroupAvatar')
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="480" height="480"><rect width="480" height="480" fill="#00a4ec"/><circle cx="240" cy="200" r="135" fill="white"/><path d="M240 80 130 260h220Z" fill="#328daf"/><text x="145" y="415" font-size="56" fill="white">AVATAR</text></svg>'
+  const original=await sharp(Buffer.from(svg)).png().toBuffer()
+  for(const size of [132,200,640])for(const quality of [70,85,95]){
+    const compressed=await sharp(original).resize(size,size).jpeg({quality}).toBuffer()
+    assert.equal(await sameGroupAvatar(original,compressed),true,`same logo, size=${size}, quality=${quality}`)
+  }
+  const blue=await sharp({create:{width:200,height:200,channels:3,background:'#00a4ec'}}).png().toBuffer()
+  const otherColor=await sharp({create:{width:200,height:200,channels:3,background:'#d74d4d'}}).png().toBuffer()
+  assert.equal(await sameGroupAvatar(blue,otherColor),false,'uniform color changes are real changes')
+  const localEdit=await sharp(original).composite([{input:await sharp({create:{width:36,height:36,channels:3,background:'#000000'}}).png().toBuffer(),left:220,top:220}]).png().toBuffer()
+  assert.equal(await sameGroupAvatar(original,localEdit),false,'a local logo edit must not disappear in a global average')
+  const translucent=await sharp({create:{width:100,height:100,channels:4,background:{r:255,g:0,b:0,alpha:0}}}).png().toBuffer()
+  const white=await sharp({create:{width:100,height:100,channels:3,background:'#ffffff'}}).jpeg().toBuffer()
+  assert.equal(await sameGroupAvatar(translucent,white),true,'transparent backgrounds compare using the same white flattening')
+  await assert.rejects(sameGroupAvatar(original,Buffer.from('invalid image')))
 })

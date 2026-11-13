@@ -6,7 +6,7 @@ import {Api} from 'telegram'
 import {CustomFile} from 'telegram/client/uploads'
 import axios from 'axios'
 import {returnBigInt} from 'telegram/Helpers'
-import {prepareGroupAvatar} from '../util/GroupAvatar'
+import {prepareGroupAvatar, sameGroupAvatar} from '../util/GroupAvatar'
 import {FormatUtils} from '../util/FormatUtils'
 import {config} from '../config'
 import {FileUtils} from '../util/FileUtils'
@@ -71,17 +71,15 @@ export class TelegramGroupOperateService {
                     const buff = await FileUtils.getInstance().downloadUrl2Buffer(input.avatarLink)
                     if (!buff?.length) throw new Error('Empty group avatar')
                     const avatar = await prepareGroupAvatar(buff)
-                    let previousHash = stored.avatarHash
-                    if (!previousHash && stored.avatarLink) {
-                        if (stored.avatarLink === input.avatarLink) previousHash = avatar.hash
-                        else {
-                            try {
-                                const previous = await FileUtils.getInstance().downloadUrl2Buffer(stored.avatarLink)
-                                previousHash = (await prepareGroupAvatar(previous)).hash
-                            } catch { /* An expired legacy URL cannot establish the last uploaded content. */ }
+                    if (avatar.hash !== stored.avatarHash) {
+                        // The old source URL can expire or change its bytes. The
+                        // existing Telegram photo is the authoritative baseline.
+                        const current = await this.client.downloadProfilePhoto(entity, {isBig: true})
+                        if (!Buffer.isBuffer(current)) throw new Error('Unable to read current group avatar')
+                        if (!current.length || !await sameGroupAvatar(avatar.buffer, current)) {
+                            await this.updateGroupAvatar(entity, avatar.buffer)
                         }
                     }
-                    if (avatar.hash !== previousHash) await this.updateGroupAvatar(entity, avatar.buffer)
                     updated.avatarLink = input.avatarLink
                     updated.avatarHash = avatar.hash
                     changed = true
