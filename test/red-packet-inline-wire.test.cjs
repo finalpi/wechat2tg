@@ -23,7 +23,7 @@ test('Telegram callback wire edits the exact original photo keyboard without sen
     source:'<msg><appmsg><type>2001</type><wcpayinfo><paymsgid>synthetic123</paymsgid><nativeurl>wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=synthetic123</nativeurl></wcpayinfo></appmsg></msg>'})
   const data = `rpo:${entry.token}`,message = {message_id:9,date:0,chat:{id:-100,type:'supergroup'},message_thread_id:77,
     photo:[{file_id:'photo',file_unique_id:'photo',width:100,height:200}],caption:'Original caption',
-    reply_markup:{inline_keyboard:[[{text:'Other',callback_data:'other:action'}],[{text:'拆开并领取',callback_data:data}]]}}
+    reply_markup:{inline_keyboard:[[{text:'Other',callback_data:'other:action'}],[{text:'拆红包',callback_data:data}]]}}
   const ctx = new Context({update_id:1,callback_query:{id:'callback123',chat_instance:'test',from:{id:123,is_bot:false,first_name:'Owner'},message,data}},bot.telegram,{id:456,is_bot:true,first_name:'Test',username:'test_bot'})
   await handleRedPacketCallback(ctx,data,123,async()=>({wxId:'room@chatroom'}),service,async()=>{
     assert.equal(claims,0);assert.equal((await service.status(entry.token)).state,'opening')
@@ -35,9 +35,9 @@ test('Telegram callback wire edits the exact original photo keyboard without sen
     assert.equal(body.chat_id,-100);assert.equal(body.message_id,9)
     assert.deepEqual(body.reply_markup.inline_keyboard[0],[{text:'Other',callback_data:'other:action'}])
     assert.equal(body.caption,undefined);assert.equal(body.text,undefined);assert.equal(body.media,undefined)
-    assert(!JSON.stringify(body).includes('1.23'))
+    assert.equal(body.reply_markup.inline_keyboard.at(-1)[0].text,'已领取 ¥1.23')
   }
-  assert.match(requests.at(-1).body.reply_markup.inline_keyboard.at(-1)[0].text,/已领取/)
+  assert.equal(requests.at(-1).body.reply_markup.inline_keyboard.at(-1)[0].text,'已领取 ¥1.23')
   await handleRedPacketCallback(ctx,`rps:${entry.token}`,123,async()=>({wxId:'room@chatroom'}),service,async()=>assert.fail('status must not wait or claim'))
   const alert = requests.filter(x=>x.method === 'answerCallbackQuery').at(-1).body
   assert.equal(alert.show_alert,true);assert.match(alert.text,/1\.23/);assert.equal(claims,1)

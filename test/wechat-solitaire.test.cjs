@@ -149,7 +149,7 @@ test('red-packet SDK messages and legacy unknown placeholders retain group/topic
     f.client.bindGroupService.resolveWechat = async()=>({chatId:-100123,threadId:77,wxId:'room@chatroom',type:1,isReceive:true})
     await f.client.onMessage(packet)
     assert.equal(f.sent.length,1)
-    assert.equal(f.sent[0].content,'🧧 收到红包，请在微信客户端查看。')
+    assert.equal(f.sent[0].content,legacy ? '🧧 收到红包，请在微信客户端查看。' : '微信红包')
     assert.equal(f.sent[0].source_type,'red_packet');assert.equal(f.sent[0].threadId,77);assert.equal(f.sent[0].chatId,-100123)
     assert(!f.sent[0].content.includes('private-payment-url'))
   }

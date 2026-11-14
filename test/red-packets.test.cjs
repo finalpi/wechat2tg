@@ -174,7 +174,7 @@ test('registered AutoHongBao route is used once without redirects or SDK logging
   assert.equal(received[0].body.SendUserName,'room@chatroom')
 })
 
-function telegramFixture(token,prefix = 'rpo',text = '拆开并领取') {
+function telegramFixture(token,prefix = 'rpo',text = '拆红包') {
   const alerts = [],edits = [],unexpected = []
   const other = {text:'其他操作',callback_data:'other:action'}
   const message = {message_id:9,message_thread_id:77,photo:[{file_id:'original-photo'}],caption:'原始说明',
@@ -188,7 +188,7 @@ function telegramFixture(token,prefix = 'rpo',text = '拆开并领取') {
 const packetBinding = async()=>({wxId:'room@chatroom'})
 const noWait = async()=>undefined
 
-test('Telegram one-click claim edits only its original keyboard and keeps owner/topic checks and amounts private', async t => {
+test('Telegram one-click claim puts the amount on the original button and keeps owner/topic checks', async t => {
   const f = await fixture(t),g = telegramFixture(f.entry.token)
   g.ctx.from.id = 456
   await handleRedPacketCallback(g.ctx,`rpo:${f.entry.token}`,123,packetBinding,f.service,noWait)
@@ -203,9 +203,9 @@ test('Telegram one-click claim edits only its original keyboard and keeps owner/
     assert.equal((await f.service.status(f.entry.token)).state,'opening')
   })
   assert.equal(waited,1);assert.equal(f.calls.length,1);assert.equal(g.edits.length,1)
-  assert.match(g.edits[0].inline_keyboard.at(-1)[0].text,/已领取/)
+  assert.equal(g.edits[0].inline_keyboard.at(-1)[0].text,'已领取 ¥1.23')
   for(const markup of g.edits){
-    assert.deepEqual(markup.inline_keyboard[0],[g.other]);assert(!JSON.stringify(markup).includes('1.23'))
+    assert.deepEqual(markup.inline_keyboard[0],[g.other])
     assert(markup.inline_keyboard.flat().every(button=>Buffer.byteLength(button.callback_data) <= 64))
   }
   assert.deepEqual(g.unexpected,[]);assert.equal(g.ctx.callbackQuery.message.caption,'原始说明')
@@ -279,6 +279,10 @@ test('interrupted waits stop safely; failed result edits and timeouts never repe
   const blocked = await fixture(t),g = telegramFixture(blocked.entry.token)
   await handleRedPacketCallback(g.ctx,`rpo:${blocked.entry.token}`,123,packetBinding,blocked.service,async()=>{throw Error('wait interrupted')})
   assert.equal(blocked.calls.length,0);assert.equal((await blocked.service.status(blocked.entry.token)).state,'ready')
+  const retry = g.edits.at(-1).inline_keyboard.at(-1)[0]
+  assert.equal(retry.text,'领取失败 · 重试');assert.equal(retry.callback_data,`rpo:${blocked.entry.token}`)
+  await handleRedPacketCallback(g.ctx,retry.callback_data,123,packetBinding,blocked.service,noWait)
+  assert.equal(blocked.calls.length,1);assert.equal(g.edits.at(-1).inline_keyboard.at(-1)[0].text,'已领取 ¥1.23')
   const f = await fixture(t,async()=>{throw Error('ambiguous timeout')}),h = telegramFixture(f.entry.token)
   let edits = 0
   h.ctx.editMessageReplyMarkup = async()=>{edits++;throw Error('lost Telegram edit')}
@@ -287,6 +291,29 @@ test('interrupted waits stop safely; failed result edits and timeouts never repe
   await handleRedPacketCallback(h.ctx,`rpo:${f.entry.token}`,123,packetBinding,f.service,noWait)
   assert.equal(f.calls.length,1);assert.equal(edits,1);assert.equal((await f.service.status(f.entry.token)).state,'unknown')
   assert.deepEqual(h.unexpected,[])
+})
+
+test('confirmed failure and unknown results stay on the button with no unsafe retry action',async t=>{
+  for(const [response,label] of [[{status:404,data:{}},'领取失败 · 接口不可用'],
+    [{status:200,data:{Code:0,Success:true,Data:{retcode:1}}},'领取失败'],[{status:500,data:{}},'结果未知 · 请在微信核实']]){
+    const f = await fixture(t,async()=>response),g = telegramFixture(f.entry.token)
+    await handleRedPacketCallback(g.ctx,`rpo:${f.entry.token}`,123,packetBinding,f.service,noWait)
+    assert.equal(g.edits.length,1)
+    const button = g.edits[0].inline_keyboard.at(-1)[0]
+    assert.equal(button.text,label);assert.equal(button.callback_data,`rps:${f.entry.token}`)
+    await handleRedPacketCallback(g.ctx,button.callback_data,123,packetBinding,f.service,noWait)
+    assert.equal(f.calls.length,1);assert.equal(g.edits.length,1);assert.deepEqual(g.unexpected,[])
+  }
+})
+
+test('an already claimed legacy packet updates its old button with the stored amount without claiming again',async t=>{
+  const f = await fixture(t),g = telegramFixture(f.entry.token,'rp','拆红包')
+  const prepared = await f.service.prepare(f.entry.token,'test')
+  await f.service.open(f.entry.token,prepared.confirmation,'test')
+  await handleRedPacketCallback(g.ctx,`rp:${f.entry.token}`,123,packetBinding,f.service,noWait)
+  assert.equal(f.calls.length,1);assert.equal(g.edits.length,1)
+  assert.equal(g.edits[0].inline_keyboard.at(-1)[0].text,'已领取 ¥1.23')
+  assert.deepEqual(g.unexpected,[])
 })
 
 test('unchanged Telegram keyboard is benign and status reads do not downgrade the result',async t=>{

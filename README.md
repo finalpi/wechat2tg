@@ -4,6 +4,8 @@
 
 Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad, Mac, Car, Windows, Pad)
 
+Current stable release: **v6.0.41** — static sticker photos, red-packet amounts on the original button, improved WebUI input and previews, consistent templates, avatar deduplication, and a slimmer image. See the [release notes and upgrade guidance](docs/releases.md).
+
 ## Telegram Group: [@Wx2TgUserGroup](https://t.me/+AD02MEZa-og3ZGY1)
 
 > [!WARNING]
@@ -59,7 +61,7 @@ The same WebUI can open from the owner’s private-chat **控制台** menu. Conf
 - **Contacts are a cached directory.** dev.4 adds WeChat-style categories, alphabetical sections, avatars, search and paging. Service accounts require an explicit protocol field; remaining official accounts are not asserted to be confirmed subscription accounts. Counts are neither page lengths nor authoritative real-time WeChat totals. Cached groups are not necessarily saved-to-contacts groups. New-friend management, My Enterprise, and contact add/delete/approval are not implemented in WebUI.
 - **Official-account menus are only partially supported.** dev.4 displays synchronized menus/submenus and opens ordinary HTTP(S) links in a new window. Event clicks, mini-programs and WeChat authorization/QR actions remain disabled. Button text is never sent as a fake menu click. Missing cached menus do not prove an account has no menu, and links may still require WeChat to complete their workflow.
 - **PWA installation is not offline WeChat or background delivery.** Trusted HTTPS is required. Only public shell assets are cached, never protected APIs, chat bodies or attachments. Drafts live in the current signed-in window's memory; closing or forcing a reload does not guarantee recovery. There is no offline send replay or reliable closed-window push. Native mobile installation, keyboard and Telegram WebView behavior still need device testing.
-- **The UI migration is incomplete.** The current React UI is primarily Chinese. Independent UI-language switching, global configuration search, inline keyboard mention selection and one-click MCP client-configuration export from the old UI are not fully migrated.
+- **The UI migration is incomplete.** The current React UI is primarily Chinese. Independent UI-language switching, global configuration search and one-click MCP client-configuration export from the old UI are not fully migrated.
 
 Use `/chat` for chat and `/manage` for settings. Implemented features retain SSE-driven updates without periodic message/contact polling; desktop focus mode and chat/settings switching preserve in-window chat drafts and reading position. See [PWA/chat boundaries](docs/pwa-chat.md), [directory/menu capabilities](docs/research/wechat-contact-classification.md) and [WebUI development](docs/webui-development.md).
 

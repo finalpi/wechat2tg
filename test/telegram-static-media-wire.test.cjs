@@ -2,14 +2,23 @@
 const {test} = require('node:test'),assert = require('node:assert/strict')
 const fs = require('node:fs'),path = require('node:path'),vm = require('node:vm'),http = require('node:http')
 const {once} = require('node:events'),{Telegraf} = require('telegraf')
+const {randomUUID} = require('node:crypto')
 const {image,animatedGif} = require('./helpers/telegram-media.cjs')
 
 for(const route of ['sender','retry']){
   test(`real Bot API multipart uses sendPhoto for static stickers and sendAnimation for motion (${route})`,async t=>{
-    const calls = []
+    const calls = [],token = `123:static-media-${randomUUID()}`
     const server = http.createServer(async(request,response)=>{
+      // Isolate this fixture from late requests to a recycled ephemeral port
+      // when the full suite runs many local Telegram servers concurrently.
+      if(!request.url.startsWith(`/bot${token}/`)){
+        request.resume();response.writeHead(404,{'content-type':'application/json'})
+        response.end(JSON.stringify({ok:false,error_code:404,description:'Unknown test bot'}));return
+      }
       const chunks = [];for await(const chunk of request)chunks.push(chunk)
-      const body = Buffer.concat(chunks).toString('latin1'),boundary = /boundary=([^;]+)/.exec(request.headers['content-type'])[1]
+      const body = Buffer.concat(chunks).toString('latin1'),boundaryMatch = /boundary=([^;]+)/.exec(request.headers['content-type'] || '')
+      assert(boundaryMatch,`Unexpected ${request.url.split('/').pop()} content type: ${request.headers['content-type']}`)
+      const boundary = boundaryMatch[1]
       const fields = {}
       for(const part of body.split(`--${boundary}`)){
         const match = /name="([^"]+)"/.exec(part)
@@ -20,7 +29,10 @@ for(const route of ['sender','retry']){
     })
     server.listen(0,'127.0.0.1');await once(server,'listening')
     t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve))})
-    const bot = new Telegraf('123:synthetic-test-only',{telegram:{apiRoot:`http://127.0.0.1:${server.address().port}`}})
+    const apiRoot = `http://127.0.0.1:${server.address().port}`
+    assert.equal((await fetch(`${apiRoot}/botother-test/sendMessage`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).status,404)
+    assert.equal(calls.length,0)
+    const bot = new Telegraf(token,{telegram:{apiRoot}})
     const exports = {},dependencies = {
       './MessageSender':{MessageSender:class {sendAction(){return undefined}}},
       '../base/BaseClient':{AbstractClient:class {static getSpyClient(){return {client:bot}}}},

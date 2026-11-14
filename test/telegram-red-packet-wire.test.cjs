@@ -54,16 +54,15 @@ for(const missingEmojiEntities of [false,true]){
     const {decorateRedPacketMessage} = load('util/RedPacketMessage.js',{
       './FormatUtils':{FormatUtils:{escapeHtml:value=>value}},
       './WechatRedPacket':require('../dist/util/WechatRedPacket'),
-      '../service/RedPacketService':{redPacketService:()=>({register:async input=>{registrations.push(input);return {token,canOpen:true,state:'ready'}}})},
+      '../service/RedPacketService':{redPacketButtonText:require('../dist/service/RedPacketService').redPacketButtonText,redPacketService:()=>({register:async input=>{registrations.push(input);return {token,canOpen:true,state:'ready'}}})},
     })
-    const source = '<msg><appmsg><type>2001</type><wcpayinfo><paymsgid>synthetic123</paymsgid><nativeurl>wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=synthetic123</nativeurl><senderc2cshowsourceurl>https://wx.gtimg.com/banner.png</senderc2cshowsourceurl><recshowsourceurl>https://wx.gtimg.com/unopened.png</recshowsourceurl><detailshowsourceurl>https://wx.gtimg.com/opened.png</detailshowsourceurl></wcpayinfo></appmsg></msg>'
+    const source = '<msg><appmsg><type>2001</type><wcpayinfo><receivertitle>恭喜发财，大吉大利</receivertitle><paymsgid>synthetic123</paymsgid><nativeurl>wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=synthetic123</nativeurl><senderc2cshowsourceurl>https://wx.gtimg.com/banner.png</senderc2cshowsourceurl><recshowsourceurl>https://wx.gtimg.com/unopened.png</recshowsourceurl><detailshowsourceurl>https://wx.gtimg.com/opened.png</detailshowsourceurl></wcpayinfo></appmsg></msg>'
     const message = {id:'test-message',chatId:-100,threadId:42,conversationWxId:'test@chatroom',param:{reply_id:91}}
     await decorateRedPacketMessage(message,source,'synthetic-self',true)
     assert.equal(registrations.length,1)
     assert.equal(message.redPacket.coverUrl,'https://wx.gtimg.com/unopened.png')
-    assert(message.content.includes('拆开并领取'))
-    assert(!message.content.includes('请在微信客户端查看'))
-    const keyboard = {inline_keyboard:[[{text:'拆开并领取',callback_data:`rpo:${token}`}]]}
+    assert.equal(message.content,'恭喜发财，大吉大利','only the blessing, with no instructions or extra notice')
+    const keyboard = {inline_keyboard:[[{text:'拆红包',callback_data:`rpo:${token}`}]]}
     const sender = new TelegramBotApiMessageSender(bot)
     const result = await sender.sendFile(message.chatId,{buff:Buffer.from('synthetic-photo-bytes'),filename:'packet.jpg',fileType:'photo',caption:missingEmojiEntities ? alias : message.content},
       {...message.param,message_thread_id:message.threadId,parse_mode:'HTML'})

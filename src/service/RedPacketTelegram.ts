@@ -2,17 +2,14 @@ import type {Context} from 'telegraf'
 import {randomInt} from 'node:crypto'
 import {setTimeout as delay} from 'node:timers/promises'
 import {getTelegramThreadId} from '../util/TelegramTopicUtils'
-import {RedPacketService,redPacketService,redPacketResultText,RedPacketResult} from './RedPacketService'
+import {RedPacketService,redPacketService,redPacketResultText,redPacketButtonText} from './RedPacketService'
 
 export const redPacketTelegramDelay = ()=>randomInt(1000,3001)
 const waitBeforeOpen = ()=>delay(redPacketTelegramDelay())
 const pendingMessages = new Set<string>()
-const resultLabel = (result:RedPacketResult)=>result.state === 'received' ? '已领取 · 查看结果'
-    : result.state === 'unknown' ? '结果未知 · 请在微信核实'
-        : result.state === 'unavailable' ? '无法领取 · 查看原因' : '未领取 · 查看状态'
 
 /** Edit only the originating message's keyboard: preserve photo/text, caption,
- * entities and unrelated buttons. Amounts remain in owner-only callback alerts.
+ * entities and unrelated buttons. The final button itself shows the amount.
  * rpo is explicit one-click consent; rps only reads. Legacy rp opens only when
  * the clicked button explicitly says to open, never when it says view results. */
 export async function handleRedPacketCallback(ctx:Context,data:string,ownerId:number,
@@ -41,22 +38,24 @@ export async function handleRedPacketCallback(ctx:Context,data:string,ownerId:nu
         catch(error){if(error?.response?.error_code !== 400 || !/message is not modified/i.test(error.response.description || ''))throw error}
     }
     let acknowledged = false,token:string|undefined
+    let destination:{chatId:number;threadId?:number;conversation:string}|undefined
     try {
         service ||= redPacketService()
         const binding = await resolve(chatId,threadId)
         if(!binding)throw new Error('unavailable')
-        const destination = {chatId,threadId,conversation:binding.wxId}
+        destination = {chatId,threadId,conversation:binding.wxId}
         if(match[1] === 'rpx'){
             token = await service.cancel(match[2],scope,destination)
             await ctx.answerCbQuery('已取消，不会领取。');acknowledged = true
-            if(token)await edit([{text:'拆开并领取',callback_data:`rpo:${token}`}])
+            if(token)await edit([{text:'拆红包',callback_data:`rpo:${token}`}])
             return
         }
         if(match[1] === 'rps' || match[1] === 'rp' && !legacyOpen){
             const result = await service.status(match[2],destination)
             await ctx.answerCbQuery(redPacketResultText(result),{show_alert:true});acknowledged = true
             token = match[2]
-            if(result.canOpen)await edit([{text:'拆开并领取',callback_data:`rpo:${token}`}])
+            if(result.canOpen)await edit([{text:'拆红包',callback_data:`rpo:${token}`}])
+            else if(match[1] === 'rp' && result.state !== 'opening')await edit([{text:redPacketButtonText(result),callback_data:`rps:${token}`}])
             return
         }
         let confirmation = match[2]
@@ -65,6 +64,7 @@ export async function handleRedPacketCallback(ctx:Context,data:string,ownerId:nu
             const prepared = await service.prepare(token,scope,destination)
             if(!prepared.confirmation){
                 await ctx.answerCbQuery(redPacketResultText(prepared),{show_alert:true});acknowledged = true
+                if(match[1] === 'rp' && prepared.state !== 'opening')await edit([{text:redPacketButtonText(prepared),callback_data:`rps:${token}`}])
                 return
             }
             confirmation = prepared.confirmation
@@ -79,11 +79,22 @@ export async function handleRedPacketCallback(ctx:Context,data:string,ownerId:nu
                 await wait()
             })
         token = result.token
-        if(result.state !== 'opening')await edit([{text:resultLabel(result),callback_data:`rps:${token}`}])
+        if(result.state !== 'opening')await edit([{text:redPacketButtonText(result),callback_data:`rps:${token}`}])
     } catch {
         if(!acknowledged)await ctx.answerCbQuery('红包或确认已失效，或账号 / 会话已切换。请从原红包重新查看。',{show_alert:true}).catch(()=>undefined)
-        else if(token)await edit([{text:'查看状态 · 请勿重复领取',callback_data:`rps:${token}`}]).catch(()=>undefined)
-        else await edit([{text:'确认已失效，请返回原红包',callback_data:`rpx:${match[2]}`}]).catch(()=>undefined)
+        else if(token && !updateAttempted){
+            // Retry is offered only when the private journal confirms no request
+            // was dispatched and the current account/binding still authorizes it.
+            let text = '领取失败 · 会话已失效',callback_data = `rps:${token}`
+            try {
+                if(!destination || (await resolve(chatId,threadId))?.wxId !== destination.conversation)throw new Error('unavailable')
+                const state = await service.status(token,destination)
+                if(state.canOpen){text = '领取失败 · 重试';callback_data = `rpo:${token}`}
+                else text = redPacketButtonText(state)
+            } catch { /* No automatic money retry or exposure of another account's result. */ }
+            await edit([{text,callback_data}]).catch(()=>undefined)
+        }
+        else if(!token)await edit([{text:'已失效',callback_data:`rpx:${match[2]}`}]).catch(()=>undefined)
         // A Telegram UI failure must never repeat the money-affecting operation.
     } finally {pendingMessages.delete(key)}
 }

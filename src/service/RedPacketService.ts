@@ -33,6 +33,16 @@ export function redPacketOutcome(response:{status:number;data:any},sendId:string
     return {state:'unknown',canOpen:false}
 }
 
+/** Compact inline result; the owner explicitly requested the amount on the
+ * original button, so it is visible to everyone who can see that message. */
+export function redPacketButtonText(result:RedPacketResult):string {
+    if(result.state === 'received')return Number.isSafeInteger(result.amountFen) && result.amountFen > 0
+        ? `已领取 ¥${(result.amountFen / 100).toFixed(2)}` : '金额待核实'
+    if(result.state === 'unknown')return '结果未知 · 请在微信核实'
+    if(result.state === 'unavailable')return result.reason === 'routeUnavailable' ? '领取失败 · 接口不可用' : '领取失败'
+    return '拆红包'
+}
+
 export function redPacketResultText(result:RedPacketResult):string {
     if(result.state === 'received')return `已确认领取 ¥${((result.amountFen || 0) / 100).toFixed(2)}`
     if(result.state === 'opening')return '正在处理，请勿重复打开。'
