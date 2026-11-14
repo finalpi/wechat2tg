@@ -1,6 +1,6 @@
 {
   "name": "wechat2tg",
-  "version": "6.0.41-dev.15",
+  "version": "6.0.41-dev.16",
   "description": "simple kit send wechat message to telegram",
   "main": "app.ts",
   "esModuleInterop": true,
@@ -23,6 +23,7 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
+    "abort-controller": "3.0.0",
     "axios": "^1.9.0",
     "crypto": "^1.0.1",
     "dotenv": "^16.0.3",

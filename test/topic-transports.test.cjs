@@ -42,6 +42,7 @@ const {Api} = require('telegram')
 const [emojiAlias, customEmoji] = Object.entries(emojiData.WECHAT_CUSTOM_EMOJI)[0]
 const plain = value => JSON.parse(JSON.stringify(value))
 const media = fileType => ({buff: Buffer.from('test'), filename: 'test.bin', caption: 'caption', fileType})
+const replyParameters = params=>typeof params.reply_parameters === 'string' ? JSON.parse(params.reply_parameters) : params.reply_parameters
 
 function transport(kind, failure, enabled = false, displayOptions = {}) {
   const presentation = require('./helpers/telegram-presentation')(displayOptions)
@@ -50,7 +51,7 @@ function transport(kind, failure, enabled = false, displayOptions = {}) {
     calls.push({method, args})
     const error = typeof failure === 'function' ? failure(calls.length) : failure
     if (error) throw error
-    return {id: 123, message_id: 123}
+    return displayOptions.receipt || {id: 123, message_id: 123}
   }
   const base = load('message/MessageSender.ts', {
     '../client/TelegramBotClient': {TelegramBotClient: {getSpyClient: () => ({client: {telegram: {
@@ -64,6 +65,7 @@ function transport(kind, failure, enabled = false, displayOptions = {}) {
       '../config': {config: {WECHAT_CUSTOM_EMOJI_ENABLED: enabled}},
       '../util/WechatCustomEmoji': emojiHtml,
       '../util/TelegramPresentation': presentation,
+      '../util/TelegramKeyboard': load('util/TelegramKeyboard.ts'),
       'abort-controller': AbortController,
     })
     sender = new TelegramBotApiMessageSender({telegram: Object.fromEntries(
@@ -75,6 +77,7 @@ function transport(kind, failure, enabled = false, displayOptions = {}) {
       '../config': {config: {WECHAT_CUSTOM_EMOJI_ENABLED: enabled}},
       '../util/WechatCustomEmoji': emojiHtml,
       '../util/TelegramPresentation': presentation,
+      '../util/TelegramKeyboard': load('util/TelegramKeyboard.ts'),
       'telegram/client/uploads': {CustomFile: class {
         constructor(name, size, filePath, buffer) {Object.assign(this, {name, size, filePath, buffer})}
       }},
@@ -115,7 +118,7 @@ for (const fileType of ['animation', 'document', 'audio', 'photo', 'video', 'voi
     assert.equal(method, `send${fileType[0].toUpperCase()}${fileType.slice(1)}`)
     assert.equal(payload.chat_id, -100)
     assert.equal(payload.message_thread_id, 42)
-    assert.deepEqual(plain(payload.reply_parameters), {message_id: 91})
+    assert.deepEqual(plain(replyParameters(payload)), {message_id: 91})
     assert.equal(payload.parse_mode, 'HTML')
     assert.equal(payload.caption, 'caption')
     assert.equal(payload[fileType].source.toString(), 'test')
@@ -160,7 +163,7 @@ for (const kind of ['bot', 'gram']) {
         const params = kind === 'bot' && method === 'sendText' ? call.args[2] : call.args[1]
         assert.equal(Object.hasOwn(params, 'message_thread_id'), false)
         assert.equal(Object.hasOwn(params, 'topMsgId'), false)
-        assert.equal(kind === 'bot' ? params.reply_parameters?.message_id : params.replyTo, option?.reply_id)
+        assert.equal(kind === 'bot' ? replyParameters(params)?.message_id : params.replyTo, option?.reply_id)
         assert.equal(f.actions.at(-1).length, 2)
       }
     }
@@ -266,6 +269,56 @@ for(const kind of ['bot','gram']){
     assert.match(kind === 'bot' ? compatible.calls[0].args[1] : compatible.calls[0].args[1].message,/<a href=/)
   })
 }
+
+for(const kind of ['bot','gram']){
+  const button = {text:'拆红包',callback_data:'rp:0123456789abcdef0123456789abcdef'}
+  const keyboard = params=>kind === 'bot' ? params.reply_markup?.inline_keyboard
+    : params.buttons?.map(row=>row.map(item=>({text:item.text,callback_data:item.data.toString()})))
+  test(`${kind} callback buttons reach text, every media kind and edits with topic/reply intact`,async()=>{
+    const f = transport(kind)
+    for(const inline_keyboard of [[button],[[button]],[null,{},button,{text:'bad',callback_data:'x'.repeat(65)}]]){
+      const option = {inline_keyboard,message_thread_id:42,reply_id:91,parse_mode:'HTML'}
+      await f.sender.sendText(-100,'body',option)
+      assert.deepEqual(plain(keyboard(f.calls.at(-1).args[kind === 'bot' ? 2 : 1])),[[button]])
+      for(const fileType of ['photo','document','video','animation','audio','voice']){
+        await f.sender.sendFile(-100,media(fileType),option)
+        const params = f.calls.at(-1).args[1]
+        assert.deepEqual(plain(keyboard(params)),[[button]])
+        assert.equal(kind === 'bot' ? params.message_thread_id : params.topMsgId,42)
+        assert.equal(kind === 'bot' ? replyParameters(params).message_id : params.replyTo,91)
+      }
+      await f.sender.editFile(-100,123,{fileType:'photo',caption:'updated'},option)
+      assert.deepEqual(plain(keyboard(f.calls.at(-1).args[kind === 'bot' ? 4 : 1])),[[button]])
+    }
+    await f.sender.sendFile(-100,media('photo'),{inline_keyboard:[{},null,{text:'invalid',callback_data:5}]})
+    assert.equal(keyboard(f.calls.at(-1).args[1]),undefined)
+  })
+  test(`${kind} accepted media caption fallback edits the receipt and retains red-packet buttons`,async()=>{
+    const f = transport(kind,undefined,true,{receipt:{id:123,message_id:123,caption:customEmoji.emoji,caption_entities:[]}})
+    const result = await f.sender.sendFile(-100,{...media('photo'),caption:emojiAlias},{parse_mode:'HTML',inline_keyboard:[button],message_thread_id:42,reply_id:91})
+    assert.equal(result.message_id,123)
+    assert.equal(f.calls.length,2,'one send followed by one edit, never another send')
+    assert.equal(f.calls[1].method,kind === 'bot' ? 'editMessageCaption' : 'editMessage')
+    assert.equal(kind === 'bot' ? f.calls[1].args[1] : f.calls[1].args[1].message,123)
+    assert.deepEqual(plain(keyboard(f.calls[0].args[1])),[[button]])
+    assert.deepEqual(plain(keyboard(f.calls[1].args[kind === 'bot' ? 4 : 1])),[[button]])
+  })
+  test(`${kind} photo errors remain single attempts even with a red-packet keyboard`,async()=>{
+    for(const error of [new Error('Request timeout'),{response:{error_code:500,description:'server error'}}]){
+      const f = transport(kind,error)
+      await assert.rejects(f.sender.sendFile(-100,media('photo'),{parse_mode:'HTML',inline_keyboard:[button]}),value=>value === error)
+      assert.equal(f.calls.length,1)
+    }
+  })
+}
+
+test('callback normalization accepts legacy queries but excludes non-string and oversized UTF-8 data',()=>{
+  const {telegramCallbackButtons} = load('util/TelegramKeyboard.ts')
+  const valid = {text:'拆红包',callback_data:'rp:packet'}
+  assert.deepEqual(plain(telegramCallbackButtons([[{text:'拆红包',query:'rp:packet'}],null,{},
+    {text:' ',callback_data:'x'},{text:'bad',callback_data:{}},{text:'big',callback_data:'红包'.repeat(11)}])),[valid])
+  assert.deepEqual(plain(telegramCallbackButtons({text:'bad'})),[])
+})
 
 function persistence(extra = []) {
   const rows = [...extra,

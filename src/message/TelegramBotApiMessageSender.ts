@@ -2,6 +2,7 @@ import {MessageSender, Option, SendResult} from './MessageSender'
 import {Telegraf, TelegramError} from 'telegraf'
 import {config} from '../config'
 import {sendTelegramHtml} from '../util/TelegramPresentation'
+import {telegramCallbackButtons} from '../util/TelegramKeyboard'
 import AbortController from 'abort-controller'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -26,16 +27,18 @@ export class TelegramBotApiMessageSender extends MessageSender {
             // 大于5mb采用document方式发送
             file.fileType = 'document'
         }
+        const buttons = telegramCallbackButtons(option?.inline_keyboard)
+        const extra = buttons.length ? {reply_markup:{inline_keyboard:[buttons]}} : {}
         return new Promise<SendResult>((resolve, reject) => {
             const send = (caption:string|undefined) => this.sender.telegram.editMessageMedia(chatId, parseInt(msgId + ''), undefined, {
                 type: file.fileType,
                 media: {source: file.buff, filename: file.filename},
                 caption,
                 parse_mode: option?.parse_mode
-            }, {})
+            }, extra)
             const pending = file.caption !== undefined && option?.parse_mode === 'HTML'
                 ? sendTelegramHtml(chatId,file.caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,send,()=>true,'botApi',
-                    (_message,caption)=>this.sender.telegram.editMessageCaption(chatId,parseInt(msgId + ''),undefined,caption,{parse_mode:option.parse_mode})) : send(file.caption)
+                    (_message,caption)=>this.sender.telegram.editMessageCaption(chatId,parseInt(msgId + ''),undefined,caption,{parse_mode:option.parse_mode,...extra})) : send(file.caption)
             pending.then(() => {
                 resolve({message_id: msgId})
             }).catch(e => reject(e))
@@ -78,16 +81,8 @@ export class TelegramBotApiMessageSender extends MessageSender {
                 if (option.parse_mode) {
                     sendParam.parse_mode = option.parse_mode
                 }
-                if (option.inline_keyboard) {
-                    // Accept a flat button list or nested rows; drop entries Telegram
-                    // would reject so a bad keyboard never fails the whole message.
-                    const rows = option.inline_keyboard as any[]
-                    const buttons = (Array.isArray(rows[0]) ? rows.flat() : rows)
-                        .filter(button => button && typeof button.text === 'string' && button.text.trim()
-                            && (button.callback_data || button.query))
-                        .map(button => ({text: button.text, callback_data: button.callback_data || button.query}))
-                    if (buttons.length) sendParam.reply_markup = {inline_keyboard: [buttons]}
-                }
+                const buttons = telegramCallbackButtons(option.inline_keyboard)
+                if (buttons.length) sendParam.reply_markup = {inline_keyboard: [buttons]}
             }
 
             // 创建超时定时器
@@ -136,6 +131,9 @@ export class TelegramBotApiMessageSender extends MessageSender {
             }
         }
 
+        const buttons = telegramCallbackButtons(option?.inline_keyboard)
+        const replyMarkup = buttons.length ? {inline_keyboard:[buttons]} : undefined
+        if(replyMarkup)sendParam.reply_markup = replyMarkup
         const originalFileType = file.fileType
 
         if (file.fileType === 'photo' && file.buff.length > 5 * 1024 * 1024) {
@@ -161,11 +159,15 @@ export class TelegramBotApiMessageSender extends MessageSender {
                 chat_id: chatId,
                 [mediaParamName]: {source: file.buff, filename: file.filename},
                 caption,
-                ...sendParam
+                ...sendParam,
+                // Pinned Telegraf serializes reply_markup in multipart, but not
+                // the newer reply_parameters object. Encode it explicitly so
+                // photo/media replies do not silently lose their target.
+                ...(sendParam.reply_parameters ? {reply_parameters:JSON.stringify(sendParam.reply_parameters)} : {})
             }, {signal: abortController.signal}).then(message=>{if(timeoutId)clearTimeout(timeoutId);return message})
             const pending = file.caption !== undefined && option?.parse_mode === 'HTML'
                 ? sendTelegramHtml(chatId,file.caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,send,()=>!settled,'botApi',
-                    (message,caption)=>this.sender.telegram.editMessageCaption(chatId,message.message_id,undefined,caption,{parse_mode:'HTML'})) : send(file.caption)
+                    (message,caption)=>this.sender.telegram.editMessageCaption(chatId,message.message_id,undefined,caption,{parse_mode:'HTML',...(replyMarkup ? {reply_markup:replyMarkup} : {})})) : send(file.caption)
             pending.then((msg: { message_id: number }) => {
                 settled = true
                 if (timeoutId) clearTimeout(timeoutId)

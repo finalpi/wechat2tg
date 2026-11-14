@@ -23,13 +23,18 @@ async function fixture(t,send) {
     async restart(){await service.close();service = new RedPacketService(async()=>session,transport,file)}}
 }
 
-test('packet parsing preserves exact IDs, selects direction-specific covers and rejects unrelated/unsafe actions', () => {
-  const extra = '<senderc2cshowsourceurl>https://snssvppicb.video.qq.com/sender.png</senderc2cshowsourceurl><receiverc2cshowsourceurl>https://snssvppicc.video.qq.com/receiver.png</receiverc2cshowsourceurl>'
+test('packet parsing preserves exact IDs, separates unopened/detail/bubble artwork and rejects unsafe actions', () => {
+  const extra = '<senderc2cshowsourceurl>https://snssvppicb.video.qq.com/sender.png</senderc2cshowsourceurl><receiverc2cshowsourceurl>https://snssvppicc.video.qq.com/receiver.png</receiverc2cshowsourceurl><recshowsourceurl>https://snssvppicb.video.qq.com/unopened.png</recshowsourceurl><detailshowsourceurl>https://snssvppicc.video.qq.com/opened.png</detailshowsourceurl>'
   const packet = readWechatRedPacket(JSON.stringify({Content:xml(extra)}))
   assert.equal(packet.sendId,id);assert.equal(packet.claimable,true);assert.equal(packet.title,'祝福 <&>')
   assert.equal(readWechatRedPacket('sender:\n' + xml()).xml,xml())
-  assert.equal(packet.coverUrl,'https://snssvppicc.video.qq.com/receiver.png')
-  assert.equal(readWechatRedPacket(xml(extra),true).coverUrl,'https://snssvppicb.video.qq.com/sender.png')
+  assert.equal(packet.coverUrl,'https://snssvppicb.video.qq.com/unopened.png')
+  assert.equal(packet.openedCoverUrl,'https://snssvppicc.video.qq.com/opened.png')
+  assert.equal(packet.bubbleCoverUrl,'https://snssvppicc.video.qq.com/receiver.png')
+  const outgoing = readWechatRedPacket(xml(extra),true)
+  assert.equal(outgoing.coverUrl,packet.coverUrl)
+  assert.equal(outgoing.openedCoverUrl,packet.openedCoverUrl)
+  assert.equal(outgoing.bubbleCoverUrl,'https://snssvppicb.video.qq.com/sender.png')
   assert.equal(readWechatRedPacket(xml().replace('2001','2000')),undefined)
   assert.equal(readWechatRedPacket('<!DOCTYPE msg [<!ENTITY x SYSTEM "file:///etc/passwd">]>' + xml()),undefined)
   assert.equal(readWechatRedPacket(xml().replace(`sendid=${id}`,'sendid=other-packet')).claimable,false)
@@ -41,6 +46,17 @@ test('packet parsing preserves exact IDs, selects direction-specific covers and 
   assert.equal(readWechatRedPacket(xml().replace('</wcpayinfo>','</wrong>')),undefined)
   assert.equal(redPacketOwnedBy(JSON.stringify({FromUserName:'other',ToUserName:'old-account'}),'self'),false)
   assert.equal(redPacketOwnedBy(JSON.stringify({FromUserName:'self',ToUserName:'room@chatroom'}),'self'),true)
+})
+
+test('missing/unsafe unopened covers never fall back to opened details or chat banners', () => {
+  const alternatives = '<detailshowsourceurl>https://wx.gtimg.com/opened.png</detailshowsourceurl><receiverc2cshowsourceurl>https://wx.gtimg.com/banner.png</receiverc2cshowsourceurl><senderc2cshowsourceurl>https://wx.gtimg.com/sender-banner.png</senderc2cshowsourceurl>'
+  for(const outgoing of [false,true]){
+    for(const cover of ['', '<recshowsourceurl>http://127.0.0.1/private</recshowsourceurl>']){
+      assert.equal(readWechatRedPacket(xml(alternatives + cover),outgoing).coverUrl,'')
+      assert.equal(readWechatRedPacket(xml(alternatives + cover + '<iconurl>https://wx.gtimg.com/generic.png</iconurl>'),outgoing).coverUrl,'https://wx.gtimg.com/generic.png')
+    }
+  }
+  assert.equal(readWechatRedPacket(xml('<detailshowsourceurl>https://wxapp.tenpay.com/pay</detailshowsourceurl>')).openedCoverUrl,'')
 })
 
 test('cover fetching is bounded, re-encoded and rejects redirects to payment/private hosts without broadening article URLs', async t => {

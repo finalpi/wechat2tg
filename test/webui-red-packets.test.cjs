@@ -3,10 +3,10 @@ const {test} = require('node:test'), assert = require('node:assert/strict')
 const fs = require('node:fs'),path = require('node:path'),vm = require('node:vm')
 
 function fixture() {
-  const xml = '<msg><appmsg><type>2001</type><wcpayinfo><receivertitle>祝福</receivertitle><paymsgid>100000000001</paymsgid><nativeurl><![CDATA[wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=100000000001&sign=private-token]]></nativeurl><receiverc2cshowsourceurl>https://wx.gtimg.com/private-cover.png</receiverc2cshowsourceurl></wcpayinfo></appmsg></msg>'
+  const xml = '<msg><appmsg><type>2001</type><wcpayinfo><receivertitle>祝福</receivertitle><paymsgid>100000000001</paymsgid><nativeurl><![CDATA[wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=100000000001&sign=private-token]]></nativeurl><receiverc2cshowsourceurl>https://wx.gtimg.com/private-banner.png</receiverc2cshowsourceurl><recshowsourceurl>https://wx.gtimg.com/private-cover.png</recshowsourceurl><detailshowsourceurl>https://wx.gtimg.com/private-opened.png</detailshowsourceurl></wcpayinfo></appmsg></msg>'
   const row = {id:1,wxId:'room@chatroom',remoteId:'9000000000000000001',type:'red_packet',body:'',direction:'incoming',status:'received',hidden:0,revokeStatus:'none',timestamp:1,
     source:JSON.stringify({FromUserName:'sender',ToUserName:'self',Content:xml})}
-  const wx = {hasLogin:true,wxInfo:{wxid:'self'}}, calls = [], hooks = {}
+  const wx = {hasLogin:true,wxInfo:{wxid:'self'}}, calls = [], covers = [], hooks = {}
   const store = {byId:async()=>({...row}),all:async()=>[{...row}],run:async()=>undefined}
   const service = {
     register:async input=>{calls.push(['register',input]);await hooks.register?.();return {token:'a'.repeat(32)}},
@@ -20,14 +20,14 @@ function fixture() {
     '../util/WechatRedPacket':require('../dist/util/WechatRedPacket'),
     './red-packets':require('../dist/webui/red-packets'),
     '../service/RedPacketService':{redPacketService:()=>service},
-    '../util/RedPacketCover':{loadRedPacketCover:async()=>{await hooks.cover?.();return Buffer.from('cover')}},
+    '../util/RedPacketCover':{loadRedPacketCover:async url=>{covers.push(url);await hooks.cover?.();return Buffer.from('cover')}},
     './message-body':require('../dist/webui/message-body'),
     './revoke':{revokePolicy:()=>({}),revokePayload:()=>{throw Error('not revocable')}},
     'wx2tg-puppet':require('wx2tg-puppet'),
   }
   const exports = {}
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../dist/webui/messages.js'),'utf8'),{exports,require:name=>dependencies[name] || {}})
-  return {center:exports.createMessageCenter(store,{}),row,wx,calls,hooks}
+  return {center:exports.createMessageCenter(store,{}),row,wx,calls,covers,hooks}
 }
 
 test('real message-center metadata exposes only safe cover paths/title, not raw payment credentials', async () => {
@@ -37,7 +37,7 @@ test('real message-center metadata exposes only safe cover paths/title, not raw 
   assert.equal(output.messages[0].details.redPacket.coverPath,'/api/media/red-packet/1')
   assert.equal(output.messages[0].details.redPacket.canOpen,true)
   const serialized = JSON.stringify(output)
-  for(const privateValue of ['nativeurl','private-token','private-cover.png','paymsgid'])assert(!serialized.includes(privateValue))
+  for(const privateValue of ['nativeurl','private-token','private-cover.png','private-banner.png','private-opened.png','paymsgid'])assert(!serialized.includes(privateValue))
   assert.equal(f.calls.length,0,'listing messages neither registers nor claims a packet')
 })
 
@@ -54,6 +54,7 @@ test('real adapter refuses old-account, revoked and hidden claim targets before 
 test('cover reads recheck account and revocation after awaiting the private image loader', async () => {
   const f = fixture()
   assert.equal((await f.center.redPacketCover(1)).toString(),'cover')
+  assert.deepEqual(f.covers,['https://wx.gtimg.com/private-cover.png'])
   f.hooks.cover = async()=>{f.wx.wxInfo.wxid = 'other'}
   await assert.rejects(f.center.redPacketCover(1))
   f.wx.wxInfo.wxid = 'self';f.hooks.cover = async()=>{f.row.hidden = 1}

@@ -305,6 +305,7 @@ test('formatted custom-emoji HTML splits at 4096 in order with first ID and raw 
     '../config': {config: {WECHAT_CUSTOM_EMOJI_ENABLED: true}},
     '../util/WechatCustomEmoji': emojiHtml,
     '../util/TelegramPresentation': require('./helpers/telegram-presentation')(),
+    '../util/TelegramKeyboard': require('../dist/util/TelegramKeyboard'),
     'abort-controller': AbortController,
   })
   f.client.messageSender = new TelegramBotApiMessageSender({telegram: {sendMessage: async (id, html, options) => {

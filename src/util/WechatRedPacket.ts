@@ -2,7 +2,7 @@ import {DomUtils,parseDocument} from 'htmlparser2'
 import {XMLValidator} from 'fast-xml-parser'
 import {redPacketCoverURL} from './RedPacketCover'
 
-export interface WechatRedPacket {title:string;coverUrl:string;xml:string;sendId:string;claimable:boolean}
+export interface WechatRedPacket {title:string;coverUrl:string;openedCoverUrl:string;bubbleCoverUrl:string;xml:string;sendId:string;claimable:boolean}
 
 /** Parse only message-owned data. Public callers must not expose xml/sendId or native URLs. */
 export function readWechatRedPacket(source:unknown,outgoing = false):WechatRedPacket|undefined {
@@ -23,9 +23,13 @@ export function readWechatRedPacket(source:unknown,outgoing = false):WechatRedPa
         const text = (node:any,name:string)=>{const value = child(node,name);return value ? DomUtils.textContent(value).trim() : ''}
         if(!pay || text(app,'type') !== '2001')return undefined
         const title = (text(pay,'receivertitle') || text(pay,'sendertitle') || '微信红包').slice(0,200)
-        const coverUrl = [text(pay,outgoing ? 'senderc2cshowsourceurl' : 'receiverc2cshowsourceurl'),
-            text(pay,'recshowsourceurl'),text(pay,'detailshowsourceurl'),text(pay,'iconurl'),text(app,'thumburl')]
+        // These are different surfaces, not interchangeable versions of a cover.
+        // recshowsourceurl is the unopened envelope; detailshowsourceurl is the
+        // opened detail artwork, and *c2cshowsourceurl are narrow chat-bubble banners.
+        const coverUrl = [text(pay,'recshowsourceurl'),text(pay,'iconurl'),text(app,'thumburl')]
             .map(redPacketCoverURL).find(Boolean) || ''
+        const openedCoverUrl = redPacketCoverURL(text(pay,'detailshowsourceurl'))
+        const bubbleCoverUrl = redPacketCoverURL(text(pay,outgoing ? 'senderc2cshowsourceurl' : 'receiverc2cshowsourceurl'))
         const sendId = text(pay,'paymsgid')
         let claimable = false
         try {
@@ -40,7 +44,7 @@ export function readWechatRedPacket(source:unknown,outgoing = false):WechatRedPa
         const messageXML = Number.isInteger(message.startIndex) && Number.isInteger(message.endIndex)
             ? xml.slice(message.startIndex,message.endIndex + 1) : xml
         if(XMLValidator.validate(messageXML) !== true)return undefined
-        return {title,coverUrl,xml:messageXML,sendId,claimable}
+        return {title,coverUrl,openedCoverUrl,bubbleCoverUrl,xml:messageXML,sendId,claimable}
     } catch {return undefined}
 }
 

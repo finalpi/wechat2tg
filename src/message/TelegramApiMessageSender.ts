@@ -7,6 +7,7 @@ import fs from 'node:fs'
 import {Api} from 'telegram'
 import {config} from '../config'
 import {sendTelegramHtml} from '../util/TelegramPresentation'
+import {telegramCallbackButtons} from '../util/TelegramKeyboard'
 
 export class TelegramApiMessageSender extends MessageSender {
     private sender: GramClient
@@ -32,18 +33,10 @@ export class TelegramApiMessageSender extends MessageSender {
                 if (option.parse_mode) {
                     sendParam.parseMode = option.parse_mode.toLowerCase()
                 }
-                if (option.inline_keyboard) {
-                    // Same normalisation as the Bot API sender: never emit an empty button.
-                    const rows = option.inline_keyboard as any[]
-                    const buttons = (Array.isArray(rows[0]) ? rows.flat() : rows)
-                        .filter(button => button && typeof button.text === 'string' && button.text.trim()
-                            && (button.callback_data || button.query))
-                        .map(button => new Api.KeyboardButtonCallback({
-                            text: button.text,
-                            data: Buffer.from(button.callback_data || button.query)
-                        }))
-                    if (buttons.length) sendParam.buttons = [buttons]
-                }
+                const buttons = telegramCallbackButtons(option.inline_keyboard).map(button=>new Api.KeyboardButtonCallback({
+                    text:button.text,data:Buffer.from(button.callback_data)
+                }))
+                if (buttons.length) sendParam.buttons = [buttons]
             }
             if (file.buff && file.fileType === 'photo' && file.buff.length > 5 * 1024 * 1024) {
                 // 大于5mb采用document方式发送
@@ -129,10 +122,14 @@ export class TelegramApiMessageSender extends MessageSender {
                     sendParam.parseMode = option.parse_mode.toLowerCase()
                 }
             }
+            const buttons = telegramCallbackButtons(option?.inline_keyboard).map(button=>new Api.KeyboardButtonCallback({
+                text:button.text,data:Buffer.from(button.callback_data)
+            }))
+            if(buttons.length)sendParam.buttons = [buttons]
             const pending = option?.parse_mode === 'HTML'
                 ? sendTelegramHtml(chatId,text,config.WECHAT_CUSTOM_EMOJI_ENABLED,4096,
                     html=>this.sender.sendMessage(inputPeerChannelFromMessage,{...sendParam,message:html}),()=>true,'mtproto',
-                    (message,text)=>this.sender.editMessage(inputPeerChannelFromMessage,{message:message.id,text,parseMode:'html'}))
+                    (message,text)=>this.sender.editMessage(inputPeerChannelFromMessage,{message:message.id,text,parseMode:'html',...(sendParam.buttons ? {buttons:sendParam.buttons} : {})}))
                 : this.sender.sendMessage(inputPeerChannelFromMessage,sendParam)
             pending.then(res => {
                 resolve({
@@ -173,6 +170,10 @@ export class TelegramApiMessageSender extends MessageSender {
                     sendParam.parseMode = option.parse_mode.toLowerCase()
                 }
             }
+            const buttons = telegramCallbackButtons(option?.inline_keyboard).map(button=>new Api.KeyboardButtonCallback({
+                text:button.text,data:Buffer.from(button.callback_data)
+            }))
+            if(buttons.length)sendParam.buttons = [buttons]
             if (file.fileType === 'document') {
                 sendParam.forceDocument = true
             }
@@ -182,7 +183,7 @@ export class TelegramApiMessageSender extends MessageSender {
             const pending = file.caption !== undefined && option?.parse_mode === 'HTML'
                 ? sendTelegramHtml(chatId,file.caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,
                     caption=>this.sender.sendFile(inputPeerChannelFromMessage,{...sendParam,caption}),()=>true,'mtproto',
-                    (message,text)=>this.sender.editMessage(inputPeerChannelFromMessage,{message:message.id,text,parseMode:'html'}))
+                    (message,text)=>this.sender.editMessage(inputPeerChannelFromMessage,{message:message.id,text,parseMode:'html',...(sendParam.buttons ? {buttons:sendParam.buttons} : {})}))
                 : this.sender.sendFile(inputPeerChannelFromMessage,sendParam)
             pending.then(res => {
                 resolve({
