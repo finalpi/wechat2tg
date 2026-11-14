@@ -112,7 +112,7 @@ export class RedPacketService {
         this.confirmations.set(confirmation,{token,account:session.accountId,owner:session.ownerId,scope,expires:Date.now() + 120000})
         return {...result,confirmation}
     }
-    async open(token:string,confirmation:string,scope:string,guard:()=>Promise<boolean> = async()=>true,destination?:{chatId:number;threadId?:number;conversation?:string}):Promise<RedPacketResult> {
+    async open(token:string,confirmation:string,scope:string,guard:()=>Promise<boolean> = async()=>true,destination?:{chatId:number;threadId?:number;conversation?:string},beforeDispatch?:()=>Promise<void>):Promise<RedPacketResult> {
         const {row,session} = await this.authorized(token,destination)
         if(row.state !== 'ready')return this.result(row)
         const consent = this.confirmations.get(confirmation)
@@ -124,6 +124,10 @@ export class RedPacketService {
         // No request has been made yet; a failed final authorization may safely release the claim.
         let current:RedPacketSession
         try {
+            // Telegram may wait briefly after explicit one-click consent. The
+            // durable reservation already prevents another entry from sending.
+            await beforeDispatch?.()
+            if(consent.expires < Date.now())throw redPacketError('redPacketConfirmationExpired',400)
             await this.authorized(token,destination)
             if(!await guard())throw redPacketError()
             current = await this.session()
@@ -145,16 +149,17 @@ export class RedPacketService {
         await this.authorized(token,destination)
         return result
     }
-    async confirm(confirmation:string,scope:string,destination:{chatId:number;threadId?:number;conversation?:string},guard:()=>Promise<boolean>) {
+    async confirm(confirmation:string,scope:string,destination:{chatId:number;threadId?:number;conversation?:string},guard:()=>Promise<boolean>,beforeDispatch?:(token:string)=>Promise<void>) {
         const consent = this.confirmations.get(confirmation)
         if(!consent)throw redPacketError('redPacketConfirmationExpired',400)
-        return {...await this.open(consent.token,confirmation,scope,guard,destination),token:consent.token}
+        return {...await this.open(consent.token,confirmation,scope,guard,destination,()=>beforeDispatch?.(consent.token)),token:consent.token}
     }
-    async cancel(confirmation:string,scope:string) {
+    async cancel(confirmation:string,scope:string,destination?:{chatId:number;threadId?:number;conversation?:string}):Promise<string|undefined> {
         const consent = this.confirmations.get(confirmation)
         if(!consent || consent.scope !== scope)return
-        await this.authorized(consent.token)
+        await this.authorized(consent.token,destination)
         this.confirmations.delete(confirmation)
+        return consent.token
     }
     async close(){await this.ready;await new Promise<void>((resolve,reject)=>this.db.close(error=>error ? reject(error) : resolve()))}
 }

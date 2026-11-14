@@ -3,6 +3,7 @@ import {Telegraf, TelegramError} from 'telegraf'
 import {config} from '../config'
 import {sendTelegramHtml} from '../util/TelegramPresentation'
 import {telegramCallbackButtons} from '../util/TelegramKeyboard'
+import {prepareTelegramMedia} from '../util/TelegramMedia'
 import AbortController from 'abort-controller'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -109,12 +110,13 @@ export class TelegramBotApiMessageSender extends MessageSender {
         })
     }
 
-    sendFile(chatId: string | number, file: {
+    async sendFile(chatId: string | number, file: {
         buff: Buffer,
         filename: string,
         caption?: string,
         fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
     }, option?: Option): Promise<SendResult> {
+        file = await prepareTelegramMedia(file)
         this.sendAction(Number(chatId), 'upload_document', option?.message_thread_id)
         const sendParam: tt.ExtraReplyMessage = {}
         if (option) {

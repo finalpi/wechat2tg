@@ -81,6 +81,7 @@ function fixture(customEmojiEnabled = false) {
     '../base/BaseClient': {AbstractClient: class {static getSpyClient(name) {return spy(name)}}},
     '../util/TelegramTopicUtils': topics, '../util/TelegramTextUtils': textUtils,
     '../util/SafeError': require('../dist/util/SafeError'),
+    '../util/TelegramMedia': require('../dist/util/TelegramMedia'),
     '../config': {config: {AI_API_KEY: 'synthetic', AI_API_URL: 'https://invalid.example', AI_CONTEXT_LIMIT: 2, WECHAT_CUSTOM_EMOJI_ENABLED: customEmojiEnabled}},
     '../util/WechatCustomEmoji': emojiHtml,
     '../util/TelegramPresentation': require('./helpers/telegram-presentation')(),
@@ -244,6 +245,20 @@ test('text/file persistence, Bot API card/location, retry uploads and notices re
   }
 })
 
+test('manual WeChat download retries normalize static stickers and preserve topic, reply and caption',async()=>{
+  const {image,animatedGif} = require('./helpers/telegram-media.cjs')
+  const sharp = require('sharp'),f = fixture(),options = {fileName:'emoji.gif',fileType:'animation',threadId:77,replyToMessageId:23,caption:'<b>sender</b>'}
+  const buff = await image('gif')
+  await f.client.sendWechatRetryFile(chatId,buff,options)
+  const sent = f.sent.at(-1)
+  assert.equal(sent.method,'sendPhoto');assert.equal(sent.args[1].filename,'emoji.png')
+  assert.equal((await sharp(sent.args[1].source).metadata()).format,'png')
+  assert.equal(sent.args[2].message_thread_id,77);assert.equal(JSON.parse(sent.args[2].reply_parameters).message_id,23)
+  assert.equal(sent.args[2].caption,options.caption);assert.equal(options.fileType,'animation')
+  await f.client.sendWechatRetryFile(chatId,animatedGif,options)
+  assert.equal(f.sent.at(-1).method,'sendAnimation');assert.equal(f.sent.at(-1).args[1].source,animatedGif)
+})
+
 test('large MTProto uploads specify topic root and topMsgId, with original reply when present', async () => {
   const f = fixture()
   await f.client.sendLargeDocumentViaTelegramApi(outbound(1))
@@ -274,7 +289,7 @@ for (const enabled of [false, true]) {
       assert.equal(params.caption, expected)
       assert.equal(send.method === 'mtFile' ? params.topMsgId : params.message_thread_id, 77)
       if (send.method === 'mtFile') assert.equal(params.replyTo, 23)
-      else if (send !== uploads[1]) assert.equal(params.reply_parameters.message_id, 23)
+      else if (send !== uploads[1]) assert.equal(JSON.parse(params.reply_parameters).message_id, 23)
     }
     assert.equal(msg.sender, caption)
     assert.equal(msg.content, caption)
@@ -282,7 +297,7 @@ for (const enabled of [false, true]) {
     await f.client.sendChatHistoryAttachment(chatId, Buffer.from('data'), attachment, 23, 77)
     const sentAttachment = f.sent.at(-1).args[2]
     assert.equal(sentAttachment.caption, emojiHtml.renderWechatCustomEmojiHtml(`${emojiAlias} &lt;literal&gt;`, enabled))
-    assert.equal(sentAttachment.reply_parameters.message_id, 23)
+    assert.equal(JSON.parse(sentAttachment.reply_parameters).message_id, 23)
     assert.equal(sentAttachment.message_thread_id, 77)
   })
 }
@@ -306,6 +321,7 @@ test('formatted custom-emoji HTML splits at 4096 in order with first ID and raw 
     '../util/WechatCustomEmoji': emojiHtml,
     '../util/TelegramPresentation': require('./helpers/telegram-presentation')(),
     '../util/TelegramKeyboard': require('../dist/util/TelegramKeyboard'),
+    '../util/TelegramMedia': require('../dist/util/TelegramMedia'),
     'abort-controller': AbortController,
   })
   f.client.messageSender = new TelegramBotApiMessageSender({telegram: {sendMessage: async (id, html, options) => {

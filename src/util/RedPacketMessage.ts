@@ -15,8 +15,8 @@ export async function decorateRedPacketMessage(message:BaseMessage,source:string
         try {
             const entry = await redPacketService().register({accountId,conversation:message.conversationWxId || message.wxId,
                 remoteId:message.id,source:packet.xml,chatId:message.chatId,threadId:message.threadId})
-            message.param = {...message.param,inline_keyboard:[...(message.param?.inline_keyboard || []),{text:entry.canOpen ? '拆红包' : '查看红包结果',callback_data:`rp:${entry.token}`}]}
-            message.content = caption(entry.canOpen ? '🧧 微信红包，点击下方「拆红包」并确认领取。' : '🧧 微信红包，点击下方查看处理结果。')
+            message.param = {...message.param,inline_keyboard:[...(message.param?.inline_keyboard || []),{text:entry.canOpen ? '拆开并领取' : '查看红包结果',callback_data:`${entry.canOpen ? 'rpo' : 'rps'}:${entry.token}`}]}
+            message.content = caption(entry.canOpen ? '🧧 微信红包，点击「拆开并领取」即同意领取到当前微信账号。' : '🧧 微信红包，点击下方查看处理结果。')
         } catch { /* A missing authorization/journal only removes the action, never the notification. */ }
     }
 }

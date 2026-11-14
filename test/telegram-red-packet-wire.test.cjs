@@ -46,6 +46,7 @@ for(const missingEmojiEntities of [false,true]){
       './MessageSender':{MessageSender:class {sendAction(){return undefined}}},
       '../config':{config:{WECHAT_CUSTOM_EMOJI_ENABLED:missingEmojiEntities}},
       '../util/TelegramKeyboard':require('../dist/util/TelegramKeyboard'),
+      '../util/TelegramMedia':require('../dist/util/TelegramMedia'),
       '../util/TelegramPresentation':require('./helpers/telegram-presentation')({policy}),
       'abort-controller':require('abort-controller'),
     })
@@ -60,9 +61,9 @@ for(const missingEmojiEntities of [false,true]){
     await decorateRedPacketMessage(message,source,'synthetic-self',true)
     assert.equal(registrations.length,1)
     assert.equal(message.redPacket.coverUrl,'https://wx.gtimg.com/unopened.png')
-    assert(message.content.includes('拆红包'))
+    assert(message.content.includes('拆开并领取'))
     assert(!message.content.includes('请在微信客户端查看'))
-    const keyboard = {inline_keyboard:[[{text:'拆红包',callback_data:`rp:${token}`}]]}
+    const keyboard = {inline_keyboard:[[{text:'拆开并领取',callback_data:`rpo:${token}`}]]}
     const sender = new TelegramBotApiMessageSender(bot)
     const result = await sender.sendFile(message.chatId,{buff:Buffer.from('synthetic-photo-bytes'),filename:'packet.jpg',fileType:'photo',caption:missingEmojiEntities ? alias : message.content},
       {...message.param,message_thread_id:message.threadId,parse_mode:'HTML'})

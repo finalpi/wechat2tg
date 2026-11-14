@@ -23,6 +23,7 @@ function senderFixture() {
       if (name === 'telegraf') return require('telegraf')
       if (name === 'abort-controller') return {default: globalThis.AbortController}
       if (name === '../util/TelegramKeyboard') return require('../dist/util/TelegramKeyboard')
+      if (name === '../util/TelegramMedia') return require('../dist/util/TelegramMedia')
       if (name === '../base/BaseClient') return {AbstractClient: class {static getSpyClient() {return {client: {telegram}}}}}
       // Minimal base class: the real one reaches into the client registry.
       if (name === './MessageSender') return {MessageSender: class {sendAction() {}}}

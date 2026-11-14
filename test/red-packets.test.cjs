@@ -6,7 +6,7 @@ const {readWechatRedPacket} = require('../dist/util/WechatRedPacket')
 const {redPacketCoverURL} = require('../dist/util/RedPacketCover')
 const {createArticleCoverLoader,articleCoverURL} = require('../dist/util/ArticleCover')
 const {RedPacketService,redPacketOutcome,requestRedPacketOpen} = require('../dist/service/RedPacketService')
-const {handleRedPacketCallback} = require('../dist/service/RedPacketTelegram')
+const {handleRedPacketCallback,redPacketTelegramDelay} = require('../dist/service/RedPacketTelegram')
 const {redPacketOwnedBy} = require('../dist/webui/red-packets')
 const id = '10000000000000000001'
 const xml = (extra = '',packetId = id) => `<msg><appmsg><type>2001</type><wcpayinfo><receivertitle><![CDATA[祝福 <&>]]></receivertitle><paymsgid>${packetId}</paymsgid><nativeurl><![CDATA[wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=${packetId}&sign=private-payment-token]]></nativeurl>${extra}</wcpayinfo></appmsg></msg>`
@@ -174,25 +174,128 @@ test('registered AutoHongBao route is used once without redirects or SDK logging
   assert.equal(received[0].body.SendUserName,'room@chatroom')
 })
 
-test('Telegram opening is owner-only and topic-scoped, with bounded callbacks and private result alerts', async t => {
-  const f = await fixture(t), replies = [], alerts = [], edits = []
-  const ctx = {from:{id:456},chat:{id:-100},callbackQuery:{message:{message_id:9,message_thread_id:77}},
-    answerCbQuery:async(...args)=>alerts.push(args),reply:async(...args)=>replies.push(args),editMessageText:async(...args)=>edits.push(args)}
-  const resolve = async()=>({wxId:'room@chatroom'})
-  await handleRedPacketCallback(ctx,`rp:${f.entry.token}`,123,resolve,f.service)
-  assert.equal(replies.length,0);assert.equal(f.calls.length,0)
-  ctx.from.id = 123;ctx.callbackQuery.message.message_thread_id = 88
-  await handleRedPacketCallback(ctx,`rp:${f.entry.token}`,123,resolve,f.service)
-  assert.equal(replies.length,0)
-  ctx.callbackQuery.message.message_thread_id = 77
-  await handleRedPacketCallback(ctx,`rp:${f.entry.token}`,123,resolve,f.service)
-  const buttons = replies[0][1].reply_markup.inline_keyboard[0]
-  assert(buttons.every(button=>Buffer.byteLength(button.callback_data) <= 64))
+function telegramFixture(token,prefix = 'rpo',text = '拆开并领取') {
+  const alerts = [],edits = [],unexpected = []
+  const other = {text:'其他操作',callback_data:'other:action'}
+  const message = {message_id:9,message_thread_id:77,photo:[{file_id:'original-photo'}],caption:'原始说明',
+    reply_markup:{inline_keyboard:[[other],[{text,callback_data:`${prefix}:${token}`}]]}}
+  const ctx = {from:{id:123},chat:{id:-100},callbackQuery:{message},
+    answerCbQuery:async(...args)=>alerts.push(args),
+    reply:async()=>unexpected.push('reply'),editMessageText:async()=>unexpected.push('editText'),editMessageCaption:async()=>unexpected.push('editCaption'),
+    editMessageReplyMarkup:async markup=>{edits.push(markup);message.reply_markup = markup}}
+  return {ctx,alerts,edits,unexpected,other}
+}
+const packetBinding = async()=>({wxId:'room@chatroom'})
+const noWait = async()=>undefined
+
+test('Telegram one-click claim edits only its original keyboard and keeps owner/topic checks and amounts private', async t => {
+  const f = await fixture(t),g = telegramFixture(f.entry.token)
+  g.ctx.from.id = 456
+  await handleRedPacketCallback(g.ctx,`rpo:${f.entry.token}`,123,packetBinding,f.service,noWait)
+  assert.equal(g.edits.length,0);assert.equal(f.calls.length,0)
+  g.ctx.from.id = 123;g.ctx.callbackQuery.message.message_thread_id = 88
+  await handleRedPacketCallback(g.ctx,`rpo:${f.entry.token}`,123,packetBinding,f.service,noWait)
+  assert.equal(g.edits.length,0);assert.equal(f.calls.length,0)
+  g.ctx.callbackQuery.message.message_thread_id = 77
+  let waited = 0
+  await handleRedPacketCallback(g.ctx,`rpo:${f.entry.token}`,123,packetBinding,f.service,async()=>{
+    waited++;assert.equal(f.calls.length,0);assert.equal(g.edits.length,0)
+    assert.equal((await f.service.status(f.entry.token)).state,'opening')
+  })
+  assert.equal(waited,1);assert.equal(f.calls.length,1);assert.equal(g.edits.length,1)
+  assert.match(g.edits[0].inline_keyboard.at(-1)[0].text,/已领取/)
+  for(const markup of g.edits){
+    assert.deepEqual(markup.inline_keyboard[0],[g.other]);assert(!JSON.stringify(markup).includes('1.23'))
+    assert(markup.inline_keyboard.flat().every(button=>Buffer.byteLength(button.callback_data) <= 64))
+  }
+  assert.deepEqual(g.unexpected,[]);assert.equal(g.ctx.callbackQuery.message.caption,'原始说明')
+  assert.deepEqual(g.ctx.callbackQuery.message.photo,[{file_id:'original-photo'}])
+  await handleRedPacketCallback(g.ctx,`rps:${f.entry.token}`,123,packetBinding,f.service,noWait)
+  assert.match(g.alerts.at(-1)[0],/1\.23/);assert.equal(g.alerts.at(-1)[1].show_alert,true)
+  assert.equal(f.calls.length,1)
+})
+
+test('random Telegram delay stays between one and three seconds',()=>{
+  for(let i = 0;i < 100;i++){const ms = redPacketTelegramDelay();assert(Number.isInteger(ms) && ms >= 1000 && ms <= 3000)}
+})
+
+test('delay reserves durably before waiting and repeated Telegram/WebUI clicks cannot dispatch twice',async t=>{
+  const f = await fixture(t),g = telegramFixture(f.entry.token)
+  let release,entered
+  const gate = new Promise(resolve=>{release = resolve}),waiting = new Promise(resolve=>{entered = resolve})
+  const first = handleRedPacketCallback(g.ctx,`rpo:${f.entry.token}`,123,packetBinding,f.service,async()=>{entered();await gate})
+  await waiting
+  assert.equal((await f.service.row(f.entry.token)).state,'opening');assert.equal(f.calls.length,0)
+  await handleRedPacketCallback(g.ctx,`rpo:${f.entry.token}`,123,packetBinding,f.service,noWait)
+  await handleRedPacketCallback(g.ctx,`rps:${f.entry.token}`,123,packetBinding,f.service,noWait)
+  assert.equal((await f.service.prepare(f.entry.token,'webui:1')).confirmation,undefined)
+  assert.equal(g.edits.length,0);release();await first
+  assert.equal(f.calls.length,1);assert.equal(g.edits.length,1)
+})
+
+test('consent expiry while waiting never dispatches a late claim',async t=>{
+  const f = await fixture(t),prepared = await f.service.prepare(f.entry.token,'test')
+  const consent = f.service.confirmations.get(prepared.confirmation)
+  await assert.rejects(f.service.open(f.entry.token,prepared.confirmation,'test',async()=>true,undefined,async()=>{consent.expires = Date.now() - 1}),e=>e.code === 'redPacketConfirmationExpired')
+  assert.equal(f.calls.length,0);assert.equal((await f.service.status(f.entry.token)).state,'ready')
+})
+
+test('account, owner and binding changes during the delay prevent dispatch',async t=>{
+  for(const change of ['account','owner','binding']){
+    const f = await fixture(t),g = telegramFixture(f.entry.token)
+    let group = 'room@chatroom'
+    await handleRedPacketCallback(g.ctx,`rpo:${f.entry.token}`,123,async()=>({wxId:group}),f.service,async()=>{
+      if(change === 'binding')group = 'other@chatroom'
+      else f.setSession({accountId:change === 'account' ? 'other' : 'self',ownerId:change === 'owner' ? 999 : 123,baseURL:'unused'})
+    })
+    assert.equal(f.calls.length,0);assert.equal((await f.service.row(f.entry.token)).state,'ready')
+    assert.deepEqual(g.unexpected,[])
+  }
+})
+
+test('status buttons never claim, while explicit old open buttons work in place',async t=>{
+  const f = await fixture(t),g = telegramFixture(f.entry.token,'rp','查看结果')
+  for(const prefix of ['rp','rps'])await handleRedPacketCallback(g.ctx,`${prefix}:${f.entry.token}`,123,packetBinding,f.service,noWait)
   assert.equal(f.calls.length,0)
-  await handleRedPacketCallback(ctx,buttons[0].callback_data,123,resolve,f.service)
-  assert.equal(f.calls.length,1);assert(!edits[0][0].includes('1.23'))
-  await handleRedPacketCallback(ctx,`rp:${f.entry.token}`,123,resolve,f.service)
-  assert.match(alerts.at(-1)[0],/1\.23/);assert.equal(alerts.at(-1)[1].show_alert,true)
+  assert.equal(g.edits.at(-1).inline_keyboard.at(-1)[0].callback_data,`rpo:${f.entry.token}`)
+  g.ctx.callbackQuery.message.reply_markup = {inline_keyboard:[[{text:'拆红包',callback_data:`rp:${f.entry.token}`}]]}
+  await handleRedPacketCallback(g.ctx,`rp:${f.entry.token}`,123,packetBinding,f.service,noWait)
+  assert.equal(f.calls.length,1);assert.deepEqual(g.unexpected,[])
+})
+
+test('legacy confirmation and cancellation stay on their originating messages without new replies',async t=>{
+  const f = await fixture(t),g = telegramFixture(f.entry.token)
+  const scope = 'telegram:-100:77'
+  let prepared = await f.service.prepare(f.entry.token,scope)
+  await handleRedPacketCallback(g.ctx,`rpx:${prepared.confirmation}`,123,packetBinding,f.service,noWait)
+  assert.equal(f.calls.length,0)
+  prepared = await f.service.prepare(f.entry.token,scope)
+  await handleRedPacketCallback(g.ctx,`rpc:${prepared.confirmation}`,123,packetBinding,f.service,noWait)
+  assert.equal(f.calls.length,1);assert.deepEqual(g.unexpected,[])
+  assert(g.edits.every(markup=>markup.inline_keyboard.at(-1)[0].callback_data.endsWith(f.entry.token)))
+})
+
+test('interrupted waits stop safely; failed result edits and timeouts never repeat claims or edit attempts',async t=>{
+  const blocked = await fixture(t),g = telegramFixture(blocked.entry.token)
+  await handleRedPacketCallback(g.ctx,`rpo:${blocked.entry.token}`,123,packetBinding,blocked.service,async()=>{throw Error('wait interrupted')})
+  assert.equal(blocked.calls.length,0);assert.equal((await blocked.service.status(blocked.entry.token)).state,'ready')
+  const f = await fixture(t,async()=>{throw Error('ambiguous timeout')}),h = telegramFixture(f.entry.token)
+  let edits = 0
+  h.ctx.editMessageReplyMarkup = async()=>{edits++;throw Error('lost Telegram edit')}
+  await handleRedPacketCallback(h.ctx,`rpo:${f.entry.token}`,123,packetBinding,f.service,noWait)
+  await f.restart()
+  await handleRedPacketCallback(h.ctx,`rpo:${f.entry.token}`,123,packetBinding,f.service,noWait)
+  assert.equal(f.calls.length,1);assert.equal(edits,1);assert.equal((await f.service.status(f.entry.token)).state,'unknown')
+  assert.deepEqual(h.unexpected,[])
+})
+
+test('unchanged Telegram keyboard is benign and status reads do not downgrade the result',async t=>{
+  const f = await fixture(t),g = telegramFixture(f.entry.token)
+  await handleRedPacketCallback(g.ctx,`rpo:${f.entry.token}`,123,packetBinding,f.service,noWait)
+  let edits = 0
+  g.ctx.editMessageReplyMarkup = async()=>{edits++;throw {response:{error_code:400,description:'Bad Request: message is not modified'}}}
+  await handleRedPacketCallback(g.ctx,`rps:${f.entry.token}`,123,packetBinding,f.service,noWait)
+  assert.equal(edits,0);assert.equal(f.calls.length,1);assert.match(g.alerts.at(-1)[0],/1\.23/)
 })
 
 test('HTTP routes require owner authentication and explicit confirmation, never accept private protocol input or enable demo claims', async t => {

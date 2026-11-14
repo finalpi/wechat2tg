@@ -31,6 +31,14 @@ async function main(){
     const sharp = app('sharp')
     const png = await sharp({create:{width:32,height:32,channels:3,background:'#6688aa'}}).png().toBuffer()
     assert.equal((await sharp(png).metadata()).width,32)
+    const {prepareTelegramMedia} = app('./dist/util/TelegramMedia')
+    for(const buff of [png,await sharp(png).gif().toBuffer()]){
+      const source = {buff,filename:'synthetic-emoji.gif',fileType:'animation'}
+      const prepared = await prepareTelegramMedia(source)
+      assert.equal(prepared.fileType,'photo');assert.equal(prepared.filename,'synthetic-emoji.png')
+      assert.equal((await sharp(prepared.buff).metadata()).format,'png')
+      assert.equal(source.fileType,'animation')
+    }
     const {prepareGroupAvatar,sameGroupAvatarDHash} = app('./dist/util/GroupAvatar')
     assert.equal((await prepareGroupAvatar(png)).dHash,'0000000000000000')
     assert.equal(sameGroupAvatarDHash('0000000000000000','f000000000000000'),true)
@@ -86,7 +94,7 @@ async function main(){
     for(const asset of assets)assert.equal((await fetch(origin + asset)).status,200,asset)
     assert(fs.readdirSync('/app/dist/webui/public/emoji').some(name=>/\.(png|webp)$/.test(name)))
     assert.equal((await fetch(origin + '/api/config',{headers:{Authorization:`Bearer ${token}`}})).status,200)
-    console.log('Runtime smoke passed: production-only dependencies, SQLite, synthetic red-packet journal, sharp/dHash, QuickJS worker, FFmpeg, SILK roundtrip, TGS/GIF, WebUI/PWA and authenticated config; no real accounts.')
+    console.log('Runtime smoke passed: production-only dependencies, SQLite, synthetic red-packet journal, static-sticker photos, sharp/dHash, QuickJS worker, FFmpeg, SILK roundtrip, TGS/GIF, WebUI/PWA and authenticated config; no real accounts.')
   } finally {
     if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve))}
     fs.rmSync(directory,{recursive:true,force:true})

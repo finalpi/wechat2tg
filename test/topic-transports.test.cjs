@@ -66,6 +66,7 @@ function transport(kind, failure, enabled = false, displayOptions = {}) {
       '../util/WechatCustomEmoji': emojiHtml,
       '../util/TelegramPresentation': presentation,
       '../util/TelegramKeyboard': load('util/TelegramKeyboard.ts'),
+      '../util/TelegramMedia': require('../dist/util/TelegramMedia'),
       'abort-controller': AbortController,
     })
     sender = new TelegramBotApiMessageSender({telegram: Object.fromEntries(
@@ -78,6 +79,7 @@ function transport(kind, failure, enabled = false, displayOptions = {}) {
       '../util/WechatCustomEmoji': emojiHtml,
       '../util/TelegramPresentation': presentation,
       '../util/TelegramKeyboard': load('util/TelegramKeyboard.ts'),
+      '../util/TelegramMedia': require('../dist/util/TelegramMedia'),
       'telegram/client/uploads': {CustomFile: class {
         constructor(name, size, filePath, buffer) {Object.assign(this, {name, size, filePath, buffer})}
       }},
@@ -319,6 +321,34 @@ test('callback normalization accepts legacy queries but excludes non-string and 
     {text:' ',callback_data:'x'},{text:'bad',callback_data:{}},{text:'big',callback_data:'红包'.repeat(11)}])),[valid])
   assert.deepEqual(plain(telegramCallbackButtons({text:'bad'})),[])
 })
+
+for(const kind of ['bot','gram']){
+  test(`${kind} static WeChat stickers use photos while real animations keep their bytes and route`,async()=>{
+    const sharp = require('sharp'),{image,animatedGif} = require('./helpers/telegram-media.cjs')
+    const option = {parse_mode:'HTML',message_thread_id:42,reply_id:91,inline_keyboard:[{text:'回调',callback_data:'test'}]}
+    for(const [buff,staticImage] of [[await image('gif'),true],[await image('png'),true],[animatedGif,false]]){
+      const f = transport(kind),input = {buff,filename:'emoji.gif',fileType:'animation',caption:'<b>sender</b>'}
+      const result = await f.sender.sendFile(-100,input,option)
+      assert.equal(result.message_id,123);assert.equal(f.calls.length,1)
+      const params = f.calls[0].args[1]
+      const uploaded = kind === 'bot' ? params[staticImage ? 'photo' : 'animation'].source : params.file.buffer
+      assert.equal(kind === 'bot' ? f.calls[0].args[0] : params.file.name,kind === 'bot' ? staticImage ? 'sendPhoto' : 'sendAnimation' : staticImage ? 'emoji.png' : 'emoji.gif')
+      if(staticImage)assert.equal((await sharp(uploaded).metadata()).format,'png')
+      else assert.deepEqual(uploaded,buff)
+      assert.equal(params.caption,input.caption)
+      assert.equal(kind === 'bot' ? params.message_thread_id : params.topMsgId,42)
+      assert.equal(kind === 'bot' ? replyParameters(params).message_id : params.replyTo,91)
+      assert(kind === 'bot' ? params.reply_markup : params.buttons)
+      assert.equal(input.buff,buff);assert.equal(input.fileType,'animation');assert.equal(input.filename,'emoji.gif')
+    }
+  })
+  test(`${kind} a failed static-sticker photo send never falls back to a duplicate animation`,async()=>{
+    const {image} = require('./helpers/telegram-media.cjs'),buff = await image('gif')
+    const error = new Error('Request timeout'),f = transport(kind,error)
+    await assert.rejects(f.sender.sendFile(-100,{buff,filename:'emoji.gif',fileType:'animation'}),e=>e === error)
+    assert.equal(f.calls.length,1)
+  })
+}
 
 function persistence(extra = []) {
   const rows = [...extra,

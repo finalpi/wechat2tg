@@ -72,6 +72,7 @@ import {createGroupMemberNameResolver} from '../service/GroupMemberNameService'
 import {sendSolitaireCreate, sendSolitaireJoin, solitaireCreateBody, solitaireJoinBody, solitaireJoins} from '../service/SolitaireService'
 import {handleRedPacketCallback} from '../service/RedPacketTelegram'
 import {loadRedPacketCover} from '../util/RedPacketCover'
+import {prepareTelegramMedia} from '../util/TelegramMedia'
 
 interface LargeFileProgressEditor {
     update(text: string, force?: boolean, inlineKeyboard?: Array<{ text: string, callback_data: string }>): Promise<void>
@@ -1018,7 +1019,7 @@ export class TelegramBotClient extends AbstractClient {
     private onBotAction(bot: Telegraf) {
         bot.action(/^dl:/, ctx => this.handleDirectoryCallback(ctx, ctx.match.input))
         bot.action(/^(?:us|of|ro):/, ctx => this.handleDirectoryCallback(ctx, ctx.match.input))
-        bot.action(/^rp(?:c|x)?:/, async ctx => handleRedPacketCallback(ctx,ctx.match.input,(await this.configurationService.getConfig()).chatId,
+        bot.action(/^rp(?:o|s|c|x)?:/, async ctx => handleRedPacketCallback(ctx,ctx.match.input,(await this.configurationService.getConfig()).chatId,
             (chatId,threadId)=>this.bindGroupService.resolveTelegram(chatId,threadId)))
         bot.action(/^sl:/, ctx => this.handleSolitaireJoin(ctx, ctx.match.input))
         bot.action(/^slc:/, ctx => this.handleSolitaireCustom(ctx, ctx.match.input))
@@ -3536,13 +3537,16 @@ ${this.i18n.t('help.instructions')}`))
             }
         }
 
+        const prepared = await prepareTelegramMedia({buff:fileBuffer,filename:options.fileName,fileType:options.fileType})
+        // This direct retry path also uploads multipart through pinned Telegraf.
+        if(sendOptions.reply_parameters)sendOptions.reply_parameters = JSON.stringify(sendOptions.reply_parameters)
         const send = async (caption?:string):Promise<{message_id:number}> => {
             const extra = {...sendOptions,caption}
-            const file = {source:fileBuffer,filename:options.fileName}
-            if(options.fileType === 'photo')return client.telegram.sendPhoto(chatId,file,extra)
-            if(options.fileType === 'video')return client.telegram.sendVideo(chatId,file,extra)
-            if(options.fileType === 'voice')return client.telegram.sendVoice(chatId,file,extra)
-            if(options.fileType === 'animation')return client.telegram.sendAnimation(chatId,file,extra)
+            const file = {source:prepared.buff,filename:prepared.filename}
+            if(prepared.fileType === 'photo')return client.telegram.sendPhoto(chatId,file,extra)
+            if(prepared.fileType === 'video')return client.telegram.sendVideo(chatId,file,extra)
+            if(prepared.fileType === 'voice')return client.telegram.sendVoice(chatId,file,extra)
+            if(prepared.fileType === 'animation')return client.telegram.sendAnimation(chatId,file,extra)
             return client.telegram.sendDocument(chatId,file,extra)
         }
         if(options.caption === undefined)await send()

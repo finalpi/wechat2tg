@@ -8,6 +8,7 @@ import {Api} from 'telegram'
 import {config} from '../config'
 import {sendTelegramHtml} from '../util/TelegramPresentation'
 import {telegramCallbackButtons} from '../util/TelegramKeyboard'
+import {prepareTelegramMedia} from '../util/TelegramMedia'
 
 export class TelegramApiMessageSender extends MessageSender {
     private sender: GramClient
@@ -147,6 +148,7 @@ export class TelegramApiMessageSender extends MessageSender {
         caption?: string,
         fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
     }, option?: Option): Promise<SendResult> {
+        file = await prepareTelegramMedia(file)
         const inputPeerChannelFromMessage = await this.sender.getInputEntity(chatId) || chatId
         this.sendAction(Number(chatId), 'upload_document', option?.message_thread_id)
         return new Promise((resolve, reject) => {
