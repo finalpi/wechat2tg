@@ -23,7 +23,7 @@ function fixture() {
       if (name === '../util/MessageTemplates') return require('../dist/util/MessageTemplates')
       if (name === '../service/GroupMemberNameService') return {createGroupMemberNameResolver: () => async (_room, _sender, fallback) => fallback}
       if (name === '../util/EmojiUtils') return {EmojiConverter: class {convert(value) {return value}}}
-      if (name === '../webui/message-visibility') return {isControlMessage: () => false}
+      if (name === '../webui/message-visibility') return require('../dist/webui/message-visibility')
       if (name === '../util/WechatCallStatus') return require('../dist/util/WechatCallStatus')
       if (name === '../util/WechatRedPacket') return require('../dist/util/WechatRedPacket')
       if (name === '../util/RedPacketMessage') return require('../dist/util/RedPacketMessage')
@@ -52,6 +52,25 @@ function fixture() {
   message.self = () => false
   return {client, message, sent}
 }
+
+test('four native call events produce only the invitation and answered status, in either arrival order',async()=>{
+  const {invite,cancel,dismiss,bubble} = require('./helpers/wechat-call.cjs')
+  for(const room of [true,false]){
+    for(const sequence of [[invite,cancel,dismiss,bubble],[bubble,cancel,dismiss,invite]]){
+      const f = fixture();let lookups = 0,bindings = 0,index = 0
+      f.client.messageService.getByWxMsgId = async()=>{lookups++;return null}
+      f.client.bindGroupService.resolveWechat = async()=>{bindings++;return {chatId:-100123,threadId:77,wxId:room ? 'room@chatroom' : 'sender',type:room ? 1 : 0,isReceive:true}}
+      for(const content of sequence){
+        const message = new WxMessage({MsgType:content === bubble ? 50 : 10002,Content:content,xml:content,MsgId:String(++index),NewMsgId:String(9000 + index),FromUserName:'sender',ToUserName:'self',CreateTime:2})
+        message.from = f.message.from;message.room = async()=>room ? {chatroomId:'room@chatroom',name:'Room'} : undefined;message.self = ()=>false
+        await f.client.onMessage(message)
+      }
+      assert.deepEqual(f.sent.map(message=>message.content),sequence.filter(content=>content === invite || content === bubble).map(content=>content === invite ? '[视频/语音]' : '[视频/语音] 已在其它设备接听'))
+      assert.equal(lookups,2);assert.equal(bindings,2,'silent controls are dropped before lookup or group creation')
+      assert(f.sent.every(message=>message.threadId === 77 && message.chatId === -100123 && message.source_type === 'voip'))
+    }
+  }
+})
 
 test('fresh solitaire capture is visible, pending and retains subtype 49 protocol source', async t => {
   const {WebMessageStore} = require('../dist/webui/message-store')

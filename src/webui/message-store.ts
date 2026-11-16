@@ -75,7 +75,7 @@ export class WebMessageStore {
     private async hideStoredControls() {
         // Run once during initialization, including old rows mistakenly marked
         // pending/synced. Do not remove source data or actual system notices.
-        const rows:any[] = await new Promise((resolve,reject)=>this.db.all('SELECT id,type,source FROM inbox WHERE type NOT IN (\'text\',\'0\',\'1\') AND (type=\'function_msg\' OR source LIKE \'%functionmsg%\' OR source LIKE \'%gamecenter%\' OR source LIKE \'%<newcount>%\')',(error,rows)=>error ? reject(error) : resolve(rows)))
+        const rows:any[] = await new Promise((resolve,reject)=>this.db.all('SELECT id,type,source FROM inbox WHERE type NOT IN (\'text\',\'0\',\'1\') AND (type=\'function_msg\' OR source LIKE \'%functionmsg%\' OR source LIKE \'%gamecenter%\' OR source LIKE \'%<newcount>%\' OR source LIKE \'%ilinkvoip%\')',(error,rows)=>error ? reject(error) : resolve(rows)))
         const ids = rows.filter(row=>isControlMessage(row.type,row.source || '')).map(row=>row.id)
         for(let start = 0;start < ids.length;start += 400){
             const batch = ids.slice(start,start + 400)
@@ -266,17 +266,17 @@ export class WebMessageStore {
         let preview = `[${labels[type] || '消息'}]`
         const safeText = (candidate:string)=>{
             if(/<(?:\?xml|msg|sysmsg|recordinfo|appmsg)\b|&lt;(?:msg|sysmsg|recordinfo|appmsg)\b/i.test(candidate))return ''
-            if(/^\s*\{/.test(candidate)){try{const packet = JSON.parse(candidate);if(packet.Content !== undefined || packet.xml !== undefined || packet.fileAesKey !== undefined || packet.cdnDataKey !== undefined)return ''}catch{}}
+            if(/^\s*\{/.test(candidate)){try{const packet = JSON.parse(candidate);if(packet.Content !== undefined || packet.xml !== undefined || packet.fileAesKey !== undefined || packet.cdnDataKey !== undefined)return ''}catch{ /* Non-JSON text still goes through the preview sanitizer. */ }}
             return text(candidate).slice(0,500)
         }
         if(visible && ['text','0','1','quote'].includes(type)){
             let candidate = String(visible.body || '')
-            if(type === 'quote'){try{candidate = String(JSON.parse(visible.details || '{}').title || candidate)}catch{}}
+            if(type === 'quote'){try{candidate = String(JSON.parse(visible.details || '{}').title || candidate)}catch{ /* Malformed legacy metadata retains the existing body fallback. */ }}
             // Some legacy rows stored raw transport XML as their visible body.
             // Do not turn its private fields into a quote preview by stripping tags.
             preview = safeText(candidate) || preview
         }else if(visible && labels[type]){
-            let title = '';try{title = String(JSON.parse(visible.details || '{}').title || '')}catch{}
+            let title = '';try{title = String(JSON.parse(visible.details || '{}').title || '')}catch{ /* Keep the empty title and sanitize the media caption below. */ }
             const caption = cleanMediaBody(type,String(visible.body || ''),visible.source)
             const summary = safeText(title) || safeText(caption)
             if(summary)preview = `${preview} ${summary}`.slice(0,500)
