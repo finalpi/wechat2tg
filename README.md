@@ -9,7 +9,9 @@ Current stable release: **v6.0.41** — static sticker photos, red-packet amount
 ## Telegram Group: [@Wx2TgUserGroup](https://t.me/+AD02MEZa-og3ZGY1)
 
 > [!WARNING]
-> According to feedback, the Windows protocol has the risk of account suspension, please do not use this protocol
+> **The iPad protocol is recommended and is the primary focus of maintenance. Choose other protocols with caution.**
+>
+> According to user feedback, the Windows protocol carries a risk of account suspension. Please do not use it.
 
 ## Main Features
 

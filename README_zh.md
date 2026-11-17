@@ -9,7 +9,9 @@
 ## TG 群组: [@Wx2TgUserGroup](https://t.me/+AD02MEZa-og3ZGY1)
 
 > [!WARNING]
-> 经反馈 Windows 协议有封号的风险，请勿使用该协议
+> **推荐使用 iPad 协议，目前主要维护 iPad 协议，其他协议请谨慎选择。**
+>
+> 据用户反馈，Windows 协议存在封号风险，请勿使用该协议。
 
 ## 主要功能
 
