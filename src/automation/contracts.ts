@@ -8,7 +8,7 @@ export type Permission = typeof permissions[number]
 export const eventSchema = scopeSchema.extend({
     id:id,type:z.enum(['message.received','solitaire.received']),text:z.string().max(16000),
     sender:z.object({id,name:z.string().max(200)}).strict(),timestamp:z.number().finite(),
-    self:z.boolean().default(false),solitaire:z.object({id:id.optional(),title:z.string().max(8000),messageId:id}).strict().optional(),
+    self:z.boolean().default(false),solitaire:z.object({id:id.optional(),title:z.string().max(8000),messageId:id,entryCount:z.number().int().min(0).max(4096).optional()}).strict().optional(),
 }).strict()
 export type AutomationEvent = z.infer<typeof eventSchema>
 export const ruleInputSchema = z.object({
@@ -52,7 +52,7 @@ export const REPLY_TEMPLATE = `export default async function handler(event, api,
 }`
 export const AI_PROMPT = `你正在为 wechat2tg 自动化编写 JavaScript ES Module。只输出代码，不要 Markdown 围栏。
 入口必须为 export default async function handler(event, api, params)。
-event: {id,source:"wechat"|"telegram",accountId,groupId,topicId?,type:"message.received"|"solitaire.received",text,sender:{id,name},timestamp,self,solitaire?:{id?:稳定轮次标识,title,messageId}}。
+event: {id,source:"wechat"|"telegram",accountId,groupId,topicId?,type:"message.received"|"solitaire.received",text,sender:{id,name},timestamp,self,solitaire?:{id?:稳定轮次标识,title,messageId,entryCount?:原生报名条数}}。
 params 是规则页面配置的 JSON 参数。不要在代码里写账号密钥。
 可用 API（返回值只代表动作已排入预览计划，不能用于判断远端发送成功）：
 await api.replyText(text)；await api.sendText({source,accountId,groupId,topicId?},text)；
@@ -60,7 +60,7 @@ await api.solitaire.join({solitaireId:event.solitaire.id,entry:"参加内容"})�
 await api.solitaire.create({title:"标题",entry:"首条",tail?:"结尾"})；
 api.state.get(key)；api.state.set(key,JSON值)；api.log(字符串)。
 所有动作都受绑定群、账号、话题、能力授权、冷却和每日限额约束。sendText 只能发到规则授权的目标。
-接龙仅支持微信原生卡片，不以纯文字冒充；缺少稳定轮次标识必须停止并记录日志，不得用消息ID/标题猜轮次。每账号/群/轮次的参加尝试由宿主持久化去重，不确定结果不自动重试。
+接龙仅支持微信原生卡片，不以纯文字冒充；缺少稳定轮次标识必须停止并记录日志，不得用消息ID/标题猜轮次。solitaire.id 是宿主提供的去重标识，messageId 仅用于定位当前卡片，不可传给 join 当轮次。优先使用 entryCount 判断报名位次，缺失时停止；不要把 content/s 或说明中的编号当报名人数。每账号/群/轮次的参加尝试由宿主持久化去重，不确定结果不自动重试。
 脚本在独立 QuickJS/WASM 工作线程中运行，没有 process、require、fetch、网络、文件系统、定时器或第三方 npm 包。不要 import。仅能生成动作计划；不允许绕过授权。代码不能看到 Token 或原始协议 XML。
 执行预算约200ms、QuickJS堆16MiB、最多5个动作/20条日志、状态JSON最多16KiB；不支持长期任务或等待外部事件。
 先模拟测试。不得声称动作已经真实发送。新规则默认预览；发布脚本会把引用规则重新切回未启用预览。

@@ -215,7 +215,11 @@ export class AutomationEngine {
             if (rule.daily?.day !== day) rule.daily = {day,count:0}
             if (rule.daily.count + plan.actions.length > rule.maxActionsPerDay) throw new AutomationError('dailyActionLimit')
             if (Object.keys(this.data.claims).length >= 20000) throw new AutomationError('claimStoreFull')
-            this.data.claims['event:' + eventKey] = {status:'pending',time};rule.lastRun = time
+            this.data.claims['event:' + eventKey] = {status:'pending',time}
+            // A no-op observation must not hide the next meaningful update
+            // (e.g. three entries immediately followed by the fourth).
+            if(plan.actions.length)rule.lastRun = time
+            else if(rule.mode === 'live' && JSON.stringify(plan.state) === JSON.stringify(this.data.values[rule.id] || {}))record.status = 'skipped'
             // Flush BEFORE invoking any external action. A crash may lose a send,
             // but must not silently replay it and duplicate a registration.
             this.save()

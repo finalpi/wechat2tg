@@ -1,4 +1,6 @@
 import {AutomationEvent,eventSchema} from './contracts'
+import {nativeSolitaire} from './solitaire'
+export {nativeSolitaire} from './solitaire'
 
 // A live-only seam: no history imports, database UPDATE notifications, or HTTP
 // test payloads can enter it. The application registers one trusted consumer.
@@ -11,16 +13,6 @@ function publish(event:AutomationEvent) {
     const parsed = eventSchema.safeParse(event)
     if(parsed.success && consumer)void consumer(parsed.data).catch(()=>undefined)
 }
-export function nativeSolitaire(xml:string,accountId:string):{id?:string;joined:boolean} {
-    const raw = xml.match(/<solitaire_info>\s*(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?\s*<\/solitaire_info>/i)?.[1] || ''
-    const body = raw.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&')
-    // Only an explicit stable field in the solitaire envelope is acceptable.
-    // Message IDs and titles change/repeat and are never a round identity.
-    const envelope = body.split(/<content\b/i)[0]
-    const id = envelope.match(/<(?:solitaire_id|solitaireid|solitaireId|id)>\s*(?:<!\[CDATA\[)?([a-zA-Z0-9_.:-]{1,160})(?:\]\]>)?\s*<\/(?:solitaire_id|solitaireid|solitaireId|id)>/)?.[1]
-    const participants = [...body.matchAll(/<u>\s*(?:<!\[CDATA\[)?([^<]*?)(?:\]\]>)?\s*<\/u>/g)].map(m=>m[1])
-    return {id,joined:participants.includes(accountId)}
-}
 export async function emitWechatAutomation(msg:any,accountId:string):Promise<void> {
     if(!consumer || !accountId || msg.self())return
     try {
@@ -30,7 +22,7 @@ export async function emitWechatAutomation(msg:any,accountId:string):Promise<voi
         const native = solitaire ? nativeSolitaire(String(msg._xml || ''),accountId) : undefined
         // A native list already naming this account must not be joined again.
         if(native?.joined)return
-        publish({id:String(msg.newMsgId),source:'wechat',accountId,groupId,type:solitaire ? 'solitaire.received' : 'message.received',text:String(msg.text() || '').slice(0,16000),sender:{id:String(sender?._wxid || msg.fromId),name:String(sender?.name?.() || '').slice(0,200)},timestamp:Number(msg._createTime ?? msg.date()) * 1000,self:false,...(solitaire ? {solitaire:{...(native?.id ? {id:native.id} : {}),title:String(msg.text() || '').slice(0,8000),messageId:String(msg.newMsgId)}} : {})})
+        publish({id:String(msg.newMsgId),source:'wechat',accountId,groupId,type:solitaire ? 'solitaire.received' : 'message.received',text:String(msg.text() || '').slice(0,16000),sender:{id:String(sender?._wxid || msg.fromId),name:String(sender?.name?.() || '').slice(0,200)},timestamp:Number(msg._createTime ?? msg.date()) * 1000,self:false,...(solitaire ? {solitaire:{...(native?.id ? {id:native.id} : {}),...(native?.entryCount !== undefined ? {entryCount:native.entryCount} : {}),title:String(msg.text() || '').slice(0,8000),messageId:String(msg.newMsgId)}} : {})})
     } catch { /* Optional automation capture must never break ordinary forwarding. */ }
 }
 export function emitTelegramAutomation(ctx:any) {

@@ -129,7 +129,7 @@ test('an external action observes an already-persisted pending claim',async t=>{
  assert.equal((await f.engine.snapshot()).runs[0].status,'success')
 })
 test('native solitaire parser refuses message/title identities and detects own entry',()=>{
- assert.deepEqual(nativeSolitaire('<solitaire_info><![CDATA[<solitaire><id>round-1</id><content><i><u>self</u><c>x</c></i></content></solitaire>]]></solitaire_info>','self'),{id:'round-1',joined:true})
+ assert.deepEqual(nativeSolitaire('<solitaire_info><![CDATA[<solitaire><id>round-1</id><content><i><u>self</u><c>x</c></i></content></solitaire>]]></solitaire_info>','self'),{id:'round-1',joined:true,entryCount:1})
  assert.equal(nativeSolitaire('<appmsg><title>#接龙</title><MsgId>123</MsgId></appmsg>','self').id,undefined)
 })
 test('live-only event adapters ignore own/bot messages and preserve topic scope',async()=>{
