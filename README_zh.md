@@ -156,7 +156,7 @@ Docker 将 `./config` 挂载为 `/app/storage`；备份时同时保留 `save-fil
 
 更新记录见[发行说明](docs/releases.md)。
 
-全新部署先复制一份 `.env.example` 为 `.env` 文件，然后配置环境变量。已有私有配置（包括用户的 `home_202.env`）绝不能覆盖，所需新增项应手动合并。
+全新部署先复制一份 `.env.example` 为 `.env` 文件，然后配置环境变量。
 
 复制项目中的 `app.conf.example` 为 `app.conf` 文件到 `conf` 目录，将 Redis 地址设置为你部署的 Redis 的地址。已有部署请合并新增配置，不要直接覆盖自己的端口、Redis 凭据和回调地址。
 

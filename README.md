@@ -156,7 +156,7 @@ Normal startup leaves the WebUI available if Telegram credentials are missing. F
 
 See the [release notes](docs/releases.md) for updates.
 
-For a new deployment, copy `.env.example` to `.env` and configure the environment variables. Never overwrite existing private configuration, including the user’s `home_202.env`; merge required changes manually.
+For a new deployment, copy `.env.example` to `.env` and configure the environment variables.
 
 Copy `app.conf.example` to `app.conf` in the `conf` directory and set the Redis address to your deployed Redis address. For existing deployments, merge the new settings instead of overwriting your ports, Redis credentials, and callback URL.
 
