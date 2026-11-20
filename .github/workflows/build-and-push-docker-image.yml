@@ -22,10 +22,10 @@ jobs:
       is_tagged: ${{ steps.meta.outputs.is_tagged }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -58,11 +58,22 @@ jobs:
           echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "is_tagged=$IS_TAGGED" >> "$GITHUB_OUTPUT"
 
-      - name: Install dependencies and test
+      # npm ci --ignore-scripts does not download the ffmpeg-static binary.
+      # Install ffmpeg and ffprobe explicitly for the media tests.
+      - name: Install FFmpeg for media tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffmpeg -version
+          ffprobe -version
+
+      - name: Install dependencies
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npm rebuild sqlite3 --no-audit --no-fund
-          npm test
+
+      - name: Build and run tests
+        run: npm test
 
   build:
     name: Build ${{ matrix.arch }}
@@ -87,7 +98,7 @@ jobs:
       ARCH: ${{ matrix.arch }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Each platform uses a native runner; neither job waits for the other.
       - name: Set up Docker Buildx
@@ -140,7 +151,7 @@ jobs:
       IS_TAGGED: ${{ needs.validate.outputs.is_tagged }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

@@ -60,10 +60,16 @@ function ref(event, type, name) {
     GITHUB_REF: `refs/${type === 'tag' ? 'tags' : 'heads'}/${name}`}
 }
 
-test('validation rebuilds sqlite3 before running tests', () => {
-  const install = workflow.jobs.validate.steps.find(s => s.name === 'Install dependencies and test')
-  assert(install)
-  assert.match(install.run, /npm ci[^\n]*\nnpm rebuild sqlite3[^\n]*\nnpm test/)
+test('validation installs FFmpeg and rebuilds sqlite3 before running tests', () => {
+  const steps = workflow.jobs.validate.steps
+  const ffmpeg = steps.findIndex(s => s.name === 'Install FFmpeg for media tests')
+  const install = steps.findIndex(s => s.name === 'Install dependencies')
+  const tests = steps.findIndex(s => s.name === 'Build and run tests')
+  assert(ffmpeg >= 0 && ffmpeg < install && install < tests)
+  assert.match(steps[ffmpeg].run, /apt-get install[^\n]*\bffmpeg\b/)
+  assert.match(steps[ffmpeg].run, /ffmpeg -version\nffprobe -version/)
+  assert.match(steps[install].run, /npm ci[^\n]*--ignore-scripts[^\n]*\nnpm rebuild sqlite3/)
+  assert.equal(steps[tests].run, 'npm test')
 })
 
 test('architectures build independently on native runners with isolated caches', () => {
