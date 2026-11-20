@@ -68,6 +68,8 @@ export function installStickerCollection(bot:Telegraf,options:{
                 response = reaction ? '未找到可收藏的表情记录（仅保留最近 5000 条媒体）。请回复原表情发送“收藏”。'
                     : '请回复图片、GIF 或视频贴纸发送“收藏”或 /collect。暂不支持 TGS 矢量动画。'
             } else {
+                // An authorized reply can restore an older message's missing receipt.
+                if(!reaction && target?.chat?.id === chatId)remember(target)
                 const result = await service().collect(ctx.botInfo,owner,media)
                 response = `${result.duplicate ? '已收藏过，不会重复添加。' : '已加入微信收藏贴纸包。'}${result.trimmed ? '\n动图最多保留前 3 秒，已按 TG 限制压缩。' : ''}\n${result.url}\n首次使用请打开链接添加贴纸包。有链接的人可能访问包内表情，请勿收藏私密图片。`
             }

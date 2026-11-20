@@ -101,6 +101,17 @@ test('media index persists topics and bot/chat/message isolation; corrupt state 
   assert.equal(fs.readFileSync(f.file,'utf8'),'{broken')
 })
 
+const captionedGif = {
+  chat:{id:-10},message_id:12,message_thread_id:20,caption:'转发说明',
+  animation:{file_id:'animation-file',file_size:1024,mime_type:'video/mp4'},
+  document:{file_id:'legacy-document',mime_type:'video/mp4'},
+}
+
+test('captioned Telegram GIF uses animation over the compatibility document',()=>{
+  assert.deepEqual(stickerMedia(captionedGif),{fileId:'animation-file',size:1024,kind:'video',threadId:20})
+  assert.equal(stickerMedia({document:captionedGif.document}),undefined,'ordinary MP4 documents are not GIFs')
+})
+
 function telegramFixture(t) {
   const f = fixture(t),exports = {},out = []
   vm.runInNewContext(fs.readFileSync(require.resolve('../dist/service/StickerCollectionTelegram'),'utf8'),{exports,require(name) {
@@ -110,6 +121,7 @@ function telegramFixture(t) {
   },Date,Error})
   const bot = {botInfo,telegram:{async callApi(method,payload) {
     if(method === 'sendPhoto')return {chat:{id:payload.chat_id},message_id:12,message_thread_id:20,photo:[{file_id:'same-image'}]}
+    if(method === 'sendAnimation')return {...captionedGif,chat:{id:payload.chat_id}}
     return f.api.call(method,payload)
   },async sendMessage(chat,text,extra) {out.push({chat,text,extra})}},use(fn) {this.handler = fn}}
   exports.installStickerCollection(bot,{directory:f.directory,owner:async()=>7,allowed:async(chat,thread)=>chat === 7 || (chat === -10 && thread === 20),now:()=>100000})
@@ -148,6 +160,23 @@ test('new owner thumbs-up uses a persisted outgoing receipt; repeated reaction a
   assert.equal(f.out.length,1)
   await f.invoke(replyUpdate())
   assert.match(f.out[1].text,/已收藏过/)
+})
+
+test('👍 collects a newly forwarded GIF with a caption and both Bot API media fields',async t=>{
+  const f = telegramFixture(t)
+  await f.bot.telegram.callApi('sendAnimation',{chat_id:-10})
+  await f.invoke(reactionUpdate())
+  assert.match(f.out[0].text,/已加入/)
+  assert.equal(f.calls.find(c=>c.method === 'uploadStickerFile').payload.sticker.source.toString(),'animation-file')
+})
+
+test('reply collects an unindexed historical GIF and backfills the receipt for later 👍',async t=>{
+  const f = telegramFixture(t)
+  assert.equal(await f.invoke(replyUpdate({reply_to_message:captionedGif})),false)
+  assert.match(f.out[0].text,/已加入/)
+  await f.invoke(reactionUpdate())
+  assert.match(f.out[1].text,/已收藏过/)
+  assert.equal(f.calls.filter(c=>c.method === 'uploadStickerFile').length,1)
 })
 
 test('non-owner, anonymous actor, unbound chat and stale updates cannot collect', async t=>{

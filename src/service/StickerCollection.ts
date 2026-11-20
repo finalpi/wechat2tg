@@ -11,10 +11,13 @@ export type StickerCollectionApi = {
 }
 
 export function stickerMedia(message:any):StickerMedia|undefined {
-    const media = message?.sticker || message?.animation || message?.photo?.at(-1) || message?.document
+    // Telegram includes a legacy document alongside animation (usually MP4).
+    // Only apply the document MIME allowlist when using a standalone document.
+    const primary = message?.sticker || message?.animation || message?.photo?.at(-1)
+    const media = primary || message?.document
     if(!media?.file_id)return
     const mime = media.mime_type || ''
-    if(message.document && !['image/png','image/jpeg','image/webp','image/gif','video/webm'].includes(mime))return
+    if(!primary && !['image/png','image/jpeg','image/webp','image/gif','video/webm'].includes(mime))return
     const kind = message.sticker?.is_animated ? 'animated' : message.sticker?.is_video || message.animation || ['image/gif','video/webm'].includes(mime) ? 'video' : 'static'
     return {fileId:media.file_id,size:media.file_size,kind,threadId:message.message_thread_id}
 }
