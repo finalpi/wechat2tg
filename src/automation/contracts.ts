@@ -56,7 +56,7 @@ event: {id,source:"wechat"|"telegram",accountId,groupId,topicId?,type:"message.r
 params 是规则页面配置的 JSON 参数。不要在代码里写账号密钥。
 可用 API（返回值只代表动作已排入预览计划，不能用于判断远端发送成功）：
 await api.replyText(text)；await api.sendText({source,accountId,groupId,topicId?},text)；
-await api.solitaire.join({solitaireId:event.solitaire.id,entry:"参加内容"})；
+await api.solitaire.join({solitaireId:event.solitaire.id})；默认由宿主在执行时填写自己在当前群的昵称，未设置群昵称时回退微信昵称；可显式传 entry:"参加内容" 覆盖。省略 entry 不等于空字符串，无法取得名称时停止；脚本不提供任意查群成员的接口。
 await api.solitaire.create({title:"标题",entry:"首条",tail?:"结尾"})；
 api.state.get(key)；api.state.set(key,JSON值)；api.log(字符串)。
 所有动作都受绑定群、账号、话题、能力授权、冷却和每日限额约束。sendText 只能发到规则授权的目标。

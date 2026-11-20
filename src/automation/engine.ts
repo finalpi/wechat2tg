@@ -31,7 +31,7 @@ const text = z.string().trim().min(1).max(4000)
 const actionSchema = z.discriminatedUnion('kind',[
     z.object({kind:z.literal('reply'),text}).strict(),
     z.object({kind:z.literal('send'),target:scopeSchema,text}).strict(),
-    z.object({kind:z.literal('solitaire.join'),solitaireId:z.string().min(1).max(200),entry:text}).strict(),
+    z.object({kind:z.literal('solitaire.join'),solitaireId:z.string().min(1).max(200),entry:text.optional()}).strict(),
     z.object({kind:z.literal('solitaire.create'),title:z.string().trim().min(1).max(500),entry:text,tail:z.string().max(500).optional()}).strict(),
 ])
 const resultSchema = z.object({actions:z.array(actionSchema).max(5),logs:z.array(z.string().max(500)).max(20),state:z.record(z.unknown())}).strict()

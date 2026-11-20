@@ -73,7 +73,7 @@ test('no-op third entry does not consume cooldown; fourth entry joins once acros
   let snapshot = await f.engine.snapshot()
   assert.equal(snapshot.runs[0].status,'skipped');assert.equal(snapshot.rules[0].lastRun,undefined);assert.equal(f.calls.length,0)
   f.advance(1000);await f.engine.receive(event(4,'message-4',f.now))
-  assert.equal(f.calls.length,1);assert.equal(f.calls[0][0].entry,'加一')
+  assert.equal(f.calls.length,1);assert.equal(f.calls[0][0].entry,undefined,'omitted entry requests the live self group nickname')
   assert.equal(f.calls[0][0].solitaireId,event(4,'other').solitaire.id)
   assert.equal(f.calls[0][1].solitaire.messageId,'message-4')
   f.advance(20000)

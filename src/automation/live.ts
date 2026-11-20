@@ -10,10 +10,12 @@ import {settingsPath} from '../webui/store'
 import {AutomationAdapter,AutomationScope,scopeKey} from './contracts'
 import {AutomationEngine} from './engine'
 import {listenAutomations} from './events'
+import {createGroupMemberNameResolver} from '../service/GroupMemberNameService'
 
 export function createAutomationAdapter(messages:MessageCenterAdapter):AutomationAdapter {
     const wx = ():any => AbstractClient.getSpyClient('wxClient')
     const bot = ():any => AbstractClient.getSpyClient('botClient')
+    let memberName:ReturnType<typeof createGroupMemberNameResolver>
     return {
         async scopes() {
             const out:Array<AutomationScope & {name:string}> = []
@@ -37,8 +39,17 @@ export function createAutomationAdapter(messages:MessageCenterAdapter):Automatio
                 if(!wx()?.hasLogin || wx().wxInfo?.wxid !== target.accountId)return {status:'rejected'}
                 if(action.kind === 'solitaire.join' || action.kind === 'solitaire.create') {
                     if(!target.groupId.endsWith('@chatroom'))return {status:'rejected'}
+                    let entry = action.entry
+                    if(action.kind === 'solitaire.join' && entry === undefined){
+                        memberName ||= createGroupMemberNameResolver(()=>String(wx()?.wxInfo?.wxid || ''))
+                        const nickname = wx()?.wxInfo?.nickName
+                        entry = await memberName(target.groupId,target.accountId,typeof nickname === 'string' ? nickname : '')
+                        // Name lookup is asynchronous. Never send with a previous
+                        // account's name/session after switching or logging out.
+                        if(!wx()?.hasLogin || wx()?.wxInfo?.wxid !== target.accountId || !entry?.trim() || entry.length > 4000)return {status:'rejected'}
+                    }
                     const body = action.kind === 'solitaire.join'
-                        ? solitaireJoinBody({wxid:target.accountId,toWxid:target.groupId,content:action.entry,newMsgId:event.solitaire?.messageId})
+                        ? solitaireJoinBody({wxid:target.accountId,toWxid:target.groupId,content:entry,newMsgId:event.solitaire?.messageId})
                         : solitaireCreateBody({wxid:target.accountId,toWxid:target.groupId,title:action.title,content:action.entry,tail:action.tail})
                     const result = await (action.kind === 'solitaire.join' ? sendSolitaireJoin(body) : sendSolitaireCreate(body))
                     return {status:result.status === 'joined' ? 'success' : result.status === 'rejected' ? 'rejected' : 'unknown'}

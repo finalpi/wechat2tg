@@ -65,7 +65,7 @@ export default async function handler(event, api, params) {
 | --- | --- | --- |
 | `api.replyText(text)` | `reply` | 当前规则匹配的来源群/话题 |
 | `api.sendText(target,text)` | `send` | `target` 必须是规则明确授权的 `{source,accountId,groupId,topicId?}` |
-| `api.solitaire.join({solitaireId,entry})` | `solitaire.join` | 当前微信接龙，ID 必须与事件一致 |
+| `api.solitaire.join({solitaireId,entry?})` | `solitaire.join` | 当前微信接龙，ID 必须与事件一致；省略 entry 使用自己的群昵称 |
 | `api.solitaire.create({title,entry,tail?})` | `solitaire.create` | 当前来源微信群 |
 | `api.state.get(key)` / `api.state.set(key,jsonValue)` | `state` | 当前规则自己的持久状态 |
 | `api.log(text)` | 无发送权限 | 当前执行日志，不写应用控制台 |
@@ -91,6 +91,8 @@ export default async function handler(event, api, params) {
 
 规则参数例如 `{"keyword":"午餐","entry":"张三，标准餐一份"}`。同函数可以为另一个群配置不同内容。
 
+需要默认填写自己的群昵称时，使用 `await api.solitaire.join({solitaireId: event.solitaire.id})`，**省略 `entry`**。执行端复用手动“参与接龙”的群成员名称解析：先取当前账号在当前群的昵称 / 群备注，未设置时回退微信昵称；不使用消息发送者的名字、通讯录备注或固定“加一”。无法取得可用名称时不发送。显式非空 `entry` 仍可覆盖，显式空字符串不当作默认值。模拟模式只返回省略 entry 的计划，不查询真实群成员；执行前后的账号校验、防重复记录及权限保持不变。此能力需要包含该修复的 Bot，旧版不能仅靠修改函数使用。
+
 **原生卡片识别仍有兼容边界：** 优先使用 `solitaire_info` 信封的明确 `id` / `solitaire_id` / `solitaireid` / `solitaireId`。没有明确 ID 时，仅支持原生发起者 `au` 对应唯一报名条目、且该条目的 `t` 是所有条目最早的有效时间：以发起者和此时间生成带版本前缀的哈希标识。按 `u` 查找发起者，不依赖 XML 条目顺序；明确 ID 冲突、发起条目缺失 / 重复、时间非法或变得晚于其他参与者时不提供标识，不回退到标题、当前消息 ID 或日期猜轮次。
 
 此兼容形式已对一个目标群的 180 条只读历史卡片核对：跨 10 天、同一天更新的标识一致、不同天不同，但这不是对所有客户端编辑 / 删除 / 复制卡片行为的保证。无法识别时停止自动报名。若参与者 `u` 已包含当前账号，仍不自动参加。没有进行真实自动报名测试。
@@ -99,7 +101,7 @@ export default async function handler(event, api, params) {
 
 ### 按报名位次参加
 
-[位次示例脚本](examples/solitaire-position.js) 接受 `targetTitle`（默认“用餐接龙”）、`targetPosition`（默认 5）、`myEntry`（默认“加一”）。观察到原生 `entryCount === targetPosition - 1` 且有可靠 `id` 时才生成参加计划；已经超过目标位次就跳过。缺少 ID / 条数时只记录原因，不以 `messageId` 绕过保护，也不统计标题说明里的编号。
+[位次示例脚本](examples/solitaire-position.js) 接受 `targetTitle`（默认“用餐接龙”）、`targetPosition`（默认 5）、`myEntry`（可选覆盖内容；留空时使用自己的群昵称，未设置群昵称则回退微信昵称）。观察到原生 `entryCount === targetPosition - 1` 且有可靠 `id` 时才生成参加计划；已经超过目标位次就跳过。缺少 ID / 条数时只记录原因，不以 `messageId` 绕过保护，也不统计标题说明里的编号。
 
 未产生动作的观察不会消耗动作冷却，避免 3 条后很快出现 4 条时被 10 秒冷却挡住。没有动作且没有状态变化的实际模式记录标为“跳过”，不冒充已报名。真正的动作继续受冷却、每日上限和全局轮次去重约束。位次检查不具有服务器端预留名额的原子性，多人同时报名时不能保证最终恰好第 5 位；历史回放和模拟测试不发送也不补报名。
 

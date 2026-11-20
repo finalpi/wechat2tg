@@ -21,8 +21,8 @@ export default async function handler(event, api, params) {
     api.log(`当前 ${count} 条报名，目标第 ${position} 位，本次不操作`)
     return
   }
-  const entry = String(params.myEntry || '加一').trim()
-  if (!entry) return
+  const entry = String(params.myEntry || '').trim()
   api.log(`观察到 ${count} 条报名，计划参加；最终名次仍受并发报名影响`)
-  await api.solitaire.join({solitaireId: event.solitaire.id, entry})
+  // Omit entry to use this account's group nickname (or WeChat nickname).
+  await api.solitaire.join({solitaireId: event.solitaire.id, ...(entry ? {entry} : {})})
 }

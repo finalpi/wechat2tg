@@ -4,7 +4,7 @@ const fs = require('node:fs'),path = require('node:path'),vm = require('node:vm'
 function load(name,dependencies = {},globals = {}) {
   const exports = {},file = path.join(__dirname,'../webui/src',name)
   const source = ts.transpileModule(fs.readFileSync(file,'utf8'),{fileName:file,compilerOptions:{target:ts.ScriptTarget.ES2021,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText
-  vm.runInNewContext(source,{exports,...globals,require:name=>Object.hasOwn(dependencies,name)?dependencies[name]:require(name)})
+  vm.runInNewContext(source,{exports,...globals,require:name=>Object.hasOwn(dependencies,name) ? dependencies[name] : require(name)})
   return exports
 }
 const mentions = load('lib/composer-mentions.ts')
@@ -57,11 +57,11 @@ test('choosing a member replaces only the active query and preserves the real wx
 
 test('editing before/after mentions adjusts offsets and editing or deleting the actual label removes its notification ID',()=>{
   const first = mentions.insertMention('@',{start:0,end:1,query:''},member,[])
-  const prefixed = '😀 '+first.body
+  const prefixed = '😀 ' + first.body
   const shifted = mentions.editMentions(first.body,prefixed,first.mentions)
   assert.equal(shifted[0].start,3)
   assert.equal(shifted[0].wxId,member.wxId)
-  assert.equal(mentions.editMentions(prefixed,prefixed+'后文',shifted).length,1)
+  assert.equal(mentions.editMentions(prefixed,prefixed + '后文',shifted).length,1)
   assert.equal(mentions.editMentions(prefixed,prefixed.replace('undefined','changed'),shifted).length,0)
   assert.equal(mentions.editMentions(prefixed,'',shifted).length,0)
   const inserted = mentions.replaceMentionRange(first.mentions,0,0,1)
@@ -70,8 +70,8 @@ test('editing before/after mentions adjusts offsets and editing or deleting the 
 
 test('inline sends deduplicate wxIds, respect all-member exclusivity and preserve old checkbox drafts',()=>{
   const first = mentions.insertMention('@',{start:0,end:1,query:''},member,[])
-  const body = first.body+'@'
-  const twice = mentions.insertMention(body,{start:body.length-1,end:body.length,query:''},member,first.mentions)
+  const body = first.body + '@'
+  const twice = mentions.insertMention(body,{start:body.length - 1,end:body.length,query:''},member,first.mentions)
   assert.deepEqual(plain(mentions.composerMentions(twice.body,[],false,twice.mentions)),{body:twice.body,mentions:{memberIds:[member.wxId],inline:true}})
   const everyone = mentions.insertMention('@',{start:0,end:1,query:''},{wxId:'notify@all',name:'所有人',displayName:''},[])
   assert.deepEqual(plain(mentions.composerMentions(everyone.body,[member],false,everyone.mentions).mentions),{all:true,inline:true})
