@@ -5,9 +5,10 @@ import {createHash} from 'node:crypto'
 export type StickerMedia = {fileId:string;size?:number;kind:'static'|'video'|'animated';threadId?:number}
 type Item = {set:string;uniqueId:string;status:'pending'|'done'}
 type State = {messages:Record<string,StickerMedia>;items:Record<string,Item>;packs:Record<string,number>}
+export type PreparedSticker = {source:Buffer;format:'static'|'video';digest:string;trimmed:boolean}
 export type StickerCollectionApi = {
     call(method:string,payload:Record<string,unknown>):Promise<any>
-    prepare(media:StickerMedia):Promise<{source:Buffer;format:'static'|'video';digest:string;trimmed:boolean}>
+    prepare(media:StickerMedia):Promise<PreparedSticker>
 }
 
 export function stickerMedia(message:any):StickerMedia|undefined {
@@ -50,10 +51,11 @@ export class StickerCollection {
         this.save()
     }
     lookup(botId:number,chatId:number,messageId:number) {return this.state.messages[`${botId}:${chatId}:${messageId}`]}
-    collect(bot:{id:number;username:string},owner:number,media:StickerMedia) {
+    collect(bot:{id:number;username:string},owner:number,media:StickerMedia | (()=>Promise<PreparedSticker>)) {
         if(this.queued >= 8)return Promise.reject(new Error('收藏队列已满，请稍后再试。'))
         this.queued++
-        const operation = this.queue.then(()=>this.run(bot,owner,media))
+        const prepare = typeof media === 'function' ? media : ()=>this.api.prepare(media)
+        const operation = this.queue.then(()=>this.run(bot,owner,prepare))
         this.queue = operation.catch(()=>undefined)
         return operation.finally(()=>{this.queued--})
     }
@@ -64,9 +66,9 @@ export class StickerCollection {
             throw error
         }
     }
-    private async run(bot:{id:number;username:string},owner:number,media:StickerMedia) {
+    private async run(bot:{id:number;username:string},owner:number,prepare:()=>Promise<PreparedSticker>) {
         if(!Number.isSafeInteger(owner) || owner <= 0 || !/^[a-zA-Z0-9_]+bot$/i.test(bot.username))throw new Error('无法确定贴纸包主人或 Bot 用户名。')
-        const prepared = await this.api.prepare(media)
+        const prepared = await prepare()
         const scope = `${bot.id}:${owner}`,key = `${scope}:${prepared.digest}`
         const previous = this.state.items[key]
         if(previous) {

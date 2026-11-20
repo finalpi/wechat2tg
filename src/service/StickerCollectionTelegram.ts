@@ -2,6 +2,9 @@ import path from 'node:path'
 import {Telegraf} from 'telegraf'
 import {StickerCollection,stickerMedia} from './StickerCollection'
 import {prepareCollectedSticker} from './StickerCollectionMedia'
+import type {HistoricalSticker} from './StickerCollectionHistory'
+
+const missingReactionMedia = '无法从这条消息读取原表情，请回复原消息发送 /collect。'
 
 export const STICKER_COLLECTION_UPDATES = [
     'message','edited_message','channel_post','edited_channel_post','inline_query','chosen_inline_result',
@@ -12,6 +15,7 @@ export const STICKER_COLLECTION_UPDATES = [
 export function installStickerCollection(bot:Telegraf,options:{
     owner:()=>Promise<number>
     allowed:(chatId:number,threadId?:number)=>Promise<boolean>
+    findHistory?:(chatId:number,messageId:number,botId:number,owner:number)=>Promise<HistoricalSticker|undefined>
     directory?:string
     now?:()=>number
     warn?:()=>void
@@ -63,14 +67,24 @@ export function installStickerCollection(bot:Telegraf,options:{
         try {
             const media = reaction ? service().lookup(ctx.botInfo.id,chatId,messageId) : stickerMedia(target)
             threadId ??= media?.threadId
-            if(!await options.allowed(chatId,threadId))return
-            if(!media) {
-                response = reaction ? '未找到可收藏的表情记录（仅保留最近 5000 条媒体）。请回复原表情发送“收藏”。'
-                    : '请回复图片、GIF 或视频贴纸发送“收藏”或 /collect。暂不支持 TGS 矢量动画。'
-            } else {
+            if(media || !reaction) {
+                if(!await options.allowed(chatId,threadId))return
                 // An authorized reply can restore an older message's missing receipt.
-                if(!reaction && target?.chat?.id === chatId)remember(target)
-                const result = await service().collect(ctx.botInfo,owner,media)
+                if(!reaction && media && target?.chat?.id === chatId)remember(target)
+            }
+            const findHistory = options.findHistory
+            const source = media ?? (reaction && findHistory ? async()=>{
+                const history = await findHistory(chatId,messageId,ctx.botInfo.id,owner)
+                if(!history)throw new Error(missingReactionMedia)
+                threadId = history.threadId
+                if(owner !== await options.owner() || !await options.allowed(chatId,threadId))throw new Error(missingReactionMedia)
+                const prepared = await history.prepare()
+                if(owner !== await options.owner() || !await options.allowed(chatId,threadId))throw new Error(missingReactionMedia)
+                return prepared
+            } : undefined)
+            if(!source)response = reaction ? missingReactionMedia : '请回复图片、GIF 或视频贴纸发送“收藏”或 /collect。暂不支持 TGS 矢量动画。'
+            else {
+                const result = await service().collect(ctx.botInfo,owner,source)
                 response = `${result.duplicate ? '已收藏过，不会重复添加。' : '已加入微信收藏贴纸包。'}${result.trimmed ? '\n动图最多保留前 3 秒，已按 TG 限制压缩。' : ''}\n${result.url}\n首次使用请打开链接添加贴纸包。有链接的人可能访问包内表情，请勿收藏私密图片。`
             }
         } catch(error) {
@@ -78,7 +92,7 @@ export function installStickerCollection(bot:Telegraf,options:{
             const detail = error instanceof Error && /^[\u4e00-\u9fff]/.test(error.message) ? error.message : '收藏失败，请确认已私聊启动 Bot，再稍后重试。'
             response = detail
         }
-        if(response)await bot.telegram.sendMessage(chatId,response,{
+        if(response && owner === await options.owner() && await options.allowed(chatId,threadId))await bot.telegram.sendMessage(chatId,response,{
             message_thread_id:threadId,
             reply_parameters:{message_id:messageId,allow_sending_without_reply:true},
             link_preview_options:{is_disabled:true},

@@ -77,6 +77,7 @@ import {getWechatQrCode} from '../service/WechatQrCodeService'
 import {ensureDefaultBotAvatar} from '../service/TelegramBotAvatar'
 import {handleTransferCallback} from '../service/TransferTelegram'
 import {installStickerCollection,STICKER_COLLECTION_UPDATES} from '../service/StickerCollectionTelegram'
+import {findHistoricalSticker} from '../service/StickerCollectionHistory'
 
 interface LargeFileProgressEditor {
     update(text: string, force?: boolean, inlineKeyboard?: Array<{ text: string, callback_data: string }>): Promise<void>
@@ -146,6 +147,13 @@ export class TelegramBotClient extends AbstractClient {
             owner:async()=>Number((await this.configurationService.getConfig())?.chatId || 0),
             allowed:async(chatId,threadId)=>chatId === Number((await this.configurationService.getConfig())?.chatId)
                 || Boolean(await this.bindGroupService.resolveTelegram(chatId,threadId)),
+            findHistory:async(chatId,messageId,botId,owner)=>{
+                const mt = TelegramBotClient.getSpyClient('botMTPClient')
+                if(!mt?.hasLogin || owner !== Number((await this.configurationService.getConfig())?.chatId))return
+                if(chatId !== owner && !await this.bindGroupService.isManagedForum(chatId)
+                    && !await this.bindGroupService.resolveTelegram(chatId))return
+                return findHistoricalSticker(mt.client,chatId,messageId,botId,owner)
+            },
             warn:()=>this.logger.warn('Telegram 表情收藏索引保存失败；不影响原消息发送'),
         })
         // Automation reads only owner-configured group scopes. This observer does

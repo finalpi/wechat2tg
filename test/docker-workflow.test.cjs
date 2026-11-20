@@ -16,7 +16,7 @@ const channels = [
   {version: 'v6-dev-0123456', channel: 'dev', tagged: 'false', aliases: []},
 ]
 
-function runStep(script, variables = {}, {version = '6.0.13', packageVersion = version} = {}) {
+function runStep(script, variables = {}, {version = '6.0.13', packageVersion = version, executables = {}} = {}) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'wx2tg-workflow-'))
   try {
     // Exercise the production validator without depending on the checkout's release channel.
@@ -37,6 +37,7 @@ function runStep(script, variables = {}, {version = '6.0.13', packageVersion = v
     fs.writeFileSync(output, '')
     // Never invoke real Docker, even if a workflow step starts using it unexpectedly.
     fs.writeFileSync(path.join(temp, 'docker'), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$DOCKER_CALLS"\n', {mode: 0o700})
+    for(const [name,script] of Object.entries(executables))fs.writeFileSync(path.join(temp,name),script,{mode:0o700})
     const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', script], {
       cwd: temp, encoding: 'utf8',
       env: {...process.env, GITHUB_EVENT_NAME: '', GITHUB_REF_TYPE: '', GITHUB_REF_NAME: '', GITHUB_REF: '',
@@ -72,6 +73,30 @@ test('validation installs FFmpeg and rebuilds sqlite3 before running tests', () 
   assert.equal(steps[tests].run, 'npm test')
 })
 
+test('FFmpeg setup reuses installed tools and refreshes APT only on a stale index', () => {
+  const setup = workflow.jobs.validate.steps.find(s => s.name === 'Install FFmpeg for media tests').run
+  const sudo = `#!/bin/sh
+printf '%s\\n' "$2" >> "$DOCKER_CALLS"
+case "$2" in
+  update) : > refreshed ;;
+  install)
+    if [ "$MOCK_APT" = stale ] && [ ! -f refreshed ]; then exit 1; fi
+    printf '#!/bin/sh\\nexit 0\\n' > ffmpeg
+    printf '#!/bin/sh\\nexit 0\\n' > ffprobe
+    /bin/chmod +x ffmpeg ffprobe
+    ;;
+  *) exit 2 ;;
+esac
+`
+  const tool = '#!/bin/sh\nexit 0\n'
+  for (const [mock,expected] of [['installed',''],['fresh','install\n'],['stale','install\nupdate\ninstall\n']]) {
+    const executables = mock === 'installed' ? {sudo,ffmpeg:tool,ffprobe:tool} : {sudo}
+    const result = runStep(`PATH="$PWD"\n${setup}`,{MOCK_APT:mock},{executables})
+    assert.equal(result.status,0,result.stderr)
+    assert.equal(result.calls,expected)
+  }
+})
+
 test('architectures build independently on native runners with isolated caches', () => {
   const build = workflow.jobs.build
   assert(build, 'a separate matrix build job is required')
@@ -89,8 +114,9 @@ test('architectures build independently on native runners with isolated caches',
   assert.equal(push.push, true)
   assert.equal(push.platforms, '${{ matrix.platform }}')
   assert.equal(push.tags, '${{ steps.meta.outputs.tags }}')
-  assert(push['cache-from'].includes('${{ matrix.arch }}'))
-  assert(push['cache-to'].includes('${{ matrix.arch }}'))
+  assert.match(push['cache-from'], /type=registry,ref=\$\{\{ steps\.meta\.outputs\.cache_ref \}\}/)
+  assert(push['cache-from'].includes('type=gha,scope=wx2tg-v6-${{ matrix.arch }}'))
+  assert.equal(push['cache-to'], '${{ steps.meta.outputs.cache_export }}')
 })
 
 test('only the final manifest waits for both builds; channel metadata reaches both jobs', () => {
@@ -160,7 +186,11 @@ for (const arch of ['amd64', 'arm64']) {
         {IMAGE: image, APP_VERSION: version, CHANNEL: channel, IS_TAGGED: tagged, ARCH: arch})
       assert.equal(result.status, 0, result.stderr)
       const tags = [version, ...aliases].map(tag => `${image}:${tag}-${arch}`)
-      assert.equal(result.output, `tags=${tags.join(',')}\n`)
+      const cacheRef = `${image}:buildcache-v6-${channel}-${arch}`
+      const cacheExport = tagged === 'true'
+        ? `type=registry,ref=${cacheRef},mode=max,oci-mediatypes=true,image-manifest=true,ignore-error=true`
+        : `type=gha,scope=wx2tg-v6-${arch},mode=max,ignore-error=true`
+      assert.equal(result.output, `tags=${tags.join(',')}\ncache_ref=${cacheRef}\ncache_export=${cacheExport}\n`)
     })
   }
 }

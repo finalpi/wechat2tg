@@ -112,7 +112,7 @@ test('captioned Telegram GIF uses animation over the compatibility document',()=
   assert.equal(stickerMedia({document:captionedGif.document}),undefined,'ordinary MP4 documents are not GIFs')
 })
 
-function telegramFixture(t) {
+function telegramFixture(t,options = {}) {
   const f = fixture(t),exports = {},out = []
   vm.runInNewContext(fs.readFileSync(require.resolve('../dist/service/StickerCollectionTelegram'),'utf8'),{exports,require(name) {
     if(name === './StickerCollectionMedia')return {prepareCollectedSticker:(_telegram,input)=>f.api.prepare(input)}
@@ -124,7 +124,7 @@ function telegramFixture(t) {
     if(method === 'sendAnimation')return {...captionedGif,chat:{id:payload.chat_id}}
     return f.api.call(method,payload)
   },async sendMessage(chat,text,extra) {out.push({chat,text,extra})}},use(fn) {this.handler = fn}}
-  exports.installStickerCollection(bot,{directory:f.directory,owner:async()=>7,allowed:async(chat,thread)=>chat === 7 || (chat === -10 && thread === 20),now:()=>100000})
+  exports.installStickerCollection(bot,{directory:f.directory,owner:async()=>7,allowed:async(chat,thread)=>chat === 7 || (chat === -10 && thread === 20),now:()=>100000,...options})
   const invoke = async(update)=>{
     let forwarded = false
     const message = update.message,reaction = update.message_reaction
@@ -179,6 +179,39 @@ test('reply collects an unindexed historical GIF and backfills the receipt for l
   assert.equal(f.calls.filter(c=>c.method === 'uploadStickerFile').length,1)
 })
 
+test('owner 👍 recovers an unindexed message in its real topic without a prior reply',async t=>{
+  let lookups = 0
+  const f = telegramFixture(t,{findHistory:async(...args)=>{
+    assert.deepEqual(args,[-10,12,99,7]);lookups++
+    return {threadId:20,prepare:()=>f.api.prepare({fileId:'same-image'})}
+  }})
+  await f.invoke(reactionUpdate())
+  assert.match(f.out[0].text,/已加入/)
+  assert.equal(f.out[0].extra.message_thread_id,20)
+  assert.equal(f.out[0].extra.reply_parameters.message_id,12)
+  await f.invoke(replyUpdate())
+  assert.match(f.out[1].text,/已收藏过/)
+  assert.equal(f.calls.filter(c=>c.method === 'uploadStickerFile').length,1)
+  assert.equal(lookups,1)
+})
+
+test('no history read by non-owner; unbound history topic or changed owner never uploads',async t=>{
+  let owner = 7,reads = 0,downloads = 0,threadId = 21
+  const f = telegramFixture(t,{owner:async()=>owner,findHistory:async()=>{
+    reads++
+    return {threadId,prepare:async()=>{downloads++;owner = 8;return f.api.prepare({fileId:'same-image'})}}
+  }})
+  await f.invoke(reactionUpdate({user:{id:8}}))
+  await f.invoke(reactionUpdate())
+  assert.equal(reads,1)
+  assert.equal(downloads,0)
+  threadId = 20
+  await f.invoke(reactionUpdate())
+  assert.equal(downloads,1)
+  assert.equal(f.calls.length,0)
+  assert.equal(f.out.length,0)
+})
+
 test('non-owner, anonymous actor, unbound chat and stale updates cannot collect', async t=>{
   const f = telegramFixture(t)
   await f.bot.telegram.callApi('sendPhoto',{chat_id:-10})
@@ -192,7 +225,7 @@ test('non-owner, anonymous actor, unbound chat and stale updates cannot collect'
 test('unknown historical reaction gives reply fallback, unsupported reply gives help, and neither uploads', async t=>{
   const f = telegramFixture(t)
   await f.invoke(reactionUpdate({chat:{id:7}}))
-  assert.match(f.out[0].text,/回复原表情/)
+  assert.match(f.out[0].text,/回复原消息发送 \/collect/)
   await f.invoke(replyUpdate({reply_to_message:{message_id:12,text:'plain'}}))
   assert.match(f.out[1].text,/请回复图片/)
   assert.equal(f.calls.length,0)

@@ -10,7 +10,8 @@ import axios from 'axios'
 import {Telegram} from 'telegraf'
 import {StickerMedia} from './StickerCollection'
 
-const MAX_SOURCE = 20 * 1024 * 1024
+export const MAX_STICKER_SOURCE_BYTES = 20 * 1024 * 1024
+const MAX_SOURCE = MAX_STICKER_SOURCE_BYTES
 const run = (args:string[])=>new Promise<void>((resolve,reject)=>{
     execFile(ffmpegPath && existsSync(ffmpegPath) ? ffmpegPath : 'ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y',...args],{timeout:45000,maxBuffer:1024 * 1024},error=>error ? reject(new Error('表情转换失败或超时，未添加到贴纸包。')) : resolve())
 })

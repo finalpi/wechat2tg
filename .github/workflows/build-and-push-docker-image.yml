@@ -62,8 +62,26 @@ jobs:
       # Install ffmpeg and ffprobe explicitly for the media tests.
       - name: Install FFmpeg for media tests
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg
+          have_media_tools() {
+            command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null
+          }
+          if ! have_media_tools; then
+            install_ffmpeg() {
+              sudo apt-get install -y --no-install-recommends "$@" ffmpeg
+            }
+            if ! install_ffmpeg -o Acquire::Retries=0 \
+              -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15; then
+              # Refresh Ubuntu's index, not unrelated third-party feeds.
+              sources=()
+              ubuntu_sources=/etc/apt/sources.list.d/ubuntu.sources
+              if [[ -s "$ubuntu_sources" ]]; then
+                sources=(-o "Dir::Etc::sourcelist=$ubuntu_sources"
+                         -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0)
+              fi
+              sudo apt-get update "${sources[@]}" -o Acquire::Languages=none
+              install_ffmpeg
+            fi
+          fi
           ffmpeg -version
           ffprobe -version
 
@@ -110,7 +128,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Select architecture tags
+      - name: Select architecture tags and cache
         id: meta
         shell: bash
         run: |
@@ -128,6 +146,15 @@ jobs:
             fi
           fi
           echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+          # GHA caches saved on one tag are not visible to other tags.
+          cache_ref="$IMAGE:buildcache-v6-$CHANNEL-$ARCH"
+          echo "cache_ref=$cache_ref" >> "$GITHUB_OUTPUT"
+          if [[ "$IS_TAGGED" == "true" ]]; then
+            cache_export="type=registry,ref=$cache_ref,mode=max,oci-mediatypes=true,image-manifest=true,ignore-error=true"
+          else
+            cache_export="type=gha,scope=wx2tg-v6-$ARCH,mode=max,ignore-error=true"
+          fi
+          echo "cache_export=$cache_export" >> "$GITHUB_OUTPUT"
 
       - name: Build and push architecture image
         id: push
@@ -138,8 +165,10 @@ jobs:
           push: true
           platforms: ${{ matrix.platform }}
           tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=gha,scope=wx2tg-v6-${{ matrix.arch }}
-          cache-to: type=gha,scope=wx2tg-v6-${{ matrix.arch }},mode=max
+          cache-from: |
+            type=registry,ref=${{ steps.meta.outputs.cache_ref }}
+            type=gha,scope=wx2tg-v6-${{ matrix.arch }}
+          cache-to: ${{ steps.meta.outputs.cache_export }}
 
   publish:
     name: Publish multi-architecture image
