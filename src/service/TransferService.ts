@@ -3,19 +3,19 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {createHash,randomBytes} from 'node:crypto'
 import axios from 'axios'
-import {readWechatTransfer,transferExpired,WechatTransfer} from '../util/WechatTransfer'
+import {readWechatTransfer,resolveTransferPayer,transferExpired,WechatTransfer} from '../util/WechatTransfer'
 
 export type TransferState = 'ready'|'accepting'|'received'|'unavailable'|'unknown'
 export type TransferResult = {state:TransferState;canAccept:boolean;amountFen:number}
 export type TransferSession = {accountId:string;ownerId:number;baseURL:string}
 type Destination = {chatId:number;threadId?:number;conversation:string}
 type Row = {key:string;token:string;account:string;owner:number;conversation:string;chatId:number;threadId:number|null;
-    transferId:string;transactionId:string;invalidTime:string;amount:number;state:TransferState}
+    payer:string|null;transferId:string;transactionId:string;invalidTime:string;amount:number;state:TransferState}
 const unavailable = ()=>new Error('转账不可操作，账号、主人或会话可能已切换。')
 
-export async function requestTransferAccept(session:TransferSession,packet:{transferId:string;transactionId:string;invalidTime:string},conversation:string) {
+export async function requestTransferAccept(session:TransferSession,packet:{transferId:string;transactionId:string;invalidTime:string},payer:string) {
     return axios.post(session.baseURL.replace(/\/+$/,'') + '/TenPay/Collectmoney',{
-        Wxid:session.accountId,ToUserName:conversation,TransFerId:packet.transferId,TransactionId:packet.transactionId,InvalidTime:packet.invalidTime,
+        Wxid:session.accountId,ToUserName:payer,TransFerId:packet.transferId,TransactionId:packet.transactionId,InvalidTime:packet.invalidTime,
     },{timeout:15000,maxRedirects:0,maxContentLength:262144,maxBodyLength:262144,responseType:'json',validateStatus:()=>true})
 }
 
@@ -44,8 +44,16 @@ export class TransferService {
                 this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
                     CREATE TABLE IF NOT EXISTS transfers (key TEXT PRIMARY KEY,token TEXT NOT NULL UNIQUE,
                     account TEXT NOT NULL,owner INTEGER NOT NULL,conversation TEXT NOT NULL,chatId INTEGER NOT NULL,threadId INTEGER,
-                    transferId TEXT NOT NULL,transactionId TEXT NOT NULL,invalidTime TEXT NOT NULL,amount INTEGER NOT NULL,state TEXT NOT NULL);
-                    UPDATE transfers SET state='unknown' WHERE state='accepting';`,err=>err ? reject(err) : resolve())
+                    payer TEXT,transferId TEXT NOT NULL,transactionId TEXT NOT NULL,invalidTime TEXT NOT NULL,amount INTEGER NOT NULL,state TEXT NOT NULL);
+                    UPDATE transfers SET state='unknown' WHERE state='accepting';`,err=>{
+                    if(err)return reject(err)
+                    this.db.all<{name:string}>('PRAGMA table_info(transfers)',(schemaError,columns)=>{
+                        if(schemaError)return reject(schemaError)
+                        if(columns.some(column=>column.name === 'payer'))return resolve()
+                        // Existing single-chat rows keep using their conversation as payer.
+                        this.db.run('ALTER TABLE transfers ADD COLUMN payer TEXT',migrationError=>migrationError ? reject(migrationError) : resolve())
+                    })
+                })
             })
         })
         void this.ready.catch(()=>undefined)
@@ -70,24 +78,25 @@ export class TransferService {
             || row.chatId !== destination.chatId || (row.threadId || undefined) !== destination.threadId || row.conversation !== destination.conversation)throw unavailable()
         return {row,session}
     }
-    async register(source:string,account:string,destination:Destination) {
+    async register(source:string,account:string,destination:Destination,envelope?:Parameters<typeof resolveTransferPayer>[3]) {
         const packet = readWechatTransfer(source),session = await this.session()
-        if(!packet?.claimable || !session || session.accountId !== account || session.ownerId <= 0 || !Number.isSafeInteger(session.ownerId)
-            || packet.receiver !== account || transferExpired(packet.invalidTime)
-            || !/^[a-zA-Z0-9_.-]{1,128}$/.test(destination.conversation)
-            || destination.conversation === account || (packet.payer && packet.payer !== destination.conversation))throw unavailable()
+        const payer = packet && resolveTransferPayer(packet,account,destination.conversation,envelope)
+        if(!payer || !session || session.accountId !== account || session.ownerId <= 0 || !Number.isSafeInteger(session.ownerId)
+            || transferExpired(packet.invalidTime))throw unavailable()
         const key = this.key(account,packet),token = randomBytes(16).toString('hex')
-        await this.run(`INSERT OR IGNORE INTO transfers(key,token,account,owner,conversation,chatId,threadId,transferId,transactionId,invalidTime,amount,state)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,'ready')`,[key,token,account,session.ownerId,destination.conversation,destination.chatId,destination.threadId ?? null,packet.sendId,packet.transactionId,packet.invalidTime,packet.amountFen])
+        await this.run(`INSERT OR IGNORE INTO transfers(key,token,account,owner,conversation,chatId,threadId,payer,transferId,transactionId,invalidTime,amount,state)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'ready')`,[key,token,account,session.ownerId,destination.conversation,destination.chatId,destination.threadId ?? null,payer,packet.sendId,packet.transactionId,packet.invalidTime,packet.amountFen])
         const stored:Row = await new Promise((resolve,reject)=>this.db.get<Row>('SELECT * FROM transfers WHERE key=?',[key],(error,row)=>error ? reject(error) : resolve(row)))
-        if(stored.amount !== packet.amountFen || stored.transactionId !== packet.transactionId || stored.invalidTime !== packet.invalidTime)throw unavailable()
+        if(stored.amount !== packet.amountFen || stored.transactionId !== packet.transactionId || stored.invalidTime !== packet.invalidTime
+            || (stored.payer ?? stored.conversation) !== payer)throw unavailable()
         return {token:stored.token,...await this.status(stored.token,destination)}
     }
     async observeReceipt(source:string,account:string,conversation:string) {
         const packet = readWechatTransfer(source),session = await this.session()
-        if(!packet?.received || !session || session.accountId !== account || packet.receiver !== account || (packet.payer && packet.payer !== conversation))return
-        await this.run('UPDATE transfers SET state=\'received\' WHERE key=? AND account=? AND owner=? AND conversation=? AND amount=? AND transactionId=?',
-            [this.key(account,packet),account,session.ownerId,conversation,packet.amountFen,packet.transactionId])
+        if(!packet?.received || !session || session.accountId !== account || packet.receiver !== account)return
+        await this.run(`UPDATE transfers SET state='received' WHERE key=? AND account=? AND owner=? AND conversation=?
+            AND amount=? AND transactionId=? AND (?='' OR COALESCE(payer,conversation)=?)`,
+            [this.key(account,packet),account,session.ownerId,conversation,packet.amountFen,packet.transactionId,packet.payer,packet.payer])
     }
     async status(token:string,destination:Destination) {return this.result((await this.authorized(token,destination)).row)}
     async accept(token:string,destination:Destination,guard:()=>Promise<boolean>):Promise<TransferResult> {
@@ -114,7 +123,8 @@ export class TransferService {
         }
         let state:TransferState = 'unknown'
         try {
-            const response = await this.send(current,row,row.conversation)
+            // Group ID scopes the button; Collectmoney takes the individual payer.
+            const response = await this.send(current,row,row.payer ?? row.conversation)
             // A missing route is definitive. All transport/decoding/business
             // uncertainty remains non-retryable; no alternate endpoint is tried.
             if([404,405].includes(response.status))state = 'unavailable'

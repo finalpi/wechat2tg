@@ -6,6 +6,20 @@ export interface WechatTransfer {
     amountFen:number;memo:string;claimable:boolean;received:boolean
 }
 
+const personId = /^[a-zA-Z0-9_.-]{1,128}$/
+const roomId = /^[a-zA-Z0-9_.-]{1,128}@chatroom$/
+
+export function resolveTransferPayer(packet:WechatTransfer,account:string,conversation:string,
+    envelope?:{sender?:string;recipient?:string;group:boolean}):string|undefined {
+    if(!packet.claimable || !account || packet.receiver !== account)return
+    const group = roomId.test(conversation)
+    if(envelope && envelope.group !== group)return
+    const payer = group ? envelope?.sender : conversation
+    if(!payer || payer === account || !personId.test(payer) || (packet.payer && packet.payer !== payer))return
+    if(envelope && (envelope.sender !== payer || envelope.recipient !== (group ? conversation : account)))return
+    return payer
+}
+
 export function transferExpired(invalidTime:string):boolean {
     return !/^\d{10}$/.test(invalidTime) || Number(invalidTime) <= Math.floor(Date.now() / 1000)
 }
@@ -25,11 +39,12 @@ export function readWechatTransfer(source:unknown):WechatTransfer|undefined {
         if(XMLValidator.validate(xml) !== true)return
         const sendId = text(pay,'transferid'),transactionId = text(pay,'transcationid'),invalidTime = text(pay,'invalidtime')
         const payer = text(pay,'payer_username'),receiver = text(pay,'receiver_username')
+        const hasPayer = pay.children.some((item:any)=>item.type === 'tag' && item.name === 'payer_username')
         // These values are concatenated by the protocol server into a signed form.
         // Reject delimiters rather than allowing injected payment parameters.
         const identifiersValid = [sendId,transactionId].every(value=>/^[a-zA-Z0-9_-]{6,128}$/.test(value))
-            && /^\d{10}$/.test(invalidTime) && /^[a-zA-Z0-9_.-]{1,128}$/.test(receiver)
-            && (!payer || /^[a-zA-Z0-9_.-]{1,128}$/.test(payer) && payer !== receiver)
+            && /^\d{10}$/.test(invalidTime) && personId.test(receiver)
+            && (!hasPayer || personId.test(payer) && payer !== receiver)
         const amount = /^[¥￥]([0-9]{1,9})(?:\.([0-9]{1,2}))?$/.exec(text(pay,'feedesc'))
         if(!amount)return
         const amountFen = Number(amount[1]) * 100 + Number((amount[2] || '').padEnd(2,'0'))
