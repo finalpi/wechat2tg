@@ -31,6 +31,7 @@ import {WebMessageStore} from '../webui/message-store'
 import {isControlMessage} from '../webui/message-visibility'
 import {wechatRedPacketNotice} from '../util/WechatRedPacket'
 import {decorateRedPacketMessage} from '../util/RedPacketMessage'
+import {decorateTransferMessage,observeTransferReceipt} from '../util/TransferMessage'
 import {TelegramOutbox,TelegramOutboxEntry} from '../webui/telegram-outbox'
 import {quoteXML,sendQuote} from '../webui/quotes'
 import {withNativeWechatReceipt} from '../webui/wechat-receipt'
@@ -507,6 +508,10 @@ export class WeChatClient extends AbstractClient {
             if(process.env.WEBUI_ENABLED !== 'false')await WebMessageStore.getInstance().setTelegramStatus(String(msg.newMsgId),'excluded')
             return
         }
+        // A native outgoing receipt can confirm an earlier claim even when
+        // normal forwarding of our own messages is disabled.
+        if(msg.type() === WxMessage.Type.Transfer && msg.self() && this._wxInfo?.wxid && msg.fromId === this._wxInfo.wxid)
+            await observeTransferReceipt(String(msg._xml || ''),this._wxInfo.wxid,msg.toId)
         // 过滤重复消息
         const oldMsg = await this.messageService.getByWxMsgId(msg.newMsgId)
         if (oldMsg) {
@@ -883,10 +888,9 @@ export class WeChatClient extends AbstractClient {
                 await WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.Transfer:
-                // 转账消息处理
-                msgJson = WxMessage.getXmlToJson(msg._xml)
-                messageParam.content = `[${MessageTypeUtils.getTypeName(msg.type() + '')}]<blockquote>金额：${msgJson.msg.appmsg.wcpayinfo.feedesc}\n转账备注：${msgJson.msg.appmsg.wcpayinfo.pay_memo || ''}</blockquote>`
-                WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                await decorateTransferMessage(messageParam,String(msg._xml || ''),this._wxInfo?.wxid || '',
+                    msg.self(),msg.fromId,msg.toId,Boolean(room))
+                await WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.Revoke:
                 msgJson = WxMessage.getXmlToJson(msg._xml)

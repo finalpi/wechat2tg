@@ -1,12 +1,12 @@
 {
   "name": "wechat2tg",
-  "version": "6.0.42-dev.3",
+  "version": "6.0.42-dev.4",
   "description": "simple kit send wechat message to telegram",
   "main": "app.ts",
   "esModuleInterop": true,
   "scripts": {
     "dev": "ts-node src/app.ts",
-    "build": "tsc && tsc -p webui/tsconfig.json && vite build --config webui/vite.config.ts && node scripts/copy-webui.cjs",
+    "build": "tsc && tsc -p webui/tsconfig.json && vite build --config webui/vite.config.ts && node scripts/copy-webui.cjs && node scripts/copy-bot-assets.cjs",
     "check:version": "node scripts/check-version.cjs",
     "test": "npm run build && node --test test/*.test.cjs",
     "webui": "node dist/webui/standalone.js",

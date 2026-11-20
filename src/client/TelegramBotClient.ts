@@ -73,6 +73,10 @@ import {sendSolitaireCreate, sendSolitaireJoin, solitaireCreateBody, solitaireJo
 import {handleRedPacketCallback} from '../service/RedPacketTelegram'
 import {loadRedPacketCover} from '../util/RedPacketCover'
 import {prepareTelegramMedia} from '../util/TelegramMedia'
+import {getWechatQrCode} from '../service/WechatQrCodeService'
+import {ensureDefaultBotAvatar} from '../service/TelegramBotAvatar'
+import {handleTransferCallback} from '../service/TransferTelegram'
+import {installStickerCollection,STICKER_COLLECTION_UPDATES} from '../service/StickerCollectionTelegram'
 
 interface LargeFileProgressEditor {
     update(text: string, force?: boolean, inlineKeyboard?: Array<{ text: string, callback_data: string }>): Promise<void>
@@ -138,6 +142,12 @@ export class TelegramBotClient extends AbstractClient {
         const bot: Telegraf = this.client
         telegramDisplay.configure(config.botId,config.chatId)
         bot.use(session())
+        installStickerCollection(bot,{
+            owner:async()=>Number((await this.configurationService.getConfig())?.chatId || 0),
+            allowed:async(chatId,threadId)=>chatId === Number((await this.configurationService.getConfig())?.chatId)
+                || Boolean(await this.bindGroupService.resolveTelegram(chatId,threadId)),
+            warn:()=>this.logger.warn('Telegram 表情收藏索引保存失败；不影响原消息发送'),
+        })
         // Automation reads only owner-configured group scopes. This observer does
         // not bypass the existing command/forwarding authorization middleware.
         bot.use((ctx,next) => {emitTelegramAutomation?.(ctx);return next()})
@@ -1020,6 +1030,8 @@ export class TelegramBotClient extends AbstractClient {
         bot.action(/^dl:/, ctx => this.handleDirectoryCallback(ctx, ctx.match.input))
         bot.action(/^(?:us|of|ro):/, ctx => this.handleDirectoryCallback(ctx, ctx.match.input))
         bot.action(/^rp(?:o|s|c|x)?:/, async ctx => handleRedPacketCallback(ctx,ctx.match.input,(await this.configurationService.getConfig()).chatId,
+            (chatId,threadId)=>this.bindGroupService.resolveTelegram(chatId,threadId)))
+        bot.action(/^tf[os]:/, async ctx => handleTransferCallback(ctx,ctx.match.input,(await this.configurationService.getConfig()).chatId,
             (chatId,threadId)=>this.bindGroupService.resolveTelegram(chatId,threadId)))
         bot.action(/^sl:/, ctx => this.handleSolitaireJoin(ctx, ctx.match.input))
         bot.action(/^slc:/, ctx => this.handleSolitaireCustom(ctx, ctx.match.input))
@@ -2279,8 +2291,7 @@ ${this.i18n.t('help.instructions')}`))
                 ctx.reply(this.i18n.t('login.please_login_wx'))
                 return
             }
-            const wxClient = TelegramBotClient.getSpyClient('wxClient').client
-            const qr = await wxClient.qrcode()
+            const qr = await getWechatQrCode()
             const base64Data = qr.qrCode.replace(/^data:image\/\w+;base64,/, '')
             const imageBuffer = Buffer.from(base64Data, 'base64')
             ctx.replyWithPhoto({source: imageBuffer})
@@ -2669,10 +2680,13 @@ ${this.i18n.t('help.instructions')}`))
             this.pollingHealth.start()
             try {
                 this.logger.info(`正在连接 Telegram Bot API（第 ${retryCount + 1} 次）；WebUI 已启动不代表 Bot 已上线`)
-                await bot.launch(() => {
+                await bot.launch({allowedUpdates:[...STICKER_COLLECTION_UPDATES]},() => {
                     this.isConnected = true
                     retryCount = 0
                     this.logger.info('Telegram API 连接成功，正在启动消息监听')
+                    void ensureDefaultBotAvatar(bot.telegram,bot.botInfo.id).catch(()=>{
+                        this.logger.warn('默认 Bot 头像初始化未完成（可能是 API 不支持或网络错误）；不会覆盖已有头像，不影响启动')
+                    })
 
                     // 保存 botID
                     this.configurationService.getConfig().then(config => {
