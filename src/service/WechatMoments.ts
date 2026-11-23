@@ -7,6 +7,8 @@ export type MomentsSession = {owner:number;account:string;baseURL:string}
 export type MomentPhoto = {original?:string;thumbnail?:string}
 export type Moment = {id:string;target:string;name:string;time:number;text:string;likes:number;comments:number;photos:MomentPhoto[];otherMedia:boolean}
 export type MomentsPage = {posts:Moment[];next?:string;md5:string;tip:string}
+export class MomentsReadError extends Error {}
+const protocolCode = (value:unknown)=>typeof value === 'number' && Number.isSafeInteger(value) ? value : undefined
 const maxID = (1n << 64n) - 1n
 export const momentsContactId = (value:unknown):value is string=>typeof value === 'string' && /^[a-zA-Z0-9_.-]{1,128}$/.test(value)
 const postId = (value:unknown):value is string=>typeof value === 'string' && /^[1-9]\d{0,19}$/.test(value) && BigInt(value) <= maxID
@@ -55,8 +57,11 @@ function parseMoment(raw:any,target:string):Moment|undefined {
 
 export function parseMomentsPage(body:unknown,target:string,cursor?:string):MomentsPage {
     const response = body as any,data = response?.Data,ret = data?.BaseResponse?.ret
-    if(response?.Code !== 0 || response.Success !== true || !data || (ret !== undefined && ret !== 0 && ret !== 2004))
-        throw new Error('朋友圈读取失败，请检查微信在线状态或上游协议版本。')
+    if(response?.Code !== 0 || response.Success !== true || !data || (ret !== undefined && ret !== 0 && ret !== 2004)) {
+        const code = protocolCode(response?.Code),wechatRet = protocolCode(ret)
+        const status = [code === undefined ? '' : `Code=${code}`,wechatRet === undefined ? '' : `ret=${wechatRet}`].filter(Boolean).join('，')
+        throw new MomentsReadError(`朋友圈读取失败：上游 GetDetail 返回异常${status ? `（${status}）` : ''}。请检查微信登录状态和协议服务。`)
+    }
     const tip = text(Array.isArray(data.RetTips) ? data.RetTips[0] : data.RetTips,240)
     const md5 = typeof data.FristPageMd5 === 'string' && /^[a-f0-9]{8,64}$/i.test(data.FristPageMd5) ? data.FristPageMd5 : ''
     const posts:Moment[] = [], seen = new Set<string>()
@@ -65,13 +70,14 @@ export function parseMomentsPage(body:unknown,target:string,cursor?:string):Mome
         if(!post || seen.has(post.id) || (cursor && BigInt(post.id) >= BigInt(cursor)))continue
         seen.add(post.id);posts.push(post)
     }
-    if(ret === 2004 && !posts.length && !tip)throw new Error('微信未返回可查看的朋友圈内容。')
+    // A visibility-limited response may contain no posts and no RetTips.
+    // The UI must treat that as an empty view, not a request to start a private chat.
     const next = posts.reduce<string|undefined>((lowest,post)=>!lowest || BigInt(post.id) < BigInt(lowest) ? post.id : lowest,undefined)
     return {posts,next,md5,tip}
 }
 
 export async function fetchMomentsPage(session:MomentsSession,target:string,cursor?:string,md5 = ''):Promise<MomentsPage> {
-    if(!momentsContactId(session.account) || !momentsContactId(target) || (cursor !== undefined && !postId(cursor)))throw new Error('无效的朋友圈联系人或翻页位置。')
+    if(!momentsContactId(session.account) || !momentsContactId(target) || (cursor !== undefined && !postId(cursor)))throw new MomentsReadError('朋友圈读取失败：联系人或翻页位置无效。')
     const header = JSON.stringify({Wxid:session.account,Towxid:target,Fristpagemd5:cursor && /^[a-f0-9]{8,64}$/i.test(md5) ? md5 : ''})
     // Do not round the uint64, or send a JSON string to a Go uint64 field.
     const payload = `${header.slice(0,-1)},"Maxid":${cursor ?? '0'}}`
@@ -81,7 +87,13 @@ export async function fetchMomentsPage(session:MomentsSession,target:string,curs
         })
         return parseMomentsPage(result.data,target,cursor)
     } catch(error) {
-        if(axios.isAxiosError(error))throw new Error('暂时无法读取朋友圈，请检查上游 GetDetail 接口。')
+        if(axios.isAxiosError(error)) {
+            const status = protocolCode(error.response?.status)
+            if(status === 404 || status === 405)throw new MomentsReadError(`朋友圈读取失败：上游 GetDetail 接口不可用（HTTP ${status}），请检查协议版本和 API 地址。`)
+            if(status !== undefined)throw new MomentsReadError(`朋友圈读取失败：上游 GetDetail 返回 HTTP ${status}。`)
+            if(error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT')throw new MomentsReadError('朋友圈读取失败：请求上游 GetDetail 超时。')
+            throw new MomentsReadError('朋友圈读取失败：无法连接上游 GetDetail，请检查协议服务。')
+        }
         throw error
     }
 }

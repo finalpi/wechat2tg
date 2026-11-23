@@ -1,7 +1,7 @@
 import {randomBytes} from 'node:crypto'
 import type {Context,Telegraf} from 'telegraf'
 import {MomentsArchive,MomentsContact} from './MomentsArchive'
-import {downloadMomentPhotos,fetchMomentsPage,momentsContactId} from './WechatMoments'
+import {downloadMomentPhotos,fetchMomentsPage,momentsContactId,MomentsReadError} from './WechatMoments'
 import type {Moment,MomentsSession} from './WechatMoments'
 import {articleMessageRejected} from '../util/TelegramArticleMessage'
 import {momentsScope as scope,syncMoments} from './MomentsSync'
@@ -11,15 +11,13 @@ import {getTelegramThreadId} from '../util/TelegramTopicUtils'
 type Button = {text:string;callback_data:string}
 type Online = {kind:'online';contact:MomentsContact;remaining:Moment[];cursor?:string;md5:string;tip:string}
 type Reader = {kind:'archive';contact:MomentsContact;offset:number}
-type Picker = {kind:'pick';contacts:MomentsContact[];mode:'contacts'|'saved'|'search';offset:number;more:boolean;save:boolean}
-type Screen = Picker | Online | Reader | {kind:'settings'|'confirm';contact:MomentsContact}
+type Screen = Online | Reader | {kind:'settings'|'confirm';contact:MomentsContact}
     | {kind:'resume';contact:MomentsContact;checkpoint:MomentsCheckpoint}
-type Delivery = {telegram:Context['telegram'];active:()=>Promise<boolean>}
-type Ticket = {session:MomentsSession;screen:Screen;expires:number}
+type Destination = {chatId:number;threadId?:number;boundId:string}
+type Delivery = {telegram:Context['telegram'];destination:Destination;active:()=>Promise<boolean>}
+type Ticket = {session:MomentsSession;destination:Destination;screen:Screen;expires:number}
 type Dependencies = {
     session:()=>Promise<MomentsSession|undefined>
-    search:(query:string)=>Promise<MomentsContact[]>
-    contacts:(offset:number,limit:number)=>Promise<MomentsContact[]>
     boundContact:(ctx:Context)=>Promise<MomentsContact|undefined>
     archive?:MomentsArchive
     fetchPage?:typeof fetchMomentsPage
@@ -29,9 +27,8 @@ type Dependencies = {
 const escape = (value:string)=>value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
 const label = (contact:MomentsContact)=>contact.name.replace(/\s+/g,' ').trim().slice(0,48) || contact.id.slice(0,48)
 const sameSession = (a:MomentsSession|undefined,b:MomentsSession|undefined)=>Boolean(a && b && a.owner === b.owner && a.account === b.account && a.baseURL === b.baseURL)
-const pickerSize = 10
-const usage = '<b>查看朋友圈</b>\n点选联系人，只查看微信当前允许看到的内容。\n<i>也可用 /moments 昵称或备注快速搜索。</i>'
 const isGroup = (ctx:Context)=>ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup'
+const thread = (ctx:Context)=>getTelegramThreadId(ctx.message ?? ctx.callbackQuery?.message)
 
 type PostView = {post:Moment;images:Buffer[];expected:number;archived?:boolean;notes?:string[]}
 const postTitle = (view:PostView)=>`${view.post.name} · ${view.archived ? '本地归档' : '朋友圈'}`
@@ -69,51 +66,53 @@ export class MomentsTelegram {
     private checkingDaily = false
     constructor(private deps:Dependencies) {}
     private store() {return this.archive ||= this.deps.archive || new MomentsArchive()}
-    private privateOwner(ctx:Context,session:MomentsSession|undefined) {
-        return Boolean(ctx.chat?.type === 'private' && ctx.chat.id === ctx.from?.id && ctx.from?.id === session?.owner)
+    private ownerContext(ctx:Context,session:MomentsSession) {
+        return ctx.from?.id === session.owner && (isGroup(ctx) || (ctx.chat?.type === 'private' && ctx.chat.id === session.owner))
     }
-    private delivery(ctx:Context,expected:MomentsSession,bound?:MomentsContact):Delivery {
-        return {telegram:ctx.telegram,active:async()=>{
+    private delivery(ctx:Context,expected:MomentsSession,destination:Destination):Delivery {
+        return {telegram:ctx.telegram,destination,active:async()=>{
             const current = await this.deps.session()
-            if(!sameSession(current,expected))return false
-            if(this.privateOwner(ctx,current))return true
-            // Keep in-flight group requests bound to the original individual.
-            return Boolean(bound && isGroup(ctx) && ctx.from?.id === current.owner
-                && (await this.deps.boundContact(ctx))?.id === bound.id)
+            if(!sameSession(current,expected) || !this.ownerContext(ctx,current)
+                || ctx.chat?.id !== destination.chatId || thread(ctx) !== destination.threadId)return false
+            // A card can only act on the individual still bound to this chat/topic.
+            return (await this.deps.boundContact(ctx))?.id === destination.boundId
         }}
     }
     private async show(to:Delivery,session:MomentsSession,screen:Screen,content:string | PostView,keys:(key:string)=>Button[][]) {
         const token = randomBytes(12).toString('hex'),active = to.active
+        const {chatId,threadId} = to.destination
         const reply_markup = {inline_keyboard:keys(token).filter(row=>row.length)}
         if(!await active())return false
         let richSent = false
-        if(typeof content !== 'string' && this.deps.rich?.allowed(session.owner)) {
+        if(typeof content !== 'string' && (this.deps.rich?.allowed(chatId) ?? true)) {
             try {
                 await to.telegram.callApi('sendRichMessage' as any,{
-                    chat_id:session.owner,protect_content:true,reply_markup,...momentRichPayload(content),
+                    chat_id:chatId,message_thread_id:threadId,protect_content:true,reply_markup,...momentRichPayload(content),
                 } as any)
                 richSent = true
             } catch(error) {
                 if(!articleMessageRejected(error))throw error // Ambiguous delivery is not safe to repeat.
-                this.deps.rich.rejected(session.owner)
+                this.deps.rich?.rejected(chatId)
             }
         }
         if(!richSent) {
-            const html = typeof content === 'string' ? content : momentHtml(content,await this.photos(to,session,content.images))
+            const html = typeof content === 'string' ? content : momentHtml(content,await this.photos(to,content.images))
             if(!await active())return false
-            await to.telegram.sendMessage(session.owner,html,{parse_mode:'HTML',protect_content:true,link_preview_options:{is_disabled:true},reply_markup})
+            await to.telegram.sendMessage(chatId,html,{message_thread_id:threadId,parse_mode:'HTML',protect_content:true,link_preview_options:{is_disabled:true},reply_markup})
         }
         for(const [key,value] of this.tickets)if(value.expires <= Date.now())this.tickets.delete(key)
         if(this.tickets.size >= 32)this.tickets.delete(this.tickets.keys().next().value)
-        this.tickets.set(token,{session,screen,expires:Date.now() + 20 * 60 * 1000})
+        this.tickets.set(token,{session,destination:to.destination,screen,expires:Date.now() + 20 * 60 * 1000})
         return true
     }
     private button(key:string,action:string,text:string):Button {return {text,callback_data:`mom:${key}:${action}`}}
-    private async photos(to:Delivery,session:MomentsSession,images:Buffer[]):Promise<number> {
+    private async photos(to:Delivery,images:Buffer[]):Promise<number> {
         if(!images.length || !await to.active())return 0
+        const {chatId,threadId} = to.destination
+        const options = {message_thread_id:threadId,protect_content:true}
         try {
-            if(images.length === 1)await to.telegram.sendPhoto(session.owner,{source:images[0],filename:'moment.jpg'},{protect_content:true})
-            else await to.telegram.sendMediaGroup(session.owner,images.map((source,index)=>({type:'photo',media:{source,filename:`moment-${index + 1}.jpg`}})),{protect_content:true})
+            if(images.length === 1)await to.telegram.sendPhoto(chatId,{source:images[0],filename:'moment.jpg'},options)
+            else await to.telegram.sendMediaGroup(chatId,images.map((source,index)=>({type:'photo',media:{source,filename:`moment-${index + 1}.jpg`}})),options)
             return images.length
         } catch {return 0} // An uncertain send must not resend the album.
     }
@@ -131,7 +130,7 @@ export class MomentsTelegram {
         const [post,...remaining] = screen.remaining
         screen.remaining = remaining
         const notes = screen.tip ? [screen.tip] : []
-        let rendered:PostView|string = `<b>${escape(label(screen.contact))} · 朋友圈</b>\n${first ? '微信没有返回可查看的动态。' : '没有更多可查看的动态。'}` + (screen.tip ? `\n\n<i>${escape(screen.tip)}</i>` : '')
+        let rendered:PostView|string = `<b>${escape(label(screen.contact))} · 朋友圈</b>\n${first ? '没有可查看的朋友圈。对方可能未发布，或当前微信账号不可见。' : '没有更多可查看的动态。'}` + (screen.tip ? `\n\n<i>${escape(screen.tip)}</i>` : '')
         if(post) {
             const images = await (this.deps.photos || downloadMomentPhotos)(post,active)
             if(!await active())return false
@@ -142,7 +141,6 @@ export class MomentsTelegram {
         return this.show(to,session,screen,rendered,key=>[
             screen.remaining.length || screen.cursor ? [this.button(key,'next',screen.remaining.length ? '下一条' : '加载更多')] : [],
             [this.button(key,'archive','查看本地归档'),this.button(key,'settings','保存设置')],
-            [this.button(key,'contacts','选择联系人')],
         ])
     }
     private async archived(to:Delivery,session:MomentsSession,reader:Reader) {
@@ -153,7 +151,6 @@ export class MomentsTelegram {
         return this.show(to,session,reader,rendered,key=>[
             reader.offset + 1 < count ? [this.button(key,'next','下一条归档')] : [],
             [this.button(key,'online','查看线上朋友圈'),this.button(key,'settings','保存设置')],
-            [this.button(key,'saved','归档联系人'),this.button(key,'contacts','选择联系人')],
         ])
     }
     private async settings(to:Delivery,session:MomentsSession,contact:MomentsContact) {
@@ -163,86 +160,47 @@ export class MomentsTelegram {
             [this.button(key,'saveall','立即保存当前可见的全部动态')],
             [this.button(key,enabled ? 'off' : 'on',enabled ? '停止每日同步' : '开启每日同步')],
             [this.button(key,'archive','查看本地归档'),this.button(key,'online','查看线上朋友圈')],
-            [this.button(key,'contacts','选择联系人')],
             count ? [this.button(key,'clear','清空此人归档…')] : [],
         ])
     }
-    private async picker(to:Delivery,session:MomentsSession,mode:Picker['mode'],save:boolean,offset = 0,search?:MomentsContact[]) {
-        if(!await to.active())return false
-        const candidates = mode === 'saved' ? await this.store().contacts(scope(session),pickerSize + 1,offset)
-            : mode === 'contacts' ? await this.deps.contacts(offset,pickerSize + 1) : search || []
-        const contacts = candidates.slice(0,pickerSize).filter(c=>momentsContactId(c.id)),more = mode !== 'search' && candidates.length > pickerSize
-        const screen:Picker = {kind:'pick',contacts,mode,offset,more,save}
-        const title = save ? '<b>保存朋友圈</b>\n点选联系人，一次保存当前可见的动态。' : usage
-        return this.show(to,session,screen,title + (contacts.length ? '' : mode === 'saved' ? '\n\n暂无归档联系人。' : '\n\n没有匹配的联系人。'), key=>[
-            ...contacts.map((item,index)=>[this.button(key,`p${index}`,label(item))]),
-            [...offset ? [this.button(key,'prevlist','上一页')] : [],...more ? [this.button(key,'nextlist','下一页')] : []],
-            mode === 'saved' ? [this.button(key,'contacts','全部联系人')] : [this.button(key,'saved','归档联系人')],
-        ])
-    }
-    async command(ctx:Context,query = '',save = false) {
-        const session = await this.deps.session(),group = isGroup(ctx)
-        if(group ? !session || ctx.from?.id !== session.owner : ctx.chat?.type !== 'private')return
-        if(!session)return void await ctx.reply('请先确认 Bot 已绑定主人、微信已登录。')
-        if(!group && !this.privateOwner(ctx,session))return
-        if(this.busy.has(session.owner))return
+    async command(ctx:Context,save = false) {
+        const session = await this.deps.session()
+        if(!session || !this.ownerContext(ctx,session) || this.busy.has(session.owner))return
         this.busy.add(session.owner)
-        let to = this.delivery(ctx,session)
-        const groupReply = (text:string)=>ctx.reply(text,{message_thread_id:getTelegramThreadId(ctx.message)})
+        let to:Delivery|undefined
+        const reply = (text:string)=>ctx.reply(text,{message_thread_id:thread(ctx)})
         try {
-            if(group) {
-                if(query.trim()) {
-                    await groupReply('在群或话题里直接用命令，不用加参数；搜索其他人请在 Bot 私聊操作。');return
-                }
-                const contact = await this.deps.boundContact(ctx)
-                if(!contact || !momentsContactId(contact.id)) {
-                    await groupReply('这里没有可用的单人联系人绑定。请在 Bot 私聊发送命令并点选联系人。');return
-                }
-                to = this.delivery(ctx,session,contact)
-                const sent = save ? await this.startSave(to,session,contact) : await this.startOnline(to,session,contact)
-                if(sent && await to.active())await groupReply('请查看 Bot 私聊。')
-                return
+            const contact = await this.deps.boundContact(ctx)
+            if(!contact || !momentsContactId(contact.id)) {
+                await reply('当前聊天未绑定单个微信联系人，请在已绑定该联系人的聊天或话题里使用此命令。');return
             }
-            query = query.trim()
-            if(!query){await this.picker(to,session,'contacts',save);return}
-            if(query.length > 128)return void await ctx.reply('联系人搜索词太长。')
-            const contacts = (await this.deps.search(query)).filter(c=>momentsContactId(c.id))
-            if(contacts.length === 1) {
-                if(save)await this.startSave(to,session,contacts[0]);else await this.startOnline(to,session,contacts[0])
-            } else await this.picker(to,session,'search',save,0,contacts)
+            to = this.delivery(ctx,session,{chatId:ctx.chat.id,threadId:thread(ctx),boundId:contact.id})
+            if(save)await this.startSave(to,session,contact);else await this.startOnline(to,session,contact)
         } catch(error) {
-            if(group)await groupReply('未能打开。请确认已在 Bot 私聊点过「开始」，也可直接在私聊试一次。').catch(()=>undefined)
-            else await this.report(to,session,error)
+            if(to)await this.report(to,error)
+            else await reply('暂时无法确认当前聊天绑定的联系人，请稍后再试。').catch(()=>undefined)
         } finally {this.busy.delete(session.owner)}
     }
     async callback(ctx:Context,key:string,action:string) {
         const ticket = this.tickets.get(key),session = await this.deps.session()
-        if(!this.privateOwner(ctx,session))return
+        if(!session || !this.ownerContext(ctx,session))return
         if(!ticket || ticket.expires <= Date.now() || !sameSession(ticket.session,session)) {
             await ctx.answerCbQuery('菜单已失效，请重新发送 /moments。');return
+        }
+        const to = this.delivery(ctx,session,ticket.destination)
+        if(!await to.active()) {
+            await ctx.answerCbQuery('原会话或联系人绑定已变更，请在当前聊天重新发送 /moments。');return
         }
         if(this.busy.has(session.owner)){await ctx.answerCbQuery('正在处理，请稍候。');return}
         this.busy.add(session.owner)
         try {
             await ctx.answerCbQuery()
-            if(await this.navigate(this.delivery(ctx,session),session,ticket.screen,action))this.tickets.delete(key)
-        } catch(error) {await this.report(this.delivery(ctx,session),session,error)}
+            if(await this.navigate(to,session,ticket.screen,action))this.tickets.delete(key)
+        } catch(error) {await this.report(to,error)}
         finally {this.busy.delete(session.owner)}
     }
     private async navigate(to:Delivery,session:MomentsSession,screen:Screen,action:string):Promise<boolean> {
         if(!await to.active())return false
-        const save = screen.kind === 'pick' && screen.save
-        if(action === 'contacts' || action === 'saved')return this.picker(to,session,action,save)
-        if(screen.kind === 'pick') {
-            if(screen.mode !== 'search') {
-                if(action === 'nextlist' && screen.more)return this.picker(to,session,screen.mode,save,screen.offset + pickerSize)
-                if(action === 'prevlist' && screen.offset)return this.picker(to,session,screen.mode,save,Math.max(0,screen.offset - pickerSize))
-            }
-            const choice = /^p(\d{1,2})$/.exec(action),contact = choice && screen.contacts[Number(choice[1])]
-            if(!contact)return false
-            if(save)return this.startSave(to,session,contact)
-            return screen.mode === 'saved' ? this.archived(to,session,{kind:'archive',contact,offset:0}) : this.startOnline(to,session,contact)
-        }
         const {contact} = screen,id = scope(session)
         if(action === 'settings')return this.settings(to,session,contact)
         if(action === 'saveall' && screen.kind === 'settings')return this.startSave(to,session,contact)
@@ -287,7 +245,7 @@ export class MomentsTelegram {
             await this.show(to,session,summary,`<b>${escape(label(contact))} · ${done.complete ? '保存完成' : '保存已暂停'}</b>\n${result}${done.tip ? `\n<i>${escape(done.tip)}</i>` : ''}`,
                 id=>[done.complete ? [] : [this.button(id,'resume','继续保存')],
                     [this.button(id,'archive','查看本地归档'),this.button(id,'settings','保存设置')]])
-        })().catch(error=>this.report(to,session,error)).finally(()=>this.jobs.delete(key)).catch(()=>undefined)
+        })().catch(error=>this.report(to,error)).finally(()=>this.jobs.delete(key)).catch(()=>undefined)
         return true
     }
     async checkDaily(now?:number) {
@@ -310,10 +268,15 @@ export class MomentsTelegram {
             }
         } finally {this.checkingDaily = false}
     }
-    private async report(to:Delivery,session:MomentsSession,error:unknown) {
-        // Protocol, Telegram and SQLite errors can contain private content.
-        const msg = error instanceof Error && /^[\u4e00-\u9fff][\u4e00-\u9fff]/.test(error.message) ? error.message : '朋友圈操作暂时失败，请稍后再试。'
-        if(await to.active())await to.telegram.sendMessage(session.owner,msg).catch(()=>undefined)
+    private async report(to:Delivery,error:unknown) {
+        // Do not echo raw protocol or Telegram response bodies into a chat.
+        const code = (error as {response?:{error_code?:number}})?.response?.error_code
+        const msg = error instanceof MomentsReadError ? error.message
+            : code === 429 ? 'Telegram 发送太频繁，请稍后再试。'
+                : code === 403 ? 'Telegram 拒绝发送，请检查 Bot 在当前聊天的发送权限。'
+                    : error instanceof Error && /^[\u4e00-\u9fff][\u4e00-\u9fff]/.test(error.message) ? error.message
+                        : `朋友圈操作暂时失败${Number.isSafeInteger(code) ? `（Telegram ${code}）` : ''}，请稍后再试。`
+        if(await to.active())await to.telegram.sendMessage(to.destination.chatId,msg,{message_thread_id:to.destination.threadId,protect_content:true}).catch(()=>undefined)
     }
 }
 
@@ -321,7 +284,7 @@ export function installMomentsTelegram(bot:Telegraf,deps:Dependencies) {
     const reader = new MomentsTelegram(deps)
     const tick = ()=>void reader.checkDaily().catch(()=>undefined)
     setInterval(tick,15 * 60 * 1000).unref()
-    bot.command('moments',ctx=>reader.command(ctx,ctx.payload))
-    bot.command('savemoments',ctx=>reader.command(ctx,ctx.payload,true))
+    bot.command('moments',ctx=>reader.command(ctx))
+    bot.command('savemoments',ctx=>reader.command(ctx,true))
     bot.action(/^mom:([a-f0-9]{24}):([a-z0-9]{1,10})$/,ctx=>reader.callback(ctx,ctx.match[1],ctx.match[2]))
 }

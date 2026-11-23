@@ -41,6 +41,7 @@ test('GetDetail reads visible posts despite 2004 with a privacy tip, preserves u
   assert.equal(parseMomentsPage(page([record()]),contact.id,first).next,undefined,'stop when the server repeats a page')
   assert.throws(()=>parseMomentsPage(page([],500),contact.id),/读取失败/)
   assert.equal(parseMomentsPage(page([]),contact.id).tip,tip)
+  assert.deepEqual(parseMomentsPage(page([],2004,''),contact.id).posts,[],'empty 2004 without a tip is not a send failure')
   for(const url of ['http://127.0.0.1/mmsns/img/0','https://x.qpic.cn.evil.example/mmsns/img/0',
     'https://shmmsns.qpic.cn:8080/mmsns/img/0','https://user@shmmsns.qpic.cn/mmsns/img/0','https://shmmsns.qpic.cn/unknown/img/0'])assert.equal(momentsPhotoURL(url),undefined)
 })
@@ -93,15 +94,16 @@ test('archive is opt-in per account and contact, persists images, stops without 
   assert.equal(await f.archive.count(archiveScope,contact.id),0)
 })
 
-function telegramFixture(archive,{rich = false,richError} = {}) {
+function telegramFixture(archive,{rich,richError,upstream} = {}) {
   const replies = [],albums = [],calls = [],answers = [],native = [],rejections = [],groupReplies = []
-  const contacts = [contact,...Array.from({length:12},(_,i)=>({id:`friend_${i}`,name:`联系人 ${i}`}))]
   let session = {...mode},changeOnFetch,bound = contact
-  const controller = new MomentsTelegram({session:async()=>session,archive,search:async query=>query === '朋友' ? [contact] : [],
-    contacts:async(offset,limit)=>contacts.slice(offset,offset + limit),boundContact:async()=>bound,
-    fetchPage:async(_session,who,cursor)=>{calls.push([who,cursor]);if(changeOnFetch)changeOnFetch();return parseMomentsPage(page([record(cursor ? second : first,who)]),who,cursor)},
+  const controller = new MomentsTelegram({session:async()=>session,archive,boundContact:async()=>bound,
+    fetchPage:async(_session,who,cursor)=>{
+      calls.push([who,cursor]);if(changeOnFetch)changeOnFetch()
+      return parseMomentsPage(upstream ?? page([record(cursor ? second : first,who)]),who,cursor)
+    },
     photos:async()=>[Buffer.from('one'),Buffer.from('two')],
-    rich:{allowed:()=>rich,rejected:chat=>rejections.push(chat)},
+    ...(rich === undefined ? {} : {rich:{allowed:()=>rich,rejected:chat=>rejections.push(chat)}}),
   })
   const ctx = {chat:{id:7,type:'private'},from:{id:7},async reply(text,extra) {replies.push({text,extra})},
     async answerCbQuery(text) {answers.push(text)},telegram:{async sendMessage(chat,text,extra) {replies.push({chat,text,extra})},
@@ -113,14 +115,15 @@ function telegramFixture(archive,{rich = false,richError} = {}) {
     assert.ok(button,`missing ${action}`)
     return button.callback_data.split(':')[1]
   }
-  const group = {...ctx,chat:{type:'supergroup',id:-10},async reply(text){groupReplies.push(text)}}
-  return {controller,ctx,group,groupReplies,replies,albums,calls,answers,native,rejections,buttons,key,tap:async(action)=>controller.callback(ctx,key(action),action),
+  const group = {...ctx,chat:{type:'supergroup',id:-10},message:{message_thread_id:42},async reply(text,extra){groupReplies.push({text,extra})}}
+  const groupCallback = {...group,message:undefined,callbackQuery:{message:{message_thread_id:42}}}
+  return {controller,ctx,group,groupCallback,groupReplies,replies,albums,calls,answers,native,rejections,buttons,key,tap:async(action)=>controller.callback(ctx,key(action),action),
     setSession:value=>{session = value},setBound:value=>{bound = value},onFetch:fn=>{changeOnFetch = fn}}
 }
 
 test('Telegram displays escaped rich text, protects albums, paginates, and offers an independently configurable archive',async t=>{
-  const a = await archiveFixture(t),f = telegramFixture(a.archive)
-  await f.controller.command(f.ctx,'朋友')
+  const a = await archiveFixture(t),f = telegramFixture(a.archive,{rich:false})
+  await f.controller.command(f.ctx)
   assert.match(f.replies.at(-1).text,/<blockquote>上行\n&lt;b&gt;&amp; \[旺柴\]<\/blockquote>/)
   assert.match(f.replies.at(-1).text,/仅展示最近三天/)
   assert.equal(f.replies.at(-1).extra.protect_content,true)
@@ -142,13 +145,15 @@ test('Telegram displays escaped rich text, protects albums, paginates, and offer
 
 test('native rich Moments embeds images and falls back only after a definite rejection',async t=>{
   const a = await archiveFixture(t)
-  const rich = telegramFixture(a.archive,{rich:true})
-  await rich.controller.command(rich.ctx,'朋友')
+  const rich = telegramFixture(a.archive)
+  await rich.controller.command(rich.group)
   assert.equal(rich.replies.length,0)
   assert.equal(rich.albums.length,0)
   const [{method,payload}] = rich.native
   assert.equal(method,'sendRichMessage')
   assert.equal(payload.protect_content,true)
+  assert.equal(payload.chat_id,-10)
+  assert.equal(payload.message_thread_id,42)
   const {blocks,skip_entity_detection:skip} = JSON.parse(payload.rich_message)
   assert.equal(skip,true)
   assert.equal(blocks[0].text.type,'bold')
@@ -156,47 +161,78 @@ test('native rich Moments embeds images and falls back only after a definite rej
   assert.equal(payload.moment_0.source.toString(),'one')
   assert.match(payload.reply_markup.inline_keyboard.flat()[0].callback_data,/:next$/)
   const unsupported = telegramFixture(a.archive,{rich:true,richError:{response:{error_code:404,description:'Not Found'}}})
-  await unsupported.controller.command(unsupported.ctx,'朋友')
-  assert.deepEqual(unsupported.rejections,[7])
+  await unsupported.controller.command(unsupported.group)
+  assert.deepEqual(unsupported.rejections,[-10])
   assert.equal(unsupported.albums.length,1)
+  assert.equal(unsupported.albums[0].chat,-10)
+  assert.equal(unsupported.albums[0].extra.message_thread_id,42)
   assert.match(unsupported.replies[0].text,/<b>/)
+  assert.equal(unsupported.replies[0].chat,-10)
   const uncertain = telegramFixture(a.archive,{rich:true,richError:new Error('network timeout')})
-  await uncertain.controller.command(uncertain.ctx,'朋友')
+  await uncertain.controller.command(uncertain.group)
   assert.equal(uncertain.albums.length,0)
   assert.equal(uncertain.native.length,1)
   assert.match(uncertain.replies[0].text,/暂时失败/)
 })
 
-test('no-argument /moments opens a paged picker in private, and uses the bound contact from an owner group',async t=>{
-  const a = await archiveFixture(t),f = telegramFixture(a.archive)
+test('/moments uses only the binding; owner-only callbacks stay in the original topic',async t=>{
+  const a = await archiveFixture(t),f = telegramFixture(a.archive,{rich:false})
+  f.setBound(undefined)
   await f.controller.command(f.ctx)
   assert.equal(f.calls.length,0)
-  assert.match(f.buttons()[0].text,/朋友/)
-  await f.tap('nextlist')
-  assert.ok(f.buttons().some(button=>button.text === '上一页'))
-  await f.tap('prevlist')
-  await f.tap('p0')
-  assert.deepEqual(f.calls,[[contact.id,undefined]])
+  assert.match(f.replies.at(-1).text,/未绑定单个微信联系人/)
+  assert.equal(f.buttons().length,0)
+  f.setBound(contact)
   await f.controller.command(f.group)
-  assert.deepEqual(f.calls.at(-1),[contact.id,undefined])
-  assert.equal(f.calls.length,2)
-  assert.equal(f.replies.at(-1).chat,7)
-  assert.equal(f.albums.at(-1).chat,7)
-  assert.deepEqual(f.groupReplies,['请查看 Bot 私聊。'])
+  assert.deepEqual(f.calls,[[contact.id,undefined]])
+  assert.equal(f.replies.at(-1).chat,-10)
+  assert.equal(f.replies.at(-1).extra.message_thread_id,42)
+  assert.equal(f.albums.at(-1).chat,-10)
+  assert.ok(f.buttons().every(button=>!button.text.includes('选择联系人')))
+  const key = f.key('next')
+  await f.controller.callback(f.ctx,key,'next')
+  await f.controller.callback({...f.groupCallback,callbackQuery:{message:{message_thread_id:43}}},key,'next')
+  await f.controller.callback({...f.groupCallback,from:{id:8}},key,'next')
   await f.controller.command({...f.group,from:{id:8}})
-  assert.equal(f.calls.length,2)
+  assert.equal(f.calls.length,1)
+  assert.match(f.answers.at(-1),/原会话或联系人绑定已变更/)
+  await f.controller.callback(f.groupCallback,key,'next')
+  assert.deepEqual(f.calls.at(-1),[contact.id,first])
+  assert.equal(f.replies.at(-1).extra.message_thread_id,42)
   f.onFetch(()=>f.setBound({id:'different_contact',name:'另一人'}))
   const before = f.replies.length
   await f.controller.command(f.group)
   assert.equal(f.replies.length,before,'changing the binding during lookup drops the result')
+  assert.deepEqual(f.groupReplies,[])
+})
+
+test('a visibility-limited empty feed and a genuine upstream error get different messages in the current topic',async t=>{
+  const a = await archiveFixture(t)
+  for(const tip of ['', '朋友仅展示最近三天的朋友圈']) {
+    const empty = telegramFixture(a.archive,{upstream:page([],2004,tip)})
+    await empty.controller.command(empty.group)
+    assert.equal(empty.replies[0].chat,-10)
+    assert.equal(empty.replies[0].extra.message_thread_id,42)
+    assert.match(empty.replies[0].text,/没有可查看的朋友圈/)
+    assert.doesNotMatch(empty.replies[0].text,/私聊|开始/)
+    if(tip)assert.ok(empty.replies[0].text.includes(tip))
+    assert.equal(empty.native.length,0)
+  }
+  const rejected = telegramFixture(a.archive,{upstream:page([],500,'do not display raw detail')})
+  await rejected.controller.command(rejected.group)
+  assert.match(rejected.replies[0].text,/GetDetail.*ret=500/)
+  assert.doesNotMatch(rejected.replies[0].text,/私聊|开始|raw detail/)
+  assert.equal(rejected.replies[0].chat,-10)
 })
 
 test('manual save walks every visible page including known posts without enabling daily sync',async t=>{
   const a = await archiveFixture(t),f = telegramFixture(a.archive)
-  await f.controller.command(f.group,'',true)
-  assert.deepEqual(f.groupReplies,['请查看 Bot 私聊。'])
+  await f.controller.command(f.group,true)
+  assert.match(f.replies[0].text,/正在保存/)
+  assert.equal(f.replies[0].chat,-10)
   for(let i = 0;i < 160 && !f.replies.some(reply=>reply.text.includes('保存完成'));i++)await new Promise(resolve=>setTimeout(resolve,15))
   assert.match(f.replies.at(-1).text,/新增 2 条/)
+  assert.equal(f.replies.at(-1).extra.message_thread_id,42)
   assert.deepEqual(f.calls,[[contact.id,undefined],[contact.id,first],[contact.id,second]])
   assert.equal(await a.archive.count(archiveScope,contact.id),2)
   assert.equal(await a.archive.enabled(archiveScope,contact.id),false)
@@ -248,12 +284,11 @@ test('daily sync is opt-in, persisted, account-scoped, and cannot repeat within 
   assert.equal(g.replies.length,0)
 })
 
-test('other users, groups with a search and switched accounts cannot read or follow old Moments buttons',async t=>{
-  const a = await archiveFixture(t),f = telegramFixture(a.archive)
-  await f.controller.command({...f.ctx,chat:{id:9,type:'private'},from:{id:9}},'朋友')
-  await f.controller.command({...f.ctx,chat:{id:-10,type:'supergroup'}},'朋友')
+test('other users and switched accounts cannot read or follow old Moments buttons',async t=>{
+  const a = await archiveFixture(t),f = telegramFixture(a.archive,{rich:false})
+  await f.controller.command({...f.ctx,chat:{id:9,type:'private'},from:{id:9}})
   assert.equal(f.calls.length,0)
-  await f.controller.command(f.ctx,'朋友')
+  await f.controller.command(f.ctx)
   const key = f.key('next')
   f.setSession({...mode,account:'wx_changed'})
   await f.controller.callback(f.ctx,key,'next')
@@ -261,7 +296,7 @@ test('other users, groups with a search and switched accounts cannot read or fol
   assert.equal(f.calls.length,1)
   f.onFetch(()=>f.setSession({...mode,account:'wx_switched_again'}))
   const previousReplies = f.replies.length,previousAlbums = f.albums.length
-  await f.controller.command(f.ctx,'朋友')
+  await f.controller.command(f.ctx)
   assert.equal(f.replies.length,previousReplies)
   assert.equal(f.albums.length,previousAlbums)
 })

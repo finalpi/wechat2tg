@@ -203,21 +203,12 @@ export class TelegramBotClient extends AbstractClient {
                 if(!Number.isSafeInteger(owner) || owner <= 0 || !wx?.hasLogin || !wx.wxInfo?.wxid)return
                 return {owner,account:wx.wxInfo.wxid,baseURL:wx.client?.baseUrl || config.BASE_API}
             },
-            search:async(query)=>{
-                const contacts = WxContactRepository.getInstance()
-                const exact = await contacts.getByUserName(query)
-                const matches = exact ? [exact] : await contacts.getByNickNameOrRemark(query,24)
-                return matches.filter(c=>!c.userName.startsWith('gh_') && !['filehelper','weixin','fmessage'].includes(c.userName))
-                    .map(c=>({id:c.userName,name:c.remark || c.nickName || c.userName}))
-            },
-            contacts:async(offset,limit)=>(await WxContactRepository.getInstance().pageMomentsContacts(offset,limit))
-                .map(c=>({id:c.userName,name:c.remark || c.nickName || c.userName})),
             boundContact:async(ctx)=>{
                 const binding = await this.bindGroupService.resolveTelegram(ctx.chat.id,this.currentThread(ctx))
                 if(binding?.type !== 0 || binding.wxId.startsWith('gh_') || ['filehelper','weixin','fmessage'].includes(binding.wxId))return
                 return {id:binding.wxId,name:binding.alias || binding.name || binding.wxId}
             },
-            rich:{allowed:chatId=>telegramDisplay.allows('richMessage',chatId),rejected:chatId=>telegramDisplay.reject('richMessage',chatId)},
+            rich:{allowed:chatId=>telegramDisplay.canAttempt('richMessage',chatId),rejected:chatId=>telegramDisplay.reject('richMessage',chatId)},
         })
         this.onBotCommand(bot)
         this.onMessage(bot)

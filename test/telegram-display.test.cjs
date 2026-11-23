@@ -28,6 +28,18 @@ test('auto probes emoji independently of owner membership and isolates bot/owner
   p.observeOwner({id:200,is_premium:true});p.configure(101,200);assert.equal(p.ownerPremium(),undefined)
   p.observeOwner({id:200,is_premium:true});p.configure(101,202);assert.equal(p.ownerPremium(),undefined)
 })
+test('native rich attempts in auto mode do not require membership evidence but honor compatibility and rejections',t=>{
+  const {policy:p} = fixture(t)
+  assert.equal(p.ownerPremium(),undefined)
+  assert.equal(p.allows('richMessage',-10),false,'other consumers keep their existing policy')
+  assert.equal(p.canAttempt('richMessage',-10),true)
+  p.setMode('compatible',-10)
+  assert.equal(p.canAttempt('richMessage',-10),false)
+  p.setMode('inherit',-10)
+  p.reject('richMessage',-10)
+  assert.equal(p.canAttempt('richMessage',-10),false)
+  assert.equal(p.canAttempt('richMessage',-11),true)
+})
 test('global and per-chat preferences persist privately; inheritance and rejection expiry remain feature-scoped',t=>{
   const {file} = fixture(t);let now = 1000
   const p = new TelegramDisplayPolicy(file,'auto',()=>now);p.configure(100,200)

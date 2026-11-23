@@ -56,13 +56,15 @@ export class TelegramDisplayPolicy {
         const key = String(chatId)
         return (Object.prototype.hasOwnProperty.call(this.preferences.chats,key) ? this.preferences.chats[key] : undefined) || this.preferences.global || this.defaultMode
     }
+    canAttempt(feature:DisplayFeature,chatId?:number|string):boolean {
+        return this.mode(chatId) !== 'compatible' && (this.rejected.get(`${feature}:${chatId}`) || 0) <= this.now()
+    }
     allows(feature:DisplayFeature,chatId?:number|string,transport:EmojiTransport = 'botApi'):boolean {
-        const mode = this.mode(chatId)
-        if(mode === 'compatible' || (this.rejected.get(`${feature}:${chatId}`) || 0) > this.now())return false
+        if(!this.canAttempt(feature,chatId))return false
         // Auto attempts the real message when capability is unknown. The separate
         // custom-emoji switch and explicit compatible overrides remain authoritative.
         if(feature === 'customEmoji')return this.emoji.snapshot(chatId,transport).state !== 'unsupported'
-        return mode === 'enhanced' || this.ownerPremium() === true
+        return this.mode(chatId) === 'enhanced' || this.ownerPremium() === true
     }
     reject(feature:DisplayFeature,chatId?:number|string,transport:EmojiTransport = 'botApi'):void {
         if(feature === 'customEmoji'){this.emoji.record(chatId,'unsupported','rejected',transport);return}
