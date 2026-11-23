@@ -57,7 +57,9 @@ function parseMoment(raw:any,target:string):Moment|undefined {
 
 export function parseMomentsPage(body:unknown,target:string,cursor?:string):MomentsPage {
     const response = body as any,data = response?.Data,ret = data?.BaseResponse?.ret
-    if(response?.Code !== 0 || response.Success !== true || !data || (ret !== undefined && ret !== 0 && ret !== 2004)) {
+    // MMSNS_RET_ISALL (207) is a successful final page, not a protocol error.
+    const finalPage = ret === 207
+    if(response?.Code !== 0 || response.Success !== true || !data || (ret !== undefined && ret !== 0 && ret !== 2004 && !finalPage)) {
         const code = protocolCode(response?.Code),wechatRet = protocolCode(ret)
         const status = [code === undefined ? '' : `Code=${code}`,wechatRet === undefined ? '' : `ret=${wechatRet}`].filter(Boolean).join('，')
         throw new MomentsReadError(`朋友圈读取失败：上游 GetDetail 返回异常${status ? `（${status}）` : ''}。请检查微信登录状态和协议服务。`)
@@ -72,6 +74,7 @@ export function parseMomentsPage(body:unknown,target:string,cursor?:string):Mome
     }
     // A visibility-limited response may contain no posts and no RetTips.
     // The UI must treat that as an empty view, not a request to start a private chat.
+    if(finalPage)return {posts,md5,tip}
     const next = posts.reduce<string|undefined>((lowest,post)=>!lowest || BigInt(post.id) < BigInt(lowest) ? post.id : lowest,undefined)
     return {posts,next,md5,tip}
 }

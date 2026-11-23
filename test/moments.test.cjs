@@ -19,6 +19,14 @@ const record = (id = first,target = contact.id)=>({Id:Number(id),Username:target
   <media><type>6</type><url>https://example.invalid/video</url></media>
   </mediaList></ContentObject></TimelineObject>`}})
 const page = (records,ret = 2004,retTip = tip)=>({Code:0,Success:true,Data:{BaseResponse:{ret},FristPageMd5:'950aa948298138cf',ObjectList:records,RetTips:[retTip]}})
+const finalIds = [first,second,'15059483964339720500','15059483964339720399']
+const finalRecords = finalIds.map((id,index)=>({...record(id),ObjectDesc:{buffer:`<TimelineObject>
+  <id><![CDATA[${id}]]></id><username><![CDATA[${contact.id}]]></username><createTime><![CDATA[1795230384]]></createTime>
+  <contentDesc><![CDATA[样例动态 ${index + 1}\n[旺柴]]]></contentDesc><ContentObject><mediaList><media>
+  <type><![CDATA[${index === 2 ? '6' : '2'}]]></type><url><![CDATA[http://szmmsns.qpic.cn/mmsns/example/0]]></url>
+  <thumb><![CDATA[http://szmmsns.qpic.cn/mmsns/example/150]]></thumb></media></mediaList></ContentObject></TimelineObject>`}}))
+const finalPage = page(finalRecords,207,'')
+Object.assign(finalPage.Data,{ObjectCount:4,ContinueId:[0]})
 
 async function archiveFixture(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(),'moments-archive-')),file = path.join(directory,'moments.db')
@@ -46,6 +54,18 @@ test('GetDetail reads visible posts despite 2004 with a privacy tip, preserves u
     'https://shmmsns.qpic.cn:8080/mmsns/img/0','https://user@shmmsns.qpic.cn/mmsns/img/0','https://shmmsns.qpic.cn/unknown/img/0'])assert.equal(momentsPhotoURL(url),undefined)
 })
 
+test('GetDetail ret 207 is a successful terminal page with exact uint64 IDs and CDATA',()=>{
+  const result = parseMomentsPage(finalPage,contact.id)
+  assert.deepEqual(result.posts.map(post=>post.id),finalIds)
+  assert.equal(result.posts[0].text,'样例动态 1\n[旺柴]')
+  assert.equal(result.posts[0].photos[0].original,'https://szmmsns.qpic.cn/mmsns/example/0')
+  assert.equal(result.posts[2].otherMedia,true)
+  assert.equal(result.next,undefined)
+  assert.equal(parseMomentsPage(page([],207,''),contact.id).next,undefined)
+  assert.deepEqual(parseMomentsPage(finalPage,contact.id,second).posts.map(post=>post.id),finalIds.slice(2))
+  assert.throws(()=>parseMomentsPage({...finalPage,Success:false},contact.id),/读取失败/)
+})
+
 test('the actual HTTP contract sends a numeric Maxid without precision loss and does not follow redirects',async t=>{
   const requests = []
   const server = http.createServer(async(req,res)=>{
@@ -53,14 +73,16 @@ test('the actual HTTP contract sends a numeric Maxid without precision loss and 
     requests.push({url:req.url,body:Buffer.concat(chunks).toString()})
     if(requests.length === 3){res.writeHead(307,{location:'/must-not-follow'});res.end();return}
     res.setHeader('content-type','application/json')
-    res.end(JSON.stringify(page([record(requests.length === 1 ? first : second)])))
+    res.end(JSON.stringify(requests.length === 1 ? page([record()]) : page([record(second)],207,'')))
   })
   server.listen(0,'127.0.0.1');await once(server,'listening')
   t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve))})
   const session = {...mode,baseURL:`http://127.0.0.1:${server.address().port}/api/`}
   const view = await fetchMomentsPage(session,contact.id)
   assert.equal(view.next,first)
-  assert.equal((await fetchMomentsPage(session,contact.id,view.next,view.md5)).next,second)
+  const last = await fetchMomentsPage(session,contact.id,view.next,view.md5)
+  assert.deepEqual(last.posts.map(post=>post.id),[second])
+  assert.equal(last.next,undefined)
   assert.deepEqual(requests.slice(0,2),[
     {url:'/api/FriendCircle/GetDetail',body:'{"Wxid":"wx_me","Towxid":"wx_friend","Fristpagemd5":"","Maxid":0}'},
     {url:'/api/FriendCircle/GetDetail',body:`{"Wxid":"wx_me","Towxid":"wx_friend","Fristpagemd5":"950aa948298138cf","Maxid":${first}}`},
@@ -68,6 +90,17 @@ test('the actual HTTP contract sends a numeric Maxid without precision loss and 
   await assert.rejects(fetchMomentsPage(session,contact.id),/上游/)
   await assert.rejects(fetchMomentsPage(session,contact.id,'1e10'),/无效/)
   assert.equal(requests.length,3)
+})
+
+test('saving a ret 207 response archives all its visible posts with one upstream request',async t=>{
+  const f = await archiveFixture(t),calls = []
+  await f.archive.rememberContact(archiveScope,contact)
+  const done = await syncMoments(f.archive,mode,contact,'all',async()=>true,{pageDelay:0,
+    fetchPage:async(_session,target,cursor)=>{calls.push(cursor);return parseMomentsPage(finalPage,target,cursor)},photos:async()=>[]})
+  assert.equal(done.complete,true)
+  assert.equal(done.saved,4)
+  assert.equal(await f.archive.count(archiveScope,contact.id),4)
+  assert.deepEqual(calls,[undefined])
 })
 
 test('archive is opt-in per account and contact, persists images, stops without deletion, and deduplicates',async t=>{
@@ -120,6 +153,23 @@ function telegramFixture(archive,{rich,richError,upstream} = {}) {
   return {controller,ctx,group,groupCallback,groupReplies,replies,albums,calls,answers,native,rejections,buttons,key,tap:async(action)=>controller.callback(ctx,key(action),action),
     setSession:value=>{session = value},setBound:value=>{bound = value},onFetch:fn=>{changeOnFetch = fn}}
 }
+
+test('ret 207 lets the owner browse every returned post in the bound topic without an extra upstream fetch',async t=>{
+  const a = await archiveFixture(t),f = telegramFixture(a.archive,{upstream:finalPage})
+  await f.controller.command(f.group)
+  for(const id of [1,2,3,4]) {
+    const payload = f.native.at(-1).payload
+    assert.equal(payload.chat_id,-10)
+    assert.equal(payload.message_thread_id,42)
+    assert.ok(JSON.parse(payload.rich_message).blocks.some(block=>block.text === `样例动态 ${id}\n[旺柴]`))
+    const next = payload.reply_markup.inline_keyboard.flat().find(button=>button.callback_data.endsWith(':next'))
+    if(id < 4) {
+      assert.equal(next.text,'下一条')
+      await f.controller.callback(f.groupCallback,next.callback_data.split(':')[1],'next')
+    } else assert.equal(next,undefined)
+  }
+  assert.deepEqual(f.calls,[[contact.id,undefined]])
+})
 
 test('Telegram displays escaped rich text, protects albums, paginates, and offers an independently configurable archive',async t=>{
   const a = await archiveFixture(t),f = telegramFixture(a.archive,{rich:false})
