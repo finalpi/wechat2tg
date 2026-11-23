@@ -9,19 +9,14 @@ MCP shares the existing WeChat session, message store and send queue. Sent messa
 
 The WebUI MCP access page manages enablement, client endpoint, bridge path and both tokens, and exports HTTP or stdio client configurations. Preview uses a token placeholder; explicit export includes the selected credential. Changes apply immediately without restarting WeChat.
 
-WebUI 保存后的设置持久化于 `storage/mcp-settings.json`（或 `WEBUI_CONFIG_PATH` 同目录），优先于环境变量。环境变量仅用于尚未保存的初始值。Token 更换后旧 Token 在下一次请求失效，需重新导出或更新客户端；令牌文件下载只保存到当前浏览器下载目录，不会自动更新其他电脑上的文件。
+MCP 设置和自动生成的两个令牌保存在 `storage/db/wx2tg.db`，升级时导入旧设置和令牌文件。`MCP_ENABLED`、`MCP_TOKEN`、`MCP_READ_TOKEN` 只覆盖运行，不修改数据库；ENV 管理的令牌不可在 WebUI 显示或轮换。数据库令牌轮换后旧令牌于下一次请求失效，客户端需要更新。
 
-Saved WebUI settings override environment defaults and persist across restarts. After rotation, update your clients using a new export. Token downloads do not automatically replace credentials on other machines.
+MCP settings and generated tokens are stored in SQLite. Environment overrides are not saved back, and environment-managed tokens cannot be revealed or rotated in WebUI. After rotating a database token, update your clients with the new credential.
 
 服务端使用 WebUI 的监听地址和端口，路径为 `/mcp`，例如默认本地地址 `http://127.0.0.1:17863/mcp`。远程部署建议通过 SSH 隧道或 HTTPS 访问。桥接必须显式设置 `WECHAT_MCP_URL`，没有机器专属的默认地址。
 Use Streamable HTTP through an SSH tunnel or HTTPS, or the local stdio bridge below. Explicitly set `WECHAT_MCP_URL` to your deployment's endpoint.
 
-首次启动自动生成两个独立令牌，文件权限 0600：
-
-- `storage/mcp-token`：读取与发送 / read and send.
-- `storage/mcp-read-token`：只读 / read only.
-
-容器部署时，令牌位于挂载到容器 `storage` 的宿主机目录；设置 `WEBUI_CONFIG_PATH` 时，令牌与该配置文件同目录。不要使用 WebUI 登录令牌。可通过 `MCP_TOKEN` / `MCP_READ_TOKEN` 覆盖；必须不同且至少 16 字符。`MCP_ENABLED=false` 禁用 MCP。
+读写令牌与只读令牌必须不同，且至少 16 字符；不要使用 WebUI 登录令牌。旧服务端令牌文件迁移后不再更新。供外部 stdio 客户端使用的令牌文件可以放在客户端自己的私有位置（权限 0600），并在轮换时更新。`MCP_ENABLED=false` 禁用 MCP。
 Keep credentials private. MCP tokens cannot access WebUI configuration. `MCP_ENABLED=false` disables MCP. MCP currently uses the WebUI listener, so WebUI must remain enabled.
 
 stdio 客户端配置示例（替换脚本绝对路径、连接地址和令牌文件路径；无需把令牌写入配置）。通用模板见 [mcp-client.example.json](mcp-client.example.json)，实际配置保存在仓库外：

@@ -1,12 +1,9 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import dotenv from 'dotenv'
-import {loadPersistentEnvironment} from './webui/store'
 import {resolveMessageTemplates} from './util/MessageTemplates'
 
 dotenv.config()
-// WebUI 保存的配置优先于环境变量，并随 storage 挂载持久化。
-loadPersistentEnvironment()
 
 export const config = {
     WEBUI_MINI_APP_URL: process.env.WEBUI_MINI_APP_URL?.trim() || '',
@@ -20,7 +17,6 @@ export const config = {
     API_HASH: process.env.API_HASH?.toString() || '',
     TENCENT_SECRET_ID: process.env.TENCENT_SECRET_ID?.toString() || '',
     TENCENT_SECRET_KEY: process.env.TENCENT_SECRET_KEY?.toString() || '',
-    DB_SQLITE_PATH: process.env.DB_SQLITE_PATH?.toString() || 'storage/db/wechat2Tg.db',
     ...resolveMessageTemplates(process.env),
     CREATE_ROOM_NAME: process.env.CREATE_ROOM_NAME?.toString() || '#[alias_first]',
     CREATE_CONTACT_NAME: process.env.CREATE_CONTACT_NAME?.toString() || '#[alias]#[[name]]',

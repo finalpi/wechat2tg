@@ -3,6 +3,7 @@ const {test} = require('node:test'),assert = require('node:assert/strict')
 const fs = require('node:fs'),path = require('node:path'),os = require('node:os')
 const {TelegramDisplayPolicy,customEmojiRejected} = require('../dist/util/TelegramDisplayPolicy')
 const {handleTelegramDisplayCommand} = require('../dist/util/TelegramDisplayCommand')
+const {TelegramEmojiProbe} = require('../dist/util/TelegramEmojiProbe')
 const {renderWechatEmojiFallbackHtml,renderWechatCustomEmojiHtml,splitTelegramHtml} = require('../dist/util/WechatCustomEmoji')
 const {WECHAT_EMOJI_IMAGE_NAMES} = require('../dist/util/WechatCustomEmojiData')
 const {wechatRedPacketNotice} = require('../dist/util/WechatRedPacket')
@@ -27,6 +28,45 @@ test('auto probes emoji independently of owner membership and isolates bot/owner
   p.observeOwner({id:200});assert.equal(p.ownerPremium(),false)
   p.observeOwner({id:200,is_premium:true});p.configure(101,200);assert.equal(p.ownerPremium(),undefined)
   p.observeOwner({id:200,is_premium:true});p.configure(101,202);assert.equal(p.ownerPremium(),undefined)
+})
+test('confirmed emoji evidence survives restart with its original expiry and exact scope',async t=>{
+  const {file} = fixture(t)
+  let now = 1000
+  const open = (bot = 100,owner = 200)=>{
+    const p = new TelegramDisplayPolicy(file,'auto',()=>now)
+    p.configure(bot,owner)
+    return p
+  }
+  const p = open(),probe = new TelegramEmojiProbe(p.emoji,()=>now)
+  await probe.run(200,async icon=>({message_id:1,reply_markup:{inline_keyboard:[[{icon_custom_emoji_id:icon}]]}}))
+  const confirmed = probe.status(200)
+  p.observeOwner({id:200,is_premium:true})
+  p.emoji.record(-10,'unsupported','rejected','mtproto')
+  p.emoji.record(-11,'unknown','requestFailed')
+  now += 60000
+  const restarted = open()
+  assert.deepEqual(restarted.emoji.snapshot(200),{state:'supported',reason:'buttonConfirmed',checkedAt:confirmed.checkedAt,expiresAt:confirmed.expiresAt})
+  assert.equal(restarted.ownerPremium(),undefined)
+  assert.equal(restarted.emoji.snapshot(-10,'mtproto').state,'unsupported')
+  assert.equal(restarted.emoji.snapshot(-10).state,'unknown')
+  assert.equal(restarted.emoji.snapshot(-11).reason,'notChecked')
+  assert.equal(open(101).emoji.snapshot(200).state,'unknown')
+  assert.equal(open(100,201).emoji.snapshot(200).state,'unknown')
+  assert.equal(fs.statSync(path.join(path.dirname(file),'display-emoji.json')).mode & 0o777,0o600)
+  now = 1000 + 6 * 60 * 60 * 1000
+  assert.equal(open().emoji.snapshot(-10,'mtproto').state,'unknown')
+  assert.equal(open().emoji.snapshot(200).state,'supported')
+  now = confirmed.expiresAt
+  assert.equal(open().emoji.snapshot(200).state,'unknown')
+})
+test('damaged emoji evidence does not override display preferences',t=>{
+  const {file,policy} = fixture(t)
+  policy.setMode('enhanced')
+  fs.writeFileSync(path.join(path.dirname(file),'display-emoji.json'),'invalid json')
+  const restarted = new TelegramDisplayPolicy(file)
+  restarted.configure(100,200)
+  assert.equal(restarted.mode(-10),'enhanced')
+  assert.equal(restarted.emoji.snapshot(200).state,'unknown')
 })
 test('native rich attempts in auto mode do not require membership evidence but honor compatibility and rejections',t=>{
   const {policy:p} = fixture(t)

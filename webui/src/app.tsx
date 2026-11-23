@@ -15,6 +15,7 @@ import {McpPanel} from '@/features/mcp-panel'
 import {AutomationPanel} from '@/features/automation-panel'
 import {AITools} from '@/features/ai-tools'
 import {TelegramEmojiStatus} from '@/features/telegram-emoji-status'
+import {TelegramDisplayOverrides} from './features/telegram-display-overrides'
 import {TemplatePreview} from '@/features/template-preview'
 import {MessagesPanel} from '@/features/messages-panel'
 import {ChatMenu} from '@/features/chat-menu'
@@ -327,7 +328,7 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
               <CardContent className="flex flex-col gap-6">
                 {active === 'forward' && !snapshot.demo && <TelegramEmojiStatus token={token} />}
                 {environment.length > 0 && (
-                  <Section title="环境配置" fields={environment} currentValue={currentValue} setField={setField} busy={busy || Boolean(snapshot.demo)} />
+                  <Section title="应用配置（重启生效）" fields={environment} currentValue={currentValue} setField={setField} busy={busy || Boolean(snapshot.demo)} envOverridden={snapshot.envOverridden} />
                 )}
                 {runtime.length > 0 && (
                   <Section title="机器人偏好" fields={runtime} currentValue={currentValue} setField={setField} busy={busy || Boolean(snapshot.demo)} />
@@ -336,6 +337,7 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
                   <AITools token={token} url={aiUrl} model={aiModel} onModel={model => setField(aiModelField, model)} />
                 )}
                 {active === 'templates' && <TemplatePreview values={templateValues} />}
+                {active === 'forward' && !snapshot.demo && <TelegramDisplayOverrides token={token} />}
                 {fields.length === 0 && active !== 'mcp' && <p className="text-sm text-muted-foreground">暂无设置。</p>}
               </CardContent>
             </Card>
@@ -362,12 +364,13 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
   )
 }
 
-function Section({title, fields, currentValue, setField, busy}: {
+function Section({title, fields, currentValue, setField, busy, envOverridden}: {
   title: string
   fields: Field[]
   currentValue: (field: Field) => FieldValue
   setField: (field: Field, value: FieldValue) => void
   busy: boolean
+  envOverridden?: string[]
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -379,6 +382,7 @@ function Section({title, fields, currentValue, setField, busy}: {
               {field.label}{field.required && <span className="text-destructive"> *</span>}
             </Label>
             {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
+            {envOverridden?.includes(field.key) && <p className="text-xs text-muted-foreground"><Badge variant="outline">ENV 覆盖</Badge> 当前运行使用 {field.key}；这里编辑的是数据库值。</p>}
           </div>
           <FieldControl field={field} value={currentValue(field)} disabled={busy}
             onChange={value => setField(field, value)} />

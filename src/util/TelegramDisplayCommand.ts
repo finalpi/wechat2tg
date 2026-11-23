@@ -20,7 +20,7 @@ export async function handleTelegramDisplayCommand(ctx:DisplayContext,ownerId:nu
     const usage = '/display auto | compatible | enhanced | inherit\n/display global auto | compatible | enhanced | inherit'
     if(args.length){
         if(args.length !== (global ? 2 : 1) || (mode !== 'inherit' && !isDisplayMode(mode))){await ctx.reply(usage);return}
-        try {policy.setMode(mode as 'auto'|'compatible'|'enhanced'|'inherit',global ? undefined : ctx.chat.id)}
+        try {await policy.setMode(mode as 'auto'|'compatible'|'enhanced'|'inherit',global ? undefined : ctx.chat.id)}
         catch {await ctx.reply(english ? 'Could not save display settings. Previous settings remain active.' : '展示设置保存失败，仍使用原设置。');return}
     }
     const premium = policy.ownerPremium()

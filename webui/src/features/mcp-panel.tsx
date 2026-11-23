@@ -9,9 +9,10 @@ import {Alert, AlertDescription} from '@/components/ui/alert'
 import {Spinner} from '@/components/ui/spinner'
 import {api, type McpMetadata} from '@/lib/api'
 
-function TokenRow({role, configured, onAction}: {
+function TokenRow({role, configured, envOverride, onAction}: {
   role: 'read' | 'write'
   configured: boolean
+  envOverride?: boolean
   onAction: (action: 'reveal' | 'rotate') => void
 }) {
   const label = role === 'write' ? '读写 Token' : '只读 Token'
@@ -21,10 +22,10 @@ function TokenRow({role, configured, onAction}: {
         <span className="text-sm font-medium">{label}</span>
         {configured ? <Badge variant="secondary">已配置</Badge> : <Badge variant="outline">未配置</Badge>}
       </div>
-      <div className="flex items-center gap-2">
+      {envOverride ? <Badge variant="outline">ENV 覆盖</Badge> : <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={() => onAction('reveal')}>显示</Button>
         <Button variant="outline" size="sm" onClick={() => onAction('rotate')}>重新生成</Button>
-      </div>
+      </div>}
     </div>
   )
 }
@@ -104,7 +105,7 @@ export function McpPanel({token}: {token: string}) {
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-1">
             <Label>启用 MCP</Label>
-            <p className="text-xs text-muted-foreground">关闭后客户端无法连接。</p>
+            <p className="text-xs text-muted-foreground">{meta.envOverridden?.includes('MCP_ENABLED') ? '当前由 MCP_ENABLED 覆盖；此开关仅保存数据库值。' : '关闭后客户端无法连接。'}</p>
           </div>
           <Switch checked={enabled} onCheckedChange={setEnabled} disabled={busy} />
         </div>
@@ -120,8 +121,8 @@ export function McpPanel({token}: {token: string}) {
           <Input value={scriptPath} onChange={e => setScriptPath(e.target.value)} />
         </div>
 
-        <TokenRow role="write" configured={meta.writeConfigured} onAction={action => tokenAction('write', action)} />
-        <TokenRow role="read" configured={meta.readConfigured} onAction={action => tokenAction('read', action)} />
+        <TokenRow role="write" configured={meta.writeConfigured} envOverride={meta.envOverridden?.includes('MCP_TOKEN')} onAction={action => tokenAction('write', action)} />
+        <TokenRow role="read" configured={meta.readConfigured} envOverride={meta.envOverridden?.includes('MCP_READ_TOKEN')} onAction={action => tokenAction('read', action)} />
 
         {revealed && (
           <Alert>

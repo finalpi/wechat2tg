@@ -55,7 +55,10 @@ export function momentRichPayload(view:PostView):Record<string,unknown> {
     if(pictures.length)blocks.push(pictures.length === 1 ? pictures[0] : {type:'collage',blocks:pictures})
     blocks.push({type:'paragraph',text:postStats(view,pictures.length)})
     for(const note of postNotes(view))blocks.push({type:'paragraph',text:note})
-    return {...attachments,rich_message:JSON.stringify({blocks,skip_entity_detection:true})}
+    const rich = {blocks,skip_entity_detection:true}
+    // Telegraf needs an explicit JSON field for multipart requests. Text-only
+    // requests are JSON and can pass the rich message as an object.
+    return {...attachments,rich_message:pictures.length ? JSON.stringify(rich) : rich}
 }
 
 export class MomentsTelegram {

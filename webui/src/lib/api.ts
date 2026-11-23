@@ -25,6 +25,7 @@ export interface ConfigSnapshot {
   revision: string
   values: Record<string, unknown>
   secrets: Record<string, boolean>
+  envOverridden?: string[]
   restartRequired: boolean
   runtimeAvailable: boolean
   demo?: boolean
@@ -100,6 +101,7 @@ export interface EmojiCapabilityStatus {
 }
 
 export interface McpMetadata {
+  envOverridden?: string[]
   enabled: boolean
   endpoint: string
   scriptPath: string

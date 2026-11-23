@@ -1,4 +1,5 @@
 import {config} from '../config'
+import {settingsDatabase,startupOverrides} from '../webui/settings-db'
 import {TelegramDisplayPolicy,isDisplayMode,customEmojiRejected} from './TelegramDisplayPolicy'
 import {renderWechatCustomEmojiHtml,renderWechatEmojiFallbackHtml,stripTelegramCustomEmoji,splitTelegramHtml} from './WechatCustomEmoji'
 import {replyDirectoryText as replyDirectoryTextRaw,DirectoryDeliveryContext,DirectoryDetailAvatar} from './DirectoryPageDelivery'
@@ -6,7 +7,9 @@ import type {DirectoryMarkup} from './DirectoryPager'
 import type {EmojiTransport} from './TelegramEmojiCapability'
 import {setTimeout,clearTimeout} from 'node:timers'
 
-export const telegramDisplay = new TelegramDisplayPolicy('storage/telegram-display.json',isDisplayMode(config.TELEGRAM_DISPLAY_MODE) ? config.TELEGRAM_DISPLAY_MODE : 'auto')
+const envMode = startupOverrides?.TELEGRAM_DISPLAY_MODE?.trim().toLowerCase()
+export const telegramDisplay = new TelegramDisplayPolicy('storage/telegram-display.json',isDisplayMode(config.TELEGRAM_DISPLAY_MODE) ? config.TELEGRAM_DISPLAY_MODE : 'auto',undefined,
+    settingsDatabase,isDisplayMode(envMode) ? envMode : undefined)
 
 /** One final rendering boundary shared by Bot API, MTProto, quotes and captions. */
 export function renderTelegramHtml(html:string,customEnabled:boolean,maxLength?:number,chatId?:string|number,transport:EmojiTransport = 'botApi'):string {

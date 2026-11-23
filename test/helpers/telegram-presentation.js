@@ -9,6 +9,7 @@ module.exports = function presentationFixture({mode = 'enhanced',fallback = 'tex
   const dependencies = {
     'node:timers':require('node:timers'),
     '../config':{config:{TELEGRAM_DISPLAY_MODE:mode,TELEGRAM_EMOJI_FALLBACK:fallback}},
+    '../webui/settings-db':{},
     './TelegramDisplayPolicy':{...require('../../dist/util/TelegramDisplayPolicy'),
       ...(policy ? {TelegramDisplayPolicy:class {constructor(){return policy}}} : {})},
     './WechatCustomEmoji':require('../../dist/util/WechatCustomEmoji'),

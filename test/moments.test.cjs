@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-var-requires -- CommonJS test runner. */
 const test = require('node:test'),assert = require('node:assert/strict')
-const http = require('node:http'),{once} = require('node:events')
+const http = require('node:http'),{once} = require('node:events'),{Telegraf} = require('telegraf')
 const fs = require('node:fs'),path = require('node:path'),os = require('node:os')
 const {fetchMomentsPage,parseMomentsPage,momentsPhotoURL} = require('../dist/service/WechatMoments')
 const {MomentsArchive,momentsDay} = require('../dist/service/MomentsArchive')
@@ -127,7 +127,7 @@ test('archive is opt-in per account and contact, persists images, stops without 
   assert.equal(await f.archive.count(archiveScope,contact.id),0)
 })
 
-function telegramFixture(archive,{rich,richError,upstream} = {}) {
+function telegramFixture(archive,{rich,richError,upstream,pictures = [Buffer.from('one'),Buffer.from('two')]} = {}) {
   const replies = [],albums = [],calls = [],answers = [],native = [],rejections = [],groupReplies = []
   let session = {...mode},changeOnFetch,bound = contact
   const controller = new MomentsTelegram({session:async()=>session,archive,boundContact:async()=>bound,
@@ -135,7 +135,7 @@ function telegramFixture(archive,{rich,richError,upstream} = {}) {
       calls.push([who,cursor]);if(changeOnFetch)changeOnFetch()
       return parseMomentsPage(upstream ?? page([record(cursor ? second : first,who)]),who,cursor)
     },
-    photos:async()=>[Buffer.from('one'),Buffer.from('two')],
+    photos:async()=>pictures,
     ...(rich === undefined ? {} : {rich:{allowed:()=>rich,rejected:chat=>rejections.push(chat)}}),
   })
   const ctx = {chat:{id:7,type:'private'},from:{id:7},async reply(text,extra) {replies.push({text,extra})},
@@ -191,6 +191,42 @@ test('Telegram displays escaped rich text, protects albums, paginates, and offer
   assert.equal(await a.archive.count(archiveScope,contact.id),1)
   await f.tap('clear');await f.tap('delete')
   assert.equal(await a.archive.count(archiveScope,contact.id),0)
+})
+
+test('Telegraf sends native rich Moments in the bound topic with JSON text or multipart images',async t=>{
+  const a = await archiveFixture(t),sent = []
+  const server = http.createServer(async(req,res)=>{
+    const chunks = [];for await(const chunk of req)chunks.push(chunk)
+    sent.push({method:req.url.split('/').pop(),type:req.headers['content-type'],body:Buffer.concat(chunks).toString()})
+    res.setHeader('content-type','application/json')
+    res.end(JSON.stringify({ok:true,result:{message_id:10,date:1,chat:{id:-10,type:'supergroup'}}}))
+  })
+  server.listen(0,'127.0.0.1');await once(server,'listening')
+  t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve))})
+  const bot = new Telegraf('123:synthetic-moments',{telegram:{apiRoot:`http://127.0.0.1:${server.address().port}`}})
+  for(const pictures of [[],[Buffer.from('one'),Buffer.from('two')]]) {
+    const f = telegramFixture(a.archive,{pictures})
+    await f.controller.command({...f.group,telegram:bot.telegram})
+  }
+  assert.deepEqual(sent.map(req=>req.method),['sendRichMessage','sendRichMessage'])
+  const json = JSON.parse(sent[0].body)
+  assert.equal(json.chat_id,-10)
+  assert.equal(json.message_thread_id,42)
+  assert.equal(json.rich_message.blocks[0].text.type,'bold')
+  const multipart = sent[1]
+  const boundary = /boundary=([^;]+)/.exec(multipart.type)[1]
+  const fields = Object.fromEntries(multipart.body.split(`--${boundary}`).flatMap(part=>{
+    const match = /name="([^"]+)"/.exec(part)
+    return match ? [[match[1],part.slice(part.indexOf('\r\n\r\n') + 4).replace(/\r\n$/,'')]] : []
+  }))
+  assert.equal(fields.chat_id,'-10')
+  assert.equal(fields.message_thread_id,'42')
+  assert.equal(fields.protect_content,'true')
+  const collage = JSON.parse(fields.rich_message).blocks.find(block=>block.type === 'collage')
+  assert.deepEqual(collage.blocks.map(block=>block.photo.media),['attach://moment_0','attach://moment_1'])
+  assert.equal(fields.moment_0,'one')
+  assert.equal(fields.moment_1,'two')
+  assert.ok(JSON.parse(fields.reply_markup).inline_keyboard.length)
 })
 
 test('native rich Moments embeds images and falls back only after a definite rejection',async t=>{

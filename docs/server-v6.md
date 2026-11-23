@@ -167,7 +167,7 @@ server 收到微信通知
 
 `v6.0.13-dev.1` 合并了 `wx2tg-v3-dev` 的 WebUI / MCP 消息中心，并增加默认关闭的 [公众号 Topic 模式](official-account-topics.md)。新消息中心另有自己的 SQLite 历史与附件缓存，和 server 归档、bot 绑定库分别管理；现有旧消息清理任务不自动清理这两类新存储。
 
-WebUI 保存的配置位于 `storage/webui-config.json`，优先于环境变量；部署不能覆盖用户的 `.env`，需要同时核对是否存在历史 WebUI 覆盖值。默认示例开启 WebUI，公网访问应使用 HTTPS 和独立访问令牌，不可把令牌放入 URL。
+WebUI 保存的配置统一存入 `storage/db/wx2tg.db`。旧版 `storage/webui-config.json` 会自动导入；非空 ENV 只覆盖运行值。升级前按 [配置迁移](settings-migration.md) 备份并核对重复配置。公网访问应使用 HTTPS 和独立访问令牌，不可把令牌放入 URL。
 
 ## 核对依据
 

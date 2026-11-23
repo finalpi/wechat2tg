@@ -48,7 +48,7 @@ The same WebUI can open from the owner’s private-chat **控制台** menu. Conf
 - Configure Telegram / WeChat connections, forwarding preferences, message templates, proxies, AI / speech recognition, retries, retention, and logging.
 - Existing-field validation, unsaved-change tracking, conflict detection, responsive layouts and restart feedback are available. Telegram bot language settings do not imply equivalent WebUI language switching.
 - Telegram and WeChat proxies are presented separately. Message templates have live contact, group, and official-account previews, including missing-alias examples. Previews use sample data and never send messages.
-- Sign in with `WEBUI_TOKEN` (at least 16 characters), or the generated `storage/webui-token`. Sign-in opens chat by default. Ordinary browsers save the access token locally for refresh/reopen; Mini App sessions remain separate and memory-only. Signing out or a rejected token clears saved credentials.
+- Sign in with `WEBUI_TOKEN` (at least 16 characters), or retrieve the generated SQLite-backed token with `node dist/settings-cli.js --webui-token`. Sign-in opens chat by default. Ordinary browsers save the access token locally for refresh/reopen; Mini App sessions remain separate and memory-only. Signing out or a rejected token clears saved credentials.
 - Configuration secret fields remain blank: leave blank to retain the saved value, enter a new value to replace it, or explicitly clear an optional secret. MCP tokens have separate reveal/regeneration controls.
 
 ### Chat capabilities and current limitations — read first
@@ -102,16 +102,13 @@ MCP uses the existing WeChat login and send queue. Reading messages does not wak
 
 | Storage file / directory | Purpose | When changes apply |
 |---|---|---|
-| `storage/webui-config.json` | WebUI environment overrides | Restart the application |
-| `storage/db/wx2tg.db` | Bot bindings and runtime preferences | Preferences apply immediately; startup synchronization runs on next startup |
+| `storage/db/wx2tg.db` | Application settings, bot preferences and bindings, Telegram display overrides, MCP, credentials and automations | App settings apply on restart; preferences, display overrides, MCP and automation update immediately |
 | `storage/db/webui-messages.db` | Message center history and delivery tracking | Immediately |
 | `storage/webui-media` / `storage/webui-avatars` | Attachments and avatar cache | Immediately |
-| `storage/mcp-settings.json` | MCP enablement, client settings, and tokens | Immediately, including token rotation |
-| `storage/webui-token`, `storage/mcp-token`, `storage/mcp-read-token` | Generated access credentials | Used for their respective interfaces |
 
-Docker mounts `./config` as `/app/storage`; back it up with `save-files`, `conf`, and `redis-data`. WebUI environment overrides take priority over `.env` and container environment variables. To restore an environment default, stop the app, remove that key from `webui-config.json`, and restart. Saved MCP settings take priority over `MCP_ENABLED`, `MCP_TOKEN`, and `MCP_READ_TOKEN`; these variables initialize settings before the first WebUI MCP save. `WEBUI_CONFIG_PATH` relocates the WebUI file and MCP settings/token directory.
+Manage settings in the WebUI. **Non-empty ENV > SQLite values > built-in defaults.** ENV overrides the running process without writing back to SQLite; affected fields are marked in the WebUI. Back up `./.env` and `./config` (mounted at `/app/storage`) before upgrading. Existing settings files are imported once and retained untouched. See [configuration migration](docs/settings-migration.md) for upgrade steps and optional import of legacy ENV-only application settings.
 
-Normal startup leaves the WebUI available if Telegram credentials are missing. For setup without clients or a database, use `npm run build` then `npm run webui`; stop the standalone process before starting the normal app. Standalone mode cannot manage bot database preferences or send messages.
+Normal startup leaves the WebUI available if Telegram credentials are missing. To edit application settings without connecting clients, use `npm run build` then `npm run webui`; stop the standalone process before starting the normal app. The standalone process uses the same SQLite settings database but does not start Telegram or WeChat.
 
 ## Supported Message Types
 
@@ -176,7 +173,7 @@ mkdir -p conf
 test -e conf/app.conf || cp app.conf.example conf/app.conf
 docker compose pull
 docker compose up -d
-docker compose exec wechat2tg cat storage/webui-token
+docker compose exec wechat2tg node dist/settings-cli.js --webui-token
 ```
 
 In `.env`, fill in `BOT_TOKEN`, `API_ID`, and `API_HASH`, or enter them through WebUI and restart the app after saving. The bundled example uses `BASE_API=http://wx2tg-server:8058/api` and `redislink=wx2tg-redis:6379`. Keep those Compose service names if using the bundled stack.
@@ -358,13 +355,12 @@ Starting with v6.0.15, directories use native Telegram RichMessage: click names 
 |`MESSAGE_BUFFER_EXPIRE_TIME`| No | Legacy cleanup setting for completed forwarding records (at least 7 days); pending, failed and uncertain payloads never expire automatically. |
 |`AUTO_DELETE_OLD_MESSAGES`, `MESSAGE_RETENTION_DAYS`| No | Cleanup existing bot message history; defaults `false` / `7` days |
 |`LOG_LEVEL`, `DEBUG_MODE`| No | Logging level and debug mode; defaults `info` / `false` |
-|`DB_SQLITE_PATH`| No | Legacy compatibility setting; the current bot binding database is fixed at `storage/db/wx2tg.db` |
 |`WEBUI_ENABLED`| No | Enable WebUI; default `true`. MCP uses the same listener |
 |`WEBUI_HOST`| No | Local listener defaults to `127.0.0.1`; Compose overrides to `0.0.0.0` |
 |`WEBUI_PORT`| No | WebUI and MCP port; default `17863` |
 |`WEBUI_BIND_ADDRESS`| No | Compose host bind address; default `0.0.0.0` |
 |`WEBUI_TOKEN`| No | WebUI access credential, minimum 16 characters; generated if omitted |
-|`WEBUI_CONFIG_PATH`| No | WebUI override file; default `storage/webui-config.json` |
+|`WEBUI_CONFIG_PATH`| No | Legacy migration source; defaults to `storage/webui-config.json` and does not move the SQLite database |
 |`MCP_ENABLED`| No | Initial MCP enablement; default `true`, then overridden by saved MCP settings |
 |`MCP_TOKEN`, `MCP_READ_TOKEN`| No | Initial read/send and read-only credentials; generated if omitted, must differ |
 |`WECHAT_MCP_URL`, `WECHAT_MCP_TOKEN_FILE`, `WECHAT_MCP_TOKEN`| Client | stdio bridge endpoint and token source; URL required, token value takes precedence over token file |
@@ -431,7 +427,7 @@ Notes:
 - Group nicknames come from the WeChat group-member API and are cached per account and group for 60 seconds. A failed or slower-than-1.5-second lookup falls back to the WeChat nickname immediately, so forwarding is never blocked or dropped; the same account/group then falls back directly for 60 seconds.
 - Group members are only queried when a template actually contains `#[member_name]`.
 - Group nicknames are HTML-escaped, so an administrator-defined group name cannot break the message format.
-- When upgrading from an older version, those 7 message display templates are **reset to the defaults once** (including old values from `.env` and the environment). The previous values of these 7 templates only are backed up to `webui-config.json.message-templates-v1.json` before the reset, and later customizations are never overwritten again. Group naming templates, avatars and bindings are unchanged.
+- The database migration preserves existing message templates; it does not reset them. Existing `webui-config.json.message-templates-v1.json` backups are left untouched.
 
 `#[identity]`: Identity information text
 

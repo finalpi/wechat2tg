@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
 export type EmojiTransport = 'botApi' | 'mtproto'
 export type EmojiCapabilityState = 'unknown' | 'supported' | 'unsupported'
 export type EmojiCapabilityReason = 'notChecked' | 'confirmed' | 'buttonConfirmed' | 'buttonMissing' | 'missingEntities' | 'rejected' | 'requestFailed' | 'expired'
@@ -10,13 +13,53 @@ export interface EmojiCapabilitySnapshot {
 
 const SUPPORTED_TTL = 24 * 60 * 60 * 1000
 const UNSUPPORTED_TTL = 6 * 60 * 60 * 1000
+const MAX_ENTRIES = 1000
+const storageKey = /^(?:botApi|mtproto):(-?[1-9]\d{0,15})$/
+const isEvidence = (state:unknown,reason:unknown):boolean=>state === 'supported' && (reason === 'confirmed' || reason === 'buttonConfirmed')
+    || state === 'unsupported' && (reason === 'rejected' || reason === 'missingEntities' || reason === 'buttonMissing')
+const expiry = (state:EmojiCapabilityState,checkedAt:number)=>checkedAt + (state === 'supported' ? SUPPORTED_TTL : UNSUPPORTED_TTL)
 
 /** A successful private-chat test is evidence for that destination and transport. */
 export class TelegramEmojiCapability {
     generation = 0
     private entries = new Map<string,EmojiCapabilitySnapshot>()
+    private storage?:{file:string;botId:number;ownerId:number}
+    private lastSavedAt = -Infinity
     constructor(private now = Date.now) {}
-    clear(): void {this.entries.clear();this.generation++}
+    clear(): void {
+        this.entries.clear();this.storage = undefined;this.lastSavedAt = -Infinity;this.generation++
+    }
+    restore(file:string,botId:number,ownerId:number):void {
+        this.clear()
+        this.storage = {file,botId,ownerId}
+        try {
+            if(fs.statSync(file).size > 256 * 1024)return
+            const stored = JSON.parse(fs.readFileSync(file,'utf8'))
+            if(stored.version !== 1 || stored.botId !== botId || stored.ownerId !== ownerId || !Array.isArray(stored.entries))return
+            const now = this.now()
+            for(const value of stored.entries.slice(0,MAX_ENTRIES)) {
+                const {key,state,reason,checkedAt} = value || {},match = typeof key === 'string' && storageKey.exec(key)
+                if(!match || !Number.isSafeInteger(Number(match[1])) || !isEvidence(state,reason)
+                    || !Number.isSafeInteger(checkedAt) || checkedAt < 0 || checkedAt > now)continue
+                const expiresAt = expiry(state,checkedAt)
+                if(expiresAt > now)this.entries.set(key,{state,reason,checkedAt,expiresAt})
+            }
+        } catch { /* Missing or invalid evidence is unknown, not a display-settings error. */ }
+    }
+    private persist():void {
+        if(!this.storage)return
+        const {file,botId,ownerId} = this.storage,now = this.now()
+        const entries = [...this.entries].filter(([key,entry])=>storageKey.test(key) && isEvidence(entry.state,entry.reason) && entry.expiresAt > now)
+            .map(([key,{state,reason,checkedAt}])=>({key,state,reason,checkedAt}))
+        const temporary = `${file}.${process.pid}.tmp`
+        try {
+            fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700})
+            fs.writeFileSync(temporary,JSON.stringify({version:1,botId,ownerId,entries}),{mode:0o600})
+            fs.renameSync(temporary,file)
+            this.lastSavedAt = now
+        } catch { /* Keep live results even if private storage is unavailable. */ }
+        finally {try {fs.unlinkSync(temporary)} catch { /* Renamed or not created. */ }}
+    }
     snapshot(chatId: string | number, transport: EmojiTransport = 'botApi'): EmojiCapabilitySnapshot {
         const entry = this.entries.get(`${transport}:${chatId}`)
         if (!entry) return {state:'unknown',reason:'notChecked',checkedAt:null,expiresAt:null}
@@ -27,8 +70,11 @@ export class TelegramEmojiCapability {
         const key = `${transport}:${chatId}`, now = this.now()
         // Transport errors do not discard still-valid, confirmed evidence.
         if (state === 'unknown' && this.snapshot(chatId,transport).state !== 'unknown') return
-        if (!this.entries.has(key) && this.entries.size >= 1000) this.entries.delete(this.entries.keys().next().value)
-        this.entries.set(key,{state,reason,checkedAt:now,expiresAt:state === 'unknown' ? null : now + (state === 'supported' ? SUPPORTED_TTL : UNSUPPORTED_TTL)})
+        const previous = this.entries.get(key)
+        if (!previous && this.entries.size >= MAX_ENTRIES) this.entries.delete(this.entries.keys().next().value)
+        this.entries.set(key,{state,reason,checkedAt:now,expiresAt:state === 'unknown' ? null : expiry(state,now)})
+        if(isEvidence(state,reason) && (previous?.state !== state || previous?.reason !== reason
+            || previous.expiresAt <= now || now - this.lastSavedAt >= 60000))this.persist()
     }
     observe(chatId: string | number, html: string, result: unknown, transport: EmojiTransport = 'botApi'): void {
         const expected = [...html.matchAll(/<tg-emoji\b[^>]*\bemoji-id=["'](\d+)["'][^>]*>/g)].map(match=>match[1])

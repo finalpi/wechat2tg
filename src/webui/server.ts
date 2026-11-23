@@ -4,6 +4,7 @@ import path from 'node:path'
 import {createHash, timingSafeEqual} from 'node:crypto'
 import {fields, groups, validatePatch} from './schema'
 import {getAccessToken, readOverrides, settingsPath, writeOverrides} from './store'
+import {SettingsDatabase,settingsDatabase,startupOverrides} from './settings-db'
 import type {MessageCenterAdapter} from './messages'
 import {CONTACT_KINDS} from './contact-directory'
 import {createAIConnector} from './ai-connector'
@@ -15,6 +16,7 @@ import {createMessageStreamHandler} from './message-stream'
 import {safeErrorDetails} from '../util/SafeError'
 import {AutomationEngine} from '../automation/engine'
 import {AutomationError} from '../automation/contracts'
+import {isDisplayMode,TelegramDisplayPolicy} from '../util/TelegramDisplayPolicy'
 
 export interface RuntimeAdapter {
     read(): Promise<Record<string, unknown>>
@@ -25,10 +27,13 @@ interface Options {
     runtime?: RuntimeAdapter
     token?: string
     file?: string
+    database?: SettingsDatabase
+    envOverrides?: Record<string,string>
     publicDirectory?: string
     messages?: MessageCenterAdapter
     mcpTokens?: {write:string,read:string}
     automation?: AutomationEngine
+    display?: TelegramDisplayPolicy
     /** Only the isolated dev entry point enables this; never inferred from an outage. */
     demo?: boolean
 }
@@ -36,8 +41,13 @@ interface Options {
 const aliases = {PROXY_PROTOCOL: 'PROTOCOL', PROXY_HOST: 'HOST', PROXY_PORT: 'PORT', PROXY_USERNAME: 'USERNAME', PROXY_PASSWORD: 'PASSWORD'}
 
 export function createWebUIServer(options: Options) {
-    const token = options.token || getAccessToken()
+    const database = options.database
+    const envOverrides = options.envOverrides || {}
+    const token = options.token || (database ? process.env.WEBUI_TOKEN || database.document('webui-token').read() : getAccessToken())
+    if(!token || token.length < 16 && !options.token)throw new Error('WebUI 访问令牌无效')
     const file = options.file || settingsPath()
+    const readSaved = ()=>database ? database.savedEnvironment() : readOverrides(file)
+    const effectiveValues = (saved:Record<string,string>)=>({...saved,...envOverrides})
     const assetDirectory = options.publicDirectory || path.join(__dirname, 'public')
     const startedAt = new Date().toISOString()
     const miniAppUrl = options.demo ? '' : normalizeMiniAppUrl(options.environment.WEBUI_MINI_APP_URL || process.env.WEBUI_MINI_APP_URL)
@@ -46,17 +56,17 @@ export function createWebUIServer(options: Options) {
         ownerId: async () => (await options.runtime?.read())?.chatId,
     })
     const stream = createMessageStreamHandler()
-    const mcpSettings = new McpSettings(path.join(path.dirname(file),'mcp-settings.json'),options.mcpTokens)
+    const mcpSettings = new McpSettings(path.join(path.dirname(file),'mcp-settings.json'),options.mcpTokens,database)
     const mcp = options.messages && !options.demo ? createMcpHandler(options.messages,undefined,mcpSettings) : undefined
-    const ai = createAIConnector(()=>{const saved = readOverrides(file);return {url:saved.AI_API_URL ?? String(options.environment.AI_API_URL || ''),key:saved.AI_API_KEY ?? String(options.environment.AI_API_KEY || ''),model:saved.AI_MODEL ?? String(options.environment.AI_MODEL || '')}})
+    const ai = createAIConnector(()=>{const saved = effectiveValues(readSaved());return {url:saved.AI_API_URL ?? String(options.environment.AI_API_URL || ''),key:saved.AI_API_KEY ?? String(options.environment.AI_API_KEY || ''),model:saved.AI_MODEL ?? String(options.environment.AI_MODEL || '')}})
     let automation = options.automation
-    const automationService = () => automation || (automation = new AutomationEngine(path.join(path.dirname(file),'automations.json')))
+    const automationService = () => automation || (automation = new AutomationEngine(path.join(path.dirname(file),'automations.json'),undefined,undefined,database?.document('automations')))
     let queue = Promise.resolve()
     const attempts = new Map<string, {count: number, until: number}>()
     const digest = (value: string) => createHash('sha256').update(value).digest()
     const snapshot = async () => {
-        const overrides = readOverrides(file)
-        const environment = Object.fromEntries(fields.filter(f => f.source === 'environment').map(f => [f.key, overrides[f.key] ?? options.environment[aliases[f.key] || f.key] ?? f.defaultValue ?? '']))
+        const overrides = readSaved()
+        const environment = Object.fromEntries(fields.filter(f => f.source === 'environment').map(f => [f.key, overrides[f.key] ?? (envOverrides[f.key] === undefined ? options.environment[aliases[f.key] || f.key] : undefined) ?? f.defaultValue ?? '']))
         // Blank or missing message templates always behave like their defaults.
         Object.assign(environment, resolveMessageTemplates(environment))
         const runtime = options.runtime ? await options.runtime.read() : {}
@@ -77,11 +87,12 @@ export function createWebUIServer(options: Options) {
         const startupTemplates = resolveMessageTemplates(options.environment)
         const savedTemplates = resolveMessageTemplates(environment)
         // A saved value equal to its effective default does not need a restart.
-        const restartRequired = Object.entries(overrides).some(([key, value]) =>
+        const restartRequired = Object.entries(overrides).some(([key, value]) => envOverrides[key] === undefined && (
             Object.prototype.hasOwnProperty.call(MESSAGE_TEMPLATE_DEFAULTS, key)
                 ? startupTemplates[key] !== savedTemplates[key]
-                : String(options.environment[aliases[key] || key] ?? fields.find(field=>field.key === key)?.defaultValue ?? '') !== value)
-        return {revision, values, secrets, restartRequired, runtimeAvailable: Boolean(options.runtime), startedAt, templateDefaults: MESSAGE_TEMPLATE_DEFAULTS, ...(options.demo ? {demo: true} : {})}
+                : String(options.environment[aliases[key] || key] ?? fields.find(field=>field.key === key)?.defaultValue ?? '') !== value))
+        const envOverridden = fields.filter(f=>f.source === 'environment' && envOverrides[f.key] !== undefined).map(f=>f.key)
+        return {revision, values, secrets, envOverridden, restartRequired, runtimeAvailable: Boolean(options.runtime), startedAt, templateDefaults: MESSAGE_TEMPLATE_DEFAULTS, ...(options.demo ? {demo: true} : {})}
     }
     const respond = (res: ServerResponse, status: number, data: unknown) => {
         res.writeHead(status, {'Content-Type': 'application/json; charset=utf-8'})
@@ -162,7 +173,7 @@ export function createWebUIServer(options: Options) {
         // A dev preview may simulate chat mutations, never configuration writes,
         // automation, AI requests, MCP access or calls to real external services.
         if (options.demo && (route.startsWith('/api/telegram/') || route.startsWith('/api/ai/') || route.startsWith('/api/automation')
-            || route.startsWith('/api/mcp/') || route === '/api/config' && req.method !== 'GET')) {
+            || route.startsWith('/api/mcp/') || (route === '/api/config' || route?.startsWith('/api/config/')) && req.method !== 'GET')) {
             return respond(res, 403, {error: 'demoReadOnly'})
         }
         try {
@@ -179,6 +190,21 @@ export function createWebUIServer(options: Options) {
                 if(!body || body.confirm !== true || Object.keys(body).some(key=>key !== 'confirm'))return respond(res,400,{error:'invalidRequest'})
                 if(!options.messages?.probeTelegramCustomEmoji)return respond(res,503,{error:'telegramOffline'})
                 return respond(res,200,await options.messages.probeTelegramCustomEmoji())
+            }
+            if (route === '/api/config/telegram-display') {
+                const display = options.display
+                if (req.method === 'GET')return respond(res,200,display?.overrideSnapshot() ?? {available:false})
+                if (req.method !== 'PATCH') return respond(res,405,{error:'methodNotAllowed'})
+                if (!display?.overrideSnapshot().available)return respond(res,503,{error:'telegramOffline'})
+                if (!req.headers['content-type']?.startsWith('application/json'))return respond(res,415,{error:'jsonRequired'})
+                let raw = '',size = 0
+                for await(const chunk of req){size += chunk.length;if(size > 16384)return respond(res,413,{error:'tooLarge'});raw += chunk.toString()}
+                let body
+                try {body = JSON.parse(raw)} catch {return respond(res,400,{error:'invalidJson'})}
+                if(!body || typeof body.revision !== 'string' || (body.mode !== 'inherit' && !isDisplayMode(body.mode))
+                    || (body.chatId !== undefined && (!Number.isSafeInteger(body.chatId) || !body.chatId)))return respond(res,400,{error:'invalidRequest'})
+                await display.setMode(body.mode,body.chatId,body.revision)
+                return respond(res,200,display.overrideSnapshot())
             }
             if (route === '/api/automation' || route === '/api/automation/test' || route === '/api/automation/generate') {
                 if (route === '/api/automation' && req.method === 'GET') return respond(res,200,await automationService().snapshot())
@@ -431,11 +457,12 @@ export function createWebUIServer(options: Options) {
                     if (!options.runtime) return respond(res, 503, {error: 'runtimeUnavailable'})
                     await options.runtime.save(patch)
                 } else {
-                    const overrides = {...readOverrides(file), ...patch}
-                    const effective = {...current.values, ...overrides}
+                    const overrides = {...readSaved(), ...patch} as Record<string,string>
+                    const effective:Record<string,unknown> = {...current.values, ...effectiveValues(overrides)}
                     if (effective.PROXY_PROTOCOL && (!effective.PROXY_HOST || !effective.PROXY_PORT)) return respond(res, 400, {error: 'proxyIncomplete'})
                     if (effective.MODE === 'callback' && Number(effective.CALLBACK_PORT) === Number(process.env.WEBUI_PORT || 17863)) return respond(res, 400, {error: 'portConflict'})
-                    writeOverrides(overrides, file)
+                    if(database)await database.saveEnvironment(overrides)
+                    else writeOverrides(overrides,file)
                 }
                 return respond(res, 200, await snapshot())
             })
@@ -450,15 +477,15 @@ export function createWebUIServer(options: Options) {
     })
 }
 
-export function startWebUI(environment: Record<string, unknown>, runtime?: RuntimeAdapter, messages?: MessageCenterAdapter, automation?: AutomationEngine) {
+export function startWebUI(environment: Record<string, unknown>, runtime?: RuntimeAdapter, messages?: MessageCenterAdapter, automation?: AutomationEngine,display?:TelegramDisplayPolicy) {
     if (process.env.WEBUI_ENABLED === 'false') return
     const port = Number(process.env.WEBUI_PORT || 17863)
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('WEBUI_PORT 必须为 1–65535')
     const host = process.env.WEBUI_HOST || '127.0.0.1'
-    const server = createWebUIServer({environment, runtime, messages, automation})
+    const server = createWebUIServer({environment, runtime, messages, automation,display,database:settingsDatabase,envOverrides:startupOverrides})
     server.on('error', error => console.error(`WebUI 启动失败：${error.message}`))
     server.listen(port, host, () => {
-        console.log(`WebUI: http://${host}:${port} · 访问令牌：WEBUI_TOKEN 或 ${path.join(path.dirname(settingsPath()), 'webui-token')}`)
+        console.log(`WebUI: http://${host}:${port} · 访问令牌：WEBUI_TOKEN 或 node dist/settings-cli.js --webui-token`)
     })
     return server
 }

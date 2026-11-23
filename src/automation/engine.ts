@@ -45,18 +45,23 @@ export class AutomationEngine {
     private data:State
     private queue:Promise<unknown> = Promise.resolve()
     private pending = 0
-    constructor(private file:string,private adapter?:AutomationAdapter,private now = () => Date.now()) {
-        if (fs.existsSync(file)) {
+    constructor(private file:string,private adapter?:AutomationAdapter,private now = () => Date.now(),private storage?:import('../webui/settings-db').SettingsDocument) {
+        let raw = storage?.read()
+        if (!storage && fs.existsSync(file)) {
             if (fs.lstatSync(file).isSymbolicLink() || fs.statSync(file).size > 16 * 1024 * 1024) throw new AutomationError('automationStorageInvalid',503)
-            try {this.data = JSON.parse(fs.readFileSync(file,'utf8'))} catch {throw new AutomationError('automationStorageInvalid',503)}
-            if (this.data.format !== 1 || !Array.isArray(this.data.scripts) || !Array.isArray(this.data.rules) || !this.data.claims || !this.data.values || !Array.isArray(this.data.runs) || !Array.isArray(this.data.samples)) throw new AutomationError('automationStorageInvalid',503)
+            raw = fs.readFileSync(file,'utf8')
+        }
+        if (raw !== undefined) {
+            try {this.data = JSON.parse(raw)} catch {throw new AutomationError('automationStorageInvalid',503)}
+            if (this.data?.format !== 1 || !Array.isArray(this.data.scripts) || !Array.isArray(this.data.rules) || !this.data.claims || !this.data.values || !Array.isArray(this.data.runs) || !Array.isArray(this.data.samples)) throw new AutomationError('automationStorageInvalid',503)
             // An attempt claimed before a crash is not safe to replay.
             for (const claim of Object.values(this.data.claims)) if (claim.status === 'pending') claim.status = 'unknown'
         } else this.data = {format:1,scripts:[],rules:[],runs:[],samples:[],claims:{},values:{}}
     }
-    private save() {
+    private async save() {
         const raw = JSON.stringify(this.data)
         if (Buffer.byteLength(raw) > 16 * 1024 * 1024) throw new AutomationError('automationStorageFull',503)
+        if(this.storage)return this.storage.write(raw)
         fs.mkdirSync(path.dirname(this.file),{recursive:true,mode:0o700})
         const temp = this.file + '.' + randomUUID() + '.tmp'
         try {
@@ -138,7 +143,7 @@ export class AutomationEngine {
                     this.data.rules = this.data.rules.filter(r=>r.id !== body.id)
                     delete this.data.values[body.id]
                 } else throw new AutomationError('invalidOperation')
-                this.save()
+                await this.save()
             } catch (error) {this.data = previous;throw error}
             return this.snapshot()
         })
@@ -198,7 +203,7 @@ export class AutomationEngine {
                 this.data.samples.push(clone(event));this.data.samples = this.data.samples.slice(-20)
             }
             for (const rule of this.data.rules.filter(r=>r.enabled && this.matches(r,event))) await this.run(rule,event)
-            this.save()
+            await this.save()
         })
     }
     private async run(rule:AutomationRule,event:AutomationEvent) {
@@ -222,7 +227,7 @@ export class AutomationEngine {
             else if(rule.mode === 'live' && JSON.stringify(plan.state) === JSON.stringify(this.data.values[rule.id] || {}))record.status = 'skipped'
             // Flush BEFORE invoking any external action. A crash may lose a send,
             // but must not silently replay it and duplicate a registration.
-            this.save()
+            await this.save()
             if (rule.mode === 'live') {
                 await this.verifyScopes([event,...rule.targets])
                 for (let i = 0;i < plan.actions.length;i++) {
@@ -230,7 +235,7 @@ export class AutomationEngine {
                     const joinKey = action.kind === 'solitaire.join' ? 'join:' + createHash('sha256').update(JSON.stringify([event.source,event.accountId,event.groupId,event.solitaire.id])).digest('hex') : null
                     if (joinKey && this.data.claims[joinKey]) {record.logs.push('该账号/群/轮次已有参加尝试，已跳过；不确定结果需人工确认。');continue}
                     if (joinKey) this.data.claims[joinKey] = {status:'pending',time}
-                    rule.daily.count++;this.save()
+                    rule.daily.count++;await this.save()
                     let outcome
                     try {outcome = await this.adapter.execute(action,event,'automation-' + eventKey + '-' + i)} catch {outcome = {status:'unknown'}}
                     if (joinKey) this.data.claims[joinKey] = {status:outcome.status,time}
@@ -252,6 +257,6 @@ export class AutomationEngine {
         // Bound retained message content; no source XML, keys or process env here.
         record.event.text = record.event.text.slice(0,1000)
         this.data.runs.push(record);this.data.runs = this.data.runs.slice(-200)
-        this.save()
+        await this.save()
     }
 }

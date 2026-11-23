@@ -19,9 +19,13 @@ const demo = process.env.WEBUI_MOCK !== 'false' && !process.argv.includes('--no-
 // Keep the demo login separate from the real standalone server's saved token.
 const settingsDir = path.dirname(path.resolve(root, process.env.WEBUI_CONFIG_PATH || 'storage/webui-config.json'))
 const tokenFile = path.join(settingsDir, demo ? 'webui-demo-token' : 'webui-token')
-fs.mkdirSync(path.dirname(tokenFile), {recursive: true})
 let token = process.env.WEBUI_TOKEN
-if (!token) {
+if (!token && !demo) {
+    const result = spawnSync(process.execPath, ['dist/settings-cli.js', '--webui-token'], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit']})
+    if (result.status !== 0 || !result.stdout?.trim()) process.exit(result.status || 1)
+    token = result.stdout.trim()
+} else if (!token) {
+    fs.mkdirSync(path.dirname(tokenFile), {recursive: true})
     if (!fs.existsSync(tokenFile)) fs.writeFileSync(tokenFile, crypto.randomBytes(32).toString('hex') + '\n', {mode: 0o600})
     token = fs.readFileSync(tokenFile, 'utf8').trim()
 }

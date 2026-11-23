@@ -79,8 +79,8 @@ export function createAutomationAdapter(messages:MessageCenterAdapter):Automatio
         },
     }
 }
-export function createLiveAutomation(messages:MessageCenterAdapter) {
-    const engine = new AutomationEngine(path.join(path.dirname(settingsPath()),'automations.json'),createAutomationAdapter(messages))
+export function createLiveAutomation(messages:MessageCenterAdapter,storage?:import('../webui/settings-db').SettingsDocument) {
+    const engine = new AutomationEngine(path.join(path.dirname(settingsPath()),'automations.json'),createAutomationAdapter(messages),undefined,storage)
     listenAutomations(event=>engine.receive(event))
     return engine
 }

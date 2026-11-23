@@ -48,7 +48,7 @@ WebUI 随应用启动，当前 React 界面主要为中文。Docker Compose **�
 - 配置 Telegram / 微信连接、转发偏好、消息样式、代理、AI / 语音识别，以及重试、历史清理和日志选项。
 - 支持已有配置字段校验、未保存更改提示、冲突检测、手机布局和重启提示。Telegram 机器人语言设置不代表 WebUI 已支持相同的语言切换。
 - Telegram 代理和微信代理分块展示。消息模板支持联系人、群聊和公众号实时预览，也可测试没有备注时的回退结果；预览仅使用示例数据，不发送消息。
-- 使用至少 16 字符的 `WEBUI_TOKEN` 登录；不设置时自动生成 `storage/webui-token`。登录后默认进入聊天。普通浏览器会在本地保存访问令牌，刷新或重新打开后可恢复登录；Mini App 会话独立且仅保存在内存。退出登录或服务器拒绝旧令牌时清除保存值。
+- 使用至少 16 字符的 `WEBUI_TOKEN` 登录；不设置时自动生成并保存到 SQLite，可用 `node dist/settings-cli.js --webui-token` 查看。登录后默认进入聊天。普通浏览器会在本地保存访问令牌，刷新或重新打开后可恢复登录；Mini App 会话独立且仅保存在内存。退出登录或服务器拒绝旧令牌时清除保存值。
 - 普通配置密钥不返回明文，留空保留原值，输入新值替换，可选密钥可显式清除。MCP Token 使用独立的显示和重新生成操作。
 
 ### 聊天能力与当前局限（请先阅读）
@@ -102,16 +102,13 @@ MCP 复用已有微信登录和发送队列。读取消息不会自动唤醒空�
 
 | 文件 / 目录 | 用途 | 生效方式 |
 |---|---|---|
-| `storage/webui-config.json` | WebUI 保存的环境配置 | 重启应用后生效 |
-| `storage/db/wx2tg.db` | 绑定关系与机器人偏好 | 偏好即时生效；启动同步在下次启动执行 |
+| `storage/db/wx2tg.db` | WebUI 应用配置、机器人偏好与绑定、Telegram 展示覆盖、MCP、令牌和自动化 | 应用配置重启生效；偏好、展示覆盖、MCP 和自动化可立即保存使用 |
 | `storage/db/webui-messages.db` | 消息管理记录和发送跟踪 | 即时 |
 | `storage/webui-media` / `storage/webui-avatars` | 附件和头像缓存 | 即时 |
-| `storage/mcp-settings.json` | MCP 开关、客户端信息和 Token | 即时，包含 Token 更换 |
-| `storage/webui-token`、`storage/mcp-token`、`storage/mcp-read-token` | 自动生成的访问凭证 | 分别用于对应接口 |
 
-Docker 将 `./config` 挂载为 `/app/storage`；备份时同时保留 `save-files`、`conf` 和 `redis-data`。WebUI 环境配置优先于 `.env` / Docker 环境变量；要恢复环境变量默认值，先停止应用，删除 `webui-config.json` 中对应键，再重启。已保存的 MCP 设置优先于 `MCP_ENABLED`、`MCP_TOKEN`、`MCP_READ_TOKEN`，这些环境变量仅初始化首次保存前的设置。`WEBUI_CONFIG_PATH` 可以改变 WebUI 配置文件及同目录的 MCP 设置与令牌位置。
+日常在 **WebUI** 管理，**非空 ENV > SQLite 保存值 > 内置默认值**。ENV 只覆盖运行，不回写 SQLite；WebUI 会标出受影响的字段。端口、挂载及微信服务端自身的配置仍由部署管理。升级前先备份 `./.env` 和 `./config`（容器内 `/app/storage`）；旧文件自动导入且保留不动。详细步骤见 [配置迁移](docs/settings-migration.md)。
 
-正常应用缺少 Telegram 凭证时仍保留 WebUI 配置入口。需要独立初始化时，运行 `npm run build` 后执行 `npm run webui`，保存后停止独立进程，再启动正常应用。独立模式不启动客户端、不连接数据库，因此不能修改机器人数据库偏好或发送消息。
+正常应用缺少 Telegram 凭证时仍保留 WebUI 配置入口。也可运行 `npm run build` 后执行 `npm run webui`，单独编辑应用配置，再关闭独立进程并启动正常应用。独立模式使用同一个设置数据库，但不启动 Telegram / 微信客户端。
 
 ## 支持的消息类型
 
@@ -176,7 +173,7 @@ mkdir -p conf
 test -e conf/app.conf || cp app.conf.example conf/app.conf
 docker compose pull
 docker compose up -d
-docker compose exec wechat2tg cat storage/webui-token
+docker compose exec wechat2tg node dist/settings-cli.js --webui-token
 ```
 
 在 `.env` 填写 `BOT_TOKEN`、`API_ID`、`API_HASH`，也可以先进入 WebUI 填写并保存，然后重启应用。随仓库的示例使用 `BASE_API=http://wx2tg-server:8058/api` 和 `redislink=wx2tg-redis:6379`，使用整套 Compose 时保留这些服务名。
@@ -364,13 +361,12 @@ docker compose logs --tail=100 wechat2tg
 |`MESSAGE_BUFFER_EXPIRE_TIME`| 否 | 兼容旧配置的已完成转发记录清理时间（实际至少 7 天）；待发送、失败和未知记录不自动过期。 |
 |`AUTO_DELETE_OLD_MESSAGES`、`MESSAGE_RETENTION_DAYS`| 否 | 清理原有机器人消息历史，默认 `false` / `7` 天 |
 |`LOG_LEVEL`、`DEBUG_MODE`| 否 | 日志级别与调试模式，默认 `info` / `false` |
-|`DB_SQLITE_PATH`| 否 | 兼容保留字段；当前绑定数据库实际固定为 `storage/db/wx2tg.db` |
 |`WEBUI_ENABLED`| 否 | 是否启用 WebUI，默认 `true`；MCP 共用此监听服务 |
 |`WEBUI_HOST`| 否 | 本地默认 `127.0.0.1`；Compose 覆盖为 `0.0.0.0` |
 |`WEBUI_PORT`| 否 | WebUI 与 MCP 端口，默认 `17863` |
 |`WEBUI_BIND_ADDRESS`| 否 | Compose 宿主机绑定地址，默认 `0.0.0.0` |
 |`WEBUI_TOKEN`| 否 | WebUI 访问令牌，至少 16 字符；不填则自动生成 |
-|`WEBUI_CONFIG_PATH`| 否 | WebUI 持久化文件，默认 `storage/webui-config.json` |
+|`WEBUI_CONFIG_PATH`| 否 | 旧 WebUI 配置迁移来源，默认 `storage/webui-config.json`；不改变 SQLite 位置 |
 |`MCP_ENABLED`| 否 | MCP 初始启用状态，默认 `true`；之后以已保存 MCP 设置为准 |
 |`MCP_TOKEN`、`MCP_READ_TOKEN`| 否 | MCP 初始读写 / 只读凭证，不填自动生成，两者必须不同 |
 |`WECHAT_MCP_URL`、`WECHAT_MCP_TOKEN_FILE`、`WECHAT_MCP_TOKEN`| 客户端 | stdio 桥接地址与凭证来源；地址必填，Token 值优先于 Token 文件 |
@@ -445,7 +441,7 @@ MESSAGE_DISPLAY='#[identity]#[br]#[body]'
 - 群昵称通过微信群成员接口查询，按账号与群缓存 60 秒；查询失败或超过 1.5 秒时不发送昵称查询请求的等待，直接回退到微信昵称，不会阻塞或丢弃消息。失败后同一账号/群会在 60 秒内直接回退。
 - 只有模板里出现 `#[member_name]` 时才查询群成员，自定义模板未使用时不会产生额外请求。
 - 群昵称会做 HTML 转义，管理员自定义的群名不会破坏消息格式。
-- 从旧版本升级时，上述 7 项消息展示模板会**一次性重置为默认值**（包括 `.env` 和环境变量中的旧值）；重置前会把旧值备份到 `webui-config.json.message-templates-v1.json`（仅这 7 项，不含密钥），之后你修改的模板不会被再次覆盖。群名称模板、头像和绑定关系不变。
+- 配置迁移保留旧 WebUI 中现有模板，不再次重置。已有 `webui-config.json.message-templates-v1.json` 历史备份也不会被修改。
 
 `#[identity]`：身份信息文本
 
