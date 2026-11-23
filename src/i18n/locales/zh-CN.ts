@@ -146,6 +146,8 @@ const zhCN = {
   'command.solitaire': '发起微信群接龙',
   'command.join': '用自定义内容参与接龙',
   'command.contacts': '查看联系人详情（含企业微信，只读）',
+  'command.moments': '查看联系人朋友圈与本地归档',
+  'command.savemoments': '保存指定联系人当前可见的朋友圈',
   'command.members': '查看微信群成员（只读）',
   'command.getqr': '获取我的二维码名片',
   'command.unbind': '解绑群组',

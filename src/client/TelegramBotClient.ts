@@ -78,6 +78,7 @@ import {ensureDefaultBotAvatar} from '../service/TelegramBotAvatar'
 import {handleTransferCallback} from '../service/TransferTelegram'
 import {installStickerCollection,STICKER_COLLECTION_UPDATES} from '../service/StickerCollectionTelegram'
 import {findHistoricalSticker} from '../service/StickerCollectionHistory'
+import {installMomentsTelegram} from '../service/MomentsTelegram'
 
 interface LargeFileProgressEditor {
     update(text: string, force?: boolean, inlineKeyboard?: Array<{ text: string, callback_data: string }>): Promise<void>
@@ -139,9 +140,9 @@ export class TelegramBotClient extends AbstractClient {
             })
         }
         this.startTime = new Date()
-        const config = await this.configurationService.getConfig()
+        const configuration = await this.configurationService.getConfig()
         const bot: Telegraf = this.client
-        telegramDisplay.configure(config.botId,config.chatId)
+        telegramDisplay.configure(configuration.botId,configuration.chatId)
         bot.use(session())
         installStickerCollection(bot,{
             owner:async()=>Number((await this.configurationService.getConfig())?.chatId || 0),
@@ -161,7 +162,7 @@ export class TelegramBotClient extends AbstractClient {
         bot.use((ctx,next) => {emitTelegramAutomation?.(ctx);return next()})
         // 此方法需要放在所有监听方法之前,先拦截命令做处理鉴权
         bot.use(async (ctx, next) => {
-            const chatId = config.chatId
+            const chatId = configuration.chatId
             if (ctx.message) {
                 const messageDate = new Date(ctx.message?.date * 1000)
                 if (messageDate.getTime() < this.startTime.getTime()) {
@@ -194,6 +195,29 @@ export class TelegramBotClient extends AbstractClient {
             if (!ctx.chat?.type.includes('group') && ctx.message && !ctx.message.from.is_bot) {
                 return ctx.reply(this.i18n.t('auth.not_authorized')) // 如果用户未授权，发送提示消息
             }
+        })
+        installMomentsTelegram(bot,{
+            session:async()=>{
+                const owner = (await this.configurationService.getConfig())?.chatId
+                const wx = TelegramBotClient.getSpyClient('wxClient') as WeChatClient|undefined
+                if(!Number.isSafeInteger(owner) || owner <= 0 || !wx?.hasLogin || !wx.wxInfo?.wxid)return
+                return {owner,account:wx.wxInfo.wxid,baseURL:wx.client?.baseUrl || config.BASE_API}
+            },
+            search:async(query)=>{
+                const contacts = WxContactRepository.getInstance()
+                const exact = await contacts.getByUserName(query)
+                const matches = exact ? [exact] : await contacts.getByNickNameOrRemark(query,24)
+                return matches.filter(c=>!c.userName.startsWith('gh_') && !['filehelper','weixin','fmessage'].includes(c.userName))
+                    .map(c=>({id:c.userName,name:c.remark || c.nickName || c.userName}))
+            },
+            contacts:async(offset,limit)=>(await WxContactRepository.getInstance().pageMomentsContacts(offset,limit))
+                .map(c=>({id:c.userName,name:c.remark || c.nickName || c.userName})),
+            boundContact:async(ctx)=>{
+                const binding = await this.bindGroupService.resolveTelegram(ctx.chat.id,this.currentThread(ctx))
+                if(binding?.type !== 0 || binding.wxId.startsWith('gh_') || ['filehelper','weixin','fmessage'].includes(binding.wxId))return
+                return {id:binding.wxId,name:binding.alias || binding.name || binding.wxId}
+            },
+            rich:{allowed:chatId=>telegramDisplay.allows('richMessage',chatId),rejected:chatId=>telegramDisplay.reject('richMessage',chatId)},
         })
         this.onBotCommand(bot)
         this.onMessage(bot)
@@ -734,6 +758,7 @@ export class TelegramBotClient extends AbstractClient {
     private phoneNumber: string | undefined = undefined
     private password: string | undefined = undefined
     private phoneCode = ''
+    private userLoginTask?: Promise<void>
     private messageSender: MessageSender
     // bot 启动时间
     private startTime: Date
@@ -2577,7 +2602,22 @@ ${this.i18n.t('help.instructions')}`))
         }).catch(()=>{this.logger.debug('Telegram 主人会员状态暂不可用，保留兼容展示')})
     }
 
-    public async loginUserClient() {
+    public loginUserClient(): Promise<void> {
+        // Startup, polling reconnect and /login must share one pending auth flow.
+        if (this.userLoginTask) return this.userLoginTask
+        this.userLoginTask = Promise.resolve().then(() => this.runUserClientLogin())
+            .catch(error => {this.logger.error('Telegram 用户登录失败:', safeErrorDetails(error))})
+            .finally(() => {
+                this.waitInputCommand = undefined
+                this.phoneNumber = undefined
+                this.password = undefined
+                this.phoneCode = ''
+                this.userLoginTask = undefined
+            })
+        return this.userLoginTask
+    }
+
+    private async runUserClientLogin(): Promise<void> {
         if (!TelegramBotClient.getSpyClient('userMTPClient')) {
             const clientFactory = new ClientFactory()
             TelegramBotClient.addSpyClient({
@@ -2585,43 +2625,57 @@ ${this.i18n.t('help.instructions')}`))
                 client: clientFactory.create('userMTPClient')
             })
         }
+        const userClient = TelegramBotClient.getSpyClient('userMTPClient')
+        if (userClient.hasLogin) {
+            this.refreshDisplayMembership()
+            return
+        }
+        let promptUnavailable = false
+        const sendPrompt: typeof this.client.telegram.sendMessage = (...args) =>
+            this.client.telegram.sendMessage(...args).catch(error => {
+                promptUnavailable = true
+                throw error
+            })
         const authParams: UserAuthParams = {
-            onError: (err: Error): Promise<boolean> | void => {
+            onError: async (err: Error): Promise<boolean> => {
+                // If the Bot cannot deliver a prompt, do not spin in GramJS's flow.
+                if (promptUnavailable) return true
                 this.logger.error('认证错误:', err)
+                return false
             },
             phoneNumber: async () =>
-                new Promise((resolve) => {
-                    this.client.telegram.sendMessage(this.chatId, this.i18n.t('auth.phone_number')).then(res => {
+                new Promise((resolve, reject) => {
+                    sendPrompt(this.chatId, this.i18n.t('auth.phone_number')).then(res => {
                         this.waitInputCommand = 'phoneNumber'
                         const intervalId = setInterval(() => {
                             if (this.phoneNumber) {
                                 const phoneNumber = this.phoneNumber
                                 this.phoneNumber = undefined
                                 clearInterval(intervalId)
-                                this.client.telegram.deleteMessage(this.chatId, res.message_id)
+                                void this.client.telegram.deleteMessage(this.chatId, res.message_id).catch(() => undefined)
                                 resolve(phoneNumber)
                             }
                         }, 1000)
-                    })
+                    }, reject)
                 }),
             password: async () =>
-                new Promise((resolve) => {
-                    this.client.telegram.sendMessage(this.chatId, this.i18n.t('auth.password')).then(res => {
+                new Promise((resolve, reject) => {
+                    sendPrompt(this.chatId, this.i18n.t('auth.password')).then(res => {
                         this.waitInputCommand = 'password'
                         const intervalId = setInterval(() => {
                             if (this.password) {
                                 const password = this.password
                                 this.password = undefined
                                 clearInterval(intervalId)
-                                this.client.telegram.deleteMessage(this.chatId, res.message_id)
+                                void this.client.telegram.deleteMessage(this.chatId, res.message_id).catch(() => undefined)
                                 resolve(password)
                             }
                         }, 1000)
-                    })
+                    }, reject)
                 }),
             phoneCode: async () =>
-                new Promise((resolve) => {
-                    this.client.telegram.sendMessage(this.chatId, this.i18n.t('auth.verification_code'), {
+                new Promise((resolve, reject) => {
+                    sendPrompt(this.chatId, this.i18n.t('auth.verification_code'), {
                         reply_markup: {
                             inline_keyboard: [
                                 [
@@ -2652,22 +2706,18 @@ ${this.i18n.t('help.instructions')}`))
                                 const phoneCode = this.phoneCode
                                 this.phoneCode = ''
                                 clearInterval(intervalId)
-                                this.client.telegram.deleteMessage(this.chatId, res.message_id)
+                                void this.client.telegram.deleteMessage(this.chatId, res.message_id).catch(() => undefined)
                                 resolve(phoneCode.substring(0, phoneCode.length - 1))
                             }
                         }, 1000)
-                    })
+                    }, reject)
                 }),
         }
-        if (!TelegramBotClient.getSpyClient('userMTPClient').hasLogin) {
-            TelegramBotClient.getSpyClient('userMTPClient').login(authParams).then(login => {
-                if (login) {
-                    this.refreshDisplayMembership()
-                    this.client.telegram.sendMessage(this.chatId, this.i18n.t('login.success'))
-                    this.loginWechatClient()
-                }
-            })
-        } else this.refreshDisplayMembership()
+        if (await userClient.login(authParams)) {
+            this.refreshDisplayMembership()
+            void this.client.telegram.sendMessage(this.chatId, this.i18n.t('login.success')).catch(() => undefined)
+            this.loginWechatClient()
+        }
     }
 
     private pollingHealth?: ReturnType<typeof installTelegramPollingHealth>

@@ -1,7 +1,6 @@
 import {Telegraf} from 'telegraf'
 import {LogUtils} from '../util/LogUtil'
-import {WxContactRepository} from '../repository/WxContactRepository'
-import {initBot, setupUserCommand} from '../util/PageHelper'
+import {initBot} from '../util/PageHelper'
 import I18n from '../i18n'
 
 export default class TgCommandHelper {
@@ -29,6 +28,8 @@ export default class TgCommandHelper {
             {command: 'solitaire', description: i18n.t('command.solitaire')},
             {command: 'join', description: i18n.t('command.join')},
             {command: 'contacts', description: i18n.t('command.contacts')},
+            {command: 'moments', description: i18n.t('command.moments')},
+            {command: 'savemoments', description: i18n.t('command.savemoments')},
             {command: 'members', description: i18n.t('command.members')},
             {command: 'relogin', description: i18n.t('command.relogin')},
             {command: 'getqr', description: i18n.t('command.getqr')},
@@ -51,20 +52,6 @@ export default class TgCommandHelper {
     }
 
     public static setSimpleCommandHandler(bot: Telegraf) {
-        // this.user(bot)
-        // FIXME: JUST TEST
-        // setupUserCommand(bot)
         initBot(bot)
-    }
-
-    private static user(bot: Telegraf) {
-        bot.command('user', (ctx) => {
-            const name = ctx.args[0] ? ctx.args[0] : ''
-            WxContactRepository.getInstance().pageByName(name, {pageNo: 1, pageSize: 10}).then(page => {
-                page.data.forEach(c => {
-                    ctx.reply(`name: ${c.userName}, nickName: ${c.nickName}, userName: ${c.userName}`)
-                })
-            })
-        })
     }
 }

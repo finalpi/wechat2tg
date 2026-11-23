@@ -29,8 +29,9 @@ export class WxContactRepository {
         return this.WxContactRepository.findOneBy({ userName })
     }
 
-    async getByNickNameOrRemark(query: string) {
+    async getByNickNameOrRemark(query: string, limit?: number) {
         return this.WxContactRepository.find({
+            ...(limit === undefined ? {} : {take: limit, order: {userName: 'ASC' as const}}),
             where: [
                 { nickName: directoryContains(query) },
                 { remark: directoryContains(query) },
@@ -38,6 +39,13 @@ export class WxContactRepository {
                 { userName: directoryContains(query) }
             ]
         })
+    }
+
+    async pageMomentsContacts(offset:number,limit:number):Promise<WxContact[]> {
+        return this.WxContactRepository.createQueryBuilder('c')
+            .where('c.userName NOT LIKE :external AND substr(c.userName,1,3) != :official', {external:'%@%',official:'gh_'})
+            .andWhere('c.userName NOT IN (:...system)',{system:['filehelper','weixin','fmessage']})
+            .orderBy('c.userName','ASC').skip(offset).take(limit).getMany()
     }
 
     async getAll(): Promise<WxContact[]> {

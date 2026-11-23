@@ -146,6 +146,8 @@ const enUS = {
   'command.solitaire': 'Start a WeChat group solitaire',
   'command.join': 'Join a solitaire with custom text',
   'command.contacts': 'View contact details (including WeCom, read-only)',
+  'command.moments': 'Browse contact Moments and local archives',
+  'command.savemoments': 'Save all currently visible Moments for a contact',
   'command.members': 'View WeChat group members (read-only)',
   'command.getqr': 'Get my QR code card',
   'command.unbind': 'Unbind group',
