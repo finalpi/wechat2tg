@@ -2,18 +2,40 @@
 
 中文 | [English](README.md)
 
-基于微信协议在 Telegram 收发微信消息，支持 ipad,mac,car,windows,pad 多种协议
+自托管的微信与 Telegram 消息桥接工具。
 
-当前正式版 **v6.0.41**：静态表情图片发送、原红包按钮直接显示领取金额、WebUI 输入与预览优化、消息模板统一、头像去重和镜像精简。完整变更与升级注意事项见 [发行说明](docs/releases.md)。
-
-## TG 群组: [@Wx2TgUserGroup](https://t.me/+AD02MEZa-og3ZGY1)
+## 警告信息
 
 > [!WARNING]
-> **推荐使用 iPad 协议，目前主要维护 iPad 协议，其他协议请谨慎选择。**
+> **推荐使用 iPad 协议。** 本项目主要维护 iPad 协议，其他协议请谨慎选择。据用户反馈，Windows 协议存在封号风险，请勿使用。
 >
-> 据用户反馈，Windows 协议存在封号风险，请勿使用该协议。
+> 本项目不是微信官方客户端，仅供技术研究和学习，严禁用于非法用途。微信可能拒绝登录、使会话失效或限制账号；能登录不代表能一直在线。
+>
+> 不要公开机器人和 WebUI Token、Telegram / 微信会话、密码、验证码或登录二维码。未绑定的 Bot 会把第一个在私聊发送 `/login` 的人设为主人，请先自行完成绑定再分享机器人。默认 Compose 会开放 WebUI 的 `17863` 端口，请限制访问；远程访问请使用 HTTPS。
 
-## 主要功能
+## 使用前需要准备什么
+
+| 需要什么 | 用途 |
+| --- | --- |
+| Telegram 机器人及 `BOT_TOKEN` | 通过 [@BotFather](https://t.me/BotFather) 创建。Token 认证的是机器人。 |
+| Telegram `API_ID` 和 `API_HASH` | 在 [my.telegram.org](https://my.telegram.org/) 创建应用获取。这两个值用于标识应用，不等于个人账号已登录。 |
+| Telegram 个人账号 | 当前 `/login` 在没有可用会话时会先登录个人账号；Telegram 可能要求验证码，开启两步验证时还会要求密码。个人会话用于创建群、把 Bot 加入群、整理聊天文件夹等。当前版本没有跳过个人登录的 Bot-only 模式。 |
+| 微信账号和主力设备 | 完成 Telegram 登录后，用微信扫码或确认登录。`DEVICE_TYPE` 是服务端使用的登录协议，不是你平时使用的微信版本或设备型号。 |
+| 部署主机 | 推荐 Docker Compose v2；本地开发需要 Node.js 18+。标准部署包括 `wechat2tg`、`wx2tg-server` 和 Redis，`BASE_API` 指向微信服务端 API。 |
+
+**登录顺序：** 配好 Bot → 在机器人私聊发送 `/login` → 按提示完成 Telegram 个人账号登录（已有可用会话则跳过）→ 扫码或确认微信登录。Telegram 要求验证码不代表 Bot Token 或 API ID / Hash 配错了。大文件传输用的是 Bot 自己的 MTProto 会话，不依赖个人账号来传文件。
+
+当前正式版：**v6.0.41**。正式版、开发版变更与升级说明见 [发行说明](docs/releases.md)。交流：[Telegram 用户群](https://t.me/+AD02MEZa-og3ZGY1)。
+
+## 目前能做什么、不能做什么
+
+### 微信登录兼容性
+
+推荐 iPad 协议，但不是所有账号都能登录。如果微信更新协议后拒绝当前服务端的登录请求，现有版本可能没有可用的解决办法。修改 Telegram Bot Token 或 API 凭证不能解决微信侧拒绝登录的问题。
+
+如果你登录不上，欢迎提交 [微信登录失败统计](https://github.com/finalpi/wechat2tg/issues/new?template=wechat-login.yml)。请填写**该账号平时使用的主力设备型号和微信的准确版本**，另填部署选用的 `DEVICE_TYPE`、实际运行的 `wx2tg-server` 具体版本、Bot 版本，以及卡在哪一步。统计用于排查兼容性，不保证能修复。不要公开账号信息、登录凭证、二维码或完整日志。
+
+### 主要功能
 
 1. 微信单聊消息、微信群消息、公众号消息的接收，以及企业微信消息的接收
 2. 通过 Telegram 向指定的微信用户、微信群、公众号发送消息
@@ -23,27 +45,58 @@
 6. WebUI 基础消息查看、有限操作、通讯录分类与 Telegram 同步跟踪；消息类型尚未完整支持
 7. 十一个微信 MCP 工具和 WebUI Token 管理，客户端配置方式见 MCP 文档
 
-## 聊天文件夹自动扩容
+### 支持的消息类型
+
+#### 微信消息
+
++ [x] 文本消息
++ [x] 企业微信消息
++ [x] 微信表情包
++ [x] 图片消息
++ [x] 视频消息
++ [x] 音频/视频通话（仅消息提醒）
++ [x] 文件消息
++ [x] 链接消息
++ [x] 群聊消息
++ [x] 群聊@消息（@所有人和@你 会转换成 Telegram @你）
++ [x] 公众号消息
++ [x] emoji
++ [x] 位置消息
++ [x] 撤回消息
++ [x] 语音消息
++ [x] 红包消息：显示祝福语和可用封面；机器人主人可手动领取符合条件的红包，确认成功后显示金额。不支持自动抢红包。详见[红包说明](docs/red-packets.md)。
++ [ ] 小程序消息
+
+#### Telegram 消息
+
++ [x] 文本消息
++ [x] 贴纸表情
++ [x] 图片消息
++ [x] 视频消息
++ [x] 文件消息
++ [x] 语音消息
+
+### 聊天文件夹自动扩容
 
 新群按 Telegram 返回的账号限额依次放入 `WeChat`、`WeChat 2`、`WeChat 3` 等文件夹。文件夹总数也满额时，群组照常创建、绑定和转发，仍可在「全部聊天」找到。保留现有设置和其他/共享文件夹。详见 [文件夹分配与失败处理](docs/telegram-chat-folders.md)。
 
-## 公众号集中到论坛 Topic
+### 公众号集中到论坛 Topic
 
 可选设置 `OFFICIAL_ACCOUNT_TOPICS_ENABLED=true`，重启后首次处理公众号时自动创建一个私有论坛群，每个公众号对应独立 Topic。所有公众号的新消息切换到各自 Topic，支持从 Topic 回复；General 区域不会发送到微信。默认关闭，旧群和绑定保留，关闭后恢复旧路由。详见 [公众号 Topic 模式](docs/official-account-topics.md)。
 
-## 微信行内自定义表情
+### 微信行内自定义表情
 
 设置 `WECHAT_CUSTOM_EMOJI_ENABLED=true` 后，将 `[微笑]`、`[捂脸]` 等原生表情替换为 [WeChatPack](https://t.me/addemoji/WeChatPack) 行内自定义表情，保留富文本和普通 Unicode Emoji。发送资格支持机器人持有者 Premium 或 Fragment 授权。默认开启并使用自动模式，在发送前通过按钮图标预检测资格；未知或不支持时使用兼容展示。WebUI 可查看检测结果、重新检测或手动关闭；未知标记保留原文。详见 [映射、覆盖范围与限制](docs/wechat-custom-emoji.md)。自 `v6.0.13-dev.3` 起提供。
 
-## WebUI 配置与消息管理
+### WebUI 配置与消息管理
 
 WebUI 随应用启动，当前 React 界面主要为中文。Docker Compose **默认对外开放 TCP 17863**，访问 `http://<服务器地址>:17863/`；本地开发默认仅监听本机，地址为 `http://127.0.0.1:17863/`。WebUI 和 MCP 共用这个端口，MCP 路径为 `/mcp`。
 
-### Telegram Mini App 与实时消息
+#### Telegram Mini App 与实时消息
 
 同一套 WebUI 可从 Telegram 私聊「控制台」菜单打开。配置 `WEBUI_MINI_APP_URL=https://你的域名/` 并重启 Bot 后，后端校验 Telegram 签名且**仅允许现有机器人主人访问**，不需要输入 WebUI Token；普通浏览器入口继续保留。消息页改用 SSE 长连接通知，不再每 5 秒轮询。需要可访问的 HTTPS 根域名和支持 SSE 的反向代理，详见[配置说明与安全边界](docs/telegram-mini-app.md)。自 v6.0.35 起提供；**请使用 v6.0.36 或更新版本，以包含私聊菜单修复。**
 
-### 配置控制台
+#### 配置控制台
 
 - 配置 Telegram / 微信连接、转发偏好、消息样式、代理、AI / 语音识别，以及重试、历史清理和日志选项。
 - 支持已有配置字段校验、未保存更改提示、冲突检测、手机布局和重启提示。Telegram 机器人语言设置不代表 WebUI 已支持相同的语言切换。
@@ -51,12 +104,12 @@ WebUI 随应用启动，当前 React 界面主要为中文。Docker Compose **�
 - 使用至少 16 字符的 `WEBUI_TOKEN` 登录；不设置时自动生成并保存到 SQLite，可用 `node dist/settings-cli.js --webui-token` 查看。登录后默认进入聊天。普通浏览器会在本地保存访问令牌，刷新或重新打开后可恢复登录；Mini App 会话独立且仅保存在内存。退出登录或服务器拒绝旧令牌时清除保存值。
 - 普通配置密钥不返回明文，留空保留原值，输入新值替换，可选密钥可显式清除。MCP Token 使用独立的显示和重新生成操作。
 
-### 聊天能力与当前局限（请先阅读）
+#### WebUI 聊天局限
 
 > [!IMPORTANT]
 > **WebUI 聊天目前主要用于查看文字等简单消息，并提供有限的发送、引用、撤回和同步操作。尚未完整支持微信的所有消息类型，也不等价于微信客户端。** 页面能显示某种消息的摘要、链接或附件入口，不代表该消息类型已完整解析、交互可用或经过全面验收。复杂内容请以微信客户端为准。
 
-- **消息展示是有限适配。** 图片、音视频、文件、公众号图文和合并聊天记录等已有部分预览 / 下载 / 解析路径，但受协议返回内容、媒体有效期、缓存和嵌套结构影响，可能出现摘要、占位、缺失附件或加载失败，不能保证完整还原。红包、转账、小程序、视频号、特殊卡片、实时语音 / 视频通话等不能当作已完整支持的 Web 功能。
+- **消息展示是有限适配。** 图片、音视频、文件、公众号图文和合并聊天记录等已有部分预览 / 下载 / 解析路径，但受协议返回内容、媒体有效期、缓存和嵌套结构影响，可能出现摘要、占位、缺失附件或加载失败，不能保证完整还原。符合条件的红包可手动领取，见[红包说明](docs/red-packets.md)。转账、小程序、视频号、特殊卡片和实时语音 / 视频通话等未在 WebUI 完整支持。
 - **历史不是微信的完整历史。** 页面读取本项目已保存 / 已同步的记录；首次打开先展示近期记录并补齐本地历史，不会自动从微信获取全部旧消息。Telegram 转发能力与 WebUI 渲染能力也不能混为一谈。
 - **有操作入口不等于所有类型都能操作。** 文字、部分附件发送和符合条件的引用 / 撤回可使用；附件上传上限 50 MiB，文字与附件分开发送。引用不能同时带附件或原生艾特，群成员需通过成员选择器选择。撤回需真实回执且受微信时限约束；复杂卡片的原生交互不保证可用。
 - **状态不冒充已读。** “已提交微信”只表示取得微信侧回执，不代表对方收到或读过；Telegram 待同步数不是微信未读数。结果不确定时不自动重发。
@@ -106,52 +159,13 @@ MCP 复用已有微信登录和发送队列。读取消息不会自动唤醒空�
 | `storage/db/webui-messages.db` | 消息管理记录和发送跟踪 | 即时 |
 | `storage/webui-media` / `storage/webui-avatars` | 附件和头像缓存 | 即时 |
 
-日常在 **WebUI** 管理，**非空 ENV > SQLite 保存值 > 内置默认值**。ENV 只覆盖运行，不回写 SQLite；WebUI 会标出受影响的字段。端口、挂载及微信服务端自身的配置仍由部署管理。升级前先备份 `./.env` 和 `./config`（容器内 `/app/storage`）；旧文件自动导入且保留不动。详细步骤见 [配置迁移](docs/settings-migration.md)。
+从 `v6.0.42-dev.12` 起，日常在 **WebUI** 管理，**非空 ENV > SQLite 保存值 > 内置默认值**。正式版 `v6.0.41` 仍使用 `storage/webui-config.json`，其中已保存的值优先于 ENV。ENV 只覆盖运行，不回写 SQLite；WebUI 会标出受影响的字段。端口、挂载及微信服务端自身的配置仍由部署管理。升级前先备份 `./.env` 和 `./config`（容器内 `/app/storage`）；旧文件自动导入且保留不动。详细步骤见 [配置迁移](docs/settings-migration.md)。
 
 正常应用缺少 Telegram 凭证时仍保留 WebUI 配置入口。也可运行 `npm run build` 后执行 `npm run webui`，单独编辑应用配置，再关闭独立进程并启动正常应用。独立模式使用同一个设置数据库，但不启动 Telegram / 微信客户端。
 
-## 支持的消息类型
-
-### 微信消息类型支持列表
-
-+ [x] 文本消息
-+ [x] 企业微信消息
-+ [x] 微信表情包
-+ [x] 图片消息
-+ [x] 视频消息
-+ [x] 音频/视频通话（仅消息提醒）
-+ [x] 文件消息
-+ [x] 链接消息
-+ [x] 群聊消息
-+ [x] 群聊@消息（@所有人和@你 会转换成 Telegram @你）
-+ [x] 公众号消息
-+ [x] emoji
-+ [x] 位置消息
-+ [x] 撤回消息
-+ [x] 语音消息
-+ [ ] 红包消息（仅提醒，无法获取红包内容）
-+ [ ] 小程序消息
-
-### Telegram 消息类型支持列表
-
-+ [x] 文本消息
-+ [x] 贴纸表情
-+ [x] 图片消息
-+ [x] 视频消息
-+ [x] 文件消息
-+ [x] 语音消息
-
-## 注意事项
-
-1. 本项目仅用于技术研究和学习，严禁用于非法用途
-2. 欢迎随时提交 issue 报告使用中遇到的任何问题
-3. 请确保 wx2tg-server 服务的 IP 与登录地区一致，否则可能需要输入验证码
-4. 在 arm-64 架构环境下，由于缺少必要的依赖文件，无法使用 wx2tg-server 镜像
-5. 登录后一天之后会掉线一次，再次登录后就能稳定在线了
-
 ## 部署安装
 
-更新记录见[发行说明](docs/releases.md)。
+更新记录见[发行说明](docs/releases.md)。ARM64 部署请确认所选 `wx2tg-server` 镜像支持该架构；Bot 和服务端使用不同的镜像。
 
 全新部署先复制一份 `.env.example` 为 `.env` 文件，然后配置环境变量。
 
@@ -173,12 +187,13 @@ mkdir -p conf
 test -e conf/app.conf || cp app.conf.example conf/app.conf
 docker compose pull
 docker compose up -d
-docker compose exec wechat2tg node dist/settings-cli.js --webui-token
 ```
+
+如果没设置 `WEBUI_TOKEN`，请在部署主机上查看自动生成的令牌。正式版 `v6.0.41` 执行 `docker compose exec wechat2tg cat storage/webui-token`；`v6.0.42-dev.12` 及之后执行 `docker compose exec wechat2tg node dist/settings-cli.js --webui-token`。
 
 在 `.env` 填写 `BOT_TOKEN`、`API_ID`、`API_HASH`，也可以先进入 WebUI 填写并保存，然后重启应用。随仓库的示例使用 `BASE_API=http://wx2tg-server:8058/api` 和 `redislink=wx2tg-redis:6379`，使用整套 Compose 时保留这些服务名。
 
-访问 `http://<服务器地址>:17863/`，使用访问令牌登录。连接凭证齐全后，在 Telegram 使用 `/login` 登录微信；凭证缺失时配置页面仍可使用。WebUI 保存环境配置后执行：
+访问 `http://<服务器地址>:17863/`，使用访问令牌登录。连接凭证齐全后，按上文顺序在机器人私聊发送 `/login`；凭证缺失时配置页面仍可使用。WebUI 保存环境配置后执行：
 
 ```bash
 docker compose restart wechat2tg
@@ -277,7 +292,7 @@ docker compose logs --tail=100 wechat2tg
 
 ### BOT命令
 
-- `/login`：获取登录二维码；首次部署启动时，最先发送 `/login` 命令的人将成为 `BOT` 的所有者
+- `/login`：在机器人私聊使用；没有可用 Telegram 个人会话时先登录个人账号，再进入微信登录流程。首次部署时第一个执行此命令的人会成为机器人主人。
 
 - `/logout`：退出登录，删除登录缓存
 
@@ -460,11 +475,10 @@ MESSAGE_DISPLAY='#[identity]#[br]#[body]'
 
 ## 常见问题
 
-### 为什么提示我输入验证码
+### 为什么提示我输入验证码？
 
-wx2tg-server 需要保证和你登陆地在同一个区域，如果遇到输入验证码的情况，检查一下是否在同一区域
-
-如果不在同一个区域可以在环境变量配置微信代理登录，或者迁移已经登录好的 Redis 数据
+- **还没出现微信二维码，Telegram 就要求验证码：** `/login` 正在登录个人 Telegram 账号。没有可用会话时，这是正常行为。
+- **微信端要求验证或拒绝登录：** 先看微信客户端的提示，并检查 `wx2tg-server` 所在网络地区是否与你平时登录的地区一致。地区一致不能解决协议不支持的问题。仍无法登录时，欢迎提交 [微信登录失败统计](https://github.com/finalpi/wechat2tg/issues/new?template=wechat-login.yml)。
 
 ## 参与开发
 

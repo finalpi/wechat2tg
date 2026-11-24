@@ -13,7 +13,8 @@ storage/**
 /server-data/
 /server-logs/
 logs
-.github
+/.github/*
+!/.github/ISSUE_TEMPLATE/
 
 # Local tests
 tests/

@@ -1,0 +1,129 @@
+name: 微信登录失败统计 / WeChat login compatibility
+description: >-
+  记录微信登录失败的设备、版本和协议。
+  Report the device, WeChat version, and protocol when login fails.
+title: "[WeChat login] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        此表收集微信登录失败的数据，不保证可以修复。
+        请填写**平时使用该微信账号的主力设备**，不要用部署主机或 `DEVICE_TYPE` 代替。
+
+        Report the **device you normally use with this WeChat account**,
+        not the deployment host or `DEVICE_TYPE`.
+
+        微信二维码出现前，Telegram 要求验证码或两步验证密码是默认的个人登录流程，
+        本身不是微信登录失败。
+
+        A Telegram code or two-step password prompt before the WeChat QR code
+        is normally part of Telegram user sign-in, not a WeChat login failure.
+
+        **这是公开 Issue。** 请勿上传手机号、账号 ID、验证码、密码、Token、
+        API Hash、登录二维码、会话文件、`.env` 或未脱敏的日志。
+
+        **This issue is public.** Do not post phone numbers, account IDs, codes,
+        passwords, tokens, API hashes, login QR codes, session files, `.env`,
+        or unredacted logs.
+  - type: dropdown
+    id: primary-platform
+    attributes:
+      label: 主力设备平台 / Main device platform
+      options:
+        - iPhone (iOS)
+        - Android phone / 安卓手机
+        - iPad (iPadOS)
+        - Android tablet / 安卓平板
+        - Other or unknown / 其他或不清楚
+    validations:
+      required: true
+  - type: input
+    id: primary-device
+    attributes:
+      label: 主力设备型号 / Main device model
+      description: >-
+        填写型号和系统版本（如知道），不需要序列号或设备 ID。
+        Model and OS version if known. No serial numbers or device IDs.
+      placeholder: "iPhone 15 (iOS 18.6) / Pixel 8 (Android 15)"
+    validations:
+      required: true
+  - type: input
+    id: wechat-version
+    attributes:
+      label: 主力设备的微信版本 / WeChat version on the main device
+      description: >-
+        微信「我 → 设置 → 关于微信」里的准确版本，不要只填「最新版」；查不到请填「未知」。
+        Enter the exact version from WeChat's About page, or “unknown”.
+      placeholder: "8.0.xx"
+    validations:
+      required: true
+  - type: dropdown
+    id: protocol
+    attributes:
+      label: 本次尝试的登录协议 / Selected DEVICE_TYPE
+      description: >-
+        填写失败时使用的值，不需要为了报告重试其他协议。
+        Report the value used when login failed. Do not retest other protocols.
+      options:
+        - ipad
+        - ipadX
+        - pad
+        - mac
+        - car
+        - win
+        - Other or unknown / 其他或不清楚
+    validations:
+      required: true
+  - type: input
+    id: server-version
+    attributes:
+      label: 微信服务端（wx2tg-server）具体版本 / WeChat server version
+      description: >-
+        填写实际运行的服务端完整版本。若使用 latest、v6-latest 等滚动标签，
+        请提供对应的镜像摘要或构建提交，不要只填滚动标签或 Bot 版本。
+        Enter the exact running server version. For rolling tags such as latest
+        or v6-latest, provide the image digest or server build commit.
+      placeholder: "v6.0.16"
+    validations:
+      required: true
+  - type: input
+    id: bot-version
+    attributes:
+      label: Bot（wechat2tg）版本 / Bot version
+      description: 填写 Bot 的完整版本或镜像标签。Enter the bot version or image tag.
+      placeholder: "v6.0.42-dev.12"
+    validations:
+      required: true
+  - type: dropdown
+    id: login-stage
+    attributes:
+      label: 微信登录卡在哪一步？ / Where did WeChat login fail?
+      options:
+        - 不显示微信二维码 / WeChat QR code did not appear
+        - 微信扫码后报错 / WeChat showed an error after scanning
+        - 微信确认后失败或超时 / Failed or timed out after confirming in WeChat
+        - 已登录但很快退出，或旧会话无法恢复 / Session ended quickly or could not be restored
+        - 其他或不清楚 / Other or unknown
+    validations:
+      required: true
+  - type: textarea
+    id: observed-result
+    attributes:
+      label: 发生了什么？ / What happened?
+      description: >-
+        请写明是首次登录还是已有会话失效、主力设备上的微信能否正常使用，
+        以及复现步骤和脱敏后的错误提示或错误码。可附大致时间和时区。
+        Was this a first login or a lost session? Does WeChat still work on the
+        main device? Include the steps and a redacted error message or code.
+        Approximate time and time zone are optional.
+    validations:
+      required: true
+  - type: checkboxes
+    id: public-report
+    attributes:
+      label: 提交前检查 / Before submitting
+      options:
+        - label: >-
+            我已移除登录凭证和可识别账号的内容。
+            I removed credentials and account-identifying information.
+          required: true

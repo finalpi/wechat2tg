@@ -2,18 +2,40 @@
 
 [中文](README_zh.md) | English
 
-Transmit WeChat messages on Telegram, supporting multiple WeChat protocols (iPad, Mac, Car, Windows, Pad)
+A self-hosted bridge for sending and receiving WeChat messages through Telegram.
 
-Current stable release: **v6.0.41** — static sticker photos, red-packet amounts on the original button, improved WebUI input and previews, consistent templates, avatar deduplication, and a slimmer image. See the [release notes and upgrade guidance](docs/releases.md).
-
-## Telegram Group: [@Wx2TgUserGroup](https://t.me/+AD02MEZa-og3ZGY1)
+## Warnings
 
 > [!WARNING]
-> **The iPad protocol is recommended and is the primary focus of maintenance. Choose other protocols with caution.**
+> **Use the iPad protocol.** It is the main protocol maintained by this project. Use other protocols with caution. Users have reported account suspensions with the Windows protocol; do not use it.
 >
-> According to user feedback, the Windows protocol carries a risk of account suspension. Please do not use it.
+> This is an unofficial integration for research and learning. WeChat may reject logins, end sessions, or restrict accounts. A successful login does not guarantee continued access. Do not use it for illegal purposes.
+>
+> Keep bot and WebUI tokens, Telegram and WeChat sessions, passwords, verification codes, and login QR codes private. The first person to run `/login` in a private chat with an unbound bot becomes its owner. Complete that step yourself before sharing the bot. The default Compose setup exposes the WebUI on port `17863`; restrict access or use HTTPS for remote access.
 
-## Main Features
+## What you need
+
+| Requirement | What it is for |
+|---|---|
+| A Telegram bot and its `BOT_TOKEN` | Create the bot with [@BotFather](https://t.me/BotFather). The token authenticates the bot. |
+| Telegram `API_ID` and `API_HASH` | Create an application at [my.telegram.org](https://my.telegram.org/). These credentials identify the application, not a personal login session. |
+| A personal Telegram account | The current `/login` flow signs in to this account first if there is no usable session. Telegram may ask for a verification code and, if enabled, a two-step verification password. The session is used for features such as creating groups, adding the bot to them and organizing chat folders. There is no Bot-only login mode in this release. |
+| A WeChat account and your main device | Keep the WeChat client available to scan or confirm the login after Telegram sign-in. The protocol selected in `DEVICE_TYPE` is separate from the WeChat version and model of your main device. |
+| A host with Docker Compose v2 (or Node.js 18+ for local development) | The standard stack includes the `wechat2tg` bot, `wx2tg-server`, and Redis. `BASE_API` points to the WeChat service API. |
+
+**Login order:** configure the bot → send `/login` in its private chat → complete Telegram user sign-in if prompted → scan or confirm the WeChat login. A Telegram code prompt does not mean that the Bot Token or API ID/hash is wrong. Large-file transfer uses the bot's own MTProto session, not the personal account.
+
+Current stable release: **v6.0.41**. See the [release notes and upgrade guidance](docs/releases.md) for stable and development builds. Community: [Telegram group](https://t.me/+AD02MEZa-og3ZGY1).
+
+## What works and what does not
+
+### WeChat login compatibility
+
+The iPad protocol is the recommended option, not a guarantee. If a recent WeChat protocol change causes the server to reject a login, there may be no working fix for that device or version in the current release. Changing the Bot Token or Telegram API credentials will not fix a WeChat-side rejection.
+
+If you cannot sign in, please submit a [WeChat login compatibility report](https://github.com/finalpi/wechat2tg/issues/new?template=wechat-login.yml). Include the **device model and exact WeChat app version on the main device you normally use with that account**, the selected `DEVICE_TYPE`, the exact running `wx2tg-server` version, the bot version, and where login stopped. Reports help identify patterns; they do not guarantee a fix. Do not post account details, login secrets, QR codes, or raw logs.
+
+### Main features
 
 1. Receive messages from WeChat personal chats, group chats, official accounts, and enterprise WeChat
 2. Send messages via Telegram to specific WeChat users, groups, and official accounts
@@ -23,27 +45,58 @@ Current stable release: **v6.0.41** — static sticker photos, red-packet amount
 6. Basic WebUI message viewing, limited operations, categorized contacts and Telegram synchronization tracking; message-type support is incomplete
 7. Eleven MCP tools and WebUI token management; client setup is documented separately
 
-## Automatic chat-folder overflow
+### Supported message types
+
+#### WeChat messages
+
++ [x] Text messages
++ [x] Enterprise WeChat messages
++ [x] WeChat stickers
++ [x] Image messages
++ [x] Video messages
++ [x] Audio/Video calls (notification only)
++ [x] File messages
++ [x] Link messages
++ [x] Group chat messages
++ [x] Group chat @mentions (converts @everyone and @you to Telegram @you)
++ [x] Official account messages
++ [x] Emoji
++ [x] Location messages
++ [x] Message recall
++ [x] Voice messages
++ [x] Red packet messages: display text and an available cover; the bot owner can manually claim eligible packets and see the amount when confirmed. No automatic claiming. [Details and limits](docs/red-packets.md).
++ [ ] Mini program messages
+
+#### Telegram messages
+
++ [x] Text messages
++ [x] Sticker emotes
++ [x] Image messages
++ [x] Video messages
++ [x] File messages
++ [x] Voice messages
+
+### Automatic chat-folder overflow
 
 New groups are organized into `WeChat`, `WeChat 2`, `WeChat 3`, and so on using the logged-in account’s Telegram limits. If no folder slot remains, group creation, binding, and forwarding still succeed; the chat stays available in All Chats. Existing settings and unrelated/shared folders are preserved. See [folder allocation and failure behavior (Chinese)](docs/telegram-chat-folders.md).
 
-## Official accounts in forum topics
+### Official accounts in forum topics
 
 Optionally set `OFFICIAL_ACCOUNT_TOPICS_ENABLED=true` and restart. The first official-account message automatically provisions one private forum, with a separate topic per account. Future messages use those topics and replies route back to the matching account; General never routes to WeChat. The feature defaults off, retains old groups/bindings, and restores old routing when disabled. See [official-account topics (Chinese)](docs/official-account-topics.md).
 
-## Inline WeChat custom emoji
+### Inline WeChat custom emoji
 
 `WECHAT_CUSTOM_EMOJI_ENABLED=true` renders native `[微笑]` / `[Facepalm]` tokens inline using [WeChatPack](https://t.me/addemoji/WeChatPack), preserving rich text and ordinary Unicode emoji. Sending eligibility includes a Premium bot owner or an eligible Fragment username. Enabled by default in auto mode, with button-icon eligibility checks before delivery and compatible output when eligibility is unknown or unavailable. The WebUI shows detection results and supports rechecking or explicit disable. Unknown tokens remain unchanged. See [mapping, coverage and limits (Chinese)](docs/wechat-custom-emoji.md). Available starting with `v6.0.13-dev.3`.
 
-## WebUI and message center
+### WebUI and message center
 
 The WebUI starts with the application; the current React interface is primarily Chinese. Docker Compose exposes **TCP 17863 on all host interfaces by default**: open `http://<server-address>:17863/`. Local development listens on loopback by default: `http://127.0.0.1:17863/`. WebUI and MCP share the same port; the MCP path is `/mcp`.
 
-### Telegram Mini App and live messages
+#### Telegram Mini App and live messages
 
 The same WebUI can open from the owner’s private-chat **控制台** menu. Configure `WEBUI_MINI_APP_URL=https://your-domain/` and restart the Bot: the backend verifies Telegram signatures and permits **only the existing bot owner**, without entering a WebUI token. Ordinary browser login remains available. The message page uses SSE change notifications instead of five-second polling. A reachable HTTPS root URL and an SSE-compatible reverse proxy are required; see [setup and security boundaries](docs/telegram-mini-app.md). Available since v6.0.35; use **v6.0.36 or later** for the private-chat menu fix.
 
-### Configuration console
+#### Configuration console
 
 - Configure Telegram / WeChat connections, forwarding preferences, message templates, proxies, AI / speech recognition, retries, retention, and logging.
 - Existing-field validation, unsaved-change tracking, conflict detection, responsive layouts and restart feedback are available. Telegram bot language settings do not imply equivalent WebUI language switching.
@@ -51,12 +104,12 @@ The same WebUI can open from the owner’s private-chat **控制台** menu. Conf
 - Sign in with `WEBUI_TOKEN` (at least 16 characters), or retrieve the generated SQLite-backed token with `node dist/settings-cli.js --webui-token`. Sign-in opens chat by default. Ordinary browsers save the access token locally for refresh/reopen; Mini App sessions remain separate and memory-only. Signing out or a rejected token clears saved credentials.
 - Configuration secret fields remain blank: leave blank to retain the saved value, enter a new value to replace it, or explicitly clear an optional secret. MCP tokens have separate reveal/regeneration controls.
 
-### Chat capabilities and current limitations — read first
+#### WebUI chat limitations
 
 > [!IMPORTANT]
 > **WebUI chat is currently intended mainly for viewing simple messages such as text, with limited send, quote, recall and synchronization operations. It does not fully support every WeChat message type and is not a replacement for the WeChat client.** A summary, link or attachment entry does not mean that a message type is fully decoded, interactive or comprehensively verified. Use WeChat for the complete experience.
 
-- **Rendering is partial.** Images, audio/video, files, official-account articles and merged histories have some preview/download/decoding paths. Protocol responses, expired media, cache availability and nested formats can still produce summaries, placeholders, missing attachments or failures. Red packets, transfers, mini-programs, Channels content, special cards and real-time voice/video calls are not fully supported Web features.
+- **Rendering is partial.** Images, audio/video, files, official-account articles and merged histories have some preview/download/decoding paths. Protocol responses, expired media, cache availability and nested formats can still produce summaries, placeholders, missing attachments or failures. Eligible red packets can be opened manually; see the [red packet guide](docs/red-packets.md). Transfers, mini-programs, Channels content, special cards and real-time voice/video calls are not fully supported in the WebUI.
 - **History is not your complete WeChat history.** The page reads records this project has saved or synchronized; it does not retrieve all old messages from WeChat. Telegram forwarding support must not be confused with WebUI rendering support.
 - **Operations are type-dependent.** Text, some attachment sends and eligible quote/recall operations are available; uploads are limited to 50 MiB and captions are sent separately. Quotes cannot include attachments or native mentions; use the member picker for group mentions. Recalls require native receipts and remain subject to WeChat limits. Native interactions on complex cards are not guaranteed.
 - **Status is not a read receipt.** Submitted means a WeChat-side receipt was returned, not that the recipient received/read the message. Pending Telegram synchronization is not WeChat unread state. Uncertain outcomes are not automatically resent.
@@ -106,52 +159,13 @@ MCP uses the existing WeChat login and send queue. Reading messages does not wak
 | `storage/db/webui-messages.db` | Message center history and delivery tracking | Immediately |
 | `storage/webui-media` / `storage/webui-avatars` | Attachments and avatar cache | Immediately |
 
-Manage settings in the WebUI. **Non-empty ENV > SQLite values > built-in defaults.** ENV overrides the running process without writing back to SQLite; affected fields are marked in the WebUI. Back up `./.env` and `./config` (mounted at `/app/storage`) before upgrading. Existing settings files are imported once and retained untouched. See [configuration migration](docs/settings-migration.md) for upgrade steps and optional import of legacy ENV-only application settings.
+Starting with `v6.0.42-dev.12`, manage settings in the WebUI. **Non-empty ENV > SQLite values > built-in defaults.** Stable `v6.0.41` still uses `storage/webui-config.json`, whose saved values override ENV. ENV overrides the running process without writing back to SQLite; affected fields are marked in the WebUI. Back up `./.env` and `./config` (mounted at `/app/storage`) before upgrading. Existing settings files are imported once and retained untouched. See [configuration migration](docs/settings-migration.md) for upgrade steps and optional import of legacy ENV-only application settings.
 
 Normal startup leaves the WebUI available if Telegram credentials are missing. To edit application settings without connecting clients, use `npm run build` then `npm run webui`; stop the standalone process before starting the normal app. The standalone process uses the same SQLite settings database but does not start Telegram or WeChat.
 
-## Supported Message Types
-
-### WeChat Message Type Support List
-
-+ [x] Text messages
-+ [x] Enterprise WeChat messages
-+ [x] WeChat stickers
-+ [x] Image messages
-+ [x] Video messages
-+ [x] Audio/Video calls (notification only)
-+ [x] File messages
-+ [x] Link messages
-+ [x] Group chat messages
-+ [x] Group chat @mentions (converts @everyone and @you to Telegram @you)
-+ [x] Official account messages
-+ [x] Emoji
-+ [x] Location messages
-+ [x] Message recall
-+ [x] Voice messages
-+ [ ] Red packet messages (notification only, cannot retrieve content)
-+ [ ] Mini program messages
-
-### Telegram Message Type Support List
-
-+ [x] Text messages
-+ [x] Sticker emotes
-+ [x] Image messages
-+ [x] Video messages
-+ [x] File messages
-+ [x] Voice messages
-
-## Precautions
-
-1. This project is for technical research and learning purposes only, strictly prohibited for illegal use
-2. Welcome to submit issues for any problems encountered during use
-3. Ensure that the IP of wx2tg-server matches the login region, otherwise a verification code may be required
-4. On arm-64 architecture, due to missing dependencies, the wx2tg-server image cannot be used.
-5. After logging in, you may be logged out once after one day; after logging in again, the connection will remain stable.
-
 ## Installation & Deployment
 
-See the [release notes](docs/releases.md) for updates.
+See the [release notes](docs/releases.md) for updates. On ARM64, verify that your chosen `wx2tg-server` image supports your host architecture; the bot and server are separate images.
 
 For a new deployment, copy `.env.example` to `.env` and configure the environment variables.
 
@@ -173,12 +187,13 @@ mkdir -p conf
 test -e conf/app.conf || cp app.conf.example conf/app.conf
 docker compose pull
 docker compose up -d
-docker compose exec wechat2tg node dist/settings-cli.js --webui-token
 ```
+
+If `WEBUI_TOKEN` is not configured, retrieve the generated token locally. For stable `v6.0.41`, run `docker compose exec wechat2tg cat storage/webui-token`; for `v6.0.42-dev.12` and newer, run `docker compose exec wechat2tg node dist/settings-cli.js --webui-token`.
 
 In `.env`, fill in `BOT_TOKEN`, `API_ID`, and `API_HASH`, or enter them through WebUI and restart the app after saving. The bundled example uses `BASE_API=http://wx2tg-server:8058/api` and `redislink=wx2tg-redis:6379`. Keep those Compose service names if using the bundled stack.
 
-Open `http://<server-address>:17863/` and sign in with the token. Then use Telegram `/login` to sign in to WeChat. Missing credentials leave the configuration page available. After saving environment settings in WebUI:
+Open `http://<server-address>:17863/` and sign in with the token. Then follow the login order above using `/login` in the bot's Telegram private chat. Missing credentials leave the configuration page available. After saving environment settings in WebUI:
 
 ```bash
 docker compose restart wechat2tg
@@ -274,7 +289,7 @@ Disable the bot's privacy mode. Open BotFather, enter `/mybots`, select your bot
 
 ## Bot Commands
 
-- `/login`: Get login QR code; the first person to send this command during initial deployment will become the bot owner
+- `/login`: In the bot's private chat, complete Telegram user sign-in if needed, then start WeChat login. On a fresh deployment, the first person to run this command becomes the bot owner.
 
 - `/logout`: Logout and delete login cache
 
@@ -446,11 +461,10 @@ Send a message starting with `@all` to @everyone, only supports text messages @e
 
 ## Frequently Asked Questions
 
-### Why am I prompted to enter a verification code
+### Why am I prompted to enter a verification code?
 
-wx2tg-server needs to be in the same region as your login. If you encounter a verification code prompt, check if they are in the same region.
-
-If not in the same region, you can configure WeChat proxy login in environment variables, or migrate already logged Redis data.
+- **Telegram prompts before the WeChat QR code:** `/login` is signing in to your personal Telegram account. This is expected if no usable Telegram user session exists.
+- **WeChat prompts or refuses login:** Check the message in the WeChat client and whether the `wx2tg-server` network region matches your usual login region. This alone does not resolve an unsupported protocol. If the problem persists, use the [WeChat login compatibility report](https://github.com/finalpi/wechat2tg/issues/new?template=wechat-login.yml).
 
 ## Participating in Development
 
