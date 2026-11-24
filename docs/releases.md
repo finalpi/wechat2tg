@@ -1,5 +1,10 @@
 # v6：单分支、双发行通道
 
+## 开发预览：v6.0.42-dev.13（非稳定版）
+
+- `wechat2tg` 可选 PostgreSQL，覆盖配置、绑定、WebUI 消息历史、待发送队列、红包／转账流水及朋友圈归档。Telegram 会话、附件缓存和微信 SDK 文件仍使用本地挂载。Bot 可与 `wx2tg-server` 共用一个 PostgreSQL 实例，但用独立数据库和账号。默认仍使用 SQLite。
+- 已有 SQLite 数据时，停止 Bot 并备份后设置 `BOT_POSTGRES_DSN` 和 `BOT_POSTGRES_AUTO_MIGRATE=true`，启动时自动迁移一次。迁移不覆盖目标数据、不改写原 SQLite；失败停止启动。详见 [PostgreSQL 配置与迁移](postgresql.md)。
+
 ## 开发预览：v6.0.42-dev.12（非稳定版）
 
 - WebUI 配置统一保存至 `storage/db/wx2tg.db`，首次启动从旧配置文件导入，保留原文件、模板、绑定及历史数据。**非空 ENV 现在优先于数据库，只覆盖运行、不写回**，WebUI 会标明覆盖项。测试前请备份 `./config` 和 `.env`，并阅读 [配置迁移说明](settings-migration.md)。
