@@ -25,7 +25,8 @@ function loadSource(name, dependencies = {}) {
   return exports
 }
 const data = loadSource('WechatCustomEmojiData')
-const {WECHAT_CUSTOM_EMOJI: mapping} = data
+const {WECHAT_CUSTOM_EMOJI: mapping,WECHAT_CUSTOM_EMOJI_BY_ID: byId} = data
+const {telegramTextForWechat: restore} = loadSource('TelegramTextUtils',{'./WechatCustomEmojiData':data})
 const {renderWechatCustomEmojiHtml: render, stripTelegramCustomEmoji: strip, splitTelegramHtml: split} =
   loadSource('WechatCustomEmoji', {'./WechatCustomEmojiData': data})
 const customEntities = entities => entities.filter(entity => entity instanceof Api.MessageEntityCustomEmoji)
@@ -72,6 +73,39 @@ test('all pinned mappings belong to the public pack and preserve its exact fallb
   assert.equal(mapping['[笑脸]'].emoji, mapping['[憨笑]'].emoji)
   assert.notEqual(mapping['[笑脸]'].id, mapping['[憨笑]'].id)
   assert.equal(render('[發][爆竹]', true), '[發][爆竹]', 'unverified pack matches must not be guessed')
+})
+
+test('all verified WeChatPack document IDs round trip through real GramJS text entities', () => {
+  const entries = Array.from(byId)
+  assert.equal(entries.length,108)
+  const original = entries.map(([,entry])=>entry.alias).join('')
+  const [text,entities] = HTMLParser.parse(entries.map(([,entry])=>markup(entry.alias)).join(''))
+  assert.equal(restore(text,entities),original)
+})
+
+test('Bot API reverse conversion preserves non-entities and resolves identical fallbacks by ID', () => {
+  const text = '\\/emoji 😀 🙂🙂 🙂 🤦‍♂ ✌ 👆'
+  const offset = text.indexOf('🙂')
+  const entity = (alias,offset,length)=>({type:'custom_emoji',custom_emoji_id:mapping[alias].id,offset,length})
+  assert.equal(restore(text,[
+    entity('[胜利]',text.indexOf('✌'),1),
+    entity('[皱眉]',offset + 2,2),
+    entity('[微笑]',offset,2),
+    entity('[捂脸]',text.indexOf('🤦'), '🤦‍♂'.length),
+    {type:'custom_emoji',custom_emoji_id:'9999999999999999',offset:text.indexOf('👆'),length:2},
+  ]),'/emoji 😀 [微笑][皱眉] 🙂 [捂脸] [胜利] 👆')
+  assert.equal(restore(text),text.slice(1))
+})
+
+test('malformed or non-emoji entities never corrupt the fallback text', () => {
+  const text = '𠮷🙂 caption'
+  const entity = {type:'custom_emoji',custom_emoji_id:mapping['[微笑]'].id,offset:2,length:2}
+  assert.equal(restore(text,[
+    {...entity,offset:1}, {...entity,length:3}, {...entity,offset:-2},
+    {...entity,offset:99}, {...entity,length:1.5}, {...entity,type:'bold'},
+    {...entity,custom_emoji_id:Number(entity.custom_emoji_id)},
+  ]),text)
+  assert.equal(restore(text,[entity,entity]),'𠮷[微笑] caption')
 })
 
 test('custom mode defers legacy image conversion until final rendering', () => {

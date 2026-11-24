@@ -19,7 +19,7 @@ import fs from 'node:fs'
 import {ConverterHelper} from '../util/FfmpegUtils'
 import crypto from 'crypto'
 import path from 'node:path'
-import {normalizeEscapedTelegramCommandText} from '../util/TelegramTextUtils'
+import {telegramTextForWechat} from '../util/TelegramTextUtils'
 import {getTelegramThreadId} from '../util/TelegramTopicUtils'
 import {TelegramChatFolderService} from '../service/TelegramChatFolderService'
 
@@ -88,11 +88,10 @@ export class UserMTProtoClient extends AbstractClient {
                     && !msg.fromId.userId.eq(botId) && exist.isForwardOthers) {
                     const doSend = () => {
                         if (msg.message) {
-                            const isEscapedCommandText = msg.message.startsWith('\\/')
-                            const text = normalizeEscapedTelegramCommandText(msg.message)
-                            if (!isEscapedCommandText && text.startsWith('/')) {
+                            if (msg.message.startsWith('/')) {
                                 return
                             }
+                            const text = telegramTextForWechat(msg.message,msg.entities)
                             const textMessage: BaseMessage = {
                                 id: msg.id + '',
                                 senderId: '',

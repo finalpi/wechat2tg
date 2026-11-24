@@ -60,7 +60,7 @@ import http from 'http'
 import {LogUtils} from '../util/LogUtil'
 import {ChatHistoryAttachment, getChatHistory, NestedChatHistory} from '../util/handleMsg'
 import {MessageTypeUtils} from '../util/MessageTypeUtils'
-import {normalizeEscapedTelegramCommandText} from '../util/TelegramTextUtils'
+import {telegramTextForWechat} from '../util/TelegramTextUtils'
 import {AiReplyService} from '../service/AiReplyService'
 import {CustomFile} from 'telegram/client/uploads'
 import {WebMessageStore} from '../webui/message-store'
@@ -1278,8 +1278,6 @@ export class TelegramBotClient extends AbstractClient {
         bot.on(message('text'), async ctx => {
             // 识别文本类型
             const rawText = ctx.message.text
-            const text = normalizeEscapedTelegramCommandText(rawText)
-            const isEscapedCommandText = rawText.startsWith('\\/')
             // 处理完毕
             const messageId = ctx.message.message_id
             const chatId = ctx.chat.id
@@ -1293,9 +1291,11 @@ export class TelegramBotClient extends AbstractClient {
                 return
             }
             // 其他 bot 的命令会进来，不处理
-            if (!isEscapedCommandText && typeof text === 'string' && text.startsWith('/')) {
+            if (rawText.startsWith('/')) {
                 return
             }
+            const entities = 'entities' in ctx.message && Array.isArray(ctx.message.entities) ? ctx.message.entities : undefined
+            const text = telegramTextForWechat(rawText,entities)
             const message: BaseMessage = {
                 id: messageId + '',
                 senderId: '',
@@ -1609,7 +1609,8 @@ export class TelegramBotClient extends AbstractClient {
         }
         // 带有文本的消息单独发送文本
         if (ctx.text || ctx.message.caption) {
-            const text = normalizeEscapedTelegramCommandText(ctx.text || ctx.message.caption)
+            const caption = ctx.message.caption
+            const text = telegramTextForWechat(caption || ctx.text,caption ? ctx.message.caption_entities : ctx.message.entities)
             const textMessage: BaseMessage = {
                 id: messageId + '',
                 senderId: '',

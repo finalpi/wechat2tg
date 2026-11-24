@@ -6,6 +6,8 @@ const path = require('node:path')
 const vm = require('node:vm')
 const ts = require('typescript')
 const {HTMLParser} = require('telegram/extensions/html')
+const {Api} = require('telegram')
+const {returnBigInt} = require('telegram/Helpers')
 const {Markup} = require('telegraf')
 const topics = require('../dist/util/TelegramTopicUtils')
 const textUtils = require('../dist/util/TelegramTextUtils')
@@ -182,6 +184,16 @@ for (const quoteThread of [undefined, 77, 88]) {
     if (quoteThread) assert.deepEqual(f.lookups[0], [chatId, 10, 77])
   })
 }
+
+test('Bot API text and captions restore only inline WeChatPack entities in the current topic', async () => {
+  const f = fixture(false)
+  const entities = [{type:'custom_emoji',custom_emoji_id:emojiData.WECHAT_CUSTOM_EMOJI['[微笑]'].id,offset:4,length:2}]
+  await f.text(f.ctx(77,{text:'hi🙂🙂',entities}))
+  await f.client.handleFileMessage(f.ctx(77,{text:undefined,caption:'hi🙂🙂',caption_entities:entities,document:{file_id:'file',file_name:'test.bin'}}),'document')
+  await flush()
+  assert.deepEqual(f.forwarded.filter(message=>message.type === 0).map(message=>[message.content,message.threadId,message.conversationWxId]),
+    [['hi🙂[微笑]',77,'gh_news'],['hi🙂[微笑]',77,'gh_news']])
+})
 
 for (const thread of [undefined, 1, 88]) {
   test(`General/unknown ${thread} blocks text and media before download`, async () => {
@@ -444,12 +456,14 @@ test('UserMTProto forwarding resolves current topic and honors its forward flag 
   await flush()
   const listener = f.handlers.find(h => h.event instanceof f.NewMessage).fn
   const message = thread => ({id: 20, chatId: {toJSNumber: () => chatId}, fromId: new f.PeerUser(3),
-    message: 'hello', replyTo: {forumTopic: true, replyToTopId: thread, replyToMsgId: 10},
+    message: 'hello 🙂🙂', entities:[new Api.MessageEntityCustomEmoji({offset:8,length:2,documentId:returnBigInt(emojiData.WECHAT_CUSTOM_EMOJI['[皱眉]'].id)})],
+    replyTo: {forumTopic: true, replyToTopId: thread, replyToMsgId: 10},
     media: {className: 'MessageMediaDocument'}, document: {mimeType: 'application/pdf'}, downloadMedia: async () => Buffer.from('pdf')})
   await listener({message: message(77)})
   await flush()
   assert.equal(f.forwarded.length, 2)
   assert(f.forwarded.every(msg => msg.threadId === 77 && msg.conversationWxId === 'gh_news'))
+  assert.equal(f.forwarded.find(msg=>msg.type === 0).content,'hello 🙂[皱眉]')
   await listener({message: message(88)})
   await listener({message: {...message(77), replyTo: undefined}})
   f.disableForward()

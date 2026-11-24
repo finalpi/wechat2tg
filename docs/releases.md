@@ -1,5 +1,9 @@
 # v6：单分支、双发行通道
 
+## 开发预览：v6.0.42-dev.14（非稳定版）
+
+- Telegram → 微信转发按文档 ID 将 WeChatPack 中已核对的 108 个行内自定义表情还原为微信内置表情编码，覆盖正文和媒体说明。普通 Unicode 表情、其他表情包、未核对图案及丢失实体的纯文本仍按原样转发。详见 [微信行内自定义表情](wechat-custom-emoji.md)。
+
 ## 开发预览：v6.0.42-dev.13（非稳定版）
 
 - `wechat2tg` 可选 PostgreSQL，覆盖配置、绑定、WebUI 消息历史、待发送队列、红包／转账流水及朋友圈归档。Telegram 会话、附件缓存和微信 SDK 文件仍使用本地挂载。Bot 可与 `wx2tg-server` 共用一个 PostgreSQL 实例，但用独立数据库和账号。默认仍使用 SQLite。

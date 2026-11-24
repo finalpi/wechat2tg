@@ -122,6 +122,12 @@ export const WECHAT_EMOJI_IMAGE_NAMES: Readonly<Record<string,string>> = Object.
     Object.fromEntries(entries.flatMap(({aliases}) => aliases.map(alias => [alias,aliases[0].slice(1,-1)])))
 )
 
+// Use one verified WeChat alias per document, even when multiple documents
+// share the same Unicode fallback or an expression has translated aliases.
+export const WECHAT_CUSTOM_EMOJI_BY_ID: ReadonlyMap<string,{alias:string;emoji:string}> = new Map(
+    entries.map(({aliases,id,emoji})=>[id,Object.freeze({alias:aliases[0],emoji})])
+)
+
 export const WECHAT_CUSTOM_EMOJI: Readonly<Record<string, {id: string; emoji: string}>> = Object.freeze(
     Object.fromEntries(entries.flatMap(({aliases, id, emoji}) =>
         aliases.map(alias => [alias, Object.freeze({id, emoji})])))
