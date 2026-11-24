@@ -19,7 +19,7 @@ import fs from 'node:fs'
 import {ConverterHelper} from '../util/FfmpegUtils'
 import crypto from 'crypto'
 import path from 'node:path'
-import {telegramTextForWechat} from '../util/TelegramTextUtils'
+import {hasWechatPackFallback,inspectTelegramTextForWechat} from '../util/TelegramTextUtils'
 import {getTelegramThreadId} from '../util/TelegramTopicUtils'
 import {TelegramChatFolderService} from '../service/TelegramChatFolderService'
 
@@ -91,7 +91,10 @@ export class UserMTProtoClient extends AbstractClient {
                             if (msg.message.startsWith('/')) {
                                 return
                             }
-                            const text = telegramTextForWechat(msg.message,msg.entities)
+                            const emoji = inspectTelegramTextForWechat(msg.message,msg.entities)
+                            if(emoji.custom || hasWechatPackFallback(msg.message)){
+                                this.logger?.debug(`Telegram → 微信表情: transport=userMtproto, custom=${emoji.custom}, known=${emoji.known}, restored=${emoji.restored}`)
+                            }
                             const textMessage: BaseMessage = {
                                 id: msg.id + '',
                                 senderId: '',
@@ -100,7 +103,7 @@ export class UserMTProtoClient extends AbstractClient {
                                 chatId: msgChatId,
                                 threadId,
                                 conversationWxId: exist.wxId,
-                                content: text,
+                                content: emoji.text,
                                 type: 0
                             }
                             UserMTProtoClient.getSpyClient('wxClient').sendMessage(textMessage)

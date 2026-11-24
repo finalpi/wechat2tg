@@ -106,6 +106,8 @@ test('malformed or non-emoji entities never corrupt the fallback text', () => {
     {...entity,custom_emoji_id:Number(entity.custom_emoji_id)},
   ]),text)
   assert.equal(restore(text,[entity,entity]),'𠮷[微笑] caption')
+  assert.equal(restore('🤔',[{...entity,offset:0}]),'[微笑]', 'the ID wins when another valid fallback is used')
+  assert.equal(restore('ab',[{...entity,offset:0}]),'ab', 'never replace plain text from a malformed range')
 })
 
 test('custom mode defers legacy image conversion until final rendering', () => {

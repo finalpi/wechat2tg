@@ -60,7 +60,8 @@ import http from 'http'
 import {LogUtils} from '../util/LogUtil'
 import {ChatHistoryAttachment, getChatHistory, NestedChatHistory} from '../util/handleMsg'
 import {MessageTypeUtils} from '../util/MessageTypeUtils'
-import {telegramTextForWechat} from '../util/TelegramTextUtils'
+import {hasWechatPackFallback,inspectTelegramTextForWechat,TelegramTextEntity} from '../util/TelegramTextUtils'
+import {TelegramIngressEmojiHistory} from '../util/TelegramIngressEmojiHistory'
 import {AiReplyService} from '../service/AiReplyService'
 import {CustomFile} from 'telegram/client/uploads'
 import {WebMessageStore} from '../webui/message-store'
@@ -1274,6 +1275,30 @@ export class TelegramBotClient extends AbstractClient {
         })
     }
 
+    private emojiHistory?:TelegramIngressEmojiHistory
+
+    private async restoreIncomingEmoji(text:string,entities:TelegramTextEntity[]|undefined,ctx:{
+        botInfo?:{id:number}; chat?:{id:number}; from?:{id:number}; message?:{message_id:number;has_protected_content?:boolean}
+    }):Promise<string> {
+        const incoming = inspectTelegramTextForWechat(text,entities)
+        if(!incoming.custom && !hasWechatPackFallback(text))return incoming.text
+        let restored = incoming,history = 'not-needed'
+        // Do not manufacture entities from ordinary Unicode. Recover metadata
+        // from only this already-authorized message if Bot API provided none.
+        if(!incoming.custom && !ctx.message?.has_protected_content){
+            history = 'unavailable'
+            const mt = TelegramBotClient.getSpyClient('botMTPClient')
+            if(mt?.hasLogin && mt.client?.connected && ctx.botInfo?.id && ctx.from?.id && ctx.chat?.id && ctx.message?.message_id){
+                this.emojiHistory ||= new TelegramIngressEmojiHistory()
+                const result = await this.emojiHistory.lookup(mt.client,{botId:ctx.botInfo.id,chatId:ctx.chat.id,senderId:ctx.from.id,messageId:ctx.message.message_id,text})
+                history = result.status
+                if('entities' in result && result.entities?.length)restored = inspectTelegramTextForWechat(text,result.entities)
+            }
+        }
+        this.logger.debug(`Telegram → 微信表情: botApi=${incoming.custom}, custom=${restored.custom}, known=${restored.known}, restored=${restored.restored}, history=${history}`)
+        return restored.text
+    }
+
     onMessage(bot: Telegraf) {
         bot.on(message('text'), async ctx => {
             // 识别文本类型
@@ -1295,7 +1320,7 @@ export class TelegramBotClient extends AbstractClient {
                 return
             }
             const entities = 'entities' in ctx.message && Array.isArray(ctx.message.entities) ? ctx.message.entities : undefined
-            const text = telegramTextForWechat(rawText,entities)
+            const text = await this.restoreIncomingEmoji(rawText,entities,ctx)
             const message: BaseMessage = {
                 id: messageId + '',
                 senderId: '',
@@ -1610,7 +1635,7 @@ export class TelegramBotClient extends AbstractClient {
         // 带有文本的消息单独发送文本
         if (ctx.text || ctx.message.caption) {
             const caption = ctx.message.caption
-            const text = telegramTextForWechat(caption || ctx.text,caption ? ctx.message.caption_entities : ctx.message.entities)
+            const text = await this.restoreIncomingEmoji(caption || ctx.text,caption ? ctx.message.caption_entities : ctx.message.entities,ctx)
             const textMessage: BaseMessage = {
                 id: messageId + '',
                 senderId: '',
@@ -3021,7 +3046,7 @@ ${this.i18n.t('help.instructions')}`))
         // 所有验证通过后，才保存到数据库
         const messageEntity = this.createMessageEntity(message)
         await this.messageService.createOrUpdate(messageEntity)
-        this.logger.info(`开始发送文本消息: wxMsgId=${message.id}, chatId=${targetChatId}`)
+        this.logger.debug(`开始发送文本消息: wxMsgId=${message.id}, chatId=${targetChatId}`)
 
         const option: Option = {
             message_thread_id: message.threadId,
@@ -3046,7 +3071,7 @@ ${this.i18n.t('help.instructions')}`))
 
         // Persist each confirmed fragment. Known pre-connect failures resume at
         // the first unacknowledged fragment, never replaying the earlier prefix.
-        if (chunks.length > 1) this.logger.info(`长文本消息将分 ${chunks.length} 片发送: ${message.id}`)
+        if (chunks.length > 1) this.logger.debug(`长文本消息将分 ${chunks.length} 片发送: ${message.id}`)
         for (let i = progress?.ids.length || 0; i < chunks.length; i++) {
             try {
                 const sent = await this.sendTelegramRequest(targetChatId, () => this.messageSender.sendText(targetChatId, chunks[i], option))
@@ -3084,7 +3109,7 @@ ${this.i18n.t('help.instructions')}`))
                     this.logger.warn(`聊天记录按钮添加失败: wxMsgId=${message.id}, tgBotMsgId=${messageEntity.tgBotMsgId}`)
                 }
             }
-            this.logger.info(`文本消息发送成功: wxMsgId=${message.id}, tgBotMsgId=${messageEntity.tgBotMsgId}`)
+            this.logger.debug(`文本消息发送成功: wxMsgId=${message.id}, tgBotMsgId=${messageEntity.tgBotMsgId}`)
         } else if (!success) {
             this.logger.warn(`消息保存到数据库但 tgBotMsgId=0: wxMsgId=${message.id}, chatId=${targetChatId}`)
         }

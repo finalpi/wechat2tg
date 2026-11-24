@@ -82,6 +82,7 @@ function fixture(customEmojiEnabled = false) {
     telegraf: {Markup}, 'telegraf/filters': {message: name => name},
     '../base/BaseClient': {AbstractClient: class {static getSpyClient(name) {return spy(name)}}},
     '../util/TelegramTopicUtils': topics, '../util/TelegramTextUtils': textUtils,
+    '../util/TelegramIngressEmojiHistory': require('../dist/util/TelegramIngressEmojiHistory'),
     '../util/SafeError': require('../dist/util/SafeError'),
     '../util/TelegramMedia': require('../dist/util/TelegramMedia'),
     '../config': {config: {AI_API_KEY: 'synthetic', AI_API_URL: 'https://invalid.example', AI_CONTEXT_LIMIT: 2, WECHAT_CUSTOM_EMOJI_ENABLED: customEmojiEnabled}},
@@ -193,6 +194,38 @@ test('Bot API text and captions restore only inline WeChatPack entities in the c
   await flush()
   assert.deepEqual(f.forwarded.filter(message=>message.type === 0).map(message=>[message.content,message.threadId,message.conversationWxId]),
     [['hi🙂[微笑]',77,'gh_news'],['hi🙂[微笑]',77,'gh_news']])
+})
+
+test('Bot API with no custom entities recovers a known ID via its own exact MTProto message', async () => {
+  const f = fixture(false),debug = [],reads = []
+  const text = '🙂🙂',botId = 123,senderId = 555
+  const ctx = f.ctx(77,{text})
+  Object.assign(ctx,{botInfo:{id:botId},from:{id:senderId}})
+  const entity = new Api.MessageEntityCustomEmoji({offset:2,length:2,documentId:returnBigInt(emojiData.WECHAT_CUSTOM_EMOJI['[皱眉]'].id)})
+  const message = new Api.Message({id:20,date:1,peerId:new Api.PeerChannel({channelId:returnBigInt('12345')}),fromId:new Api.PeerUser({userId:returnBigInt(senderId)}),message:text,entities:[entity]})
+  // GramJS receives the marked chat ID, which need not use the synthetic fixture's short form.
+  const telegramChat = Number(require('telegram').utils.getPeerId(message.peerId))
+  ctx.chat.id = telegramChat
+  f.bind.resolveTelegram = async () => ({wxId:'gh_news'})
+  f.client.dealWithCommand = async()=>false
+  f.client.logger.debug = line=>debug.push(line)
+  Object.assign(f.mt.client,{connected:true,getMe:async()=>({userId:returnBigInt(botId)}),
+    getMessages:async(...args)=>{reads.push(args);return [message]},
+  })
+  await f.text(ctx)
+  assert.deepEqual(reads,[[telegramChat,{ids:[20]}]])
+  assert.equal(f.forwarded[0].content,'🙂[皱眉]')
+  assert.match(debug.at(-1),/botApi=0, custom=1, known=1, restored=1, history=checked/)
+  assert(!debug.at(-1).includes(text))
+  // A stale/wrong message from the same peer must not supply emoji metadata.
+  const second = fixture(false)
+  second.bind.resolveTelegram = f.bind.resolveTelegram
+  second.client.dealWithCommand = async()=>false
+  Object.assign(second.mt.client,{connected:true,getMe:f.mt.client.getMe,getMessages:async()=>[new Api.Message({
+    id:20,date:1,peerId:message.peerId,fromId:new Api.PeerUser({userId:returnBigInt(senderId + 1)}),message:text,entities:[entity],
+  })]})
+  await second.text(ctx)
+  assert.equal(second.forwarded[0].content,text)
 })
 
 for (const thread of [undefined, 1, 88]) {
@@ -481,6 +514,16 @@ test('UserMTProto deletion skips unscoped IDs and scopes known events by event.c
   await listener({chatId: {toString: () => String(chatId)}, deletedIds: [20, 21]})
   assert.deepEqual(f.lookups, [[chatId, 20], [chatId, 21]])
   assert.equal(f.forwarded.length, 2)
+})
+
+test('routine WeChat to Telegram text delivery logs at debug, not info', async () => {
+  const f = fixture(),info = [],debug = []
+  f.client.logger.info = line=>info.push(line)
+  f.client.logger.debug = line=>debug.push(line)
+  assert.equal(await f.client.sendTextMsgSynchronously(outbound()),true)
+  assert(!info.some(line=>/文本消息/.test(line)))
+  assert(debug.some(line=>line.includes('开始发送文本消息')))
+  assert(debug.some(line=>line.includes('文本消息发送成功')))
 })
 
 test('retry preserves stored destination after feature disable and forbidden send never retargets', async () => {
