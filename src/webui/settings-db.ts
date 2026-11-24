@@ -152,10 +152,29 @@ export function environmentOverrides(environment:NodeJS.ProcessEnv):Record<strin
     return Object.fromEntries(persistedFields.filter(f=>f.source === 'environment' && environment[f.key]?.trim()).map(f=>[f.key,environment[f.key]]))
 }
 
+/** Start with the configured database. Only the two explicit migration gates
+ * can trigger import; connection, schema, and data errors remain fatal. */
+export async function openStartupSettings(environment = process.env,file = APP_DATABASE,legacyFile = settingsPath()) {
+    const dsn = botPostgresDsn(environment)
+    if(!dsn)return SettingsDatabase.open(file,legacyFile)
+    try {
+        return await SettingsDatabase.openPostgres(dsn,file,legacyFile)
+    } catch(error) {
+        const storesOnly = error?.code === 'BOT_PG_STORES_MIGRATION_REQUIRED'
+        if(environment.BOT_POSTGRES_AUTO_MIGRATE !== 'true' || !storesOnly && error?.code !== 'BOT_PG_MIGRATION_REQUIRED')throw error
+        const {migrateBotToPostgres,migrateExistingPostgresStores} = await import('../BotPostgresMigration')
+        const migrate = storesOnly ? migrateExistingPostgresStores : migrateBotToPostgres
+        console.info('[PostgreSQL] 开始迁移 Bot SQLite 数据，迁移完成后继续启动。')
+        const counts = await migrate(dsn,file)
+        console.info('[PostgreSQL] 迁移完成（各表行数）：',counts)
+        return SettingsDatabase.openPostgres(dsn,file,legacyFile)
+    }
+}
+
 export let settingsDatabase:SettingsDatabase|undefined
 export let startupOverrides:Record<string,string>|undefined
 export async function initializeSettings() {
-    settingsDatabase = await SettingsDatabase.openConfigured()
+    settingsDatabase = await openStartupSettings()
     startupOverrides = environmentOverrides(process.env)
     for(const [key,value] of Object.entries(settingsDatabase.savedEnvironment())) {
         if(startupOverrides[key] === undefined)process.env[key] = value

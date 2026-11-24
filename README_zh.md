@@ -211,6 +211,7 @@ services:
       WEBUI_HOST: "0.0.0.0"
       WEBUI_PORT: "${WEBUI_PORT:-17863}"
       BOT_POSTGRES_DSN: "${BOT_POSTGRES_DSN:-}"
+      BOT_POSTGRES_AUTO_MIGRATE: "${BOT_POSTGRES_AUTO_MIGRATE:-false}"
       MESSAGE_STORE_POSTGRES_DSN: ""
     ports:
       - "${WEBUI_BIND_ADDRESS:-0.0.0.0}:${WEBUI_PORT:-17863}:${WEBUI_PORT:-17863}"
@@ -353,6 +354,7 @@ docker compose logs --tail=100 wechat2tg
 |`DEVICE_TYPE`| 是    | 微信登录协议:ipad,car,mac,pad,win,ipadX                              |
 |`BASE_API`| 是    | wx2tg-server 容器的 API 请求地址，需要填入完整路径名                            |
 |`BOT_POSTGRES_DSN`| 否 | Bot 专用 PostgreSQL 连接串，留空使用 SQLite |
+|`BOT_POSTGRES_AUTO_MIGRATE`| 否 | 备份后设为 `true`，下次启动自动迁移已有 Bot SQLite 数据；默认 `false` |
 |`MESSAGE_STORE_POSTGRES_DSN`| 否 | 服务端归档专用 PostgreSQL 连接串，需同时在服务端配置 `messagestore = "postgres"` |
 |`PROXY_PROTOCOL`| 否    | 代理类型可选值（socks5,http,https）                                     |
 |`PROXY_HOST`| 否    | 代理的 URL                                                        |

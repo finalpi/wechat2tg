@@ -211,6 +211,7 @@ services:
       WEBUI_HOST: "0.0.0.0"
       WEBUI_PORT: "${WEBUI_PORT:-17863}"
       BOT_POSTGRES_DSN: "${BOT_POSTGRES_DSN:-}"
+      BOT_POSTGRES_AUTO_MIGRATE: "${BOT_POSTGRES_AUTO_MIGRATE:-false}"
       MESSAGE_STORE_POSTGRES_DSN: ""
     ports:
       - "${WEBUI_BIND_ADDRESS:-0.0.0.0}:${WEBUI_PORT:-17863}:${WEBUI_PORT:-17863}"
@@ -347,6 +348,7 @@ Starting with v6.0.15, directories use native Telegram RichMessage: click names 
 |`DEVICE_TYPE`| Yes | WeChat login protocol: ipad, car, mac, pad, win, ipadX              |
 |`BASE_API`| Yes | wx2tg-server container API request address, full path required      |
 |`BOT_POSTGRES_DSN`| No | Dedicated bot PostgreSQL database URI; leave empty to use SQLite |
+|`BOT_POSTGRES_AUTO_MIGRATE`| No | Set to `true` after backing up to migrate existing bot SQLite data on startup; default `false` |
 |`MESSAGE_STORE_POSTGRES_DSN`| No | Dedicated server archive PostgreSQL database URI; also set `messagestore = "postgres"` in the server config |
 |`PROXY_PROTOCOL`| No | Proxy type optional values (socks5, http, https)                    |
 |`PROXY_HOST`| No | Proxy URL                                                           |

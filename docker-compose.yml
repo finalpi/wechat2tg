@@ -7,6 +7,7 @@ services:
       WEBUI_HOST: "0.0.0.0"
       WEBUI_PORT: "${WEBUI_PORT:-17863}"
       BOT_POSTGRES_DSN: "${BOT_POSTGRES_DSN:-}"
+      BOT_POSTGRES_AUTO_MIGRATE: "${BOT_POSTGRES_AUTO_MIGRATE:-false}"
       # Do not pass the server's DSN from env_file to the bot.
       MESSAGE_STORE_POSTGRES_DSN: ""
     ports:

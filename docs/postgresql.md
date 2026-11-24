@@ -38,17 +38,17 @@ messagepgautomigratesqlite = true
 
 **新安装、没有上述业务 SQLite 文件时：** 设置 `BOT_POSTGRES_DSN` 并启动 `wechat2tg`。Bot 会在专用 PG 库建表。DSN 非空但连接失败时不会回退 SQLite。
 
-**已有 Bot SQLite 数据时：** 先停止 Bot，再完整备份 `./config`、`.env` 及相关持久化目录。确认已经选用包含此功能的 Bot 镜像，并让 Compose 使用同一个原数据挂载。在填好 `BOT_POSTGRES_DSN` 后执行：
+**已有 Bot SQLite 数据时：** 先运行 `docker compose stop wechat2tg`，完整备份 `./config`、`.env` 及相关持久化目录。选用支持此功能的 Bot 镜像，保留原数据挂载，再在 `.env` 设置：
 
-```sh
-docker compose stop wechat2tg
-docker compose run --rm --no-deps wechat2tg node dist/settings-cli.js --migrate-postgres
-docker compose up -d wechat2tg
+```dotenv
+BOT_POSTGRES_AUTO_MIGRATE=true
 ```
 
-本地部署可在应用目录运行 `node dist/settings-cli.js --migrate-postgres`。迁移只读旧 SQLite，要求目标为专用空库；有数据时拒绝覆盖。该命令迁移主库和 `webui-messages.db`、`telegram-outbox.db`、`red-packets.db`、`transfers.db`、`moments.db`。导入保留主键、游标、队列进度和操作状态，并在一个事务内提交；失败不会留下半份数据，不改写旧 SQLite，也不双写。已派发但结果不明的动作会保留为「结果未知」，不会因迁移重发、补领或重新收款。
+同时填好 `BOT_POSTGRES_DSN`，然后执行 `docker compose up -d wechat2tg`。Bot 会在连接 Telegram、启动 WebUI 之前自动迁移；日志会显示各表导入行数。通常只需启用一次，成功后可以移除该参数；即使保留 `true`，之后重启也不重复导入。默认 `false`，未配置 DSN 时此参数无效。
 
-**已使用只支持 PG 主库的早期构建：** 主库无需重迁。停 Bot 并备份后，用上面的步骤将 `--migrate-postgres` 换成 `--migrate-postgres-stores`，只导入仍在 SQLite 的业务流水。该操作不覆盖已有 PG 业务数据。
+迁移只读旧 SQLite：完整迁移目标必须是专用空库；如果已使用只支持 PG 主库的早期构建，会自动识别并只导入剩余业务库，不覆盖主库或已有 PG 业务数据。导入范围包括主库和 `webui-messages.db`、`telegram-outbox.db`、`red-packets.db`、`transfers.db`、`moments.db`。导入保留主键、游标、队列进度和操作状态；失败停止启动，不回退、不双写、不改写旧 SQLite。已派发但结果不明的动作会保留为「结果未知」，不会因迁移重发、补领或重新收款。
+
+如需手动控制迁移时点，可不设自动参数，在 Bot 停止后执行 `docker compose run --rm --no-deps wechat2tg node dist/settings-cli.js --migrate-postgres`；PG 主库已迁移时用 `--migrate-postgres-stores`。非 Docker 部署可以在应用目录执行对应的 `node dist/settings-cli.js` 命令。
 
 迁移后检查 WebUI 配置、已有绑定，以及一条已绑定聊天的转发；WebUI 令牌查看仍用 `docker compose exec wechat2tg node dist/settings-cli.js --webui-token`。改 DSN 后用 `docker compose up -d` 重建对应容器，单纯 `restart` 不会载入新的 ENV。回退前先停止写入并备份 PG：移除它的 DSN 会重新使用旧 SQLite，但 **PG 切换后产生的更新不会同步回来，尤其不要直接用过期的发送和收款流水启动**。避免同时运行指向同一数据的两套服务。
 

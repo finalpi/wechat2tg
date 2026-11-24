@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 const {test} = require('node:test'),assert = require('node:assert/strict')
 const fs = require('node:fs'),os = require('node:os'),path = require('node:path'),{createHash} = require('node:crypto')
-const {SettingsDatabase} = require('../dist/webui/settings-db')
+const {SettingsDatabase,openStartupSettings} = require('../dist/webui/settings-db')
 const {botPostgresDsn} = require('../dist/DatabaseOptions')
 const {migrateBotToPostgres,migrateExistingPostgresStores} = require('../dist/BotPostgresMigration')
 const {createBotDataSource} = require('../dist/BotDataSource')
@@ -24,6 +24,14 @@ test('the bot defaults to SQLite and does not auto-enable PG from the server DSN
   const dsn = 'postgresql://bot@host/wechat2tg_bot'
   assert.equal(createBotDataSource(botPostgresDsn({BOT_POSTGRES_DSN:dsn})).options.type,'postgres')
   assert.throws(()=>botPostgresDsn({BOT_POSTGRES_DSN:'postgres://bot:secret@host/'}),{code:'BOT_PG_INVALID_DSN'})
+})
+
+test('the automatic migration switch alone does not enable PostgreSQL',async t=>{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'wechat2tg-sqlite-startup-'))
+  t.after(()=>fs.rmSync(dir,{force:true,recursive:true}))
+  const file = path.join(dir,'wx2tg.db')
+  const settings = await openStartupSettings({BOT_POSTGRES_AUTO_MIGRATE:'true'},file,path.join(dir,'legacy.json'))
+  try {assert.equal(fs.existsSync(file),true)} finally {await settings.close()}
 })
 
 test('the optional PostgreSQL driver leaves SQLite column types unchanged',async()=>{
@@ -167,28 +175,33 @@ test('PostgreSQL imports the Bot main database, message journal, outbox, payment
   } finally {await source.destroy()}
   const extras = await seedAuxiliaryStores(dir,ownerId,chatId)
   const original = digest(file)
-  await assert.rejects(SettingsDatabase.openPostgres(dsn,file,legacy),{code:'BOT_PG_MIGRATION_REQUIRED'})
-  await assert.rejects(migrateBotToPostgres(dsn,file),/Invalid SQLite boolean/)
+  const env = {BOT_POSTGRES_DSN:dsn,BOT_POSTGRES_AUTO_MIGRATE:'true'}
+  await assert.rejects(openStartupSettings({BOT_POSTGRES_DSN:dsn},file,legacy),{code:'BOT_PG_MIGRATION_REQUIRED'})
+  await assert.rejects(openStartupSettings({...env,BOT_POSTGRES_AUTO_MIGRATE:'false'},file,legacy),{code:'BOT_PG_MIGRATION_REQUIRED'})
+  await assert.rejects(openStartupSettings(env,file,legacy),/Invalid SQLite boolean/)
   assert.equal(digest(file),original)
+  const target = await createBotDataSource(dsn,false).initialize()
+  try {
+    const repo = target.getRepository(BindGroup)
+    const existing = await repo.save({wxId:'already-in-pg',chatId:-101,name:'must not be overwritten',type:0})
+    await assert.rejects(openStartupSettings(env,file,legacy),{code:'BOT_PG_TARGET_NOT_EMPTY'})
+    assert.equal((await repo.findOneByOrFail({id:existing.id})).wxId,'already-in-pg')
+    await repo.delete(existing.id)
+  } finally {await target.destroy()}
   const fix = await createBotDataSource(undefined,false,file).initialize()
   await fix.query('UPDATE official_account_topic SET "isForwardOthers" = 0')
   await fix.destroy()
   const corrected = digest(file)
-  const counts = await migrateBotToPostgres(dsn,file)
-  assert.equal(counts.message,201)
-  assert.equal(counts.official_account_topic,1)
-  for(const name of ['inbox','outbox','red_packets','transfers','moments_posts'])assert.equal(counts[name],1,name)
-  assert.equal(digest(file),corrected)
-  await verifyAuxiliaryStores(dir,ownerId,chatId,extras)
-  await assert.rejects(migrateBotToPostgres(dsn,file),{code:'BOT_PG_TARGET_NOT_EMPTY'})
-
-  const pgSettings = await SettingsDatabase.openPostgres(dsn,file,legacy)
+  const pgSettings = await openStartupSettings(env,file,legacy)
   try {
     assert.equal(pgSettings.document('webui-token').read(),token)
     assert.equal(pgSettings.savedEnvironment().AI_MODEL,'sqlite-model')
     await pgSettings.saveEnvironment({AI_MODEL:'pg-model'})
   } finally {await pgSettings.close()}
-  const reopened = await SettingsDatabase.openPostgres(dsn,file,legacy)
+  assert.equal(digest(file),corrected)
+  await verifyAuxiliaryStores(dir,ownerId,chatId,extras)
+  await assert.rejects(migrateBotToPostgres(dsn,file),{code:'BOT_PG_TARGET_NOT_EMPTY'})
+  const reopened = await openStartupSettings(env,file,legacy)
   assert.equal(reopened.savedEnvironment().AI_MODEL,'pg-model')
   await reopened.close()
   assert.equal(digest(file),corrected)
@@ -232,10 +245,13 @@ test('the offline stores-only upgrade keeps an existing PG settings and binding 
     await pg.getRepository(BindGroup).insert({name:'existing',wxId,chatId:-1000100010000,type:0})
     const web = new WebMessageStore(path.join(dir,'webui-messages.db'))
     try {await web.insert(message)} finally {await web.close()}
-    await assert.rejects(SettingsDatabase.openPostgres(upgradeDsn,file,legacy),{code:'BOT_PG_STORES_MIGRATION_REQUIRED'})
-    assert.deepEqual(await migrateExistingPostgresStores(upgradeDsn,file),{inbox:1,media:0,transcript_media:0,telegram_recalls:0})
-    const settings = await SettingsDatabase.openPostgres(upgradeDsn,file,legacy)
-    try {assert.equal(settings.savedEnvironment().AI_MODEL,'existing-pg')} finally {await settings.close()}
+    await assert.rejects(openStartupSettings({BOT_POSTGRES_DSN:upgradeDsn},file,legacy),{code:'BOT_PG_STORES_MIGRATION_REQUIRED'})
+    const env = {BOT_POSTGRES_DSN:upgradeDsn,BOT_POSTGRES_AUTO_MIGRATE:'true'}
+    for(let attempt = 0;attempt < 2;attempt++){
+      const settings = await openStartupSettings(env,file,legacy)
+      try {assert.equal(settings.savedEnvironment().AI_MODEL,'existing-pg')} finally {await settings.close()}
+    }
+    assert.equal((await pg.query('SELECT remoteid FROM inbox'))[0].remoteid,remoteId)
     assert.equal((await pg.getRepository(BindGroup).findOneByOrFail({wxId})).name,'existing')
     await assert.rejects(migrateExistingPostgresStores(upgradeDsn,file),{code:'BOT_PG_TARGET_NOT_EMPTY'})
   } finally {await pg.destroy()}
