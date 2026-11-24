@@ -2,17 +2,62 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {randomBytes} from 'node:crypto'
 import {Database} from 'sqlite3'
+import {Pool} from 'pg'
+import {APP_DATABASE,BOT_SETTINGS_LOCK,BOT_TABLES,botPostgresDsn} from '../DatabaseOptions'
 import {persistedFields,validatePatch} from './schema'
 import {readOverrides,settingsPath} from './store'
 
-export const APP_DATABASE = 'storage/db/wx2tg.db'
+export {APP_DATABASE}
+const SETTINGS_TABLE_SQL = 'CREATE TABLE IF NOT EXISTS app_settings (name TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)'
+export const POSTGRES_SETTINGS_TABLE_SQL = SETTINGS_TABLE_SQL.replace('app_settings','public.app_settings')
+export const SQLITE_IMPORT_MARKER = 'sqlite-import-v1'
+
+type SettingRow = {name:string;value:string}
+const UPSERT = 'INSERT INTO app_settings (name,value) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value'
 export interface SettingsDocument {
     read(): string | undefined
     write(value:string): Promise<void>
 }
 
 export class SettingsDatabase {
-    private constructor(private db:Database,private values:Map<string,string>) {}
+    private constructor(private values:Map<string,string>,private upsert:(name:string,value:string)=>Promise<void>,readonly close:()=>Promise<void>) {}
+    static openConfigured():Promise<SettingsDatabase> {
+        const dsn = botPostgresDsn()
+        return dsn ? this.openPostgres(dsn) : this.open()
+    }
+    static async openPostgres(dsn:string,sqliteFile = APP_DATABASE,legacyFile = settingsPath()):Promise<SettingsDatabase> {
+        const pool = new Pool({connectionString:dsn,connectionTimeoutMillis:5000,max:4,application_name:'wechat2tg-settings'})
+        pool.on('error',()=>console.warn('[Settings] Idle PostgreSQL connection failed'))
+        try {
+            const client = await pool.connect()
+            let query = (sql:string,params?:unknown[])=>client.query(sql,params)
+            try {
+                await query('BEGIN')
+                await query('SELECT pg_advisory_xact_lock($1::bigint)',[BOT_SETTINGS_LOCK])
+                const {rows:tables} = await query('SELECT tablename FROM pg_tables WHERE schemaname=$1',['public'])
+                if(tables.some(({tablename})=>!BOT_TABLES.some(allowed=>allowed === tablename))){
+                    throw Object.assign(new Error('Dedicated bot database required'),{code:'BOT_PG_TARGET_NOT_EMPTY'})
+                }
+                await query(POSTGRES_SETTINGS_TABLE_SQL)
+                const {rows} = await query('SELECT name, value FROM public.app_settings')
+                const store = new SettingsDatabase(new Map(rows.map(({name,value}:SettingRow)=>[name,value])),async(name,value)=>{
+                    await query(UPSERT.replace('app_settings','public.app_settings').replace('?,?','$1,$2'),[name,value])
+                },()=>pool.end())
+                if(!store.values.has('legacy-v1')){
+                    if(!store.values.has(SQLITE_IMPORT_MARKER) && fs.existsSync(sqliteFile)){
+                        throw Object.assign(new Error('Run --migrate-postgres before enabling PostgreSQL for an existing SQLite database'),{code:'BOT_PG_MIGRATION_REQUIRED'})
+                    }
+                    await store.migrate(legacyFile,path.dirname(sqliteFile))
+                }
+                await query('COMMIT')
+                query = (sql,params)=>pool.query(sql,params)
+                return store
+            } catch(error) {
+                await query('ROLLBACK').catch(()=>undefined)
+                throw error
+            } finally {client.release()}
+        } catch(error) {await pool.end();throw error}
+    }
     static async open(file = APP_DATABASE,legacyFile = settingsPath()):Promise<SettingsDatabase> {
         fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700})
         // This file now includes credentials. Also tighten permissions on upgraded installations.
@@ -22,31 +67,28 @@ export class SettingsDatabase {
             const connection = new Database(file,error=>error ? reject(error) : resolve(connection))
         })
         db.configure('busyTimeout',5000)
-        const store = new SettingsDatabase(db,new Map())
+        const run = (sql:string,params:string[] = []):Promise<void> => new Promise((resolve,reject)=>db.run(sql,params,error=>error ? reject(error) : resolve()))
+        const store = new SettingsDatabase(new Map(),(name,value)=>run(UPSERT,[name,value]),()=>new Promise((resolve,reject)=>db.close(error=>error ? reject(error) : resolve())))
         try {
-            await store.run('CREATE TABLE IF NOT EXISTS app_settings (name TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)')
-            await store.run('BEGIN IMMEDIATE')
+            await run(SETTINGS_TABLE_SQL)
+            await run('BEGIN IMMEDIATE')
             try {
-                const rows = await new Promise<Array<{name:string;value:string}>>((resolve,reject)=>db.all('SELECT name, value FROM app_settings', (error,rows:Array<{name:string;value:string}>)=>error ? reject(error) : resolve(rows)))
+                const rows = await new Promise<SettingRow[]>((resolve,reject)=>db.all('SELECT name, value FROM app_settings', (error,rows:SettingRow[])=>error ? reject(error) : resolve(rows)))
                 store.values = new Map(rows.map(({name,value})=>[name,value]))
                 if(!store.values.has('legacy-v1'))await store.migrate(legacyFile,path.dirname(file))
-                await store.run('COMMIT')
+                await run('COMMIT')
             } catch(error) {
-                await store.run('ROLLBACK').catch(()=>undefined)
+                await run('ROLLBACK').catch(()=>undefined)
                 throw error
             }
             return store
         } catch(error) {await store.close();throw error}
     }
-    private run(sql:string,params:string[] = []):Promise<void> {
-        return new Promise((resolve,reject)=>this.db.run(sql,params,error=>error ? reject(error) : resolve()))
-    }
-    close():Promise<void> {return new Promise((resolve,reject)=>this.db.close(error=>error ? reject(error) : resolve()))}
     document(name:string):SettingsDocument {
         return {
             read:()=>this.values.get(name),
             write:async value=>{
-                await this.run('INSERT INTO app_settings (name,value) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value',[name,value])
+                await this.upsert(name,value)
                 this.values.set(name,value)
             },
         }
@@ -79,7 +121,7 @@ export class SettingsDatabase {
     }
     savedEnvironment():Record<string,string> {
         try {return JSON.parse(this.document('environment').read() || '{}')}
-        catch {throw new Error('Invalid application settings in SQLite')}
+        catch {throw new Error('Invalid persisted application settings')}
     }
     async saveEnvironment(values:Record<string,string>) {await this.document('environment').write(JSON.stringify(values))}
     /** Explicit opt-in for retiring legacy ENV-only application settings. Never replaces DB values. */
@@ -103,7 +145,7 @@ export function environmentOverrides(environment:NodeJS.ProcessEnv):Record<strin
 export let settingsDatabase:SettingsDatabase|undefined
 export let startupOverrides:Record<string,string>|undefined
 export async function initializeSettings() {
-    settingsDatabase = await SettingsDatabase.open()
+    settingsDatabase = await SettingsDatabase.openConfigured()
     startupOverrides = environmentOverrides(process.env)
     for(const [key,value] of Object.entries(settingsDatabase.savedEnvironment())) {
         if(startupOverrides[key] === undefined)process.env[key] = value

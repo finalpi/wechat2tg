@@ -1,4 +1,5 @@
 import {Entity, Column, PrimaryGeneratedColumn, Index} from 'typeorm'
+import {safeInteger} from './SafeInteger'
 
 @Entity()
 @Index('idx_message_chat_history',['chatId','id'])
@@ -8,9 +9,7 @@ export class Message {
     @PrimaryGeneratedColumn()
     id: number
 
-    @Column({
-        default: 0
-    })
+    @Column({type:'bigint',default:0,transformer:safeInteger})
     chatId: number
 
     @Column({nullable: true})
@@ -91,8 +90,6 @@ export class Message {
     msgId: string
 
     // createTime
-    @Column({
-        nullable: true
-    })
+    @Column({type:'bigint',nullable:true,transformer:safeInteger})
     createTime: number
 }

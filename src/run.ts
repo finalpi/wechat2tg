@@ -11,6 +11,8 @@ import {createMessageCenter} from './webui/messages'
 import {createLiveAutomation} from './automation/live'
 import {settingsDatabase} from './webui/settings-db'
 import {telegramDisplay} from './util/TelegramPresentation'
+import {botPostgresDsn} from './DatabaseOptions'
+import {safeErrorDetails} from './util/SafeError'
 
 // 校验配置是否配置了必填项
 const missingCredentials = ['API_HASH', 'API_ID', 'BOT_TOKEN'].filter(key => !config[key])
@@ -91,8 +93,13 @@ AppDataSource.initialize()
         })
     })
     .catch((error) => {
-        console.log(error)
-        // Connection setup remains available when the database cannot be opened.
+        console.error('Bot 数据库初始化失败',safeErrorDetails(error))
+        if(botPostgresDsn()){
+            process.exitCode = 1
+            void settingsDatabase.close().catch(()=>undefined)
+            return
+        }
+        // Connection setup remains available when the SQLite database cannot be opened.
         if (!webUIStarted) startWebUI(config)
     })
 

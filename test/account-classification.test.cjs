@@ -174,13 +174,12 @@ test('production adapter atomically preserves concurrent explicit zero, never cr
 test('mirror never synchronizes SDK columns; nullable flag has no zero default; app forum entities retained', async () => {
   const {WxContact} = loadSource('entity/WxContact.ts')
   class Dummy {}
-  const dependencies = {'../unused': {}}
-  for (const name of ['Configuration', 'BindGroup', 'Message', 'OfficialAccountForum', 'OfficialAccountTopic', 'WxRoom']) {
-    dependencies[`./entity/${name}`] = {[name]: Dummy}
-  }
-  dependencies['./entity/WxContact'] = {WxContact}
-  dependencies['./client/WechatClient'] = {}
-  const source = loadSource('data-sourse.ts', dependencies)
+  const source = loadSource('data-sourse.ts', {
+    './entity/WxRoom': {WxRoom: Dummy},
+    './entity/WxContact': {WxContact},
+    './BotDataSource': require('../dist/BotDataSource'),
+    './DatabaseOptions': {botPostgresDsn: () => undefined},
+  })
   assert.equal(source.AppDataSource.options.synchronize, true)
   assert.equal(source.AppDataSource.options.entities.length, 5)
   const mirror = source.getGeWeChatDataSource()

@@ -1,4 +1,5 @@
 import {Entity, Column, PrimaryGeneratedColumn} from 'typeorm'
+import {safeInteger} from './SafeInteger'
 
 @Entity()
 export class BindGroup {
@@ -9,7 +10,7 @@ export class BindGroup {
     id: number
 
     // bot 协议的 chatId，MTProto 协议需要取相反数
-    @Column()
+    @Column({type:'bigint',transformer:safeInteger})
     chatId: number
 
     @Column()

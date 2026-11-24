@@ -1,19 +1,16 @@
 import {Entity, Column, PrimaryColumn} from 'typeorm'
 import { Language } from '../i18n'
+import {safeInteger} from './SafeInteger'
 
 @Entity()
 export class Configuration {
     @PrimaryColumn()
     id: number
 
-    @Column({
-        default: 0
-    })
+    @Column({type:'bigint',default:0,transformer:safeInteger})
     chatId: number
 
-    @Column({
-        default: 0
-    })
+    @Column({type:'bigint',default:0,transformer:safeInteger})
     botId: number
 
     // 媒体是否压缩

@@ -1,4 +1,5 @@
 import {Column, Entity, Index, PrimaryColumn} from 'typeorm'
+import {safeInteger} from './SafeInteger'
 
 @Entity('official_account_topic')
 @Index('IDX_official_account_topic_destination', ['chatId', 'threadId'], {unique: true})
@@ -6,7 +7,7 @@ export class OfficialAccountTopic {
     @PrimaryColumn({type: 'text'})
     wxId: string
 
-    @Column({type: 'integer'})
+    @Column({type:'bigint',transformer:safeInteger})
     chatId: number
 
     @Column({type: 'integer', nullable: true})

@@ -6,6 +6,9 @@ services:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"
       WEBUI_HOST: "0.0.0.0"
       WEBUI_PORT: "${WEBUI_PORT:-17863}"
+      BOT_POSTGRES_DSN: "${BOT_POSTGRES_DSN:-}"
+      # Do not pass the server's DSN from env_file to the bot.
+      MESSAGE_STORE_POSTGRES_DSN: ""
     ports:
       - "${WEBUI_BIND_ADDRESS:-0.0.0.0}:${WEBUI_PORT:-17863}:${WEBUI_PORT:-17863}"
       # - "8056:8056" # callback 模式且需宿主机访问时启用 / Optional callback exposure

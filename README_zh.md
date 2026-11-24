@@ -167,7 +167,7 @@ MCP 复用已有微信登录和发送队列。读取消息不会自动唤醒空�
 
 更新记录见[发行说明](docs/releases.md)。ARM64 部署请确认所选 `wx2tg-server` 镜像支持该架构；Bot 和服务端使用不同的镜像。
 
-全新部署先复制一份 `.env.example` 为 `.env` 文件，然后配置环境变量。
+全新部署先复制一份 `.env.example` 为 `.env` 文件，然后配置环境变量。默认仍使用 SQLite。服务端归档和 Bot 主库可以分别启用 PostgreSQL、共用同一个实例，详见 [PostgreSQL 配置与迁移](docs/postgresql.md)。Bot 端需使用包含此功能的构建。
 
 复制项目中的 `app.conf.example` 为 `app.conf` 文件到 `conf` 目录，将 Redis 地址设置为你部署的 Redis 的地址。已有部署请合并新增配置，不要直接覆盖自己的端口、Redis 凭据和回调地址。
 
@@ -210,6 +210,8 @@ services:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"
       WEBUI_HOST: "0.0.0.0"
       WEBUI_PORT: "${WEBUI_PORT:-17863}"
+      BOT_POSTGRES_DSN: "${BOT_POSTGRES_DSN:-}"
+      MESSAGE_STORE_POSTGRES_DSN: ""
     ports:
       - "${WEBUI_BIND_ADDRESS:-0.0.0.0}:${WEBUI_PORT:-17863}:${WEBUI_PORT:-17863}"
       # - "8056:8056" # callback 模式且需宿主机访问时启用 / Optional callback exposure
@@ -350,6 +352,8 @@ docker compose logs --tail=100 wechat2tg
 |`API_HASH`| 是    | Telegram API 的 API HASH                                        |
 |`DEVICE_TYPE`| 是    | 微信登录协议:ipad,car,mac,pad,win,ipadX                              |
 |`BASE_API`| 是    | wx2tg-server 容器的 API 请求地址，需要填入完整路径名                            |
+|`BOT_POSTGRES_DSN`| 否 | Bot 专用 PostgreSQL 连接串，留空使用 SQLite |
+|`MESSAGE_STORE_POSTGRES_DSN`| 否 | 服务端归档专用 PostgreSQL 连接串，需同时在服务端配置 `messagestore = "postgres"` |
 |`PROXY_PROTOCOL`| 否    | 代理类型可选值（socks5,http,https）                                     |
 |`PROXY_HOST`| 否    | 代理的 URL                                                        |
 |`PROXY_PORT`| 否    | 代理的端口号                                                         |

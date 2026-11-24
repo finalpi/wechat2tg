@@ -60,8 +60,7 @@ export class MessageRepository {
         const result = await this.repository
             .createQueryBuilder()
             .delete()
-            .where('createTime < :timestamp', { timestamp: beforeTimestamp })
-            .andWhere('createTime IS NOT NULL')
+            .where('"createTime" < :timestamp', { timestamp: beforeTimestamp })
             .execute()
         return result.affected || 0
     }

@@ -1,20 +1,10 @@
 import {DataSource} from 'typeorm'
-import {Configuration} from './entity/Configuration'
-import {BindGroup} from './entity/BindGroup'
-import {Message} from './entity/Message'
-import {OfficialAccountForum} from './entity/OfficialAccountForum'
-import {OfficialAccountTopic} from './entity/OfficialAccountTopic'
-import fs from 'node:fs'
 import {WxContact} from './entity/WxContact'
 import {WxRoom} from './entity/WxRoom'
-import {WeChatClient} from './client/WechatClient'
+import {createBotDataSource} from './BotDataSource'
+import {botPostgresDsn} from './DatabaseOptions'
 
-export const AppDataSource = new DataSource({
-    type: 'sqlite',
-    database: 'storage/db/wx2tg.db',
-    entities: [Configuration, BindGroup, Message, OfficialAccountForum, OfficialAccountTopic],
-    synchronize: true,
-})
+export const AppDataSource = createBotDataSource(botPostgresDsn())
 
 let gewechatDataSource: DataSource
 

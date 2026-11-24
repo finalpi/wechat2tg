@@ -167,7 +167,7 @@ Normal startup leaves the WebUI available if Telegram credentials are missing. T
 
 See the [release notes](docs/releases.md) for updates. On ARM64, verify that your chosen `wx2tg-server` image supports your host architecture; the bot and server are separate images.
 
-For a new deployment, copy `.env.example` to `.env` and configure the environment variables.
+For a new deployment, copy `.env.example` to `.env` and configure the environment variables. SQLite remains the default. To opt in to PostgreSQL for the server archive, the bot database, or both on one instance, use the [PostgreSQL setup and migration guide](docs/postgresql.md). Bot PostgreSQL support requires a build that includes this change.
 
 Copy `app.conf.example` to `app.conf` in the `conf` directory and set the Redis address to your deployed Redis address. For existing deployments, merge the new settings instead of overwriting your ports, Redis credentials, and callback URL.
 
@@ -210,6 +210,8 @@ services:
       WEBUI_ENABLED: "${WEBUI_ENABLED:-true}"
       WEBUI_HOST: "0.0.0.0"
       WEBUI_PORT: "${WEBUI_PORT:-17863}"
+      BOT_POSTGRES_DSN: "${BOT_POSTGRES_DSN:-}"
+      MESSAGE_STORE_POSTGRES_DSN: ""
     ports:
       - "${WEBUI_BIND_ADDRESS:-0.0.0.0}:${WEBUI_PORT:-17863}:${WEBUI_PORT:-17863}"
       # - "8056:8056" # callback 模式且需宿主机访问时启用 / Optional callback exposure
@@ -344,6 +346,8 @@ Starting with v6.0.15, directories use native Telegram RichMessage: click names 
 |`API_HASH`| Yes | Telegram API HASH                                                   |
 |`DEVICE_TYPE`| Yes | WeChat login protocol: ipad, car, mac, pad, win, ipadX              |
 |`BASE_API`| Yes | wx2tg-server container API request address, full path required      |
+|`BOT_POSTGRES_DSN`| No | Dedicated bot PostgreSQL database URI; leave empty to use SQLite |
+|`MESSAGE_STORE_POSTGRES_DSN`| No | Dedicated server archive PostgreSQL database URI; also set `messagestore = "postgres"` in the server config |
 |`PROXY_PROTOCOL`| No | Proxy type optional values (socks5, http, https)                    |
 |`PROXY_HOST`| No | Proxy URL                                                           |
 |`PROXY_PORT`| No | Proxy port number                                                   |

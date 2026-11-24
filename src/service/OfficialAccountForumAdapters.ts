@@ -7,6 +7,8 @@ import {OfficialAccountTopic} from '../entity/OfficialAccountTopic'
 import {TelegramChatFolderService} from './TelegramChatFolderService'
 import type {OfficialForumStorage, OfficialForumTelegram, OfficialTopicOptions} from './OfficialAccountForumService'
 
+const uniqueConflict = (code:unknown) => code === 'SQLITE_CONSTRAINT' || code === '23505'
+
 export class TypeOrmOfficialForumStorage implements OfficialForumStorage {
     constructor(private readonly source: () => Promise<DataSource> = async () => (await import('../data-sourse')).AppDataSource) {}
 
@@ -27,7 +29,7 @@ export class TypeOrmOfficialForumStorage implements OfficialForumStorage {
             await (await this.forums()).insert(forum)
             return true
         } catch (error) {
-            if (error?.code === 'SQLITE_CONSTRAINT' && await this.getForum()) return false
+            if (uniqueConflict(error?.code) && await this.getForum()) return false
             throw error
         }
     }
@@ -36,7 +38,7 @@ export class TypeOrmOfficialForumStorage implements OfficialForumStorage {
         // Do not replace a known ID, even if another process supplies stale state.
         const result = await (await this.forums()).createQueryBuilder().update()
             .set({chatId: forum.chatId, creationStatus: forum.creationStatus})
-            .where('id = :id AND (chatId IS NULL OR chatId = :chatId)', {id: 1, chatId: forum.chatId}).execute()
+            .where('id = :id AND ("chatId" IS NULL OR "chatId" = :chatId)', {id: 1, chatId: forum.chatId}).execute()
         if (result.affected !== 1) throw new Error('Official-account forum state conflict; no state was reset')
     }
 
@@ -52,14 +54,14 @@ export class TypeOrmOfficialForumStorage implements OfficialForumStorage {
         try {
             await (await this.topics()).insert(topic)
         } catch (error) {
-            if (error?.code !== 'SQLITE_CONSTRAINT' || !await this.getTopic(topic.wxId)) throw error
+            if (!uniqueConflict(error?.code) || !await this.getTopic(topic.wxId)) throw error
         }
     }
 
     async finishTopic(wxId: string, threadId: number): Promise<void> {
         const result = await (await this.topics()).createQueryBuilder().update()
             .set({threadId, status: 'ready'})
-            .where('wxId = :wxId AND (threadId IS NULL OR threadId = :threadId)', {wxId, threadId}).execute()
+            .where('"wxId" = :wxId AND ("threadId" IS NULL OR "threadId" = :threadId)', {wxId, threadId}).execute()
         if (result.affected !== 1) throw new Error('Official-account topic state conflict')
     }
 
