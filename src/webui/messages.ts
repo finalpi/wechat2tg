@@ -219,7 +219,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         const stored = Object.assign(new Message(),{wxMsgId:row.remoteId,msgId:String(source.MsgId || ''),toWxid:source.ToUserName,wxSenderId:row.senderId,source_text:source.Content})
         const buffer = await bot.downloadChatHistoryAttachment(found,stored)
         const file = await media.save(found.fileName || 'attachment.bin','auto',(async function*(){yield buffer})(),'download')
-        await store.run('INSERT OR REPLACE INTO transcript_media(cacheKey,attachmentId) VALUES(?,?)',[cacheKey,file.id])
+        await store.run('INSERT INTO transcript_media(cacheKey,attachmentId) VALUES(?,?) ON CONFLICT(cacheKey) DO UPDATE SET attachmentId=excluded.attachmentId',[cacheKey,file.id])
         return media.get(file.id)
     })
     const sync = async(id:number,confirm = false)=>{
@@ -614,7 +614,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
             if(row.revokeStatus === 'unknown' && !confirmUncertain)throw new MessageCenterError('revokeUnknown',409)
             const payload = revokePayload(row,selfId)
             let claimed:boolean
-            try{claimed = await store.claimRevoke(id,requestId)}catch(e){if(e?.code === 'SQLITE_CONSTRAINT')throw new MessageCenterError('requestConflict',409);throw e}
+            try{claimed = await store.claimRevoke(id,requestId)}catch(e){if(e?.code === 'SQLITE_CONSTRAINT' || e?.code === '23505')throw new MessageCenterError('requestConflict',409);throw e}
             if(!claimed)throw new MessageCenterError('revokeInProgress',409)
             const operation = (async()=>{
                 try{await revokeWechat(payload);await store.observeRevoke(row.wxId,row.remoteId);syncRevocation(id)}
@@ -647,10 +647,10 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         },
         newMessages:async(cursor,wxId,limit)=>{
             await repairOwnership()
-            const maximum = (await store.all('SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name=\'inbox\'),0) AS cursor'))[0].cursor
+            const maximum = await store.cursor()
             if(cursor === undefined)return {messages:[],cursor:maximum,hasMore:false}
             if(cursor > maximum)throw new MessageCenterError('cursorAhead')
-            const rows = await store.all('SELECT * FROM inbox WHERE hidden=0 AND telegramTracked=1 AND direction=\'incoming\' AND id>? AND id<=? AND (? IS NULL OR wxId=?) ORDER BY id LIMIT ?',[cursor,maximum,wxId || null,wxId || null,limit + 1])
+            const rows = await store.all('SELECT * FROM inbox WHERE hidden=0 AND telegramTracked=1 AND direction=\'incoming\' AND id>? AND id<=? AND (CAST(? AS TEXT) IS NULL OR wxId=?) ORDER BY id LIMIT ?',[cursor,maximum,wxId || null,wxId || null,limit + 1])
             const hasMore = rows.length > limit
             const messages = rows.slice(0,limit).map(publicMessage)
             return {messages,cursor:hasMore ? messages[messages.length - 1].id : maximum,hasMore}

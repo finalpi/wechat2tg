@@ -4,6 +4,8 @@ import path from 'node:path'
 import {createHash,randomBytes} from 'node:crypto'
 import axios from 'axios'
 import {readWechatTransfer,resolveTransferPayer,transferExpired,WechatTransfer} from '../util/WechatTransfer'
+import {BotStorePostgres} from '../BotStorePostgres'
+import {storeFile} from '../BotStoreSchema'
 
 export type TransferState = 'ready'|'accepting'|'received'|'unavailable'|'unknown'
 export type TransferResult = {state:TransferState;canAccept:boolean;amountFen:number}
@@ -34,7 +36,15 @@ export function transferButtonText(result:TransferResult) {
 export class TransferService {
     private db:sqlite3.Database
     private ready:Promise<void>
-    constructor(private session:()=>Promise<TransferSession|undefined>,private send = requestTransferAccept,file = 'storage/db/transfers.db') {
+    private pg?:BotStorePostgres
+    constructor(private session:()=>Promise<TransferSession|undefined>,private send = requestTransferAccept,file?:string) {
+        this.pg = BotStorePostgres.configured('transfers',file)
+        if(this.pg){
+            this.ready = this.pg.initialize('transfers','UPDATE transfers SET state=\'unknown\' WHERE state=\'accepting\'')
+            void this.ready.catch(()=>undefined)
+            return
+        }
+        file ??= storeFile('transfers')
         fs.mkdirSync(path.dirname(file),{recursive:true})
         if(!fs.existsSync(file))fs.closeSync(fs.openSync(file,'wx',0o600))
         fs.chmodSync(file,0o600)
@@ -60,11 +70,14 @@ export class TransferService {
     }
     private async run(sql:string,values:unknown[] = []):Promise<number> {
         await this.ready
+        if(this.pg)return this.pg.changes(sql,values)
         return new Promise((resolve,reject)=>this.db.run(sql,values,function(error){error ? reject(error) : resolve(this.changes)}))
     }
-    private async row(token:string):Promise<Row|undefined> {
+    private async row(value:string,byKey = false):Promise<Row|undefined> {
         await this.ready
-        return new Promise((resolve,reject)=>this.db.get<Row>('SELECT * FROM transfers WHERE token=?',[token],(error,row)=>error ? reject(error) : resolve(row)))
+        const sql = byKey ? 'SELECT * FROM transfers WHERE key=?' : 'SELECT * FROM transfers WHERE token=?'
+        if(this.pg)return (await this.pg.rows<Row>(sql,[value]))[0]
+        return new Promise((resolve,reject)=>this.db.get<Row>(sql,[value],(error,row)=>error ? reject(error) : resolve(row)))
     }
     private key(account:string,packet:WechatTransfer) {return createHash('sha256').update(JSON.stringify([account,packet.sendId])).digest('hex')}
     private result(row:Row):TransferResult {
@@ -84,9 +97,9 @@ export class TransferService {
         if(!payer || !session || session.accountId !== account || session.ownerId <= 0 || !Number.isSafeInteger(session.ownerId)
             || transferExpired(packet.invalidTime))throw unavailable()
         const key = this.key(account,packet),token = randomBytes(16).toString('hex')
-        await this.run(`INSERT OR IGNORE INTO transfers(key,token,account,owner,conversation,chatId,threadId,payer,transferId,transactionId,invalidTime,amount,state)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'ready')`,[key,token,account,session.ownerId,destination.conversation,destination.chatId,destination.threadId ?? null,payer,packet.sendId,packet.transactionId,packet.invalidTime,packet.amountFen])
-        const stored:Row = await new Promise((resolve,reject)=>this.db.get<Row>('SELECT * FROM transfers WHERE key=?',[key],(error,row)=>error ? reject(error) : resolve(row)))
+        await this.run(`INSERT INTO transfers(key,token,account,owner,conversation,chatId,threadId,payer,transferId,transactionId,invalidTime,amount,state)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'ready') ON CONFLICT DO NOTHING`,[key,token,account,session.ownerId,destination.conversation,destination.chatId,destination.threadId ?? null,payer,packet.sendId,packet.transactionId,packet.invalidTime,packet.amountFen])
+        const stored = await this.row(key,true)
         if(stored.amount !== packet.amountFen || stored.transactionId !== packet.transactionId || stored.invalidTime !== packet.invalidTime
             || (stored.payer ?? stored.conversation) !== payer)throw unavailable()
         return {token:stored.token,...await this.status(stored.token,destination)}
@@ -133,7 +146,7 @@ export class TransferService {
         catch {return {state:'unknown',canAccept:false,amountFen:row.amount}}
         return this.status(token,destination)
     }
-    async close() {await this.ready;await new Promise<void>((resolve,reject)=>this.db.close(error=>error ? reject(error) : resolve()))}
+    async close() {if(this.pg){await this.ready.catch(()=>undefined);return this.pg.close()}await this.ready;await new Promise<void>((resolve,reject)=>this.db.close(error=>error ? reject(error) : resolve()))}
 }
 
 let singleton:TransferService

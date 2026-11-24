@@ -167,7 +167,7 @@ Normal startup leaves the WebUI available if Telegram credentials are missing. T
 
 See the [release notes](docs/releases.md) for updates. On ARM64, verify that your chosen `wx2tg-server` image supports your host architecture; the bot and server are separate images.
 
-For a new deployment, copy `.env.example` to `.env` and configure the environment variables. SQLite remains the default. To opt in to PostgreSQL for the server archive, the bot database, or both on one instance, use the [PostgreSQL setup and migration guide](docs/postgresql.md). Bot PostgreSQL support requires a build that includes this change.
+For a new deployment, copy `.env.example` to `.env` and configure the environment variables. SQLite remains the default. To opt in to PostgreSQL for the server archive, the bot's databases (including history, outbox and archives), or both on one instance, use the [PostgreSQL setup and migration guide](docs/postgresql.md). Bot PostgreSQL support requires a build that includes this change.
 
 Copy `app.conf.example` to `app.conf` in the `conf` directory and set the Redis address to your deployed Redis address. For existing deployments, merge the new settings instead of overwriting your ports, Redis credentials, and callback URL.
 

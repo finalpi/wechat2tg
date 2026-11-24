@@ -2,6 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import sqlite3 from 'sqlite3'
 import type {Moment} from './WechatMoments'
+import {BotStorePostgres} from '../BotStorePostgres'
+import {storeFile} from '../BotStoreSchema'
 
 export type MomentsContact = {id:string;name:string}
 export type ArchivedMoment = {post:Moment;expectedPhotos:number;images:Buffer[]}
@@ -10,7 +12,15 @@ export const momentsDay = 24 * 60 * 60 * 1000
 export class MomentsArchive {
     private db:sqlite3.Database
     private ready:Promise<void>
-    constructor(file = 'storage/db/moments.db') {
+    private pg?:BotStorePostgres
+    constructor(file?:string) {
+        this.pg = BotStorePostgres.configured('moments',file)
+        if(this.pg){
+            this.ready = this.pg.initialize('moments','')
+            void this.ready.catch(()=>undefined)
+            return
+        }
+        file ??= storeFile('moments')
         fs.mkdirSync(path.dirname(file),{recursive:true})
         if(!fs.existsSync(file))fs.closeSync(fs.openSync(file,'wx',0o600))
         fs.chmodSync(file,0o600)
@@ -34,10 +44,12 @@ export class MomentsArchive {
     }
     private async run(sql:string,args:unknown[]) {
         await this.ready
+        if(this.pg)return this.pg.changes(sql,args)
         return new Promise<number>((resolve,reject)=>this.db.run(sql,args,function(error){error ? reject(error) : resolve(this.changes)}))
     }
     private async rows<T>(sql:string,args:unknown[]) {
         await this.ready
+        if(this.pg)return this.pg.rows<T>(sql,args)
         return new Promise<T[]>((resolve,reject)=>this.db.all<T>(sql,args,(error,rows)=>error ? reject(error) : resolve(rows)))
     }
     async enabled(scope:string,target:string):Promise<boolean> {
@@ -48,8 +60,8 @@ export class MomentsArchive {
         return this.rows('SELECT target AS id,name FROM moments_contacts WHERE scope=? ORDER BY enabled DESC,name,target LIMIT ? OFFSET ?',[scope,limit,offset])
     }
     async rememberContact(scope:string,target:MomentsContact) {
-        await this.run(`INSERT OR IGNORE INTO moments_contacts(scope,target,name,enabled)
-            SELECT ?,?,?,0 WHERE (SELECT COUNT(*) FROM moments_contacts) < 2000`,[scope,target.id,target.name])
+        await this.run(`INSERT INTO moments_contacts(scope,target,name,enabled)
+            SELECT ?,?,?,0 WHERE (SELECT COUNT(*) FROM moments_contacts) < 2000 ON CONFLICT DO NOTHING`,[scope,target.id,target.name])
         if(!(await this.rows('SELECT 1 FROM moments_contacts WHERE scope=? AND target=?',[scope,target.id])).length)
             throw new Error('本机的朋友圈归档联系人已达上限。')
     }
@@ -78,10 +90,11 @@ export class MomentsArchive {
         if(images.length > 9 || images.reduce((sum,image)=>sum + image.length,0) > 8 * 1024 * 1024)throw new Error('朋友圈图片超过单条归档上限。')
         const snapshot = JSON.stringify({post:{...post,photos:[]},expectedPhotos:post.photos.length})
         const encoded = JSON.stringify(images.map(image=>image.toString('base64')))
-        const inserted = await this.run(`INSERT OR IGNORE INTO moments_posts(scope,target,id,published,post,images)
+        const inserted = await this.run(`INSERT INTO moments_posts(scope,target,id,published,post,images)
             SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM moments_contacts WHERE scope=? AND target=? AND (enabled=1 OR ?=1))
             AND (SELECT COUNT(*) FROM moments_posts) < 2000
-            AND (SELECT COALESCE(SUM(length(post)+length(images)),0) FROM moments_posts) + ? <= ?`,
+            AND (SELECT COALESCE(SUM(length(post)+length(images)),0) FROM moments_posts) + ? <= ?
+            ON CONFLICT DO NOTHING`,
         [scope,post.target,post.id,post.time,snapshot,encoded,scope,post.target,explicit ? 1 : 0,Buffer.byteLength(snapshot) + encoded.length,128 * 1024 * 1024])
         if(inserted)return true
         if((explicit || await this.enabled(scope,post.target)) && !await this.has(scope,post.target,post.id))
@@ -103,5 +116,5 @@ export class MomentsArchive {
         return row.total
     }
     async clear(scope:string,target:string) {await this.run('DELETE FROM moments_posts WHERE scope=? AND target=?',[scope,target])}
-    async close() {await this.ready;await new Promise<void>((resolve,reject)=>this.db.close(error=>error ? reject(error) : resolve()))}
+    async close() {if(this.pg){await this.ready.catch(()=>undefined);return this.pg.close()}await this.ready;await new Promise<void>((resolve,reject)=>this.db.close(error=>error ? reject(error) : resolve()))}
 }

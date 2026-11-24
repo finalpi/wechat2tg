@@ -13,7 +13,7 @@ export async function conversationMessages(source: DataSource, wxId: string, sel
         } else if (selfId && !wxId.endsWith('@chatroom')) {
             where.orWhere(`(m.conversationWxId IS NULL AND m.threadId IS NULL
                 AND ((m.wxSenderId = :selfId AND m.toWxid = :wxId) OR (m.wxSenderId = :wxId AND m.toWxid = :selfId))
-                AND m.chatId NOT IN (SELECT chatId FROM bind_group WHERE type = 1 OR wxId LIKE :roomSuffix))`,
+                AND m.chatId NOT IN (SELECT "chatId" FROM bind_group WHERE type = 1 OR "wxId" LIKE :roomSuffix))`,
             {selfId, wxId, roomSuffix: '%@chatroom'})
         }
     }))

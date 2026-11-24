@@ -4,6 +4,8 @@ import path from 'node:path'
 import {createHash,randomBytes} from 'node:crypto'
 import axios from 'axios'
 import {readWechatRedPacket} from '../util/WechatRedPacket'
+import {BotStorePostgres} from '../BotStorePostgres'
+import {storeFile} from '../BotStoreSchema'
 
 export type RedPacketState = 'ready'|'opening'|'received'|'unavailable'|'unknown'
 export interface RedPacketResult {state:RedPacketState;canOpen:boolean;amountFen?:number;reason?:string}
@@ -57,7 +59,15 @@ export class RedPacketService {
     private db:sqlite3.Database
     private ready:Promise<void>
     private confirmations = new Map<string,{token:string;account:string;owner:number;scope:string;expires:number}>()
-    constructor(private session:()=>Promise<RedPacketSession|undefined>,private send = requestRedPacketOpen,file = 'storage/db/red-packets.db') {
+    private pg?:BotStorePostgres
+    constructor(private session:()=>Promise<RedPacketSession|undefined>,private send = requestRedPacketOpen,file?:string) {
+        this.pg = BotStorePostgres.configured('packets',file)
+        if(this.pg){
+            this.ready = this.pg.initialize('packets','UPDATE red_packets SET state=\'unknown\',xml=NULL WHERE state=\'opening\'')
+            void this.ready.catch(()=>undefined)
+            return
+        }
+        file ??= storeFile('packets')
         fs.mkdirSync(path.dirname(file),{recursive:true})
         if(!fs.existsSync(file))fs.closeSync(fs.openSync(file,'wx',0o600))
         fs.chmodSync(file,0o600)
@@ -76,11 +86,14 @@ export class RedPacketService {
     }
     private async run(sql:string,params:unknown[] = []):Promise<number> {
         await this.ready
+        if(this.pg)return this.pg.changes(sql,params)
         return new Promise((resolve,reject)=>this.db.run(sql,params,function(error){error ? reject(error) : resolve(this.changes)}))
     }
-    private async row(token:string):Promise<PacketRow|undefined> {
+    private async row(value:string,byKey = false):Promise<PacketRow|undefined> {
         await this.ready
-        return new Promise((resolve,reject)=>this.db.get<PacketRow>('SELECT * FROM red_packets WHERE token=?',[token],(error,row)=>error ? reject(error) : resolve(row)))
+        const sql = byKey ? 'SELECT * FROM red_packets WHERE key=?' : 'SELECT * FROM red_packets WHERE token=?'
+        if(this.pg)return (await this.pg.rows<PacketRow>(sql,[value]))[0]
+        return new Promise((resolve,reject)=>this.db.get<PacketRow>(sql,[value],(error,row)=>error ? reject(error) : resolve(row)))
     }
     private result(row:PacketRow):RedPacketResult {
         return {state:row.state,canOpen:row.state === 'ready',...(row.state === 'received' && row.amount !== null ? {amountFen:row.amount} : {}),...(row.reason ? {reason:row.reason} : {})}
@@ -99,9 +112,9 @@ export class RedPacketService {
             || !packet?.claimable || !input.conversation || !/^[1-9]\d{0,29}$/.test(input.remoteId))throw redPacketError()
         const key = createHash('sha256').update(JSON.stringify([session.accountId,packet.sendId])).digest('hex')
         const token = randomBytes(16).toString('hex')
-        await this.run(`INSERT OR IGNORE INTO red_packets(key,token,account,owner,conversation,remoteId,xml,state,chatId,threadId,updatedAt)
-            VALUES(?,?,?,?,?,?,?,'ready',?,?,?)`,[key,token,session.accountId,session.ownerId,input.conversation,input.remoteId,packet.xml,input.chatId ?? null,input.threadId ?? null,Date.now()])
-        const stored:PacketRow = await new Promise((resolve,reject)=>this.db.get<PacketRow>('SELECT * FROM red_packets WHERE key=?',[key],(error,row)=>error ? reject(error) : resolve(row)))
+        await this.run(`INSERT INTO red_packets(key,token,account,owner,conversation,remoteId,xml,state,chatId,threadId,updatedAt)
+            VALUES(?,?,?,?,?,?,?,'ready',?,?,?) ON CONFLICT DO NOTHING`,[key,token,session.accountId,session.ownerId,input.conversation,input.remoteId,packet.xml,input.chatId ?? null,input.threadId ?? null,Date.now()])
+        const stored = await this.row(key,true)
         if(stored.owner !== session.ownerId || stored.conversation !== input.conversation)throw redPacketError()
         if(input.chatId !== undefined){
             if(stored.chatId !== null && (stored.chatId !== input.chatId || (stored.threadId || undefined) !== input.threadId))throw redPacketError()
@@ -171,7 +184,7 @@ export class RedPacketService {
         this.confirmations.delete(confirmation)
         return consent.token
     }
-    async close(){await this.ready;await new Promise<void>((resolve,reject)=>this.db.close(error=>error ? reject(error) : resolve()))}
+    async close(){if(this.pg){await this.ready.catch(()=>undefined);return this.pg.close()}await this.ready;await new Promise<void>((resolve,reject)=>this.db.close(error=>error ? reject(error) : resolve()))}
 }
 
 let singleton:RedPacketService|undefined

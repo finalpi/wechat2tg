@@ -101,7 +101,7 @@ server 工作目录为 `/usr/wic-go`，因此消息目录落在宿主机 `./serv
 
 ### 可选 PostgreSQL
 
-需要 PG 时，手动将 `messagestore` 改为 `postgres`，并在未提交的 `.env` 中填写 `MESSAGE_STORE_POSTGRES_DSN`；Compose 会将它传给 server 容器。不要把真实连接串提交到仓库。Bot 主库可另设 `BOT_POSTGRES_DSN`，两边可以共用实例但必须使用不同数据库，见 [PostgreSQL 配置与迁移](postgresql.md)。
+需要 PG 时，手动将 `messagestore` 改为 `postgres`，并在未提交的 `.env` 中填写 `MESSAGE_STORE_POSTGRES_DSN`；Compose 会将它传给 server 容器。不要把真实连接串提交到仓库。Bot 业务数据库可另设 `BOT_POSTGRES_DSN`，两边可以共用实例但必须使用不同数据库，见 [PostgreSQL 配置与迁移](postgresql.md)。
 
 - 默认 `messagepgautomigratesqlite=true`。保留原 SQLite 挂载，先备份，停止其他读写旧库或目标消息库的服务。
 - 只有全新无历史的 PG 安装才设为 `false`；不能借此跳过已开始的迁移。

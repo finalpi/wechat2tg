@@ -167,7 +167,7 @@ MCP 复用已有微信登录和发送队列。读取消息不会自动唤醒空�
 
 更新记录见[发行说明](docs/releases.md)。ARM64 部署请确认所选 `wx2tg-server` 镜像支持该架构；Bot 和服务端使用不同的镜像。
 
-全新部署先复制一份 `.env.example` 为 `.env` 文件，然后配置环境变量。默认仍使用 SQLite。服务端归档和 Bot 主库可以分别启用 PostgreSQL、共用同一个实例，详见 [PostgreSQL 配置与迁移](docs/postgresql.md)。Bot 端需使用包含此功能的构建。
+全新部署先复制一份 `.env.example` 为 `.env` 文件，然后配置环境变量。默认仍使用 SQLite。服务端归档和 Bot 业务数据库（含 WebUI 历史、队列和业务归档）可以分别启用 PostgreSQL、共用同一个实例，详见 [PostgreSQL 配置与迁移](docs/postgresql.md)。Bot 端需使用包含此功能的构建。
 
 复制项目中的 `app.conf.example` 为 `app.conf` 文件到 `conf` 目录，将 Redis 地址设置为你部署的 Redis 的地址。已有部署请合并新增配置，不要直接覆盖自己的端口、Redis 凭据和回调地址。
 

@@ -6,20 +6,21 @@ import {botPostgresDsn,databaseErrorHint} from './DatabaseOptions'
 async function main() {
     dotenv.config()
     const action = process.argv[2]
-    if(!['--import-env','--webui-token','--migrate-postgres'].includes(action) || process.argv.length !== 3){
-        console.error('Usage: node dist/settings-cli.js --import-env | --webui-token | --migrate-postgres')
+    if(!['--import-env','--webui-token','--migrate-postgres','--migrate-postgres-stores'].includes(action) || process.argv.length !== 3){
+        console.error('Usage: node dist/settings-cli.js --import-env | --webui-token | --migrate-postgres | --migrate-postgres-stores')
         process.exitCode = 2
         return
     }
-    if(action === '--migrate-postgres'){
+    if(action === '--migrate-postgres' || action === '--migrate-postgres-stores'){
         const dsn = botPostgresDsn()
         if(!dsn){
             console.error('迁移需要设置 BOT_POSTGRES_DSN')
             process.exitCode = 2
             return
         }
-        const {migrateBotToPostgres} = await import('./BotPostgresMigration')
-        console.log('Bot SQLite → PostgreSQL 迁移完成（各表行数）：',await migrateBotToPostgres(dsn))
+        const {migrateBotToPostgres,migrateExistingPostgresStores} = await import('./BotPostgresMigration')
+        const migrate = action === '--migrate-postgres' ? migrateBotToPostgres : migrateExistingPostgresStores
+        console.log('Bot SQLite → PostgreSQL 迁移完成（各表行数）：',await migrate(dsn))
         return
     }
     const db = await SettingsDatabase.openConfigured()

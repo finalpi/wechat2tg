@@ -4,6 +4,7 @@ import {randomBytes} from 'node:crypto'
 import {Database} from 'sqlite3'
 import {Pool} from 'pg'
 import {APP_DATABASE,BOT_SETTINGS_LOCK,BOT_TABLES,botPostgresDsn} from '../DatabaseOptions'
+import {botStoreDefinitions,botStoreTables,postgresStoreMarker} from '../BotStoreSchema'
 import {persistedFields,validatePatch} from './schema'
 import {readOverrides,settingsPath} from './store'
 
@@ -35,7 +36,7 @@ export class SettingsDatabase {
                 await query('BEGIN')
                 await query('SELECT pg_advisory_xact_lock($1::bigint)',[BOT_SETTINGS_LOCK])
                 const {rows:tables} = await query('SELECT tablename FROM pg_tables WHERE schemaname=$1',['public'])
-                if(tables.some(({tablename})=>!BOT_TABLES.some(allowed=>allowed === tablename))){
+                if(tables.some(({tablename})=>![...BOT_TABLES,...botStoreTables,'inbox_cursor'].includes(tablename))){
                     throw Object.assign(new Error('Dedicated bot database required'),{code:'BOT_PG_TARGET_NOT_EMPTY'})
                 }
                 await query(POSTGRES_SETTINGS_TABLE_SQL)
@@ -43,6 +44,15 @@ export class SettingsDatabase {
                 const store = new SettingsDatabase(new Map(rows.map(({name,value}:SettingRow)=>[name,value])),async(name,value)=>{
                     await query(UPSERT.replace('app_settings','public.app_settings').replace('?,?','$1,$2'),[name,value])
                 },()=>pool.end())
+                if(!store.values.has(postgresStoreMarker)){
+                    const directory = path.dirname(sqliteFile)
+                    const existingPg = store.values.has('legacy-v1')
+                    if(existingPg || botStoreDefinitions.some(({file})=>fs.existsSync(path.join(directory,file)))){
+                        const code = existingPg ? 'BOT_PG_STORES_MIGRATION_REQUIRED' : 'BOT_PG_MIGRATION_REQUIRED'
+                        throw Object.assign(new Error('Existing SQLite stores require an offline migration'),{code})
+                    }
+                    await store.document(postgresStoreMarker).write('1')
+                }
                 if(!store.values.has('legacy-v1')){
                     if(!store.values.has(SQLITE_IMPORT_MARKER) && fs.existsSync(sqliteFile)){
                         throw Object.assign(new Error('Run --migrate-postgres before enabling PostgreSQL for an existing SQLite database'),{code:'BOT_PG_MIGRATION_REQUIRED'})

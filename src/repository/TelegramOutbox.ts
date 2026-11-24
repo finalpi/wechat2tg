@@ -3,6 +3,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {createHash} from 'node:crypto'
 import type BaseMessage from '../base/BaseMessage'
+import {BotStorePostgres} from '../BotStorePostgres'
+import {storeFile} from '../BotStoreSchema'
 
 export type OutboxState = 'queued' | 'enqueued' | 'sending' | 'sent' | 'unknown' | 'failed' | 'cancelled'
 export type OutboxKind = 'message' | 'media' | 'recall'
@@ -13,7 +15,15 @@ export interface TextProgress {chunks:string[];ids:number[]}
 export class TelegramOutbox {
     private db:sqlite3.Database
     private ready:Promise<void>
-    constructor(file = 'storage/db/telegram-outbox.db') {
+    private pg?:BotStorePostgres
+    constructor(file?:string) {
+        this.pg = BotStorePostgres.configured('outbox',file)
+        if(this.pg){
+            this.ready = this.pg.initialize('outbox','UPDATE outbox SET state=\'unknown\' WHERE state=\'sending\'; UPDATE outbox SET state=\'queued\' WHERE state=\'enqueued\';')
+            void this.ready.catch(()=>undefined)
+            return
+        }
+        file ??= storeFile('outbox')
         fs.mkdirSync(path.dirname(file),{recursive:true})
         if(!fs.existsSync(file))fs.closeSync(fs.openSync(file,'wx',0o600))
         this.ready = new Promise((resolve,reject)=>{
@@ -38,10 +48,12 @@ export class TelegramOutbox {
     }
     private async run(sql:string,params:unknown[] = []):Promise<number> {
         await this.ready
+        if(this.pg)return this.pg.changes(sql,params)
         return new Promise((resolve,reject)=>this.db.run(sql,params,function(error){error ? reject(error) : resolve(this.changes)}))
     }
     private async all<T>(sql:string,params:unknown[] = []):Promise<T[]> {
         await this.ready
+        if(this.pg)return this.pg.rows<T>(sql,params)
         return new Promise((resolve,reject)=>this.db.all<T>(sql,params,(error,rows)=>error ? reject(error) : resolve(rows)))
     }
     async enqueue(account:string,message:BaseMessage,now = Date.now()):Promise<string> {
@@ -52,7 +64,7 @@ export class TelegramOutbox {
         const {file,...rest} = message
         if(file && !Buffer.isBuffer(file.file))throw new Error('Invalid forwarding media')
         const payload = JSON.stringify({...rest,...(file ? {file:{fileName:file.fileName,sendType:file.sendType,duration:file.duration}} : {})})
-        await this.run('INSERT OR IGNORE INTO outbox(key,account,remoteId,conversation,chatId,kind,state,nextAt,updatedAt,payload,media) VALUES(?,?,?,?,?,?,\'queued\',?,?,?,?)',
+        await this.run('INSERT INTO outbox(key,account,remoteId,conversation,chatId,kind,state,nextAt,updatedAt,payload,media) VALUES(?,?,?,?,?,?,\'queued\',?,?,?,?) ON CONFLICT DO NOTHING',
             [key,account,message.id,conversation,message.chatId || 0,kind,now,now,payload,file?.file || null])
         // Do not resurrect an unsent message after WeChat has recalled it. The
         // running lane still owns any request already in progress.
@@ -128,5 +140,5 @@ export class TelegramOutbox {
         // survive both the old five-minute cache TTL and process restarts.
         await this.run('DELETE FROM outbox WHERE state IN (\'sent\',\'cancelled\') AND updatedAt<?',[before])
     }
-    async close() {await this.ready;await new Promise<void>((resolve,reject)=>this.db.close(error=>error ? reject(error) : resolve()))}
+    async close() {if(this.pg){await this.ready.catch(()=>undefined);return this.pg.close()}await this.ready;await new Promise<void>((resolve,reject)=>this.db.close(error=>error ? reject(error) : resolve()))}
 }

@@ -6,6 +6,20 @@ import {getWechatCallStatus} from '../util/WechatCallStatus'
 import {cleanMediaBody} from './message-body'
 import {quoteReplyText} from './quote-reply'
 import {createMessageEvents,MessageChange} from './message-events'
+import {BotStorePostgres} from '../BotStorePostgres'
+import {storeFile} from '../BotStoreSchema'
+import {PoolClient} from 'pg'
+import {installPostgresMessageTracking} from './postgres-message-tracking'
+
+const hideControls = 'UPDATE inbox SET hidden=1,telegramStatus=\'excluded\',telegramTracked=0 WHERE (type NOT IN (\'text\',\'0\',\'1\') AND (COALESCE(source,\'\') LIKE \'%<name>HandOffMaster</name>%\' OR COALESCE(source,\'\') LIKE \'%<handofflist%\' OR (type=\'unknown\' AND COALESCE(source,\'\') LIKE \'%<op id=%\'))) OR type IN (\'file_start\',\'new_monment_timeline\') OR (type IN (\'unknown\',\'text\',\'0\') AND trim(body)=\'\' AND COALESCE(source,\'\')=\'\' AND attachmentId IS NULL AND details IS NULL);'
+const recoverHistory = 'UPDATE inbox SET hidden=1 WHERE type=\'revoke\' OR source LIKE \'%<revokemsg>%\' OR source LIKE \'%<revokemsg %\'; UPDATE inbox SET telegramStatus=\'unknown\' WHERE telegramStatus=\'syncing\'; UPDATE inbox SET revokeStatus=\'unknown\' WHERE revokeStatus=\'revoking\'; UPDATE inbox SET revokeTelegramStatus=\'unknown\' WHERE revokeTelegramStatus=\'syncing\';'
+
+function publicHistoryRow(row:{id:number;source?:string;details?:string;[key:string]:unknown}) {
+    const message = {...row}
+    delete message.source
+    try {return {...message,details:message.details ? JSON.parse(message.details) : null}}
+    catch {return {...message,details:null}}
+}
 
 export interface InboxMessage {
     id?: number
@@ -40,7 +54,15 @@ export class WebMessageStore {
         if (!this.instance) this.instance = new WebMessageStore()
         return this.instance
     }
-    constructor(file = 'storage/db/webui-messages.db') {
+    private pg?:BotStorePostgres
+    constructor(file?:string) {
+        this.pg = BotStorePostgres.configured('web',file)
+        if(this.pg){
+            this.ready = this.initializePostgres()
+            void this.ready.catch(()=>undefined)
+            return
+        }
+        file ??= storeFile('web')
         fs.mkdirSync(path.dirname(file), {recursive: true})
         this.ready = new Promise((resolve, reject) => {
             this.db = new sqlite3.Database(file, error => {
@@ -65,21 +87,29 @@ export class WebMessageStore {
                             const additions = {attachmentId:'TEXT',telegramStatus:'TEXT DEFAULT \'none\'',source:'TEXT',details:'TEXT',telegramTracked:'INTEGER DEFAULT 0',bodyFormat:'TEXT DEFAULT \'plain\'',hidden:'INTEGER DEFAULT 0',revokeStatus:'TEXT DEFAULT \'none\'',revokeRequestId:'TEXT',revokedAt:'INTEGER',revokeTelegramStatus:'TEXT DEFAULT \'none\''}
                             const sql = Object.entries(additions).filter(([name])=>!columns.some(c=>c.name === name)).map(([name,type])=>`ALTER TABLE inbox ADD COLUMN ${name} ${type};`).join('')
                             const migration = !columns.some(c=>c.name === 'telegramTracked') ? 'UPDATE inbox SET telegramTracked=1 WHERE requestId IS NOT NULL AND status=\'submitted\'; UPDATE inbox SET telegramStatus=\'unverified\' WHERE telegramTracked=0 AND telegramStatus IN (\'none\',\'pending\',\'failed\',\'unknown\',\'syncing\');' : ''
-                            const hide = 'UPDATE inbox SET hidden=1,telegramStatus=\'excluded\',telegramTracked=0 WHERE (type NOT IN (\'text\',\'0\',\'1\') AND (COALESCE(source,\'\') LIKE \'%<name>HandOffMaster</name>%\' OR COALESCE(source,\'\') LIKE \'%<handofflist%\' OR (type=\'unknown\' AND COALESCE(source,\'\') LIKE \'%<op id=%\'))) OR type IN (\'file_start\',\'new_monment_timeline\') OR (type IN (\'unknown\',\'text\',\'0\') AND trim(body)=\'\' AND COALESCE(source,\'\')=\'\' AND attachmentId IS NULL AND details IS NULL);'
-                            this.db.exec(sql + migration + hide + 'UPDATE inbox SET hidden=1 WHERE type=\'revoke\' OR source LIKE \'%<revokemsg>%\' OR source LIKE \'%<revokemsg %\';' + 'CREATE UNIQUE INDEX IF NOT EXISTS inbox_revoke_request ON inbox(revokeRequestId); UPDATE inbox SET telegramStatus=\'unknown\' WHERE telegramStatus=\'syncing\'; UPDATE inbox SET revokeStatus=\'unknown\' WHERE revokeStatus=\'revoking\'; UPDATE inbox SET revokeTelegramStatus=\'unknown\' WHERE revokeTelegramStatus=\'syncing\';',e=>e ? reject(e) : this.hideStoredControls().then(()=>this.installChangeTracking()).then(resolve,reject))
+                            this.db.exec(sql + migration + hideControls + recoverHistory + 'CREATE UNIQUE INDEX IF NOT EXISTS inbox_revoke_request ON inbox(revokeRequestId);',e=>e ? reject(e) : this.hideStoredControls().then(()=>this.installChangeTracking()).then(resolve,reject))
                         })
                     })
             })
         })
     }
+    private async initializePostgres() {
+        await this.pg.initialize('web',hideControls + recoverHistory + 'UPDATE telegram_recalls SET status=\'unknown\' WHERE status=\'syncing\'; UPDATE inbox SET status=\'unknown\' WHERE status=\'sending\';')
+        await this.hideStoredControls()
+        await this.pg.exec(installPostgresMessageTracking)
+    }
     private async hideStoredControls() {
         // Run once during initialization, including old rows mistakenly marked
         // pending/synced. Do not remove source data or actual system notices.
-        const rows:any[] = await new Promise((resolve,reject)=>this.db.all('SELECT id,type,source FROM inbox WHERE type NOT IN (\'text\',\'0\',\'1\') AND (type=\'function_msg\' OR source LIKE \'%functionmsg%\' OR source LIKE \'%gamecenter%\' OR source LIKE \'%<newcount>%\' OR source LIKE \'%ilinkvoip%\')',(error,rows)=>error ? reject(error) : resolve(rows)))
+        const sql = 'SELECT id,type,source FROM inbox WHERE type NOT IN (\'text\',\'0\',\'1\') AND (type=\'function_msg\' OR source LIKE \'%functionmsg%\' OR source LIKE \'%gamecenter%\' OR source LIKE \'%<newcount>%\' OR source LIKE \'%ilinkvoip%\')'
+        type StoredControl = {id:number;type:string;source:string}
+        const rows = this.pg ? await this.pg.rows<StoredControl>(sql) : await new Promise<StoredControl[]>((resolve,reject)=>this.db.all<StoredControl>(sql,(error,rows)=>error ? reject(error) : resolve(rows)))
         const ids = rows.filter(row=>isControlMessage(row.type,row.source || '')).map(row=>row.id)
         for(let start = 0;start < ids.length;start += 400){
             const batch = ids.slice(start,start + 400)
-            await new Promise<void>((resolve,reject)=>this.db.run(`UPDATE inbox SET hidden=1,telegramStatus='excluded',telegramTracked=0 WHERE id IN (${batch.map(()=>'?').join(',')})`,batch,error=>error ? reject(error) : resolve()))
+            const hide = `UPDATE inbox SET hidden=1,telegramStatus='excluded',telegramTracked=0 WHERE id IN (${batch.map(()=>'?').join(',')})`
+            if(this.pg)await this.pg.exec(hide,batch)
+            else await new Promise<void>((resolve,reject)=>this.db.run(hide,batch,error=>error ? reject(error) : resolve()))
         }
     }
     subscribe(listener:(event:MessageChange)=>void):()=>void {return this.changes.subscribe(listener)}
@@ -116,7 +146,10 @@ export class WebMessageStore {
         const rows:{wxId:string;id:number}[] = await new Promise((resolve,reject)=>this.db.all<{wxId:string;id:number}>('SELECT wxId,id FROM message_changes', (error,rows)=>error ? reject(error) : resolve(rows)))
         if(!rows.length)return
         await new Promise<void>((resolve,reject)=>this.db.run('DELETE FROM message_changes',error=>error ? reject(error) : resolve()))
-        // Bound both the SQLite journal and event payloads. Overflow/unmatched
+        this.publishChanges(rows)
+    }
+    private publishChanges(rows:{wxId:string;id:number}[]) {
+        // Bound both the change journal and event payloads. Overflow/unmatched
         // recall keys need a broad refresh; normal status changes retain IDs.
         if(rows.length >= 257 || rows.some(row=>row.id === 0)){this.changes.publish({type:'messages'});return}
         const conversations = new Map<string,number[]>()
@@ -126,8 +159,27 @@ export class WebMessageStore {
         }
         for(const [wxId,ids] of conversations)for(let start = 0;start < ids.length;start += 100)this.changes.publish({type:'messages',wxId,ids:ids.slice(start,start + 100)})
     }
+    private postgresWrite<T>(fn:(client:PoolClient)=>Promise<T>):Promise<T> {
+        const operation = this.writes.then(async()=>{
+            const {result,rows} = await this.pg.transact(async client=>{
+                await client.query('CREATE TEMP TABLE IF NOT EXISTS message_changes(wxId TEXT NOT NULL,id BIGINT NOT NULL,PRIMARY KEY(wxId,id)) ON COMMIT DELETE ROWS')
+                const result = await fn(client)
+                const rows = await this.pg.rows<{wxId:string;id:number}>('SELECT wxId,id FROM pg_temp.message_changes',[],client)
+                return {result,rows}
+            })
+            this.publishChanges(rows)
+            return result
+        })
+        this.writes = operation.then(()=>undefined,()=>undefined)
+        return operation
+    }
     private async execute(sql:string,params:unknown[] = []):Promise<{lastID:number;changes:number}> {
         await this.ready
+        if(this.pg)return this.postgresWrite(async client=>{
+            const statement = /^INSERT INTO inbox\b/i.test(sql) ? sql + ' RETURNING id' : sql
+            const result = await this.pg.exec(statement,params,client)
+            return {lastID:result.rows[0]?.id ?? 0,changes:result.rowCount ?? 0}
+        })
         // All application writes are single autocommit statements. Serialize
         // statement + drain so overlapping claims cannot consume each other's
         // hints, and publish only after SQLite reports successful completion.
@@ -147,6 +199,7 @@ export class WebMessageStore {
     }
     async all(sql: string, params: unknown[] = []): Promise<any[]> {
         await this.ready
+        if(this.pg)return this.pg.rows(sql,params)
         return new Promise((resolve, reject) => this.db.all(sql, params, (error, rows) => error ? reject(error) : resolve(rows)))
     }
     async run(sql: string, params: unknown[] = []): Promise<number> {
@@ -157,29 +210,32 @@ export class WebMessageStore {
         message.telegramTracked = message.telegramTracked || 0
         message.bodyFormat = message.bodyFormat || 'plain'
         message.telegramStatus = message.telegramStatus || 'none'
-        await this.run(`INSERT OR IGNORE INTO inbox (${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`, keys.map(key => message[key] ?? null))
+        await this.run('INSERT INTO inbox (requestId,wxId,remoteId,senderId,senderName,body,direction,type,status,timestamp,attachmentId,telegramStatus,source,details,telegramTracked,bodyFormat) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING', keys.map(key => message[key] ?? null))
         if(isControlMessage(message.type,message.source || '') || isNoiseMessage(message.type,message.body,message.source || '') && !message.attachmentId && !message.details)await this.run('UPDATE inbox SET hidden=1,telegramStatus=\'excluded\',telegramTracked=0 WHERE wxId=? AND remoteId=?',[message.wxId,message.remoteId])
         return (await this.all('SELECT * FROM inbox WHERE requestId = ? OR (wxId = ? AND remoteId = ?) ORDER BY id DESC LIMIT 1', [message.requestId ?? null, message.wxId, message.remoteId ?? null]))[0]
     }
     async byRequest(requestId: string) {return (await this.all('SELECT * FROM inbox WHERE requestId = ?', [requestId]))[0]}
     async importHistory(messages:InboxMessage[]){
         const keys = ['wxId','remoteId','senderId','senderName','body','direction','type','status','timestamp','telegramStatus','source','bodyFormat','hidden']
-        for(let start = 0;start < messages.length;start += 40){
-            const batch = messages.slice(start,start + 40).map(message=>isNoiseMessage(message.type,message.body,message.source || '') ? {...message,telegramStatus:'excluded'} : message)
+        // PostgreSQL cannot update one conflicting row twice in the same statement.
+        const size = this.pg && new Set(messages.filter(row=>row.remoteId != null).map(row=>JSON.stringify([row.wxId,row.remoteId]))).size
+            !== messages.filter(row=>row.remoteId != null).length ? 1 : 40
+        for(let start = 0;start < messages.length;start += size){
+            const batch = messages.slice(start,start + size).map(message=>isNoiseMessage(message.type,message.body,message.source || '') ? {...message,telegramStatus:'excluded'} : message)
             const values = batch.flatMap(m=>keys.map(key=>key === 'hidden' ? Number(isNoiseMessage(m.type,m.body,m.source || '')) : m[key] ?? null))
             await this.run(`INSERT INTO inbox (${keys.join(',')}) VALUES ${batch.map(()=>`(${keys.map(()=>'?').join(',')})`).join(',')} ON CONFLICT(wxId,remoteId) DO UPDATE SET
                 telegramStatus=CASE WHEN excluded.hidden=1 THEN 'excluded' WHEN inbox.telegramTracked=0 AND inbox.telegramStatus IN ('none','pending') THEN excluded.telegramStatus ELSE inbox.telegramStatus END,
                 telegramTracked=CASE WHEN excluded.hidden=1 THEN 0 ELSE inbox.telegramTracked END,
                 bodyFormat=CASE WHEN inbox.requestId IS NULL THEN excluded.bodyFormat ELSE inbox.bodyFormat END,
-                type=CASE WHEN inbox.requestId IS NULL AND (inbox.source IS NULL OR inbox.type GLOB '[0-9]*') THEN excluded.type ELSE inbox.type END,
+                type=CASE WHEN inbox.requestId IS NULL AND (inbox.source IS NULL OR substr(inbox.type,1,1) BETWEEN '0' AND '9') THEN excluded.type ELSE inbox.type END,
                 source=CASE WHEN inbox.requestId IS NULL THEN COALESCE(inbox.source,excluded.source) ELSE inbox.source END,
-                hidden=MAX(inbox.hidden,excluded.hidden)`,values)
+                hidden=CASE WHEN inbox.hidden IS NULL OR excluded.hidden IS NULL THEN NULL WHEN inbox.hidden>=excluded.hidden THEN inbox.hidden ELSE excluded.hidden END`,values)
         }
     }
     async history(wxId: string, before = 0, query = '') {
-        const rows = await this.all('SELECT * FROM inbox WHERE hidden=0 AND wxId = ? AND (? = 0 OR timestamp < (SELECT timestamp FROM inbox WHERE id = ?) OR (timestamp = (SELECT timestamp FROM inbox WHERE id = ?) AND id < ?)) AND body LIKE ? ORDER BY timestamp DESC, id DESC LIMIT 51', [wxId, before, before, before, before, `%${query}%`])
+        const rows = await this.all('SELECT * FROM inbox WHERE hidden=0 AND wxId = ? AND (CAST(? AS BIGINT) = 0 OR timestamp < (SELECT timestamp FROM inbox WHERE id = ?) OR (timestamp = (SELECT timestamp FROM inbox WHERE id = ?) AND id < ?)) AND body LIKE ? ORDER BY timestamp DESC, id DESC LIMIT 51', [wxId, before, before, before, before, `%${query}%`])
         const hasMore = rows.length > 50
-        const messages = rows.slice(0, 50).reverse().map(({source,details,...message})=>({...message,details:details ? JSON.parse(details) : null}))
+        const messages = rows.slice(0, 50).reverse().map(publicHistoryRow)
         return {messages, hasMore, before: messages[0]?.id || 0}
     }
     async byRemoteId(wxId:string,remoteId:string) {return (await this.all('SELECT * FROM inbox WHERE wxId=? AND remoteId=?',[wxId,remoteId]))[0]}
@@ -190,7 +246,7 @@ export class WebMessageStore {
             this.all('SELECT * FROM inbox WHERE hidden=0 AND wxId=? AND (timestamp<? OR (timestamp=? AND id<?)) ORDER BY timestamp DESC,id DESC LIMIT 26',[wxId,target.timestamp,target.timestamp,id]),
             this.all('SELECT * FROM inbox WHERE hidden=0 AND wxId=? AND (timestamp>? OR (timestamp=? AND id>?)) ORDER BY timestamp,id LIMIT 25',[wxId,target.timestamp,target.timestamp,id])
         ])
-        const messages = [...older.slice(0,25).reverse(),target,...newer.slice(0,24)].map(({source,details,...message})=>({...message,details:details ? JSON.parse(details) : null}))
+        const messages = [...older.slice(0,25).reverse(),target,...newer.slice(0,24)].map(publicHistoryRow)
         return {messages,hasMore:older.length > 25,hasNewer:newer.length > 24,before:messages[0]?.id || 0,targetId:id}
     }
     async observe(msg: any) {
@@ -252,7 +308,7 @@ export class WebMessageStore {
         return (await this.execute('UPDATE inbox SET revokeStatus=\'revoking\',revokeRequestId=? WHERE id=? AND revokeStatus NOT IN (\'revoked\',\'revoking\')',[requestId,id])).changes === 1
     }
     async claimRecallNotice(key:string,confirm = false){
-        await this.run('INSERT OR IGNORE INTO telegram_recalls(key,status) VALUES(?,\'none\')',[key])
+        await this.run('INSERT INTO telegram_recalls(key,status) VALUES(?,\'none\') ON CONFLICT DO NOTHING',[key])
         return (await this.execute('UPDATE telegram_recalls SET status=\'syncing\' WHERE key=? AND (status IN (\'none\',\'failed\') OR (?=1 AND status=\'unknown\'))',[key,confirm ? 1 : 0])).changes === 1
     }
     async observeRevoke(wxId:string,remoteId:string,options:{timestamp?:number;senderId?:string;direction?:'incoming'|'outgoing'} = {}){
@@ -325,6 +381,12 @@ export class WebMessageStore {
         const row = await this.byId(id)
         if(!row)return
         this.rememberManagedReceipt(row.wxId,remoteId)
+        if(this.pg)return this.postgresWrite(async client=>{
+            const conflicting = await this.pg.rows<{id:number;requestId:string}>('SELECT id,requestId FROM inbox WHERE wxId=? AND remoteId=? AND id<>? FOR UPDATE',[row.wxId,remoteId,id],client)
+            if(conflicting.some(item=>item.requestId != null))return
+            await this.pg.exec('DELETE FROM inbox WHERE wxId=? AND remoteId=? AND id<>? AND requestId IS NULL',[row.wxId,remoteId,id],client)
+            await this.pg.exec('UPDATE inbox SET remoteId=?,source=?,timestamp=?,status=\'submitted\',telegramStatus=\'synced\',telegramTracked=0 WHERE id=?',[remoteId,source,timestamp,id],client)
+        })
         await this.run('UPDATE OR REPLACE inbox SET remoteId=?,source=?,timestamp=?,status=\'submitted\',telegramStatus=\'synced\',telegramTracked=0 WHERE id=? AND NOT EXISTS(SELECT 1 FROM inbox other WHERE other.wxId=inbox.wxId AND other.remoteId=? AND other.id<>inbox.id AND other.requestId IS NOT NULL)',[remoteId,source,timestamp,id,remoteId])
     }
     async isManagedEcho(msg:any) {
@@ -336,5 +398,9 @@ export class WebMessageStore {
         const row = await this.byRemoteId(peer,String(msg.newMsgId))
         return Boolean(row?.requestId)
     }
-    async close() {await this.ready; await this.writes; return new Promise<void>((resolve, reject) => this.db.close(error => error ? reject(error) : resolve()))}
+    async cursor():Promise<number> {
+        const sql = this.pg ? 'SELECT high AS cursor FROM inbox_cursor WHERE singleton=1' : 'SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name=\'inbox\'),0) AS cursor'
+        return (await this.all(sql))[0].cursor
+    }
+    async close() {if(this.pg){await this.ready.catch(()=>undefined);await this.writes;return this.pg.close()}await this.ready; await this.writes; return new Promise<void>((resolve, reject) => this.db.close(error => error ? reject(error) : resolve()))}
 }
