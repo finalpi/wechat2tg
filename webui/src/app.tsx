@@ -20,28 +20,20 @@ import {TemplatePreview} from '@/features/template-preview'
 import {MessagesPanel} from '@/features/messages-panel'
 import {ChatMenu} from '@/features/chat-menu'
 import {ChatAppearance} from '@/features/chat-appearance'
+import {DesktopSettingsNavigation,groupSettingsPages,MobileSettingsNavigation} from './features/settings-navigation'
 import {AvatarCacheProvider} from '@/features/message-content'
 import {useChatPreferences} from '@/lib/chat-preferences'
 import {usePwa} from '@/lib/use-pwa'
 import {useWorkspaceRoute,useWorkspaceViewport,editorsAllowReload} from '@/lib/workspace'
 import {telegramLaunch, loadTelegramSDK, connectTelegramAppearance} from '@/lib/telegram-mini-app'
 import type {ComposerDraft} from '@/features/message-composer'
-import {ArrowLeftRight, Globe, Link2, LogOut, MessageSquare, Moon, Send, SlidersHorizontal, Sparkles, Sun, Type} from 'lucide-react'
+import {ArrowLeftRight, LogOut, MessageSquare, Moon, Sun} from 'lucide-react'
 
 type FieldValue = string | number | boolean
 
 const TOKEN_KEY = 'webui-access-token'
 const THEME_KEY = 'webui-theme'
 const launch = telegramLaunch()
-const GROUP_ICONS: Record<string, typeof MessageSquare> = {
-  message: MessageSquare,
-  link: Link2,
-  send: Send,
-  type: Type,
-  globe: Globe,
-  spark: Sparkles,
-  sliders: SlidersHorizontal,
-}
 const TEMPLATE_KEYS = ['CONTACT_MESSAGE', 'OFFICIAL_MESSAGE', 'ROOM_MESSAGE', 'CONTACT_MESSAGE_GROUP', 'OFFICIAL_MESSAGE_GROUP', 'ROOM_MESSAGE_GROUP', 'CREATE_ROOM_NAME', 'CREATE_CONTACT_NAME', 'MESSAGE_DISPLAY']
 
 function Auth({onAuthed}: {onAuthed: (token: string) => void}) {
@@ -144,7 +136,6 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
   useWorkspaceViewport()
   const [chatMounted,setChatMounted] = useState(chatOnly)
   useEffect(()=>{if(chatOnly)setChatMounted(true)},[chatOnly])
-  const selectPage = (page:string)=>{if(page==='messages')navigate(true);else setActive(page)}
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
@@ -180,11 +171,7 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
     return ()=>controller.abort()
   }, [token, onLogout, chatOnly, Boolean(snapshot)])
 
-  const groups = useMemo(() => {
-    if (!snapshot) return []
-    const wanted = ['messages', 'connection', 'forward', 'templates', 'proxy', 'ai', 'mcp', 'advanced']
-    return [...snapshot.groups.filter(group => wanted.includes(group.id)), {id:'chat-appearance',label:'聊天界面',caption:'预览与显示偏好',icon:'message'}, {id:'automation',label:'自动化',caption:'脚本函数与应用规则',icon:'spark'}]
-  }, [snapshot])
+  const categories = useMemo(()=>snapshot ? groupSettingsPages(snapshot.groups) : [],[snapshot?.groups])
 
   const currentValue = (field: Field): FieldValue => {
     const raw = Object.prototype.hasOwnProperty.call(draft, field.key) ? draft[field.key] : snapshot?.values[field.key]
@@ -255,7 +242,8 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
     }
   }
 
-  const activeGroup = groups.find(group => group.id === active)
+  const activeGroup = categories.flatMap(category=>category.pages).find(page=>page.id === active)
+  const navigation = {categories,active,onSelect:setActive}
   const fields = snapshot?.fields.filter(field => field.group === active) || []
   const environment = fields.filter(field => field.source === 'environment')
   const runtime = fields.filter(field => field.source === 'runtime')
@@ -279,15 +267,7 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
           <span className="font-semibold">wechat2tg</span>
           {snapshot?.runtimeAvailable ? <Badge variant="secondary">运行中</Badge> : <Badge variant="outline">离线</Badge>}
         </div>
-        <div className="min-w-0 flex-1 md:hidden">
-          <Select value={active} onValueChange={selectPage}>
-            <SelectTrigger aria-label="切换页面" className="w-44"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectGroup>{groups.map(group => {
-              const Icon = GROUP_ICONS[group.icon] || MessageSquare
-              return <SelectItem key={group.id} value={group.id}><span className="flex items-center gap-2"><Icon className="size-4" />{group.label}</span></SelectItem>
-            })}</SelectGroup></SelectContent>
-          </Select>
-        </div>
+        <h1 className="px-2 text-sm font-semibold md:hidden">设置</h1>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" aria-label="返回聊天" title="聊天全屏" onClick={()=>navigate(true)}><MessageSquare /></Button>
           <Button variant="ghost" size="icon" aria-label="切换主题" onClick={onToggleTheme}>
@@ -299,18 +279,8 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
       {!chatOnly && snapshot?.demo && <Alert className="shrink-0 rounded-none border-x-0 py-2"><AlertDescription>🧪 演示预览：服务配置只读，不调用真实服务；「聊天界面」显示偏好仍可调整。</AlertDescription></Alert>}
       {!miniApp && pwa.updateReady && <div role="status" className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-b bg-background px-3 py-1 text-sm"><span>{pwa.error || '新版本已就绪，当前页面不会自动刷新。'}</span><Button size="sm" variant="outline" onClick={()=>void pwa.applyUpdate()}>更新应用</Button></div>}
       <div className="flex min-h-0 flex-1">
-        {!chatOnly && <aside className="hidden w-44 shrink-0 overflow-y-auto border-r p-2 md:block">
-          <nav className="flex flex-col gap-1" aria-label="主导航">
-            {groups.map(group => {
-              const Icon = GROUP_ICONS[group.icon] || MessageSquare
-              return (
-                <Button key={group.id} variant={group.id === active ? 'secondary' : 'ghost'} size="sm"
-                  className="justify-start" onClick={() => selectPage(group.id)}>
-                  <Icon className="size-4" /> {group.label}
-                </Button>
-              )
-            })}
-          </nav>
+        {!chatOnly && <aside className="hidden w-48 shrink-0 overflow-y-auto border-r p-2 md:block">
+          <DesktopSettingsNavigation {...navigation} onChat={()=>navigate(true)} />
         </aside>}
 
         <main className={cn('min-h-0 min-w-0 flex-1', chatOnly ? 'overflow-hidden' : 'overflow-y-auto p-4 md:p-6')}>
@@ -318,6 +288,7 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
             {chatMounted && <AvatarCacheProvider key={token} token={token}><MessagesPanel preferences={chatPreferences.preferences} token={token} drafts={messageDrafts} onLogout={onLogout} visible={chatOnly} miniApp={miniApp} controls={<ChatMenu theme={theme} onToggleTheme={onToggleTheme} onManage={()=>navigate(false)} onLogout={onLogout} miniApp={miniApp} pwa={pwa} />} /></AvatarCacheProvider>}
           </div>
           <div hidden={chatOnly}>
+          {snapshot && <MobileSettingsNavigation {...navigation} />}
           {!snapshot ? <div className="flex flex-col items-center gap-3">{error?<Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>:<Spinner />}<Button variant="outline" onClick={()=>void reloadConfig()}>重新加载配置</Button></div> : active === 'chat-appearance' ? <ChatAppearance preferences={chatPreferences.preferences} onChange={chatPreferences.update} error={chatPreferences.error} /> : snapshot.demo && ['automation','mcp'].includes(active) ? <Alert><AlertDescription>演示模式未连接外部服务，此功能暂不可用。</AlertDescription></Alert> : active === 'automation' ? <AutomationPanel token={token} /> : active === 'mcp' ? (
             <McpPanel token={token} />
           ) : (
@@ -346,7 +317,7 @@ function Workspace({token, theme, onToggleTheme, onLogout, miniApp = false}: {
         </main>
       </div>
 
-      {!chatOnly && snapshot && !snapshot.demo && active !== 'messages' && active !== 'automation' && active !== 'chat-appearance' && <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+      {!chatOnly && snapshot && !snapshot.demo && (fields.length > 0 || Object.keys(draft).length > 0) && <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
         <div className="flex flex-col">
           {snapshot.restartRequired && <span className="text-sm text-amber-600">保存后需重启应用生效</span>}
           {error && <span className="text-sm text-destructive">{error}</span>}

@@ -26,6 +26,7 @@ async function main() {
   await page.goto('http://127.0.0.1:' + server.address().port + '/manage')
   await page.getByLabel('访问令牌',{exact:true}).fill(token)
   await page.getByRole('button',{name:'进入控制台'}).click()
+  await page.locator('aside').getByRole('button',{name:'扩展功能',exact:true}).click()
   await page.locator('aside').getByRole('button',{name:'自动化',exact:true}).click()
   assert.equal(await page.getByRole('tab',{name:'群消息监听',exact:true}).getAttribute('aria-selected'),'true')
   assert.equal(await page.getByRole('switch',{name:'监听群组 目录空群不应展示',exact:true}).count(),0)

@@ -85,6 +85,7 @@ async function main(){
   await input.fill('')
   await page.getByRole('button',{name:'聊天菜单'}).click()
   await page.getByRole('button',{name:'管理设置',exact:true}).click()
+  await page.getByRole('button',{name:'扩展功能',exact:true}).click()
   await page.getByRole('button',{name:'MCP 接入',exact:true}).click()
   const endpoint = page.getByPlaceholder('例如 https://example.com/mcp')
   const originalEndpoint = await endpoint.inputValue()
