@@ -389,13 +389,10 @@ export class WeChatClient extends AbstractClient {
 
     private async sendTelegramFileNotice(chatId: number, identity: string, fileName: string, threadId?: number, memberName?: string): Promise<number | undefined> {
         try {
-            const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
-            const body = `[正在从微信下载]\n${FormatUtils.escapeHtml(fileName)}`
+            const bot = WeChatClient.getSpyClient('botClient') as import('./TelegramBotClient').TelegramBotClient
+            const body = `[文件传输中]\n${FormatUtils.escapeHtml(fileName)}`
             const text = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, identity, body, memberName)
-            const sent = await tgBotClient.telegram.sendMessage(chatId, text, {
-                parse_mode: 'HTML', message_thread_id: threadId
-            })
-            return sent.message_id
+            return await bot.sendTelegramFileNotice(chatId,text,threadId)
         } catch (e) {
             this.logger.warn(`发送微信文件预告消息失败: chatId=${chatId}, fileName=${fileName}, error=${e.message || e}`)
             return undefined

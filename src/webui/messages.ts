@@ -200,7 +200,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         const box = await downloadWechatMedia(msg,(client() as any)?.wxInfo?.wxid,row.wxId,config.BASE_API)
         if(!box)throw new MessageCenterError('mediaMissing',404)
         const buffer = await box.toBuffer()
-        const result = await media.save(box.name || 'attachment.bin','auto',(async function*(){yield buffer})(),'download')
+        const result = await media.save(box.name || 'attachment.bin','auto',(async function*(){yield buffer})(),msg.type() === 'file' ? 'wechat-file' : 'download')
         await store.run('UPDATE inbox SET attachmentId=? WHERE id=?',[result.id,messageId])
         return media.get(result.id)
     })

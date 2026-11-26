@@ -32,7 +32,7 @@ import {customEmojiRejected} from '../util/TelegramDisplayPolicy'
 import {handleTelegramDisplayCommand} from '../util/TelegramDisplayCommand'
 import {Message} from '../entity/Message'
 import {MessageService} from '../service/MessageService'
-import {FileUtils, LargeFileDownloadProgress} from '../util/FileUtils'
+import {FileUtils} from '../util/FileUtils'
 import sharp from 'sharp'
 import {ConverterHelper} from '../util/FfmpegUtils'
 import * as path from 'node:path'
@@ -535,36 +535,27 @@ export class TelegramBotClient extends AbstractClient {
 
         const fileName = message.file.fileName || 'wechat-large-file'
         const totalSize = message.file.file.length
-        const progressNoticeMessageId = message.param?.telegramUploadNoticeMessageId
-            || await this.sendTelegramFileNotice(message.chatId, fileName, message.threadId)
-        const progressEditor = await this.createTelegramUploadProgressEditor(message.chatId, fileName, totalSize, progressNoticeMessageId, message.threadId)
+        const noticeId: number | undefined = message.param?.telegramUploadNoticeMessageId
         const uploadStartedAt = Date.now()
-        await progressEditor.update(this.formatTelegramUploadProgress(fileName, 0, totalSize), true)
 
         try {
             const inputPeer = await botMTPClient.client.getInputEntity(message.chatId)
             const result = await this.sendTelegramRequest(message.chatId, () => sendTelegramHtml(message.chatId,message.sender,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,caption=>this.runTelegramUploadWithTimeout(
                 fileName,
                 totalSize,
-                async () => botMTPClient.client.sendFile(inputPeer, {
-                    file: new CustomFile(fileName, totalSize, '', message.file.file),
-                    caption,
-                    replyTo: message.param?.reply_id ?? message.threadId,
-                    topMsgId: message.threadId,
-                    parseMode: 'html',
-                    forceDocument: true,
-                    workers: 3,
-                    progressCallback: async (progress: number) => {
-                        const uploaded = Math.max(0, Math.min(totalSize, Math.round(progress * totalSize)))
-                        this.logger.info(`Telegram 大文件上传进度: fileName=${fileName}, uploaded=${this.formatBytes(uploaded)}, total=${this.formatBytes(totalSize)}, percent=${Math.min(100, Math.round(progress * 100))}%`)
-                        await progressEditor.update(this.formatTelegramUploadProgress(fileName, uploaded, totalSize))
-                    }
-                })
+                async () => {
+                    const file = new CustomFile(fileName,totalSize,'',message.file.file)
+                    // A media edit inherits the notice's position, topic and replies.
+                    // Without a confirmed notice, deliver once without creating one now.
+                    return noticeId ? botMTPClient.client.editMessage(inputPeer,{
+                        message:noticeId,file,text:caption,parseMode:'html',forceDocument:true,buttons:[],
+                    }) : botMTPClient.client.sendFile(inputPeer,{
+                        file,caption,replyTo:message.param?.reply_id ?? message.threadId,topMsgId:message.threadId,
+                        parseMode:'html',forceDocument:true,workers:3,
+                    })
+                }
             ),()=>true,'mtproto',(message,caption)=>botMTPClient.client.editMessage(inputPeer,{message:message.id,text:caption,parseMode:'html'})))
-            await this.deleteTelegramMessage(message.chatId, progressNoticeMessageId)
-            setTimeout(() => {
-                void this.deleteTelegramMessage(message.chatId, progressNoticeMessageId)
-            }, 1500)
+            if(!Number.isSafeInteger(result?.id) || result.id <= 0 || (noticeId && result.id !== noticeId))throw new Error('Missing Telegram document receipt')
             return {message_id: result.id}
         } catch (e) {
             await this.resetBotMTPClientConnection(botMTPClient).catch(resetError => {
@@ -577,25 +568,24 @@ export class TelegramBotClient extends AbstractClient {
                 fileName,
                 totalSize,
                 uploadStartedAt,
-                message.threadId
+                message.threadId,
+                noticeId
             )
             if (uploadedMessageId) {
                 this.logger.info(`Telegram 大文件上传超时后确认已成功: fileName=${fileName}, tgMsgId=${uploadedMessageId}`)
-                await this.deleteTelegramMessage(message.chatId, progressNoticeMessageId)
-                setTimeout(() => {
-                    void this.deleteTelegramMessage(message.chatId, progressNoticeMessageId)
-                }, 1500)
                 return {message_id: uploadedMessageId}
             }
 
             const resultUnknownError = new TelegramUploadResultUnknownError(
                 `网络中断或上传超时，结果未知。请先检查 Telegram 是否已收到该文件；如果未收到，再手动重试。原始错误: ${e?.message || e}`
             )
-            await progressEditor.update(
-                `上传状态未知\n${fileName}\n请先检查 Telegram 是否已收到；如果未收到，再手动重试`,
-                true,
-                [{text: '重试上传', callback_data: `wmr:${message.id}`}]
-            )
+            const bot = TelegramBotClient.getSpyClient('botClient').client as Telegraf
+            const text = `上传状态未知\n${fileName}\n请先检查 Telegram 是否已收到；如果未收到，再手动重试`
+            const markup = {inline_keyboard:[[{text:'重试上传',callback_data:`wmr:${message.id}`}]]}
+            await this.sendTelegramRequest<unknown>(message.chatId,()=>noticeId
+                ? bot.telegram.editMessageText(message.chatId,noticeId,undefined,text,{reply_markup:markup})
+                : bot.telegram.sendMessage(message.chatId,text,{message_thread_id:message.threadId,reply_markup:markup})
+            ).catch(()=>undefined) // Never replace an uncertain media edit with a new document.
             throw resultUnknownError
         }
     }
@@ -619,26 +609,20 @@ export class TelegramBotClient extends AbstractClient {
         }
     }
 
-    private async deleteTelegramMessage(chatId: number, messageId?: number): Promise<void> {
-        if (!messageId) {
-            return
-        }
-        const bot = TelegramBotClient.getSpyClient('botClient').client as Telegraf
-        await this.sendTelegramRequest(chatId, () => bot.telegram.deleteMessage(chatId, messageId)).catch(() => undefined)
-    }
-
     private async findRecentUploadedTelegramDocumentMessageId(
         botMTPClient: any,
         chatId: number,
         fileName: string,
         totalSize: number,
         uploadStartedAt: number,
-        threadId?: number
+        threadId?: number,
+        noticeId?: number
     ): Promise<number | undefined> {
         try {
             const inputPeer = await botMTPClient.client.getInputEntity(chatId)
-            const messages = await botMTPClient.client.getMessages(inputPeer, {limit: 10})
+            const messages = await botMTPClient.client.getMessages(inputPeer, noticeId ? {ids:[noticeId]} : {limit:10})
             for (const msg of messages || []) {
+                if(noticeId && msg?.id !== noticeId)continue
                 if (getTelegramThreadId(msg) !== threadId) continue
                 const document = msg?.document
                 if (!document) {
@@ -646,7 +630,7 @@ export class TelegramBotClient extends AbstractClient {
                 }
 
                 const uploadedAt = Number(msg?.date ? new Date(msg.date * 1000).getTime() : 0)
-                if (uploadedAt && uploadedAt + 10_000 < uploadStartedAt) {
+                if (!noticeId && uploadedAt && uploadedAt + 10_000 < uploadStartedAt) {
                     continue
                 }
 
@@ -674,9 +658,9 @@ export class TelegramBotClient extends AbstractClient {
         await botMTPClient.client.connect()
     }
 
-    private async sendTelegramFileNotice(chatId: number, fileName: string, threadId?: number): Promise<number> {
+    async sendTelegramFileNotice(chatId: number, html: string, threadId?: number): Promise<number> {
         const bot = TelegramBotClient.getSpyClient('botClient').client as Telegraf
-        const sent = await this.sendTelegramRequest(chatId, () => bot.telegram.sendMessage(chatId, fileName, {message_thread_id: threadId}))
+        const sent = await this.sendTelegramRequest(chatId, () => bot.telegram.sendMessage(chatId, html, {message_thread_id: threadId,parse_mode:'HTML'}))
         return sent.message_id
     }
 
@@ -1515,25 +1499,18 @@ export class TelegramBotClient extends AbstractClient {
                 const cachedBuffer = this.readTelegramLargeFileCache(cachePath, fileSize)
                 const downloadPromise = cachedBuffer
                     ? Promise.resolve(cachedBuffer)
-                    : (progressEditor.update('开始下载 Telegram 大文件...'),
-                        FileUtils.getInstance().downloadLargeFile(ctx.message.message_id, ctx.chat.id, progress => {
-                            void progressEditor.update(this.formatLargeFileDownloadProgress(fileName, progress))
-                        }).then(buff => {
+                    : FileUtils.getInstance().downloadLargeFile(ctx.message.message_id, ctx.chat.id).then(buff => {
                             if (buff) {
                                 const buffer = Buffer.from(buff)
                                 this.writeTelegramLargeFileCache(cachePath, buffer)
                                 return buffer
                             }
                             return buff
-                        }))
-                if (cachedBuffer) {
-                    progressEditor.update(`使用已缓存的大文件，正在发送到微信...\n${fileName}\n大小: ${this.formatBytes(cachedBuffer.length)}`)
-                }
+                        })
                 downloadPromise.then(buff => {
                     if (buff) {
                         const buffer = Buffer.from(buff)
                         this.logger.info(`Telegram 大文件下载完成，准备发送到微信: messageId=${ctx.message.message_id}, fileName=${fileName}, bufferSize=${this.formatBytes(buffer.length)}`)
-                        progressEditor.update(`下载完成，正在发送到微信...\n${fileName}\n大小: ${this.formatBytes(buffer.length)}`)
                         baseMessage.content = fileName
                         baseMessage.file = {
                             fileName: fileName,
@@ -1555,22 +1532,12 @@ export class TelegramBotClient extends AbstractClient {
                             })
                     } else {
                         this.logger.warn(`Telegram 大文件下载返回空内容: messageId=${ctx.message.message_id}, fileName=${fileName}`)
-                        progressEditor.update(`下载失败\n${fileName}`)
-                        ctx.reply(this.i18n.t('send.failed'), {
-                            reply_parameters: {
-                                message_id: ctx.message.message_id
-                            }
-                        })
+                        void progressEditor.update(`下载失败\n${fileName}`)
                     }
                 }).catch(err => {
                     this.logger.error(`Telegram 大文件下载失败: messageId=${ctx.message.message_id}, fileName=${fileName}`, err)
                     this.logError('use telegram api download file error: ' + err)
-                    progressEditor.update(`下载失败\n${fileName}\n${err?.message || err}`)
-                    ctx.reply(this.i18n.t('send.failed'), {
-                        reply_parameters: {
-                            message_id: ctx.message.message_id
-                        }
-                    })
+                    void progressEditor.update(`下载失败\n${fileName}`)
                 })
                 return
             }
@@ -3576,7 +3543,7 @@ ${this.i18n.t('help.instructions')}`))
             // must never turn it back into a retryable file send.
             await this.messageService.createOrUpdate(Object.assign(storedMessage,{type:1,tgBotMsgId:Number(sent.message_id)}))
                 .catch(()=>this.logger.warn(`重试文件已送达，但回执保存失败: wxMsgId=${wxMsgId}`))
-            // For a large document the upload path already removed this notice.
+            // The large document now occupies the original notice; do not overwrite it.
             if(!large)await this.editWechatMediaRetryMessage(ctx, '重试下载成功，文件已发送', false).catch(()=>undefined)
         } catch (e) {
             if(e instanceof TelegramUploadResultUnknownError)throw e
@@ -3794,69 +3761,6 @@ ${this.i18n.t('help.instructions')}`))
                 }
             }
         }
-    }
-
-    private async createTelegramUploadProgressEditor(chatId: number, fileName: string, totalSize?: number, existingMessageId?: number, threadId?: number): Promise<LargeFileProgressEditor> {
-        const bot = TelegramBotClient.getSpyClient('botClient').client as Telegraf
-        const messageId = existingMessageId ?? (await this.sendTelegramRequest(chatId, () => bot.telegram.sendMessage(chatId, fileName, {message_thread_id: threadId}))).message_id
-        let lastText = ''
-        let lastEditTime = 0
-        let retryAfterUntil = 0
-        const minEditInterval = 5000
-
-        return {
-            update: async (text: string, force = false, inlineKeyboard) => {
-                const now = Date.now()
-                if (!force && now < retryAfterUntil) {
-                    return
-                }
-                if (!force && text === lastText) {
-                    return
-                }
-                if (!force && now - lastEditTime < minEditInterval) {
-                    return
-                }
-                lastText = text
-                lastEditTime = now
-                await this.sendTelegramRequest(chatId, () => bot.telegram.editMessageText(chatId, messageId, undefined, text, inlineKeyboard ? {
-                    reply_markup: {
-                        inline_keyboard: [inlineKeyboard]
-                    }
-                } : undefined)).catch(e => {
-                    const errorText = String(e?.message || e)
-                    const retryAfterMatch = errorText.match(/retry after (\d+)/i)
-                    if (retryAfterMatch) {
-                        const retryAfter = this.recordTelegramRetryAfter(e)
-                        retryAfterUntil = Date.now() + (retryAfter?.waitMs || Number(retryAfterMatch[1]) * 1000)
-                        return
-                    }
-                    if (!errorText.includes('message is not modified')) {
-                        this.logger.warn(`更新 Telegram 上传进度失败: messageId=${messageId}, fileName=${fileName}, totalSize=${totalSize ? this.formatBytes(totalSize) : 'unknown'}, error=${e?.message || e}`)
-                    }
-                })
-            }
-        }
-    }
-
-    private formatTelegramUploadProgress(fileName: string, uploaded: number, totalSize: number): string {
-        const percent = totalSize > 0 ? Math.min(100, Math.round(uploaded / totalSize * 100)) : 0
-        return [
-            '文件上传中',
-            fileName,
-            `${this.formatBytes(uploaded)} / ${this.formatBytes(totalSize)}`,
-            `进度: ${percent}%`
-        ].join('\n')
-    }
-
-    private formatLargeFileDownloadProgress(fileName: string, progress: LargeFileDownloadProgress): string {
-        const totalText = progress.total ? this.formatBytes(progress.total) : 'unknown'
-        const percentText = progress.total ? `${progress.percent}%` : 'unknown'
-        return [
-            '正在下载 Telegram 大文件...',
-            fileName,
-            `${this.formatBytes(progress.downloaded)} / ${totalText}`,
-            `进度: ${percentText}`
-        ].join('\n')
     }
 
     private getTelegramLargeFileCachePath(chatId: number, messageId: number, fileName: string): string {

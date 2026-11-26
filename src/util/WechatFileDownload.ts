@@ -7,14 +7,14 @@ import {XMLParser} from 'fast-xml-parser'
 import type {Message} from 'wx2tg-puppet'
 
 const LARGE_FILE = 80 * 1024 * 1024
-const MAX_FILE = 256 * 1024 * 1024 // server CDN frame limit
+const LEGACY_FRAME_BYTES = 256 * 1024 * 1024
 const xmlParser = new XMLParser({parseTagValue:false})
 interface FileMeta {size:number;md5?:string}
 
 /** Decode only Data.Image / Data.FileData, not diagnostics, thumbnails or keys.
  * Stream the JSON string rather than materializing hundreds of MB of base64. */
 export async function decodeFileResponse(source:Readable,{size,md5}:FileMeta):Promise<Buffer> {
-    if(!Number.isSafeInteger(size) || size < 1 || size > MAX_FILE)throw new Error('微信文件大小无效或超过服务端限制')
+    if(!Number.isSafeInteger(size) || size < 1)throw new Error('微信文件大小无效')
     let wire = 0,depth = 0,key = '',inData = false,reading = false,success = false,code = '',offset = 0,carry = '',padded = false
     let output:Buffer|undefined
     const invalid = ()=>new Error('微信文件响应不完整或格式不正确')
@@ -55,7 +55,7 @@ export async function decodeFileResponse(source:Readable,{size,md5}:FileMeta):Pr
             cb()
         } catch(error){cb(error)}
     }}))
-    if(!success || code !== '0' || !output || offset !== size)throw new Error('微信服务端未返回完整文件')
+    if(!success || code !== '0' || !output || offset !== size)throw new Error('微信文件下载失败：服务端未返回完整文件')
     if(md5 && createHash('md5').update(output).digest('hex') !== md5.toLowerCase())throw new Error('微信文件 MD5 校验失败')
     return output
 }
@@ -83,23 +83,53 @@ export function storedFileTalker(account:string,conversation:string,sender:strin
     return [sender,to].find(value=>value && value !== account) || ''
 }
 
+// One pre-sized buffer for the existing upload/outbox interface. Never accept
+// unknown-length, truncated, oversized or corrupt bytes as a complete file.
+export async function readBinaryFile(source:Readable,size:number,md5:string):Promise<Buffer> {
+    if(!Number.isSafeInteger(size) || size < 1 || !/^[a-f0-9]{32}$/i.test(md5)){
+        source.destroy();throw new Error('微信文件大小或 MD5 无效')
+    }
+    const output = Buffer.allocUnsafe(size),digest = createHash('md5')
+    let offset = 0
+    for await(const chunk of source){
+        if(!Buffer.isBuffer(chunk) || offset + chunk.length > size)throw new Error('微信文件长度不符')
+        chunk.copy(output,offset);digest.update(chunk);offset += chunk.length
+    }
+    if(offset !== size)throw new Error('微信文件长度不符')
+    if(digest.digest('hex') !== md5.toLowerCase())throw new Error('微信文件 MD5 校验失败')
+    return output
+}
+
 export async function downloadWechatMedia(msg:Message,account:string,talker:string,baseURL:string) {
     if(msg.type() !== 'file')return msg.toFileBox()
     const xml = wechatFileXml(msg),app = xmlParser.parse(xml)?.msg?.appmsg
     const size = Number(app?.appattach?.totallen)
     if(!(size > LARGE_FILE))return msg.toFileBox()
-    if(!Number.isSafeInteger(size) || size > MAX_FILE)throw new Error('微信文件超过服务端下载限制（256 MiB）')
+    if(!Number.isSafeInteger(size))throw new Error('微信文件大小无效')
+    const binary = size > LEGACY_FRAME_BYTES - 64 * 1024
     const body = fileMessageRequest(account,talker,msg.newMsgId,xml,msg._msgId)
     if(!baseURL)throw new Error('微信服务端未配置')
     let buffer:Buffer
     try {
         const response = await axios.post<Readable>(baseURL.replace(/\/+$/,'') + '/Tools/DownloadFileMessage',body,{
-            headers:{'Content-Type':'application/json'},timeout:180000,signal:AbortSignal.timeout(180000),maxRedirects:0,responseType:'stream',
+            headers:{'Content-Type':'application/json',Accept:binary ? 'application/octet-stream' : 'application/json'},timeout:180000,signal:AbortSignal.timeout(180000),maxRedirects:0,responseType:'stream',
         })
         const hash = app.md5 || app.appattach.filemd5
-        buffer = await decodeFileResponse(response.data,{size,md5:/^[0-9a-f]{32}$/i.test(hash) ? hash : undefined})
+        if(binary && response.headers['content-type']?.split(';')[0] === 'application/octet-stream'){
+            if(response.status !== 200 || Number(response.headers['content-length']) !== size){
+                response.data.destroy();throw new Error('微信文件长度不符')
+            }
+            buffer = await readBinaryFile(response.data,size,hash)
+        }else{
+            // Some servers ignore Accept and return valid JSON/base64 even for large files.
+            buffer = await decodeFileResponse(response.data,{size,md5:/^[0-9a-f]{32}$/i.test(hash) ? hash : undefined})
+        }
     } catch(error){
         // Axios errors may contain the entire XML and CDN credentials.
+        if(axios.isAxiosError(error)){
+            error.response?.data?.destroy?.()
+            if(binary && error.response?.status === 503)throw new Error('微信文件下载通道忙，请稍后重试')
+        }
         if(error instanceof Error && error.message.startsWith('微信文件'))throw new Error(error.message)
         throw new Error('微信大文件下载失败或数据不完整，请检查文件是否已过期后重试')
     }

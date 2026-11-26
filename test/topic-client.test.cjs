@@ -285,7 +285,6 @@ test('text/file persistence, Bot API card/location, retry uploads and notices re
     await f.client.sendWechatRetryFile(chatId, Buffer.from('data'), {fileName: 'retry', fileType, threadId: 77, replyToMessageId: 22})
   }
   await f.client.sendTelegramFileNotice(chatId, 'upload', 77)
-  await f.client.createTelegramUploadProgressEditor(chatId, 'upload', 5, undefined, 77)
   for (const send of f.sent.filter(s => String(s.method).startsWith('send'))) {
     assert.equal(send.args.at(-1).message_thread_id, 77)
   }
@@ -303,6 +302,15 @@ test('manual WeChat download retries normalize static stickers and preserve topi
   assert.equal(sent.args[2].caption,options.caption);assert.equal(options.fileType,'animation')
   await f.client.sendWechatRetryFile(chatId,animatedGif,options)
   assert.equal(f.sent.at(-1).method,'sendAnimation');assert.equal(f.sent.at(-1).args[1].source,animatedGif)
+})
+
+test('a confirmed large-file placeholder becomes the document without progress, extra sends or deletes',async()=>{
+  const f = fixture(),receipt = await f.client.sendTelegramFileNotice(chatId,'transfer',77),edits = []
+  f.mt.client.editMessage = async (peer,options)=>{edits.push({peer,options});return {id:options.message}}
+  const result = await f.client.sendLargeDocumentViaTelegramApi({...outbound(1),param:{telegramUploadNoticeMessageId:receipt}})
+  assert.equal(result.message_id,receipt);assert.equal(edits.length,1);assert.equal(edits[0].peer,chatId)
+  assert.equal(edits[0].options.message,receipt);assert.ok(edits[0].options.file);assert.equal(edits[0].options.forceDocument,true)
+  assert.equal(edits[0].options.progressCallback,undefined);assert.deepEqual(f.sent.map(s=>s.method),['sendMessage'])
 })
 
 test('large MTProto uploads specify topic root and topMsgId, with original reply when present', async () => {
@@ -444,6 +452,7 @@ test('upload recovery rejects an identical filename in another topic', async () 
     {id: 11, document: doc, replyTo: {forumTopic: true, replyToTopId: 77, replyToMsgId: 55}},
   ]
   assert.equal(await f.client.findRecentUploadedTelegramDocumentMessageId(f.mt, chatId, 'same.bin', 4, 0, 77), 11)
+  assert.equal(await f.client.findRecentUploadedTelegramDocumentMessageId(f.mt, chatId, 'same.bin', 4, 0, 77, 12),undefined)
 })
 
 test('AI context is scoped by current topic before repository limit and General is blocked', async () => {

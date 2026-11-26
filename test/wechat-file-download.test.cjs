@@ -20,7 +20,7 @@ test('large direct, room and reconstructed attachments put an exact numeric int6
   try {
     for(const [conversation,sender,to,expected] of [[peer,account,peer,peer],[peer,peer,account,peer],['room@chatroom','member','room@chatroom','room@chatroom'],[undefined,peer,account,peer],[peer,peer,peer,peer]]){
       const talker = storedFileTalker(account,conversation,sender,to)
-      await assert.rejects(downloadWechatMedia({type:()=>'file',_xml:talker.endsWith('@chatroom') ? 'member:\n' + xml : xml,newMsgId:id,_msgId:'42'},account,talker,`http://127.0.0.1:${server.address().port}/api`),/微信大文件下载失败/)
+      await assert.rejects(downloadWechatMedia({type:()=>'file',_xml:talker.endsWith('@chatroom') ? 'member:\n' + xml : xml,newMsgId:id,_msgId:'42'},account,talker,`http://127.0.0.1:${server.address().port}/api`),/服务端未返回完整文件/)
       const request = requests.at(-1)
       assert.equal(request.url,'/api/Tools/DownloadFileMessage')
       assert.match(request.body,/"NewMsgID":9007199254740993123[,}]/)

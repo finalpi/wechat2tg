@@ -13,6 +13,7 @@ export const MAX_DOWNLOAD_BYTES = 256 * 1024 * 1024
 export type MediaKind = 'image' | 'emoji' | 'video' | 'audio' | 'voice' | 'file'
 export interface MediaFile {id: string; name: string; kind: MediaKind; mime: string; size: number; digest: string; path?: string}
 const error = (code: string, status = 400) => Object.assign(new Error(code), {code, status})
+// eslint-disable-next-line no-control-regex -- Strip control bytes from untrusted attachment names.
 export const safeFileName = (name: string) => path.basename(name.replace(/\\/g, '/')).replace(/[<>:&'"\x00-\x1f]/g, '_').slice(0, 180) || 'attachment.bin'
 const classify = (name: string, head: Buffer): {kind: MediaKind; mime: string} => {
     if (head.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) return {kind:'image',mime:'image/png'}
@@ -28,17 +29,18 @@ const ffmpeg = (args: string[]) => new Promise<void>((resolve,reject)=>execFile(
 export class WebMediaStore {
     private thumbnails = new Map<string,Promise<string>>()
     constructor(private store: WebMessageStore, private directory = 'storage/webui-media') {fs.mkdirSync(directory,{recursive:true})}
-    async save(name: string, preference: string, stream: AsyncIterable<Uint8Array>, source: 'upload' | 'download' = 'upload'): Promise<MediaFile> {
+    async save(name: string, preference: string, stream: AsyncIterable<Uint8Array>, source: 'upload' | 'download' | 'wechat-file' = 'upload'): Promise<MediaFile> {
         if (!['auto','voice'].includes(preference)) throw error('invalidMediaType')
         name = safeFileName(name)
         const id = randomUUID(), file = path.resolve(this.directory,id), hash = createHash('sha256')
         const handle = await fs.promises.open(file,'wx',0o600)
+        const limit = source === 'wechat-file' ? Infinity : source === 'download' ? MAX_DOWNLOAD_BYTES : MAX_MEDIA_BYTES
         let size = 0,head = Buffer.alloc(0)
         try {
             for await(const value of stream) {
-                const chunk = Buffer.from(value);size += chunk.length
-                if(size > (source === 'download' ? MAX_DOWNLOAD_BYTES : MAX_MEDIA_BYTES)) throw error(source === 'download' ? 'downloadTooLarge' : 'mediaTooLarge',413)
-                if(head.length < 32)head = Buffer.concat([head,chunk]).subarray(0,32)
+                const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value.buffer,value.byteOffset,value.byteLength);size += chunk.length
+                if(size > limit) throw error(source === 'upload' ? 'mediaTooLarge' : 'downloadTooLarge',413)
+                if(head.length < 32)head = Buffer.concat([head,chunk.subarray(0,32 - head.length)])
                 hash.update(chunk)
                 let written = 0
                 while(written < chunk.length)written += (await handle.write(chunk,written,chunk.length - written)).bytesWritten
@@ -49,8 +51,8 @@ export class WebMediaStore {
             const media: MediaFile = {id,name,kind:preference === 'voice' ? 'voice' : detected.kind,mime:detected.mime,size,digest:hash.digest('hex')}
             await this.store.run('INSERT INTO media(id,name,kind,mime,size,digest) VALUES(?,?,?,?,?,?)',[id,name,media.kind,media.mime,size,media.digest])
             return media
-        } catch(e) {await handle.close();await fs.promises.unlink(file).catch(()=>{});throw e}
-        finally {await handle.close().catch(()=>{})}
+        } catch(e) {await handle.close();await fs.promises.unlink(file).catch(()=>undefined);throw e}
+        finally {await handle.close().catch(()=>undefined)}
     }
     async get(id: string): Promise<MediaFile> {
         if(!/^[a-f0-9-]{36}$/.test(id))throw error('mediaMissing',404)
@@ -72,7 +74,7 @@ export class WebMediaStore {
                 await ffmpeg(['-i',media.path,'-frames:v','1','-vf','scale=640:640:force_original_aspect_ratio=decrease','-q:v','4',temporary])
                 await fs.promises.rename(temporary,file)
                 return file
-            } finally {await fs.promises.unlink(temporary).catch(()=>{})}
+            } finally {await fs.promises.unlink(temporary).catch(()=>undefined)}
         })()
         this.thumbnails.set(id,operation)
         try {return await operation} finally {this.thumbnails.delete(id)}
@@ -98,6 +100,6 @@ export class WebMediaStore {
             } else payload = FileBox.fromBuffer(buffer,name)
             if(buffer.length > MAX_MEDIA_BYTES)throw error('mediaTooLarge',413)
             return {payload,buffer,name,duration,sendType:({image:'photo',emoji:'animation',video:'video',voice:'voice',audio:'audio',file:'document'} as const)[media.kind]}
-        } finally {await Promise.all([temporary,thumbnail].map(f=>fs.promises.unlink(f).catch(()=>{})))}
+        } finally {await Promise.all([temporary,thumbnail].map(f=>fs.promises.unlink(f).catch(()=>undefined)))}
     }
 }
