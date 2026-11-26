@@ -83,6 +83,7 @@ function fixture(customEmojiEnabled = false) {
     '../base/BaseClient': {AbstractClient: class {static getSpyClient(name) {return spy(name)}}},
     '../util/TelegramTopicUtils': topics, '../util/TelegramTextUtils': textUtils,
     '../util/TelegramIngressEmojiHistory': require('../dist/util/TelegramIngressEmojiHistory'),
+    '../util/WechatFileDownload': require('../dist/util/WechatFileDownload'),
     '../util/SafeError': require('../dist/util/SafeError'),
     '../util/TelegramMedia': require('../dist/util/TelegramMedia'),
     '../config': {config: {AI_API_KEY: 'synthetic', AI_API_URL: 'https://invalid.example', AI_CONTEXT_LIMIT: 2, WECHAT_CUSTOM_EMOJI_ENABLED: customEmojiEnabled}},
@@ -516,6 +517,17 @@ test('UserMTProto deletion skips unscoped IDs and scopes known events by event.c
   assert.equal(f.forwarded.length, 2)
 })
 
+test('a failed file download reuses its own notice, button and stored Telegram receipt',async()=>{
+  const f = fixture(),m = {...outbound(),content:'download failed',param:{telegramUploadNoticeMessageId:90,inline_keyboard:[{text:'重试下载',callback_data:'wmr:123'}]}}
+  const edits = []
+  f.client.client = {telegram:{editMessageText:async(...args)=>edits.push(args)}}
+  assert.equal(await f.client.sendTextMsgSynchronously(m),true)
+  assert.deepEqual(edits[0].slice(0,4),[chatId,90,undefined,'download failed'])
+  assert.equal(edits[0][4].reply_markup.inline_keyboard[0][0].callback_data,'wmr:123')
+  assert.equal(f.sent.filter(s=>s.method === 'text').length,0)
+  assert.equal(f.saved.at(-1).tgBotMsgId,90)
+})
+
 test('routine WeChat to Telegram text delivery logs at debug, not info', async () => {
   const f = fixture(),info = [],debug = []
   f.client.logger.info = line=>info.push(line)
@@ -530,7 +542,7 @@ test('retry preserves stored destination after feature disable and forbidden sen
   const f = fixture()
   f.messages.stored = {...outbound(1), wxMsgId: 'wx-1', source_text: 'xml', source_type: 'file'}
   f.disable()
-  f.client.buildWechatRetryMessage = () => ({type: () => 'file', toFileBox: async () => ({name: 'retry', toBuffer: async () => Buffer.from('data')})})
+  f.client.buildWechatRetryMessage = () => ({type: () => 'file',_xml:'<msg><appmsg><type>6</type><appattach><totallen>4</totallen></appattach></appmsg></msg>', toFileBox: async () => ({name: 'retry', toBuffer: async () => Buffer.from('data')})})
   f.client.wxTypeToTgFileType = () => 'document'
   f.client.editWechatMediaRetryMessage = async () => undefined
   await f.action('wmr:wx-1', f.ctx())

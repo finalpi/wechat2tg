@@ -64,7 +64,7 @@ test('video thumbnails are generated once, cached and retried after a conversion
     'ffmpeg-static':'synthetic-ffmpeg','sharp':{},'file-box':{},'wx2tg-puppet':{},'./message-store':{},
   }
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../dist/webui/media.js'),'utf8'),{
-    exports,Buffer,require:name=>Object.hasOwn(dependencies,name)?dependencies[name]:require(name),
+    exports,Buffer,require:name=>Object.hasOwn(dependencies,name) ? dependencies[name] : require(name),
   })
   const store = {all:async()=>[{id,kind,mime:'video/mp4',name:'video.mp4',size:15}]}
   const media = new exports.WebMediaStore(store,directory)
@@ -88,7 +88,10 @@ test('simultaneous automatic previews share a stored-message download and a fail
   const dependencies = {
     '../base/BaseClient':{AbstractClient:{getSpyClient:()=>null}},
     './mentions':{createGroupMentionService:()=>({})},
+    '../config':{config:{}},
+    '../util/WechatFileDownload':require('../dist/util/WechatFileDownload'),
     'wx2tg-puppet':{Message:class {
+      type(){return 'image'}
       async toFileBox() {
         downloads++;await waiting
         if(fail)throw Error('synthetic download failure')

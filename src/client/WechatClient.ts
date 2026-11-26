@@ -17,6 +17,7 @@ import {Markup, Telegraf} from 'telegraf'
 import {MessageService} from '../service/MessageService'
 import {Message} from '../entity/Message'
 import {FileUtils} from '../util/FileUtils'
+import {downloadWechatMedia,wechatFileXml} from '../util/WechatFileDownload'
 import {getGeWeChatDataSource} from '../data-sourse'
 import {messageEvents} from '../webui/message-events'
 import {ConverterHelper} from '../util/FfmpegUtils'
@@ -364,12 +365,8 @@ export class WeChatClient extends AbstractClient {
 
     private logWechatFileMeta(msg: any): void {
         try {
-            const {appmsg, attach, expireAt} = this.getWechatFileMeta(msg)
-            this.logger.info(
-                `微信文件信息: title=${appmsg.title || ''}, size=${this.formatBytes(Number(attach.totallen || 0))}, ` +
-                `attachId=${String(attach.attachid || '').slice(0, 80)}, cdnattachurl=${String(attach.cdnattachurl || '').slice(0, 60)}, ` +
-                `aeskey=${attach.aeskey || ''}, from=${msg.fromId}, expireAt=${expireAt || ''}`
-            )
+            const {attach} = this.getWechatFileMeta(msg)
+            this.logger.debug(`微信文件信息: size=${this.formatBytes(Number(attach.totallen || 0))}`)
         } catch (e) {
             this.logger.warn(`解析微信文件信息失败: wxMsgId=${msg.newMsgId}, error=${e.message}`)
         }
@@ -393,7 +390,7 @@ export class WeChatClient extends AbstractClient {
     private async sendTelegramFileNotice(chatId: number, identity: string, fileName: string, threadId?: number, memberName?: string): Promise<number | undefined> {
         try {
             const tgBotClient: Telegraf = WeChatClient.getSpyClient('botClient').client
-            const body = `[文件上传中]\n${fileName.replaceAll(/</g, '&lt;').replaceAll(/>/g, '&gt;')}`
+            const body = `[正在从微信下载]\n${FormatUtils.escapeHtml(fileName)}`
             const text = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, identity, body, memberName)
             const sent = await tgBotClient.telegram.sendMessage(chatId, text, {
                 parse_mode: 'HTML', message_thread_id: threadId
@@ -406,7 +403,7 @@ export class WeChatClient extends AbstractClient {
     }
 
     private getWechatFileMeta(msg: any): {appmsg: any, attach: any, expireAt: any} {
-        const msgJson = WxMessage.getXmlToJson(msg._xml)
+        const msgJson = WxMessage.getXmlToJson(wechatFileXml(msg))
         const appmsg = msgJson?.msg?.appmsg || {}
         const attach = appmsg?.appattach || {}
         const expireAt = msgJson?.msg?.extcommoninfo?.media_expire_at
@@ -500,7 +497,8 @@ export class WeChatClient extends AbstractClient {
         await this.waitForLogin()
         if(isControlMessage(String(msg.type()),String(msg._xml || msg.text() || '')))return
         if(process.env.WEBUI_ENABLED !== 'false' && await WebMessageStore.getInstance().isManagedEcho(msg))return
-        if(msg.type() === WxMessage.Type.RedPacket || /<wcpayinfo\b/i.test(String(msg._xml || '')))this.logger.debug('收到微信支付消息（隐藏支付载荷）')
+        if(msg.type() === WxMessage.Type.File)this.logger.debug('收到微信文件消息（隐藏附件凭据）')
+        else if(msg.type() === WxMessage.Type.RedPacket || /<wcpayinfo\b/i.test(String(msg._xml || '')))this.logger.debug('收到微信支付消息（隐藏支付载荷）')
         else this.logger.debug(`收到微信消息: type=${msg.type()}, msgId=${msg.newMsgId}, toId=${msg.toId}, text=${msg.text()?.substring(0, 100)}, xml=${msg._xml}`)
 
         // TODO: 只处理新消息，丢弃历史消息（未来可以增加选项更好的保存聊天记录）
@@ -643,14 +641,16 @@ export class WeChatClient extends AbstractClient {
         // 身份
         const identityKind = messageIdentityKind(wxId, official === true, bindGroup.threadId)
         const identityType = messageIdentityTemplate(config, identityKind)
-        let memberName = fromContact.name() || fromContact._wxid
+        const usable = (value:string)=>value && !['undefined','null'].includes(value.trim()) ? value : ''
+        const senderName = usable(fromContact?.name()) || (msg.self() ? usable(this._wxInfo?.nickName) || '我' : fromContact?._wxid || msg.fromId)
+        let memberName = senderName
         if (room && (identityType?.includes('member_name') || config.MESSAGE_DISPLAY?.includes('member_name'))) {
             this.groupMemberName ??= createGroupMemberNameResolver(() => this._wxInfo?.wxid || '')
-            memberName = await this.groupMemberName(room.chatroomId, fromContact._wxid, memberName)
+            memberName = await this.groupMemberName(room.chatroomId, fromContact?._wxid || msg.fromId, memberName)
         }
         const identity = formatMessageIdentity(config, {kind:identityKind,
-            alias:wxId !== 'app' && fromContact._alias !== fromContact.name() ? fromContact._alias : '',
-            name:wxId === 'app' ? '服务通知' : fromContact.name(), topic, memberName})
+            alias:wxId !== 'app' && fromContact?._alias !== senderName ? usable(fromContact?._alias) : '',
+            name:wxId === 'app' ? '服务通知' : senderName, topic, memberName})
         const messageParam: BaseMessage = {
             id: msg.newMsgId,
             senderId: contact._wxid,
@@ -836,6 +836,7 @@ export class WeChatClient extends AbstractClient {
                 try {
                     this.logger.info(`开始下载微信媒体文件: wxMsgId=${msg.newMsgId}, msgId=${msg._msgId}, type=${msg.type()}, from=${msg.fromId}, to=${msg.toId}`)
                     if (msg.type() === WxMessage.Type.File) {
+                        messageParam.source_text = wechatFileXml(msg)
                         this.logWechatFileMeta(msg)
                         const {appmsg, attach} = this.getWechatFileMeta(msg)
                         const fileName = appmsg.title || '未知文件'
@@ -850,12 +851,15 @@ export class WeChatClient extends AbstractClient {
                             }
                         }
                     }
-                    filebox = await msg.toFileBox()
+                    filebox = await downloadWechatMedia(msg,this._wxInfo?.wxid,room?.chatroomId || contact._wxid,this.client?.baseUrl || config.BASE_API)
+                    if(!filebox)throw new Error('下载结果为空')
+                    fileBuff = await filebox.toBuffer()
                     this.logger.info(`微信媒体文件下载完成: wxMsgId=${msg.newMsgId}, msgId=${msg._msgId}, fileName=${filebox?.name || ''}`)
                 } catch (e) {
-                    this.logger.error(`微信媒体文件下载失败: wxMsgId=${msg.newMsgId}, msgId=${msg._msgId}, type=${msg.type()}, error=${e.message}`, e)
+                    // Axios errors can carry the complete request, including CDN credentials.
+                    this.logger.error(`微信媒体文件下载失败: wxMsgId=${msg.newMsgId}, msgId=${msg._msgId}, type=${msg.type()}`)
                     messageParam.type = 0
-                    messageParam.content = this.buildWechatMediaDownloadFallbackText(msg, e)
+                    messageParam.content = FormatUtils.escapeHtml(this.buildWechatMediaDownloadFallbackText(msg,e))
                     messageParam.param = {
                         ...messageParam.param,
                         inline_keyboard: [{
@@ -866,10 +870,6 @@ export class WeChatClient extends AbstractClient {
                     WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                     return
                 }
-                if (!filebox) {
-                    return
-                }
-                fileBuff = await filebox.toBuffer()
                 messageParam.type = 1
                 messageParam.file = {
                     fileName: filebox.name,

@@ -60,6 +60,7 @@ import http from 'http'
 import {LogUtils} from '../util/LogUtil'
 import {ChatHistoryAttachment, getChatHistory, NestedChatHistory} from '../util/handleMsg'
 import {MessageTypeUtils} from '../util/MessageTypeUtils'
+import {downloadWechatMedia,storedFileTalker} from '../util/WechatFileDownload'
 import {hasWechatPackFallback,inspectTelegramTextForWechat,TelegramTextEntity} from '../util/TelegramTextUtils'
 import {TelegramIngressEmojiHistory} from '../util/TelegramIngressEmojiHistory'
 import {AiReplyService} from '../service/AiReplyService'
@@ -1263,15 +1264,18 @@ export class TelegramBotClient extends AbstractClient {
             }
         })
 
+        const activeMediaRetries = new Set<string>()
         bot.action(/^wmr:/, async ctx => {
             const wxMsgId = ctx.match.input.split(':')[1]
+            const key = `${ctx.chat.id}:${wxMsgId}`
+            if(activeMediaRetries.has(key)){await ctx.answerCbQuery('文件正在处理中');return}
+            activeMediaRetries.add(key)
             try {
                 await ctx.answerCbQuery('开始重试下载')
                 await this.retryWechatMediaDownload(ctx, wxMsgId)
             } catch (e) {
-                this.logger.error(`重试微信媒体下载失败: wxMsgId=${wxMsgId}`, e)
-                await ctx.answerCbQuery('重试失败')
-            }
+                this.logger.error(`重试微信媒体下载失败: wxMsgId=${wxMsgId}`,safeErrorDetails(e))
+            } finally {activeMediaRetries.delete(key)}
         })
     }
 
@@ -3074,7 +3078,22 @@ ${this.i18n.t('help.instructions')}`))
         if (chunks.length > 1) this.logger.debug(`长文本消息将分 ${chunks.length} 片发送: ${message.id}`)
         for (let i = progress?.ids.length || 0; i < chunks.length; i++) {
             try {
-                const sent = await this.sendTelegramRequest(targetChatId, () => this.messageSender.sendText(targetChatId, chunks[i], option))
+                const noticeId = i === 0 && message.param?.telegramUploadNoticeMessageId
+                const sent = await this.sendTelegramRequest(targetChatId, async () => {
+                    if(noticeId){
+                        try {
+                            await this.client.telegram.editMessageText(targetChatId,noticeId,undefined,chunks[i],{
+                                parse_mode:'HTML',reply_markup:{inline_keyboard:[option.inline_keyboard || []]},
+                            })
+                            return {message_id:noticeId}
+                        } catch(error){
+                            const reason = String(error?.response?.description || '')
+                            if(error?.response?.error_code === 400 && /message is not modified/i.test(reason))return {message_id:noticeId}
+                            if(error?.response?.error_code !== 400 || !/message to edit not found/i.test(reason))throw error
+                        }
+                    }
+                    return this.messageSender.sendText(targetChatId,chunks[i],option)
+                })
                 if (i === 0) newMsg = sent
                 if(progress){
                     try {
@@ -3531,16 +3550,21 @@ ${this.i18n.t('help.instructions')}`))
             return
         }
 
-        await this.editWechatMediaRetryMessage(ctx, '正在重试下载...')
+        await this.editWechatMediaRetryMessage(ctx, '正在从微信重新下载…',false)
         try {
             const wxMessage = this.buildWechatRetryMessage(storedMessage)
-            const filebox = await wxMessage.toFileBox()
+            const wx = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
+            const account = wx?.wxInfo?.wxid
+            const talker = storedFileTalker(account,storedMessage.conversationWxId,storedMessage.wxSenderId,storedMessage.toWxid)
+            const filebox = await downloadWechatMedia(wxMessage,account,talker,config.BASE_API)
             if (!filebox) {
                 throw new Error('下载结果为空')
             }
 
             const fileBuffer = await filebox.toBuffer()
-            await this.sendWechatRetryFile(storedMessage.chatId, fileBuffer, {
+            const large = this.wxTypeToTgFileType(wxMessage.type()) === 'document' && fileBuffer.length > TELEGRAM_BOT_API_UPLOAD_LIMIT
+            const sent = await this.sendWechatRetryFile(storedMessage.chatId, fileBuffer, {
+                retryWxMsgId:wxMsgId,
                 threadId: storedMessage.threadId,
                 conversationWxId: storedMessage.conversationWxId,
                 fileName: filebox.name,
@@ -3548,8 +3572,14 @@ ${this.i18n.t('help.instructions')}`))
                 caption: storedMessage.sender,
                 replyToMessageId
             })
-            await this.editWechatMediaRetryMessage(ctx, '重试下载成功，文件已发送', false)
+            // Once Telegram has acknowledged delivery, a bookkeeping/edit error
+            // must never turn it back into a retryable file send.
+            await this.messageService.createOrUpdate(Object.assign(storedMessage,{type:1,tgBotMsgId:Number(sent.message_id)}))
+                .catch(()=>this.logger.warn(`重试文件已送达，但回执保存失败: wxMsgId=${wxMsgId}`))
+            // For a large document the upload path already removed this notice.
+            if(!large)await this.editWechatMediaRetryMessage(ctx, '重试下载成功，文件已发送', false).catch(()=>undefined)
         } catch (e) {
+            if(e instanceof TelegramUploadResultUnknownError)throw e
             await this.editWechatMediaRetryMessage(ctx, `${this.buildWechatRetryFallbackTitle(storedMessage)}\n重试下载失败: ${e?.message || e}`)
             throw e
         }
@@ -3590,10 +3620,11 @@ ${this.i18n.t('help.instructions')}`))
         caption?: string
         replyToMessageId?: number
         useDedicatedUploadNotice?: boolean
+        retryWxMsgId?: string
     }) {
         if (options.fileType === 'document' && fileBuffer.length > TELEGRAM_BOT_API_UPLOAD_LIMIT) {
-            await this.sendLargeDocumentViaTelegramApi({
-                id: `retry-${Date.now()}`,
+            return this.sendLargeDocumentViaTelegramApi({
+                id: options.retryWxMsgId || `retry-${Date.now()}`,
                 senderId: '',
                 wxId: '',
                 sender: options.caption || '',
@@ -3612,7 +3643,6 @@ ${this.i18n.t('help.instructions')}`))
                     telegramUploadNoticeMessageId: !options.useDedicatedUploadNotice ? options.replyToMessageId : undefined
                 }
             })
-            return
         }
 
         const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
@@ -3638,8 +3668,8 @@ ${this.i18n.t('help.instructions')}`))
             if(prepared.fileType === 'animation')return client.telegram.sendAnimation(chatId,file,extra)
             return client.telegram.sendDocument(chatId,file,extra)
         }
-        if(options.caption === undefined)await send()
-        else await sendTelegramHtml(chatId,options.caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,send,()=>true,'botApi',
+        if(options.caption === undefined)return send()
+        return sendTelegramHtml(chatId,options.caption,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,send,()=>true,'botApi',
             (sent,caption)=>client.telegram.editMessageCaption(chatId,sent.message_id,undefined,caption,{parse_mode:'HTML'}))
     }
 

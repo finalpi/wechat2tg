@@ -1,6 +1,6 @@
 {
   "name": "wechat2tg",
-  "version": "6.0.42-dev.16",
+  "version": "6.0.42-dev.17",
   "description": "simple kit send wechat message to telegram",
   "main": "app.ts",
   "esModuleInterop": true,
@@ -43,6 +43,7 @@
     "sharp": "^0.33.4",
     "socks-proxy-agent": "^6.2.1",
     "sqlite3": "^5.1.7",
+    "stream-json": "1.9.1",
     "telegraf": "^4.16.3",
     "telegram": "2.21.2",
     "tencentcloud-sdk-nodejs": "^4.0.977",
@@ -64,6 +65,7 @@
     "@types/qrcode": "^1.5.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/stream-json": "^1.7.8",
     "@typescript-eslint/eslint-plugin": "^5.59.0",
     "@typescript-eslint/parser": "^5.59.0",
     "@vitejs/plugin-react": "^4.7.0",

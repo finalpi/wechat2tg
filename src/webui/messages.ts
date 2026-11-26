@@ -25,6 +25,7 @@ import {cleanMediaBody} from './message-body'
 import {quoteReplyText} from './quote-reply'
 import {readLinkDetails,linkArticles,publicLinkDetails,articleText} from './articles'
 import {loadArticleCover} from '../util/ArticleCover'
+import {downloadWechatMedia} from '../util/WechatFileDownload'
 import {OfficialAccountTopic} from '../entity/OfficialAccountTopic'
 import {conversationMessages, originalTelegramMessage, telegramConversationRecents} from './telegram-history'
 import {isSameTelegramDestination} from '../util/TelegramTopicUtils'
@@ -196,7 +197,7 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
         if(row.attachmentId)return media.get(row.attachmentId)
         if(!row.source)throw new MessageCenterError('mediaMissing',404)
         const msg = new WxMessage(parsePrivateMessageJSON(row.source))
-        const box = await msg.toFileBox()
+        const box = await downloadWechatMedia(msg,(client() as any)?.wxInfo?.wxid,row.wxId,config.BASE_API)
         if(!box)throw new MessageCenterError('mediaMissing',404)
         const buffer = await box.toBuffer()
         const result = await media.save(box.name || 'attachment.bin','auto',(async function*(){yield buffer})(),'download')
