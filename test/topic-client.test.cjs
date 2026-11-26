@@ -547,6 +547,17 @@ test('routine WeChat to Telegram text delivery logs at debug, not info', async (
   assert(debug.some(line=>line.includes('文本消息发送成功')))
 })
 
+test('only the matching download button fetches once and edits the same small file card',async()=>{
+  const f = fixture();let calls = 0
+  f.messages.stored = {...outbound(),wxMsgId:'wx-1',source_text:'xml',source_type:'file',tgBotMsgId:900,type:0}
+  f.client.buildWechatRetryMessage = ()=>({type:()=>'file',_xml:'<msg><appmsg><appattach><totallen>4</totallen></appattach></appmsg></msg>',toFileBox:async()=>{calls++;return {name:'test.bin',toBuffer:async()=>Buffer.from('data')}}})
+  f.client.wxTypeToTgFileType = ()=>'document'
+  await f.action('wfd:wx-1',f.ctx(77,{message_id:20}));assert.equal(calls,0)
+  await f.action('wfd:wx-1',f.ctx(77,{message_id:900}));await f.action('wfd:wx-1',f.ctx(77,{message_id:900}))
+  assert.equal(calls,1);assert.equal(f.sent.filter(s=>s.method === 'sendDocument').length,0)
+  const edits = f.sent.filter(s=>s.method === 'editMessageMedia');assert.equal(edits.length,1);assert.equal(edits[0].args[1],900)
+})
+
 test('retry preserves stored destination after feature disable and forbidden send never retargets', async () => {
   const f = fixture()
   f.messages.stored = {...outbound(1), wxMsgId: 'wx-1', source_text: 'xml', source_type: 'file'}

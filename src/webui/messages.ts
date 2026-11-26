@@ -26,6 +26,7 @@ import {quoteReplyText} from './quote-reply'
 import {readLinkDetails,linkArticles,publicLinkDetails,articleText} from './articles'
 import {loadArticleCover} from '../util/ArticleCover'
 import {downloadWechatMedia} from '../util/WechatFileDownload'
+import {setWechatFileNotice} from '../util/WechatFileNotice'
 import {OfficialAccountTopic} from '../entity/OfficialAccountTopic'
 import {conversationMessages, originalTelegramMessage, telegramConversationRecents} from './telegram-history'
 import {isSameTelegramDestination} from '../util/TelegramTopicUtils'
@@ -297,7 +298,9 @@ export function createMessageCenter(store = WebMessageStore.getInstance(),media 
                         message.content = `${formatMessageQuote(config,quotedIdentity,escape(detail.replyTo.preview))}\n${message.content}`
                     }
                 }
-                if(row.attachmentId || ['image','video','voice','audio','emoji','file'].includes(row.type)){
+                if(row.type === 'file' && (source?.xml || source?.Content) && Number(source.MsgType) === 49){
+                    setWechatFileNotice(message,source.xml || source.Content)
+                }else if(row.attachmentId || ['image','video','voice','audio','emoji','file'].includes(row.type)){
                     const file = await attachment(id),prepared = await media.prepare(file)
                     message.type = 1;message.file = {file:prepared.buffer,fileName:prepared.name,duration:prepared.duration,sendType:prepared.sendType}
                     message.sender = formatMessageText(config,identity,message.content)

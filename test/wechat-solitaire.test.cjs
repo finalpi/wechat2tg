@@ -24,6 +24,7 @@ function fixture() {
       if (name === '../service/GroupMemberNameService') return {createGroupMemberNameResolver: () => async (_room, _sender, fallback) => fallback}
       if (name === '../util/EmojiUtils') return {EmojiConverter: class {convert(value) {return value}}}
       if (name === '../webui/message-visibility') return require('../dist/webui/message-visibility')
+      if (name === '../util/WechatFileNotice') return require('../dist/util/WechatFileNotice')
       if (name === '../util/WechatCallStatus') return require('../dist/util/WechatCallStatus')
       if (name === '../util/WechatRedPacket') return require('../dist/util/WechatRedPacket')
       if (name === '../util/RedPacketMessage') return require('../dist/util/RedPacketMessage')
@@ -69,6 +70,20 @@ test('four native call events produce only the invitation and answered status, i
       assert.equal(lookups,2);assert.equal(bindings,2,'silent controls are dropped before lookup or group creation')
       assert(f.sent.every(message=>message.threadId === 77 && message.chatId === -100123 && message.source_type === 'voip'))
     }
+  }
+})
+
+test('ordinary files only enqueue a download button on arrival regardless of size',async()=>{
+  for(const size of [4,289403338]){
+    const f = fixture(),source = `<msg><appmsg><title><![CDATA[A < B.zip]]></title><type>6</type><appattach><totallen>${size}</totallen></appattach></appmsg></msg>`
+    const msg = new WxMessage({MsgType:49,Content:source,xml:source,NewMsgId:'912345678901234567',MsgId:1,CreateTime:2})
+    let downloads = 0
+    Object.assign(msg,{from:f.message.from,room:f.message.room,self:()=>false,toFileBox:()=>{downloads++;throw Error('must wait for click')}})
+    await f.client.onMessage(msg)
+    assert.equal(downloads,0);assert.equal(f.sent.length,1)
+    const [card] = f.sent
+    assert.equal(card.type,0);assert.equal(card.file,undefined);assert.equal(card.source_text,source)
+    assert.match(card.content,/A &lt; B.zip/);assert.equal(card.param.inline_keyboard[0].callback_data,`wfd:${msg.newMsgId}`)
   }
 })
 

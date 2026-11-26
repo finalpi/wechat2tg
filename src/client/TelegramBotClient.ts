@@ -1249,14 +1249,15 @@ export class TelegramBotClient extends AbstractClient {
         })
 
         const activeMediaRetries = new Set<string>()
-        bot.action(/^wmr:/, async ctx => {
+        bot.action(/^(?:wfd|wmr):/, async ctx => {
+            const fileCard = ctx.match.input.startsWith('wfd:')
             const wxMsgId = ctx.match.input.split(':')[1]
             const key = `${ctx.chat.id}:${wxMsgId}`
             if(activeMediaRetries.has(key)){await ctx.answerCbQuery('文件正在处理中');return}
             activeMediaRetries.add(key)
             try {
-                await ctx.answerCbQuery('开始重试下载')
-                await this.retryWechatMediaDownload(ctx, wxMsgId)
+                await ctx.answerCbQuery(fileCard ? '正在下载文件' : '开始重试下载')
+                await this.retryWechatMediaDownload(ctx, wxMsgId, fileCard)
             } catch (e) {
                 this.logger.error(`重试微信媒体下载失败: wxMsgId=${wxMsgId}`,safeErrorDetails(e))
             } finally {activeMediaRetries.delete(key)}
@@ -3508,7 +3509,7 @@ ${this.i18n.t('help.instructions')}`))
         })
     }
 
-    private async retryWechatMediaDownload(ctx: Context, wxMsgId: string) {
+    private async retryWechatMediaDownload(ctx: Context, wxMsgId: string, fileCard = false) {
         const storedMessage = await this.messageService.getByWxMsgId(wxMsgId)
         const callbackMessage = ctx.callbackQuery?.message
         const replyToMessageId = callbackMessage?.['message_id']
@@ -3517,7 +3518,8 @@ ${this.i18n.t('help.instructions')}`))
             return
         }
 
-        await this.editWechatMediaRetryMessage(ctx, '正在从微信重新下载…',false)
+        if(fileCard && (!replyToMessageId || storedMessage.tgBotMsgId !== replyToMessageId || storedMessage.source_type !== 'file' || storedMessage.type !== 0))return
+        if(!fileCard)await this.editWechatMediaRetryMessage(ctx, '正在从微信重新下载…',false)
         try {
             const wxMessage = this.buildWechatRetryMessage(storedMessage)
             const wx = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
@@ -3532,6 +3534,7 @@ ${this.i18n.t('help.instructions')}`))
             const large = this.wxTypeToTgFileType(wxMessage.type()) === 'document' && fileBuffer.length > TELEGRAM_BOT_API_UPLOAD_LIMIT
             const sent = await this.sendWechatRetryFile(storedMessage.chatId, fileBuffer, {
                 retryWxMsgId:wxMsgId,
+                editFileCard:fileCard,
                 threadId: storedMessage.threadId,
                 conversationWxId: storedMessage.conversationWxId,
                 fileName: filebox.name,
@@ -3544,10 +3547,11 @@ ${this.i18n.t('help.instructions')}`))
             await this.messageService.createOrUpdate(Object.assign(storedMessage,{type:1,tgBotMsgId:Number(sent.message_id)}))
                 .catch(()=>this.logger.warn(`重试文件已送达，但回执保存失败: wxMsgId=${wxMsgId}`))
             // The large document now occupies the original notice; do not overwrite it.
-            if(!large)await this.editWechatMediaRetryMessage(ctx, '重试下载成功，文件已发送', false).catch(()=>undefined)
+            if(!large && !fileCard)await this.editWechatMediaRetryMessage(ctx, '重试下载成功，文件已发送', false).catch(()=>undefined)
         } catch (e) {
             if(e instanceof TelegramUploadResultUnknownError)throw e
-            await this.editWechatMediaRetryMessage(ctx, `${this.buildWechatRetryFallbackTitle(storedMessage)}\n重试下载失败: ${e?.message || e}`)
+            const title = fileCard ? callbackMessage?.['text']?.split('\n下载失败:')[0] || '[文件]' : this.buildWechatRetryFallbackTitle(storedMessage)
+            await this.editWechatMediaRetryMessage(ctx, `${title}\n下载失败: ${e?.message || e}`)
             throw e
         }
     }
@@ -3588,6 +3592,7 @@ ${this.i18n.t('help.instructions')}`))
         replyToMessageId?: number
         useDedicatedUploadNotice?: boolean
         retryWxMsgId?: string
+        editFileCard?: boolean
     }) {
         if (options.fileType === 'document' && fileBuffer.length > TELEGRAM_BOT_API_UPLOAD_LIMIT) {
             return this.sendLargeDocumentViaTelegramApi({
@@ -3613,6 +3618,16 @@ ${this.i18n.t('help.instructions')}`))
         }
 
         const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
+        if(options.editFileCard){
+            const id = options.replyToMessageId
+            return this.sendTelegramRequest(chatId,()=>sendTelegramHtml(chatId,options.caption || '',config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,async caption=>{
+                const result = await client.telegram.editMessageMedia(chatId,id,undefined,{
+                    type:'document',media:{source:fileBuffer,filename:options.fileName},caption,parse_mode:'HTML',
+                },{reply_markup:{inline_keyboard:[]}})
+                if(result === true || result.message_id !== id)throw new Error('文件编辑回执未确认')
+                return result
+            }))
+        }
         const sendOptions: any = {
             message_thread_id: options.threadId,
             parse_mode: 'HTML'

@@ -17,7 +17,7 @@ import {Markup, Telegraf} from 'telegraf'
 import {MessageService} from '../service/MessageService'
 import {Message} from '../entity/Message'
 import {FileUtils} from '../util/FileUtils'
-import {downloadWechatMedia,wechatFileXml} from '../util/WechatFileDownload'
+import {setWechatFileNotice} from '../util/WechatFileNotice'
 import {getGeWeChatDataSource} from '../data-sourse'
 import {messageEvents} from '../webui/message-events'
 import {ConverterHelper} from '../util/FfmpegUtils'
@@ -46,7 +46,6 @@ import {LoginQrDelivery} from '../util/LoginQrDelivery'
 import {loginEvent} from '../util/LoginDiagnostics'
 import {readLinkDetails,linkArticles,articleText} from '../webui/articles'
 
-const TELEGRAM_BOT_API_UPLOAD_LIMIT = 50 * 1024 * 1024
 
 export class WeChatClient extends AbstractClient {
     get wxInfo() {
@@ -361,50 +360,6 @@ export class WeChatClient extends AbstractClient {
         const units = ['B', 'KB', 'MB', 'GB']
         const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
         return `${(bytes / Math.pow(1024, index)).toFixed(2)}${units[index]}`
-    }
-
-    private logWechatFileMeta(msg: any): void {
-        try {
-            const {attach} = this.getWechatFileMeta(msg)
-            this.logger.debug(`微信文件信息: size=${this.formatBytes(Number(attach.totallen || 0))}`)
-        } catch (e) {
-            this.logger.warn(`解析微信文件信息失败: wxMsgId=${msg.newMsgId}, error=${e.message}`)
-        }
-    }
-
-    private buildWechatMediaDownloadFallbackText(msg: any, error: any): string {
-        try {
-            if (msg.type() === WxMessage.Type.File) {
-                const {appmsg, attach} = this.getWechatFileMeta(msg)
-                const title = appmsg.title || '未知文件'
-                const size = this.formatBytes(Number(attach.totallen || 0))
-                return `[文件]\n${title}\n大小: ${size}\n下载失败: ${error.message || error}`
-            }
-        } catch (e) {
-            this.logger.warn(`生成微信媒体下载失败占位文本失败: wxMsgId=${msg.newMsgId}, error=${e.message}`)
-        }
-
-        return `[${MessageTypeUtils.getTypeName(msg.type() + '')}]\n下载失败: ${error.message || error}`
-    }
-
-    private async sendTelegramFileNotice(chatId: number, identity: string, fileName: string, threadId?: number, memberName?: string): Promise<number | undefined> {
-        try {
-            const bot = WeChatClient.getSpyClient('botClient') as import('./TelegramBotClient').TelegramBotClient
-            const body = `[文件传输中]\n${FormatUtils.escapeHtml(fileName)}`
-            const text = FormatUtils.transformIdentityBodyStr(config.MESSAGE_DISPLAY, identity, body, memberName)
-            return await bot.sendTelegramFileNotice(chatId,text,threadId)
-        } catch (e) {
-            this.logger.warn(`发送微信文件预告消息失败: chatId=${chatId}, fileName=${fileName}, error=${e.message || e}`)
-            return undefined
-        }
-    }
-
-    private getWechatFileMeta(msg: any): {appmsg: any, attach: any, expireAt: any} {
-        const msgJson = WxMessage.getXmlToJson(wechatFileXml(msg))
-        const appmsg = msgJson?.msg?.appmsg || {}
-        const attach = appmsg?.appattach || {}
-        const expireAt = msgJson?.msg?.extcommoninfo?.media_expire_at
-        return {appmsg, attach, expireAt}
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -825,30 +780,17 @@ export class WeChatClient extends AbstractClient {
                 messageParam.businessCardId = msgJson.msg.username
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
+            case WxMessage.Type.File:
+                setWechatFileNotice(messageParam,msg._xml || msg.text())
+                await WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
+                break
             case WxMessage.Type.Image:
             case WxMessage.Type.Video:
             case WxMessage.Type.Emoji:
-            case WxMessage.Type.File:
             case WxMessage.Type.Voice:
                 try {
                     this.logger.info(`开始下载微信媒体文件: wxMsgId=${msg.newMsgId}, msgId=${msg._msgId}, type=${msg.type()}, from=${msg.fromId}, to=${msg.toId}`)
-                    if (msg.type() === WxMessage.Type.File) {
-                        messageParam.source_text = wechatFileXml(msg)
-                        this.logWechatFileMeta(msg)
-                        const {appmsg, attach} = this.getWechatFileMeta(msg)
-                        const fileName = appmsg.title || '未知文件'
-                        const fileSize = Number(attach.totallen || 0)
-                        if (fileSize > TELEGRAM_BOT_API_UPLOAD_LIMIT) {
-                            const noticeMessageId = await this.sendTelegramFileNotice(messageParam.chatId, identity, fileName, messageParam.threadId, memberName)
-                            if (noticeMessageId) {
-                                messageParam.param = {
-                                    ...messageParam.param,
-                                    telegramUploadNoticeMessageId: noticeMessageId
-                                }
-                            }
-                        }
-                    }
-                    filebox = await downloadWechatMedia(msg,this._wxInfo?.wxid,room?.chatroomId || contact._wxid,this.client?.baseUrl || config.BASE_API)
+                    filebox = await msg.toFileBox()
                     if(!filebox)throw new Error('下载结果为空')
                     fileBuff = await filebox.toBuffer()
                     this.logger.info(`微信媒体文件下载完成: wxMsgId=${msg.newMsgId}, msgId=${msg._msgId}, fileName=${filebox?.name || ''}`)
@@ -856,7 +798,7 @@ export class WeChatClient extends AbstractClient {
                     // Axios errors can carry the complete request, including CDN credentials.
                     this.logger.error(`微信媒体文件下载失败: wxMsgId=${msg.newMsgId}, msgId=${msg._msgId}, type=${msg.type()}`)
                     messageParam.type = 0
-                    messageParam.content = FormatUtils.escapeHtml(this.buildWechatMediaDownloadFallbackText(msg,e))
+                    messageParam.content = FormatUtils.escapeHtml(`[${MessageTypeUtils.getTypeName(msg.type() + '')}]\n下载失败: ${e.message || e}`)
                     messageParam.param = {
                         ...messageParam.param,
                         inline_keyboard: [{
