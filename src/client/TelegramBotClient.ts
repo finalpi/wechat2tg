@@ -797,6 +797,20 @@ export class TelegramBotClient extends AbstractClient {
             .trim()
     }
 
+    private async withDeadline<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+        let timer: NodeJS.Timeout | undefined
+        try {
+            const timeout = new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new Error(`${label} timeout after ${Math.round(timeoutMs / 1000)}s`)), timeoutMs)
+                timer.unref?.()
+            })
+            promise.catch(() => undefined)
+            return await Promise.race([promise, timeout])
+        } finally {
+            if (timer) clearTimeout(timer)
+        }
+    }
+
     private async verifyRecentTelegramTextDelivery(
         chatId: number,
         htmlChunk: string,
@@ -812,8 +826,10 @@ export class TelegramBotClient extends AbstractClient {
             return { status: 'unknown' }
         }
         try {
-            const inputPeer = await botMTPClient.client.getInputEntity(chatId)
-            const messages = await botMTPClient.client.getMessages(inputPeer, { limit: 10 })
+            const messages = await this.withDeadline((async () => {
+                const inputPeer = await botMTPClient.client.getInputEntity(chatId)
+                return botMTPClient.client.getMessages(inputPeer, { limit: 10 })
+            })(), 10_000, 'MTProto text delivery check')
             const minDateSec = Math.floor((startedAt - 15_000) / 1000)
             for (const msg of messages || []) {
                 if (getTelegramThreadId(msg) !== threadId) continue
@@ -843,8 +859,10 @@ export class TelegramBotClient extends AbstractClient {
         noticeId?: number
     ): Promise<number | undefined> {
         try {
-            const inputPeer = await botMTPClient.client.getInputEntity(chatId)
-            const messages = await botMTPClient.client.getMessages(inputPeer, noticeId ? {ids:[noticeId]} : {limit:10})
+            const messages = await this.withDeadline((async () => {
+                const inputPeer = await botMTPClient.client.getInputEntity(chatId)
+                return botMTPClient.client.getMessages(inputPeer, noticeId ? {ids:[noticeId]} : {limit:10})
+            })(), 15_000, 'MTProto document delivery check')
             for (const msg of messages || []) {
                 if(noticeId && msg?.id !== noticeId)continue
                 if (getTelegramThreadId(msg) !== threadId) continue
