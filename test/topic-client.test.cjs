@@ -102,6 +102,7 @@ function fixture(customEmojiEnabled = false) {
     'node:fs': {existsSync: () => true, readFileSync: () => Buffer.from('gif')},
     'node:path': path,
     'telegram': {Api: {DocumentAttributeFilename: Filename}},
+    'telegram/Helpers': require('telegram/Helpers'),
     'telegram/client/uploads': {CustomFile: class {}},
   }
   const {TelegramBotClient} = load('client/TelegramBotClient.js', deps)
@@ -306,7 +307,7 @@ test('manual WeChat download retries normalize static stickers and preserve topi
   assert.equal(f.sent.at(-1).method,'sendAnimation');assert.equal(f.sent.at(-1).args[1].source,animatedGif)
 })
 
-test('large-file upload sends document via MTProto sendFile with multi-worker upload and no progress bar edits',async()=>{
+test('large-file upload sends document via MTProto sendFile with pacing and no progress bar edits',async()=>{
   const f = fixture(),receipt = await f.client.sendTelegramFileNotice(chatId,'transfer',77)
   const result = await f.client.sendLargeDocumentViaTelegramApi({...outbound(1),param:{telegramUploadNoticeMessageId:receipt}})
   assert.equal(result.message_id,901)
@@ -314,9 +315,39 @@ test('large-file upload sends document via MTProto sendFile with multi-worker up
   assert.equal(uploads.length,1)
   assert.equal(uploads[0].args[0],chatId)
   assert.equal(uploads[0].args[1].forceDocument,true)
-  assert.equal(uploads[0].args[1].workers,2)
+  assert.equal(uploads[0].args[1].workers,1)
   assert.equal(typeof uploads[0].args[1].progressCallback,'function')
   assert.equal(f.sent.filter(s=>s.method === 'editMessageText').length,0)
+})
+
+test('priority uploader yields between chunks while a foreground Telegram send is active', async () => {
+  const f = fixture()
+  const events = []
+  let releaseForeground
+  const foreground = new Promise(resolve => {releaseForeground = resolve})
+  f.client.inFlightForegroundTelegramRequests = 1
+  const waitPromise = f.client.waitForForegroundTelegramIdle(5000).then(() => events.push('resumed'))
+  await flush()
+  assert.deepEqual(events, [])
+  f.client.inFlightForegroundTelegramRequests = 0
+  for (const wake of f.client.foregroundRequestWaiters.splice(0)) wake()
+  await waitPromise
+  assert.deepEqual(events, ['resumed'])
+  releaseForeground()
+})
+
+test('verifyRecentTelegramTextDelivery distinguishes delivered, missing, and disconnected MTProto', async () => {
+  const f = fixture()
+  const nowSec = Math.floor(Date.now() / 1000)
+  // When MTProto is not connected, status is unknown (safe default).
+  assert.deepEqual({...await f.client.verifyRecentTelegramTextDelivery(chatId, '<b>hello &amp; hi</b>', Date.now(), 77)}, {status: 'unknown'})
+  f.mt.client.connected = true
+  // Connected and no matching message -> missing (safe to auto-retry).
+  f.mt.client.getMessages = async () => [{id: 10, date: nowSec, message: 'other', replyTo: {forumTopic: true, replyToTopId: 77}}]
+  assert.deepEqual({...await f.client.verifyRecentTelegramTextDelivery(chatId, '<b>hello &amp; hi</b>', Date.now(), 77)}, {status: 'missing'})
+  // Connected and matching message found -> delivered (recover receipt without duplicate).
+  f.mt.client.getMessages = async () => [{id: 42, date: nowSec, message: 'hello & hi', replyTo: {forumTopic: true, replyToTopId: 77}}]
+  assert.deepEqual({...await f.client.verifyRecentTelegramTextDelivery(chatId, '<b>hello &amp; hi</b>', Date.now(), 77)}, {status: 'delivered', messageId: 42})
 })
 
 test('large MTProto uploads specify topic root and topMsgId, with original reply when present', async () => {

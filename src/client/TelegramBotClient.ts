@@ -68,7 +68,8 @@ import {AiReplyService} from '../service/AiReplyService'
 import {CustomFile} from 'telegram/client/uploads'
 import {WebMessageStore} from '../webui/message-store'
 import {telegramDeliveryUncertain, telegramRetryable} from '../webui/delivery'
-import {Api} from 'telegram'
+import {Api, errors as TelegramErrors} from 'telegram'
+import {generateRandomBytes, readBigIntFromBuffer, sleep as telegramSleep} from 'telegram/Helpers'
 import {getTelegramThreadId, isSameTelegramDestination} from '../util/TelegramTopicUtils'
 import {WechatAccountClassificationService} from '../service/WechatAccountClassificationService'
 import {createGroupMemberNameResolver} from '../service/GroupMemberNameService'
@@ -91,7 +92,9 @@ const TELEGRAM_BOT_API_UPLOAD_LIMIT = 50 * 1024 * 1024
 const TELEGRAM_BOT_API_DOWNLOAD_LIMIT = 20 * 1024 * 1024
 const TELEGRAM_MT_UPLOAD_NO_PROGRESS_TIMEOUT_MS = 120_000
 const TELEGRAM_MT_UPLOAD_MAX_TIMEOUT_MS = 30 * 60_000
-const TELEGRAM_MT_UPLOAD_WORKERS = 2
+const TELEGRAM_MT_UPLOAD_WORKERS = 1
+const TELEGRAM_MT_UPLOAD_PART_SIZE = 512 * 1024
+const TELEGRAM_MT_UPLOAD_FOREGROUND_YIELD_MAX_MS = 10_000
 const TELEGRAM_GLOBAL_SEND_INTERVAL_MS = 100
 const TELEGRAM_PRIVATE_CHAT_SEND_INTERVAL_MS = 1100
 const TELEGRAM_GROUP_CHAT_SEND_INTERVAL_MS = 3200
@@ -391,12 +394,38 @@ export class TelegramBotClient extends AbstractClient {
         return true
     }
 
-    private async sendTelegramRequest<T>(chatId: number, request: () => Promise<T>): Promise<T> {
+    private inFlightForegroundTelegramRequests = 0
+    private foregroundRequestWaiters: Array<() => void> = []
+
+    private async waitForForegroundTelegramIdle(maxWaitMs = TELEGRAM_MT_UPLOAD_FOREGROUND_YIELD_MAX_MS): Promise<void> {
+        if ((this.inFlightForegroundTelegramRequests || 0) <= 0) {
+            return
+        }
+        await new Promise<void>(resolve => {
+            let done = false
+            const finish = () => {
+                if (done) return
+                done = true
+                clearTimeout(timer)
+                resolve()
+            }
+            const timer = setTimeout(finish, maxWaitMs)
+            timer.unref?.()
+            this.foregroundRequestWaiters ??= []
+            this.foregroundRequestWaiters.push(finish)
+        })
+    }
+
+    private async sendTelegramRequest<T>(chatId: number, request: () => Promise<T>, options?: { background?: boolean }): Promise<T> {
         await this.waitForTelegramSendSlot(chatId)
         const attempt = this.telegramSendAttempt?.getStore()
         if(attempt?.outboxId && !await this.messageBufferService.beginAttempt(attempt.outboxId)){
             attempt.deferred = true
             throw new Error('Forwarding account changed; delivery deferred')
+        }
+        const trackForeground = !options?.background
+        if (trackForeground) {
+            this.inFlightForegroundTelegramRequests = (this.inFlightForegroundTelegramRequests || 0) + 1
         }
         try {
             const result = await request()
@@ -407,6 +436,14 @@ export class TelegramBotClient extends AbstractClient {
             this.recordTelegramRetryAfter(error)
             if(telegramDeliveryUncertain(error))this.currentDeliveryUncertain = true
             throw error
+        } finally {
+            if (trackForeground) {
+                this.inFlightForegroundTelegramRequests = Math.max(0, (this.inFlightForegroundTelegramRequests || 1) - 1)
+                if (this.inFlightForegroundTelegramRequests === 0 && this.foregroundRequestWaiters?.length) {
+                    const waiters = this.foregroundRequestWaiters.splice(0)
+                    for (const wake of waiters) wake()
+                }
+            }
         }
     }
 
@@ -547,13 +584,29 @@ export class TelegramBotClient extends AbstractClient {
                 fileName,
                 totalSize,
                 async progressCallback => {
+                    if (typeof botMTPClient.client.getSender === 'function' && botMTPClient.client.session?.dcId) {
+                        const uploadedFile = await this.uploadLargeFileWithPriority(
+                            botMTPClient.client,
+                            fileName,
+                            message.file.file,
+                            progressCallback
+                        )
+                        return botMTPClient.client.sendFile(inputPeer, {
+                            file: uploadedFile,
+                            caption,
+                            replyTo: message.param?.reply_id ?? message.threadId,
+                            topMsgId: message.threadId,
+                            parseMode: 'html',
+                            forceDocument: true,
+                        })
+                    }
                     const file = new CustomFile(fileName,totalSize,'',message.file.file)
                     return botMTPClient.client.sendFile(inputPeer,{
                         file,caption,replyTo:message.param?.reply_id ?? message.threadId,topMsgId:message.threadId,
                         parseMode:'html',forceDocument:true,workers:TELEGRAM_MT_UPLOAD_WORKERS,progressCallback,
                     })
                 }
-            ),()=>true,'mtproto',(message,caption)=>botMTPClient.client.editMessage(inputPeer,{message:message.id,text:caption,parseMode:'html'})))
+            ),()=>true,'mtproto',(message,caption)=>botMTPClient.client.editMessage(inputPeer,{message:message.id,text:caption,parseMode:'html'})), {background: true})
             if(!Number.isSafeInteger(result?.id) || result.id <= 0)throw new Error('Missing Telegram document receipt')
             return {message_id: result.id}
         } catch (e) {
@@ -586,6 +639,73 @@ export class TelegramBotClient extends AbstractClient {
             ).catch(()=>undefined)
             throw resultUnknownError
         }
+    }
+
+    private async uploadLargeFileWithPriority(
+        client: any,
+        fileName: string,
+        buffer: Buffer,
+        progressCallback: ((progress: number) => void) & { isCanceled?: boolean }
+    ) {
+        const size = buffer.length
+        const partSize = TELEGRAM_MT_UPLOAD_PART_SIZE
+        const partCount = Math.max(1, Math.ceil(size / partSize))
+        const fileId = readBigIntFromBuffer(generateRandomBytes(8), true, true)
+        const isLarge = size > 10 * 1024 * 1024
+
+        await client.getSender(client.session.dcId)
+        progressCallback(0)
+
+        for (let part = 0; part < partCount; part++) {
+            if (progressCallback.isCanceled) {
+                throw new Error('USER_CANCELED')
+            }
+            // Yield between chunks whenever ordinary Telegram messages are sending
+            // so background large-file uploads never starve WeChat -> TG chat traffic.
+            await this.waitForForegroundTelegramIdle()
+            if (progressCallback.isCanceled) {
+                throw new Error('USER_CANCELED')
+            }
+            const bytes = buffer.subarray(part * partSize, Math.min(size, (part + 1) * partSize))
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+                let sender: any
+                try {
+                    sender = await client.getSender(client.session.dcId)
+                    await sender.send(isLarge
+                        ? new Api.upload.SaveBigFilePart({
+                            fileId,
+                            filePart: part,
+                            fileTotalParts: partCount,
+                            bytes,
+                        })
+                        : new Api.upload.SaveFilePart({
+                            fileId,
+                            filePart: part,
+                            bytes,
+                        }))
+                    break
+                } catch (err: any) {
+                    if (progressCallback.isCanceled) {
+                        throw new Error('USER_CANCELED')
+                    }
+                    if (sender && typeof sender.isConnected === 'function' && !sender.isConnected()) {
+                        await telegramSleep(1000)
+                        continue
+                    }
+                    if (TelegramErrors?.FloodWaitError && err instanceof TelegramErrors.FloodWaitError) {
+                        await telegramSleep(err.seconds * 1000)
+                        continue
+                    }
+                    throw err
+                }
+            }
+            progressCallback((part + 1) / partCount)
+        }
+
+        return isLarge
+            ? new Api.InputFileBig({ id: fileId, parts: partCount, name: fileName })
+            : new Api.InputFile({ id: fileId, parts: partCount, name: fileName, md5Checksum: '' })
     }
 
     private async runTelegramUploadWithTimeout<T>(
@@ -638,6 +758,53 @@ export class TelegramBotClient extends AbstractClient {
             if (timeoutId) {
                 clearTimeout(timeoutId)
             }
+        }
+    }
+
+    private stripTelegramHtml(html: string): string {
+        return String(html || '')
+            .replace(/<[^>]+>/g, '')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, '\'')
+            .replace(/&amp;/g, '&')
+            .trim()
+    }
+
+    private async verifyRecentTelegramTextDelivery(
+        chatId: number,
+        htmlChunk: string,
+        startedAt: number,
+        threadId?: number
+    ): Promise<{ status: 'delivered', messageId: number } | { status: 'missing' } | { status: 'unknown' }> {
+        const botMTPClient = TelegramBotClient.getSpyClient('botMTPClient')
+        if (!botMTPClient?.hasLogin || !botMTPClient?.client?.connected || typeof botMTPClient.client.getMessages !== 'function') {
+            return { status: 'unknown' }
+        }
+        const expected = this.stripTelegramHtml(htmlChunk)
+        if (!expected) {
+            return { status: 'unknown' }
+        }
+        try {
+            const inputPeer = await botMTPClient.client.getInputEntity(chatId)
+            const messages = await botMTPClient.client.getMessages(inputPeer, { limit: 10 })
+            const minDateSec = Math.floor((startedAt - 15_000) / 1000)
+            for (const msg of messages || []) {
+                if (getTelegramThreadId(msg) !== threadId) continue
+                const msgDate = Number(msg?.date || 0)
+                if (msgDate && msgDate < minDateSec) continue
+                if (String(msg?.message || '').trim() === expected) {
+                    const id = Number(msg?.id || 0)
+                    if (Number.isSafeInteger(id) && id > 0) {
+                        return { status: 'delivered', messageId: id }
+                    }
+                }
+            }
+            return { status: 'missing' }
+        } catch (e) {
+            this.logger.warn(`回查 Telegram 文本送达状态失败: chatId=${chatId}, error=${e?.message || e}`)
+            return { status: 'unknown' }
         }
     }
 
@@ -3094,6 +3261,7 @@ ${this.i18n.t('help.instructions')}`))
         // the first unacknowledged fragment, never replaying the earlier prefix.
         if (chunks.length > 1) this.logger.debug(`长文本消息将分 ${chunks.length} 片发送: ${message.id}`)
         for (let i = progress?.ids.length || 0; i < chunks.length; i++) {
+            const chunkStartedAt = Date.now()
             try {
                 const noticeId = i === 0 && message.param?.telegramUploadNoticeMessageId
                 const sent = await this.sendTelegramRequest(targetChatId, async () => {
@@ -3121,6 +3289,24 @@ ${this.i18n.t('help.instructions')}`))
                     } catch(error){this.currentDeliveryUncertain = true;throw error}
                 }
             } catch (e) {
+                if (attempt?.outboxId && this.currentDeliveryUncertain) {
+                    const verified = await this.verifyRecentTelegramTextDelivery(targetChatId, chunks[i], chunkStartedAt, message.threadId)
+                    if (verified.status === 'delivered') {
+                        this.logger.info(`文本消息超时后回查确认已送达: wxMsgId=${message.id}, tgMsgId=${verified.messageId}`)
+                        this.currentDeliveryUncertain = false
+                        if (i === 0) newMsg = {message_id: verified.messageId}
+                        if (progress) {
+                            progress.ids.push(verified.messageId)
+                            await this.messageBufferService.checkpoint(attempt.outboxId, progress).catch(() => undefined)
+                        }
+                        continue
+                    }
+                    if (verified.status === 'missing') {
+                        this.logger.warn(`文本消息超时后回查确认未送达，转为自动重试: wxMsgId=${message.id}, chatId=${targetChatId}`)
+                        this.currentDeliveryUncertain = false
+                        attempt.retryable = true
+                    }
+                }
                 this.logger.error(`文本消息发送失败 (分片${i + 1}/${chunks.length}): ${message.id}`,safeErrorDetails(e))
                 await this.dealException(e, message)
                 success = false
