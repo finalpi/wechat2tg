@@ -4,8 +4,7 @@ import {FormatUtils} from './FormatUtils'
 
 const parser = new XMLParser({parseTagValue:false})
 
-/** Queue metadata only. The original XML stays private for a later explicit click. */
-export function setWechatFileNotice(message:BaseMessage,source:string):void {
+export function parseWechatFileMeta(source:string):{xml:string;title:string;size:string} {
     const xml = String(source || '').replace(/^[^<>\s:]+:\r?\n(?=\s*<)/,'')
     let title = '未知文件',size = '未知'
     try {
@@ -16,6 +15,12 @@ export function setWechatFileNotice(message:BaseMessage,source:string):void {
             size = `${i ? (bytes / 1024 ** i).toFixed(2) : bytes} ${units[i]}`
         }
     } catch { /* Even malformed metadata must not trigger an automatic download. */ }
+    return {xml,title,size}
+}
+
+/** Queue metadata only. The original XML stays private for a later explicit click. */
+export function setWechatFileNotice(message:BaseMessage,source:string):void {
+    const {xml,title,size} = parseWechatFileMeta(source)
     message.type = 0
     message.source_text = xml
     message.source_type = 'file'

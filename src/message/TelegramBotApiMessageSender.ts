@@ -66,8 +66,8 @@ export class TelegramBotApiMessageSender extends MessageSender {
         this.sendAction(Number(chatId), 'typing', option?.message_thread_id)
         const sendParam: tt.ExtraReplyMessage = {}
 
-        // 文本消息添加 30 秒超时控制
-        const timeoutMs = 30000
+        // 文本消息添加 60 秒超时控制（避免大文件上传期间网络拥塞导致误判超时丢消息）
+        const timeoutMs = 60000
 
         return new Promise((resolve, reject) => {
             if (option) {

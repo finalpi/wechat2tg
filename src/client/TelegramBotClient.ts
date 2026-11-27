@@ -61,6 +61,7 @@ import {LogUtils} from '../util/LogUtil'
 import {ChatHistoryAttachment, getChatHistory, NestedChatHistory} from '../util/handleMsg'
 import {MessageTypeUtils} from '../util/MessageTypeUtils'
 import {downloadWechatMedia,storedFileTalker} from '../util/WechatFileDownload'
+import {parseWechatFileMeta} from '../util/WechatFileNotice'
 import {hasWechatPackFallback,inspectTelegramTextForWechat,TelegramTextEntity} from '../util/TelegramTextUtils'
 import {TelegramIngressEmojiHistory} from '../util/TelegramIngressEmojiHistory'
 import {AiReplyService} from '../service/AiReplyService'
@@ -90,7 +91,7 @@ const TELEGRAM_BOT_API_UPLOAD_LIMIT = 50 * 1024 * 1024
 const TELEGRAM_BOT_API_DOWNLOAD_LIMIT = 20 * 1024 * 1024
 const TELEGRAM_MT_UPLOAD_NO_PROGRESS_TIMEOUT_MS = 120_000
 const TELEGRAM_MT_UPLOAD_MAX_TIMEOUT_MS = 30 * 60_000
-const TELEGRAM_MT_UPLOAD_WORKERS = 4
+const TELEGRAM_MT_UPLOAD_WORKERS = 2
 const TELEGRAM_GLOBAL_SEND_INTERVAL_MS = 100
 const TELEGRAM_PRIVATE_CHAT_SEND_INTERVAL_MS = 1100
 const TELEGRAM_GROUP_CHAT_SEND_INTERVAL_MS = 3200
@@ -3567,9 +3568,10 @@ ${this.i18n.t('help.instructions')}`))
         }
 
         if(fileCard && (!replyToMessageId || storedMessage.tgBotMsgId !== replyToMessageId || storedMessage.source_type !== 'file' || storedMessage.type !== 0))return
+        const fallbackBase = this.buildWechatRetryFallbackTitle(storedMessage)
         const baseText = fileCard
-            ? String(callbackMessage?.['text'] || '[文件]').split(/\n(?:⏳ |下载失败:|✅ )/)[0] || '[文件]'
-            : this.buildWechatRetryFallbackTitle(storedMessage)
+            ? String(callbackMessage?.['text'] || fallbackBase).split(/\n(?:⏳ |下载失败:|✅ )/)[0] || fallbackBase
+            : fallbackBase
         const retryMarkup = {inline_keyboard:[[{text:'重试下载',callback_data:`${fileCard ? 'wfd' : 'wmr'}:${wxMsgId}`}]]}
         await this.editWechatMediaRetryMessage(ctx, `${baseText}\n⏳ 正在从微信下载文件…`, false).catch(() => undefined)
         try {
@@ -3727,6 +3729,13 @@ ${this.i18n.t('help.instructions')}`))
     }
 
     private buildWechatRetryFallbackTitle(storedMessage: Message): string {
+        if (storedMessage.source_type === 'file' || storedMessage.source_type === '49') {
+            const {title, size} = parseWechatFileMeta(storedMessage.source_text || '')
+            if (title && title !== '未知文件') {
+                return size && size !== '未知' ? `[文件]\n${title}\n大小: ${size}` : `[文件]\n${title}`
+            }
+            return '[文件]'
+        }
         const typeName = MessageTypeUtils?.getTypeName?.(storedMessage.source_type || '') || '文件'
         return `[${typeName}]`
     }

@@ -84,6 +84,7 @@ function fixture(customEmojiEnabled = false) {
     '../util/TelegramTopicUtils': topics, '../util/TelegramTextUtils': textUtils,
     '../util/TelegramIngressEmojiHistory': require('../dist/util/TelegramIngressEmojiHistory'),
     '../util/WechatFileDownload': require('../dist/util/WechatFileDownload'),
+    '../util/WechatFileNotice': require('../dist/util/WechatFileNotice'),
     '../util/SafeError': require('../dist/util/SafeError'),
     '../util/TelegramMedia': require('../dist/util/TelegramMedia'),
     '../config': {config: {AI_API_KEY: 'synthetic', AI_API_URL: 'https://invalid.example', AI_CONTEXT_LIMIT: 2, WECHAT_CUSTOM_EMOJI_ENABLED: customEmojiEnabled}},
@@ -313,7 +314,7 @@ test('large-file upload sends document via MTProto sendFile with multi-worker up
   assert.equal(uploads.length,1)
   assert.equal(uploads[0].args[0],chatId)
   assert.equal(uploads[0].args[1].forceDocument,true)
-  assert.equal(uploads[0].args[1].workers,4)
+  assert.equal(uploads[0].args[1].workers,2)
   assert.equal(typeof uploads[0].args[1].progressCallback,'function')
   assert.equal(f.sent.filter(s=>s.method === 'editMessageText').length,0)
 })
@@ -586,6 +587,18 @@ test('only the matching download button fetches once, updates status without blo
   const deletes = f.sent.filter(s=>s.method === 'deleteMessage')
   assert.equal(deletes.length,1)
   assert.equal(deletes[0].args[1],900)
+})
+
+test('wmr file retry keeps filename and size in status edits', async () => {
+  const f = fixture()
+  const xml = '<msg><appmsg><type>6</type><title>Ovis-mac-arm64.dmg</title><appattach><totallen>1048576</totallen></appattach></appmsg></msg>'
+  f.messages.stored = {...outbound(), wxMsgId: 'wx-2', source_text: xml, source_type: 'file', tgBotMsgId: 905, type: 0}
+  f.client.buildWechatRetryMessage = () => ({type: () => 'file', _xml: xml, toFileBox: async () => ({name: 'Ovis-mac-arm64.dmg', toBuffer: async () => Buffer.from('data')})})
+  f.client.wxTypeToTgFileType = () => 'document'
+  await f.action('wmr:wx-2', f.ctx(77, {message_id: 905, text: '上传状态未知\nOvis-mac-arm64.dmg\n请先检查 Telegram 是否已收到'}))
+  const textEdits = f.sent.filter(s => s.method === 'editMessageText').map(s => s.args[3])
+  assert(textEdits.some(t => t.includes('Ovis-mac-arm64.dmg') && t.includes('正在从微信下载文件')))
+  assert(textEdits.some(t => t.includes('Ovis-mac-arm64.dmg') && t.includes('正在上传到 Telegram')))
 })
 
 test('retry preserves stored destination after feature disable and forbidden send never retargets', async () => {
