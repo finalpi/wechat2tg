@@ -315,7 +315,7 @@ test('large-file upload sends document via MTProto sendFile with pacing and no p
   assert.equal(uploads.length,1)
   assert.equal(uploads[0].args[0],chatId)
   assert.equal(uploads[0].args[1].forceDocument,true)
-  assert.equal(uploads[0].args[1].workers,1)
+  assert.equal(uploads[0].args[1].workers,4)
   assert.equal(typeof uploads[0].args[1].progressCallback,'function')
   assert.equal(f.sent.filter(s=>s.method === 'editMessageText').length,0)
 })

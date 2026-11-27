@@ -92,7 +92,7 @@ const TELEGRAM_BOT_API_UPLOAD_LIMIT = 50 * 1024 * 1024
 const TELEGRAM_BOT_API_DOWNLOAD_LIMIT = 20 * 1024 * 1024
 const TELEGRAM_MT_UPLOAD_NO_PROGRESS_TIMEOUT_MS = 120_000
 const TELEGRAM_MT_UPLOAD_MAX_TIMEOUT_MS = 30 * 60_000
-const TELEGRAM_MT_UPLOAD_WORKERS = 1
+const TELEGRAM_MT_UPLOAD_WORKERS = 4
 const TELEGRAM_MT_UPLOAD_PART_SIZE = 512 * 1024
 const TELEGRAM_MT_UPLOAD_FOREGROUND_YIELD_MAX_MS = 10_000
 const TELEGRAM_GLOBAL_SEND_INTERVAL_MS = 100
@@ -656,51 +656,76 @@ export class TelegramBotClient extends AbstractClient {
         await client.getSender(client.session.dcId)
         progressCallback(0)
 
-        for (let part = 0; part < partCount; part++) {
-            if (progressCallback.isCanceled) {
-                throw new Error('USER_CANCELED')
-            }
-            // Yield between chunks whenever ordinary Telegram messages are sending
-            // so background large-file uploads never starve WeChat -> TG chat traffic.
-            await this.waitForForegroundTelegramIdle()
-            if (progressCallback.isCanceled) {
-                throw new Error('USER_CANCELED')
-            }
-            const bytes = buffer.subarray(part * partSize, Math.min(size, (part + 1) * partSize))
+        const concurrency = Math.max(1, Math.min(TELEGRAM_MT_UPLOAD_WORKERS, partCount))
+        let nextPart = 0
+        let completedParts = 0
+        let fatalError: unknown
+
+        const worker = async () => {
             // eslint-disable-next-line no-constant-condition
             while (true) {
-                let sender: any
-                try {
-                    sender = await client.getSender(client.session.dcId)
-                    await sender.send(isLarge
-                        ? new Api.upload.SaveBigFilePart({
-                            fileId,
-                            filePart: part,
-                            fileTotalParts: partCount,
-                            bytes,
-                        })
-                        : new Api.upload.SaveFilePart({
-                            fileId,
-                            filePart: part,
-                            bytes,
-                        }))
-                    break
-                } catch (err: any) {
-                    if (progressCallback.isCanceled) {
-                        throw new Error('USER_CANCELED')
-                    }
-                    if (sender && typeof sender.isConnected === 'function' && !sender.isConnected()) {
-                        await telegramSleep(1000)
-                        continue
-                    }
-                    if (TelegramErrors?.FloodWaitError && err instanceof TelegramErrors.FloodWaitError) {
-                        await telegramSleep(err.seconds * 1000)
-                        continue
-                    }
-                    throw err
+                if (fatalError) return
+                if (progressCallback.isCanceled) {
+                    fatalError = new Error('USER_CANCELED')
+                    return
                 }
+                // Yield before claiming the next chunk whenever ordinary Telegram
+                // messages are sending so background uploads do not starve chat traffic.
+                await this.waitForForegroundTelegramIdle()
+                if (fatalError) return
+                if (progressCallback.isCanceled) {
+                    fatalError = new Error('USER_CANCELED')
+                    return
+                }
+                const part = nextPart++
+                if (part >= partCount) return
+
+                const bytes = buffer.subarray(part * partSize, Math.min(size, (part + 1) * partSize))
+                // eslint-disable-next-line no-constant-condition
+                while (true) {
+                    if (fatalError) return
+                    let sender: any
+                    try {
+                        sender = await client.getSender(client.session.dcId)
+                        await sender.send(isLarge
+                            ? new Api.upload.SaveBigFilePart({
+                                fileId,
+                                filePart: part,
+                                fileTotalParts: partCount,
+                                bytes,
+                            })
+                            : new Api.upload.SaveFilePart({
+                                fileId,
+                                filePart: part,
+                                bytes,
+                            }))
+                        break
+                    } catch (err: any) {
+                        if (fatalError) return
+                        if (progressCallback.isCanceled) {
+                            fatalError = new Error('USER_CANCELED')
+                            return
+                        }
+                        if (sender && typeof sender.isConnected === 'function' && !sender.isConnected()) {
+                            await telegramSleep(1000)
+                            continue
+                        }
+                        if (TelegramErrors?.FloodWaitError && err instanceof TelegramErrors.FloodWaitError) {
+                            await telegramSleep(err.seconds * 1000)
+                            continue
+                        }
+                        fatalError = err
+                        return
+                    }
+                }
+                completedParts++
+                progressCallback(completedParts / partCount)
             }
-            progressCallback((part + 1) / partCount)
+        }
+
+        await Promise.all(Array.from({length: concurrency}, () => worker()))
+        if (fatalError) {
+            throw fatalError
         }
 
         return isLarge
