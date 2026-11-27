@@ -127,12 +127,13 @@ function fixture(customEmojiEnabled = false) {
       answerCbQuery: noop, editMessageReplyMarkup: noop,
     }
   }
-  const action = async (data, context) => {
+  const action = async (data, context, {wait = true} = {}) => {
     context.callbackQuery = {message: context.message}
     delete context.message
     const match = actions.find(a => a.pattern.test(data))
     context.match = {input: data}
     await match.fn(context)
+    if (wait) await client.waitForPendingMediaDownloads()
   }
   return {client, bind, messages, sent, saved, forwarded, lookups, commands, ctx, action, mt, Filename, history, formatting,
     text: context => handlers.find(h => h.kind === 'text').fn(context),
@@ -304,13 +305,17 @@ test('manual WeChat download retries normalize static stickers and preserve topi
   assert.equal(f.sent.at(-1).method,'sendAnimation');assert.equal(f.sent.at(-1).args[1].source,animatedGif)
 })
 
-test('a confirmed large-file placeholder becomes the document without progress, extra sends or deletes',async()=>{
-  const f = fixture(),receipt = await f.client.sendTelegramFileNotice(chatId,'transfer',77),edits = []
-  f.mt.client.editMessage = async (peer,options)=>{edits.push({peer,options});return {id:options.message}}
+test('large-file upload sends document via MTProto sendFile with multi-worker upload and no progress bar edits',async()=>{
+  const f = fixture(),receipt = await f.client.sendTelegramFileNotice(chatId,'transfer',77)
   const result = await f.client.sendLargeDocumentViaTelegramApi({...outbound(1),param:{telegramUploadNoticeMessageId:receipt}})
-  assert.equal(result.message_id,receipt);assert.equal(edits.length,1);assert.equal(edits[0].peer,chatId)
-  assert.equal(edits[0].options.message,receipt);assert.ok(edits[0].options.file);assert.equal(edits[0].options.forceDocument,true)
-  assert.equal(edits[0].options.progressCallback,undefined);assert.deepEqual(f.sent.map(s=>s.method),['sendMessage'])
+  assert.equal(result.message_id,901)
+  const uploads = f.sent.filter(s=>s.method === 'mtFile')
+  assert.equal(uploads.length,1)
+  assert.equal(uploads[0].args[0],chatId)
+  assert.equal(uploads[0].args[1].forceDocument,true)
+  assert.equal(uploads[0].args[1].workers,4)
+  assert.equal(typeof uploads[0].args[1].progressCallback,'function')
+  assert.equal(f.sent.filter(s=>s.method === 'editMessageText').length,0)
 })
 
 test('large MTProto uploads specify topic root and topMsgId, with original reply when present', async () => {
@@ -547,15 +552,40 @@ test('routine WeChat to Telegram text delivery logs at debug, not info', async (
   assert(debug.some(line=>line.includes('文本消息发送成功')))
 })
 
-test('only the matching download button fetches once and edits the same small file card',async()=>{
-  const f = fixture();let calls = 0
+test('only the matching download button fetches once, updates status without blocking Telegraf, sends document, and removes placeholder',async()=>{
+  const f = fixture();let calls = 0, releaseDownload
   f.messages.stored = {...outbound(),wxMsgId:'wx-1',source_text:'xml',source_type:'file',tgBotMsgId:900,type:0}
-  f.client.buildWechatRetryMessage = ()=>({type:()=>'file',_xml:'<msg><appmsg><appattach><totallen>4</totallen></appattach></appmsg></msg>',toFileBox:async()=>{calls++;return {name:'test.bin',toBuffer:async()=>Buffer.from('data')}}})
+  f.client.buildWechatRetryMessage = ()=>({type:()=>'file',_xml:'<msg><appmsg><appattach><totallen>4</totallen></appattach></appmsg></msg>',toFileBox:async()=>{
+    calls++
+    await new Promise(resolve => {releaseDownload = resolve})
+    return {name:'test.bin',toBuffer:async()=>Buffer.from('data')}
+  }})
   f.client.wxTypeToTgFileType = ()=>'document'
   await f.action('wfd:wx-1',f.ctx(77,{message_id:20}));assert.equal(calls,0)
-  await f.action('wfd:wx-1',f.ctx(77,{message_id:900}));await f.action('wfd:wx-1',f.ctx(77,{message_id:900}))
-  assert.equal(calls,1);assert.equal(f.sent.filter(s=>s.method === 'sendDocument').length,0)
-  const edits = f.sent.filter(s=>s.method === 'editMessageMedia');assert.equal(edits.length,1);assert.equal(edits[0].args[1],900)
+  // Triggering wfd: must return immediately (not await the slow download/upload inside Telegraf handler).
+  await f.action('wfd:wx-1',f.ctx(77,{message_id:900,text:'我:\n[文件]\ntest.bin\n大小: 4 B'}),{wait:false})
+  await flush()
+  assert.equal(calls,1)
+  // While downloading, a duplicate click is rejected without starting a second download.
+  await f.action('wfd:wx-1',f.ctx(77,{message_id:900,text:'我:\n[文件]\ntest.bin\n大小: 4 B'}),{wait:false})
+  assert.equal(calls,1)
+  releaseDownload()
+  await f.client.waitForPendingMediaDownloads()
+  // Clicking again after completion does nothing because storedMessage.type is now 1.
+  await f.action('wfd:wx-1',f.ctx(77,{message_id:900,text:'我:\n[文件]\ntest.bin\n大小: 4 B'}))
+  assert.equal(calls,1)
+  const textEdits = f.sent.filter(s=>s.method === 'editMessageText').map(s=>s.args[3])
+  assert(textEdits.some(t=>t.includes('正在从微信下载文件')))
+  assert(textEdits.some(t=>t.includes('正在上传到 Telegram')))
+  assert.equal(f.sent.filter(s=>s.method === 'editMessageMedia').length,0)
+  const docs = f.sent.filter(s=>s.method === 'sendDocument')
+  assert.equal(docs.length,1)
+  assert.equal(docs[0].args[1].filename,'test.bin')
+  assert.equal(docs[0].args[2].message_thread_id,77)
+  assert.equal(docs[0].args[2].reply_parameters,undefined)
+  const deletes = f.sent.filter(s=>s.method === 'deleteMessage')
+  assert.equal(deletes.length,1)
+  assert.equal(deletes[0].args[1],900)
 })
 
 test('retry preserves stored destination after feature disable and forbidden send never retargets', async () => {

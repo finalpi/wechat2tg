@@ -88,7 +88,9 @@ interface LargeFileProgressEditor {
 
 const TELEGRAM_BOT_API_UPLOAD_LIMIT = 50 * 1024 * 1024
 const TELEGRAM_BOT_API_DOWNLOAD_LIMIT = 20 * 1024 * 1024
-const TELEGRAM_MT_UPLOAD_TIMEOUT_MS = 180_000
+const TELEGRAM_MT_UPLOAD_NO_PROGRESS_TIMEOUT_MS = 120_000
+const TELEGRAM_MT_UPLOAD_MAX_TIMEOUT_MS = 30 * 60_000
+const TELEGRAM_MT_UPLOAD_WORKERS = 4
 const TELEGRAM_GLOBAL_SEND_INTERVAL_MS = 100
 const TELEGRAM_PRIVATE_CHAT_SEND_INTERVAL_MS = 1100
 const TELEGRAM_GROUP_CHAT_SEND_INTERVAL_MS = 3200
@@ -543,19 +545,15 @@ export class TelegramBotClient extends AbstractClient {
             const result = await this.sendTelegramRequest(message.chatId, () => sendTelegramHtml(message.chatId,message.sender,config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,caption=>this.runTelegramUploadWithTimeout(
                 fileName,
                 totalSize,
-                async () => {
+                async progressCallback => {
                     const file = new CustomFile(fileName,totalSize,'',message.file.file)
-                    // A media edit inherits the notice's position, topic and replies.
-                    // Without a confirmed notice, deliver once without creating one now.
-                    return noticeId ? botMTPClient.client.editMessage(inputPeer,{
-                        message:noticeId,file,text:caption,parseMode:'html',forceDocument:true,buttons:[],
-                    }) : botMTPClient.client.sendFile(inputPeer,{
+                    return botMTPClient.client.sendFile(inputPeer,{
                         file,caption,replyTo:message.param?.reply_id ?? message.threadId,topMsgId:message.threadId,
-                        parseMode:'html',forceDocument:true,workers:3,
+                        parseMode:'html',forceDocument:true,workers:TELEGRAM_MT_UPLOAD_WORKERS,progressCallback,
                     })
                 }
             ),()=>true,'mtproto',(message,caption)=>botMTPClient.client.editMessage(inputPeer,{message:message.id,text:caption,parseMode:'html'})))
-            if(!Number.isSafeInteger(result?.id) || result.id <= 0 || (noticeId && result.id !== noticeId))throw new Error('Missing Telegram document receipt')
+            if(!Number.isSafeInteger(result?.id) || result.id <= 0)throw new Error('Missing Telegram document receipt')
             return {message_id: result.id}
         } catch (e) {
             await this.resetBotMTPClientConnection(botMTPClient).catch(resetError => {
@@ -568,8 +566,7 @@ export class TelegramBotClient extends AbstractClient {
                 fileName,
                 totalSize,
                 uploadStartedAt,
-                message.threadId,
-                noticeId
+                message.threadId
             )
             if (uploadedMessageId) {
                 this.logger.info(`Telegram 大文件上传超时后确认已成功: fileName=${fileName}, tgMsgId=${uploadedMessageId}`)
@@ -581,24 +578,58 @@ export class TelegramBotClient extends AbstractClient {
             )
             const bot = TelegramBotClient.getSpyClient('botClient').client as Telegraf
             const text = `上传状态未知\n${fileName}\n请先检查 Telegram 是否已收到；如果未收到，再手动重试`
-            const markup = {inline_keyboard:[[{text:'重试上传',callback_data:`wmr:${message.id}`}]]}
+            const markup = {inline_keyboard:[[{text:'重试下载',callback_data:`wmr:${message.id}`}]]}
             await this.sendTelegramRequest<unknown>(message.chatId,()=>noticeId
                 ? bot.telegram.editMessageText(message.chatId,noticeId,undefined,text,{reply_markup:markup})
                 : bot.telegram.sendMessage(message.chatId,text,{message_thread_id:message.threadId,reply_markup:markup})
-            ).catch(()=>undefined) // Never replace an uncertain media edit with a new document.
+            ).catch(()=>undefined)
             throw resultUnknownError
         }
     }
 
-    private async runTelegramUploadWithTimeout<T>(fileName: string, totalSize: number, uploadFn: () => Promise<T>): Promise<T> {
+    private async runTelegramUploadWithTimeout<T>(
+        fileName: string,
+        totalSize: number,
+        uploadFn: (progressCallback: ((progress: number) => void) & { isCanceled?: boolean }) => Promise<T>
+    ): Promise<T> {
         let timeoutId: NodeJS.Timeout | undefined
+        const startedAt = Date.now()
+        let lastProgressAt = startedAt
+        let lastPercent = -1
+        let lastLogAt = 0
+        const progressCallback: ((progress: number) => void) & { isCanceled?: boolean } = (progress: number) => {
+            const now = Date.now()
+            lastProgressAt = now
+            const percent = Math.max(0, Math.min(100, Math.round(Number(progress || 0) * 100)))
+            if (percent >= lastPercent + 25 || (percent > lastPercent && now - lastLogAt >= 30_000)) {
+                lastPercent = percent
+                lastLogAt = now
+                this.logger.info(`Telegram 大文件上传中: fileName=${fileName}, totalSize=${this.formatBytes(totalSize)}, percent=${percent}%`)
+            }
+        }
         try {
+            const uploadPromise = uploadFn(progressCallback)
             const timeoutPromise = new Promise<never>((_, reject) => {
-                timeoutId = setTimeout(() => {
-                    reject(new Error(`Telegram upload timeout after ${Math.round(TELEGRAM_MT_UPLOAD_TIMEOUT_MS / 1000)}s`))
-                }, TELEGRAM_MT_UPLOAD_TIMEOUT_MS)
+                const check = () => {
+                    const now = Date.now()
+                    if (now - lastProgressAt >= TELEGRAM_MT_UPLOAD_NO_PROGRESS_TIMEOUT_MS) {
+                        progressCallback.isCanceled = true
+                        reject(new Error(`Telegram upload stalled with no progress for ${Math.round(TELEGRAM_MT_UPLOAD_NO_PROGRESS_TIMEOUT_MS / 1000)}s`))
+                        return
+                    }
+                    if (now - startedAt >= TELEGRAM_MT_UPLOAD_MAX_TIMEOUT_MS) {
+                        progressCallback.isCanceled = true
+                        reject(new Error(`Telegram upload timeout after ${Math.round(TELEGRAM_MT_UPLOAD_MAX_TIMEOUT_MS / 1000)}s`))
+                        return
+                    }
+                    timeoutId = setTimeout(check, 5000)
+                    timeoutId.unref?.()
+                }
+                timeoutId = setTimeout(check, 5000)
+                timeoutId.unref?.()
             })
-            return await Promise.race([uploadFn(), timeoutPromise])
+            uploadPromise.catch(() => undefined)
+            return await Promise.race([uploadPromise, timeoutPromise])
         } catch (e) {
             this.logger.warn(`Telegram 大文件上传超时/失败: fileName=${fileName}, totalSize=${this.formatBytes(totalSize)}, error=${e?.message || e}`)
             throw e
@@ -1253,15 +1284,32 @@ export class TelegramBotClient extends AbstractClient {
             const fileCard = ctx.match.input.startsWith('wfd:')
             const wxMsgId = ctx.match.input.split(':')[1]
             const key = `${ctx.chat.id}:${wxMsgId}`
-            if(activeMediaRetries.has(key)){await ctx.answerCbQuery('文件正在处理中');return}
+            if(activeMediaRetries.has(key)){await ctx.answerCbQuery('文件正在下载中，请稍候');return}
             activeMediaRetries.add(key)
             try {
-                await ctx.answerCbQuery(fileCard ? '正在下载文件' : '开始重试下载')
-                await this.retryWechatMediaDownload(ctx, wxMsgId, fileCard)
-            } catch (e) {
-                this.logger.error(`重试微信媒体下载失败: wxMsgId=${wxMsgId}`,safeErrorDetails(e))
-            } finally {activeMediaRetries.delete(key)}
+                await ctx.answerCbQuery(fileCard ? '开始下载文件' : '开始重试下载')
+            } catch { /* Ignore expired callback queries */ }
+            // Detach long-running download/upload from Telegraf's 90s handler timeout
+            // so getUpdates never stalls or restarts the bot during large file transfers.
+            const task = this.retryWechatMediaDownload(ctx, wxMsgId, fileCard)
+                .catch(e => {
+                    this.logger.error(`重试微信媒体下载失败: wxMsgId=${wxMsgId}`, safeErrorDetails(e))
+                })
+                .finally(() => {
+                    activeMediaRetries.delete(key)
+                })
+            this.pendingMediaDownloadTasks ??= new Set()
+            this.pendingMediaDownloadTasks.add(task)
+            void task.finally(() => this.pendingMediaDownloadTasks?.delete(task))
         })
+    }
+
+    private pendingMediaDownloadTasks?: Set<Promise<void>>
+
+    async waitForPendingMediaDownloads(): Promise<void> {
+        while (this.pendingMediaDownloadTasks?.size) {
+            await Promise.all([...this.pendingMediaDownloadTasks])
+        }
     }
 
     private emojiHistory?:TelegramIngressEmojiHistory
@@ -3519,7 +3567,11 @@ ${this.i18n.t('help.instructions')}`))
         }
 
         if(fileCard && (!replyToMessageId || storedMessage.tgBotMsgId !== replyToMessageId || storedMessage.source_type !== 'file' || storedMessage.type !== 0))return
-        if(!fileCard)await this.editWechatMediaRetryMessage(ctx, '正在从微信重新下载…',false)
+        const baseText = fileCard
+            ? String(callbackMessage?.['text'] || '[文件]').split(/\n(?:⏳ |下载失败:|✅ )/)[0] || '[文件]'
+            : this.buildWechatRetryFallbackTitle(storedMessage)
+        const retryMarkup = {inline_keyboard:[[{text:'重试下载',callback_data:`${fileCard ? 'wfd' : 'wmr'}:${wxMsgId}`}]]}
+        await this.editWechatMediaRetryMessage(ctx, `${baseText}\n⏳ 正在从微信下载文件…`, false).catch(() => undefined)
         try {
             const wxMessage = this.buildWechatRetryMessage(storedMessage)
             const wx = TelegramBotClient.getSpyClient('wxClient') as WeChatClient
@@ -3531,27 +3583,29 @@ ${this.i18n.t('help.instructions')}`))
             }
 
             const fileBuffer = await filebox.toBuffer()
-            const large = this.wxTypeToTgFileType(wxMessage.type()) === 'document' && fileBuffer.length > TELEGRAM_BOT_API_UPLOAD_LIMIT
+            await this.editWechatMediaRetryMessage(ctx, `${baseText}\n⏳ 正在上传到 Telegram…`, false).catch(() => undefined)
             const sent = await this.sendWechatRetryFile(storedMessage.chatId, fileBuffer, {
                 retryWxMsgId:wxMsgId,
-                editFileCard:fileCard,
+                noticeMessageId:replyToMessageId,
                 threadId: storedMessage.threadId,
                 conversationWxId: storedMessage.conversationWxId,
                 fileName: filebox.name,
                 fileType: this.wxTypeToTgFileType(wxMessage.type()),
                 caption: storedMessage.sender,
-                replyToMessageId
+                replyToMessageId: fileCard ? undefined : replyToMessageId
             })
             // Once Telegram has acknowledged delivery, a bookkeeping/edit error
             // must never turn it back into a retryable file send.
             await this.messageService.createOrUpdate(Object.assign(storedMessage,{type:1,tgBotMsgId:Number(sent.message_id)}))
                 .catch(()=>this.logger.warn(`重试文件已送达，但回执保存失败: wxMsgId=${wxMsgId}`))
-            // The large document now occupies the original notice; do not overwrite it.
-            if(!large && !fileCard)await this.editWechatMediaRetryMessage(ctx, '重试下载成功，文件已发送', false).catch(()=>undefined)
+            if (replyToMessageId) {
+                await ctx.telegram.deleteMessage(storedMessage.chatId, replyToMessageId).catch(() =>
+                    this.editWechatMediaRetryMessage(ctx, `${baseText}\n✅ 文件已发送`, false).catch(() => undefined)
+                )
+            }
         } catch (e) {
             if(e instanceof TelegramUploadResultUnknownError)throw e
-            const title = fileCard ? callbackMessage?.['text']?.split('\n下载失败:')[0] || '[文件]' : this.buildWechatRetryFallbackTitle(storedMessage)
-            await this.editWechatMediaRetryMessage(ctx, `${title}\n下载失败: ${e?.message || e}`)
+            await this.editWechatMediaRetryMessage(ctx, `${baseText}\n下载失败: ${e?.message || e}`, true, retryMarkup).catch(() => undefined)
             throw e
         }
     }
@@ -3590,11 +3644,14 @@ ${this.i18n.t('help.instructions')}`))
         fileType: 'animation' | 'document' | 'audio' | 'photo' | 'video' | 'voice'
         caption?: string
         replyToMessageId?: number
+        noticeMessageId?: number
         useDedicatedUploadNotice?: boolean
         retryWxMsgId?: string
-        editFileCard?: boolean
     }) {
         if (options.fileType === 'document' && fileBuffer.length > TELEGRAM_BOT_API_UPLOAD_LIMIT) {
+            const noticeId = !options.useDedicatedUploadNotice
+                ? (options.noticeMessageId ?? options.replyToMessageId)
+                : undefined
             return this.sendLargeDocumentViaTelegramApi({
                 id: options.retryWxMsgId || `retry-${Date.now()}`,
                 senderId: '',
@@ -3612,22 +3669,12 @@ ${this.i18n.t('help.instructions')}`))
                 },
                 param: {
                     reply_id: options.replyToMessageId,
-                    telegramUploadNoticeMessageId: !options.useDedicatedUploadNotice ? options.replyToMessageId : undefined
+                    telegramUploadNoticeMessageId: noticeId
                 }
             })
         }
 
         const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
-        if(options.editFileCard){
-            const id = options.replyToMessageId
-            return this.sendTelegramRequest(chatId,()=>sendTelegramHtml(chatId,options.caption || '',config.WECHAT_CUSTOM_EMOJI_ENABLED,1024,async caption=>{
-                const result = await client.telegram.editMessageMedia(chatId,id,undefined,{
-                    type:'document',media:{source:fileBuffer,filename:options.fileName},caption,parse_mode:'HTML',
-                },{reply_markup:{inline_keyboard:[]}})
-                if(result === true || result.message_id !== id)throw new Error('文件编辑回执未确认')
-                return result
-            }))
-        }
         const sendOptions: any = {
             message_thread_id: options.threadId,
             parse_mode: 'HTML'
@@ -3655,7 +3702,12 @@ ${this.i18n.t('help.instructions')}`))
             (sent,caption)=>client.telegram.editMessageCaption(chatId,sent.message_id,undefined,caption,{parse_mode:'HTML'}))
     }
 
-    private async editWechatMediaRetryMessage(ctx: Context, text: string, keepRetryButton = true) {
+    private async editWechatMediaRetryMessage(
+        ctx: Context,
+        text: string,
+        keepRetryButton = true,
+        fallbackMarkup?: { inline_keyboard: Array<Array<{ text: string, callback_data: string }>> }
+    ) {
         const callbackMessage = ctx.callbackQuery?.message
         const messageId = callbackMessage?.['message_id']
         if (!messageId) {
@@ -3663,9 +3715,9 @@ ${this.i18n.t('help.instructions')}`))
         }
 
         const extra: any = keepRetryButton ? {
-            reply_markup: callbackMessage?.['reply_markup']
+            reply_markup: callbackMessage?.['reply_markup'] || fallbackMarkup
         } : {
-            reply_markup: undefined
+            reply_markup: { inline_keyboard: [] }
         }
         await ctx.telegram.editMessageText(ctx.chat.id, messageId, undefined, text, extra).catch(e => {
             if (!String(e?.message || e).includes('message is not modified')) {
@@ -3675,7 +3727,7 @@ ${this.i18n.t('help.instructions')}`))
     }
 
     private buildWechatRetryFallbackTitle(storedMessage: Message): string {
-        const typeName = MessageTypeUtils.getTypeName(storedMessage.source_type || '')
+        const typeName = MessageTypeUtils?.getTypeName?.(storedMessage.source_type || '') || '文件'
         return `[${typeName}]`
     }
 

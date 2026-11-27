@@ -112,7 +112,7 @@ export async function downloadWechatMedia(msg:Message,account:string,talker:stri
     let buffer:Buffer
     try {
         const response = await axios.post<Readable>(baseURL.replace(/\/+$/,'') + '/Tools/DownloadFileMessage',body,{
-            headers:{'Content-Type':'application/json',Accept:binary ? 'application/octet-stream' : 'application/json'},timeout:180000,signal:AbortSignal.timeout(180000),maxRedirects:0,responseType:'stream',
+            headers:{'Content-Type':'application/json',Accept:binary ? 'application/octet-stream' : 'application/json'},timeout:180000,signal:AbortSignal.timeout(600000),maxRedirects:0,responseType:'stream',
         })
         const hash = app.md5 || app.appattach.filemd5
         if(binary && response.headers['content-type']?.split(';')[0] === 'application/octet-stream'){
