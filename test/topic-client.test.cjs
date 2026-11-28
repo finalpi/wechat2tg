@@ -317,7 +317,17 @@ test('WeChat venue metadata survives Telegram forwarding into a different bindin
   assert.deepEqual(f.forwarded[0].location,{latitude:0,longitude:-2.5,title:'测试地点',address:'测试地址'})
   assert.equal(f.forwarded[1].conversationWxId,'gh_news')
   assert.equal(f.forwarded[1].threadId,77)
-  assert.match(f.forwarded[1].source_text,/x="90" y="180"/)
+  assert.match(f.forwarded[1].source_text,/x="90" y="180".*label="90, 180" poiname="位置"/)
+})
+
+test('a WeChat location with only an address keeps that text through a Telegram forward', async () => {
+  const f = fixture()
+  await f.client.sendLocationMessage({...outbound(5),source_text:'<msg><location x="1" y="2" poiname="  " label="测试路 &amp; 12 号" /></msg>'}, {})
+  const venue = f.sent.find(s => s.method === 'sendVenue')
+  assert.deepEqual(venue.args.slice(0,5),[chatId,1,2,'测试路 & 12 号','测试路 & 12 号'])
+  const location = {latitude:1,longitude:2}
+  await f.location(f.ctx(77,{location,venue:{location,title:venue.args[3],address:venue.args[4]}}))
+  assert.match(f.forwarded[0].source_text,/poiname="测试路 &amp; 12 号"/)
 })
 
 test('manual WeChat download retries normalize static stickers and preserve topic, reply and caption',async()=>{
@@ -591,7 +601,7 @@ test('UserMTProto forwards geo media as locations, not downloads, and honors the
   f.disableForward()
   await listener({message:{...message,media:venue}})
   assert.deepEqual(f.forwarded.map(m=>[m.type,m.threadId,m.conversationWxId,m.location.title]),
-    [[5,77,'gh_news','地点'],[5,77,'gh_news',''],[5,77,'gh_news','']])
+    [[5,77,'gh_news','地点'],[5,77,'gh_news','位置'],[5,77,'gh_news','位置']])
 })
 
 test('UserMTProto deletion skips unscoped IDs and scopes known events by event.chatId', async () => {

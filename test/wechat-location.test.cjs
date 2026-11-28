@@ -23,9 +23,29 @@ test('location XML validates coordinate bounds and escapes venue metadata', () =
   assert.equal(location.y,'-122.12345')
   assert.equal(location.poiname,venue.location.title)
   assert.equal(location.label,venue.location.address)
+  assert.equal(location.maptype,'0')
+  assert.equal(location.poiid,'')
+  assert.equal(location.isFromPoiList,'true')
   for(const [lat,lon] of [[NaN,0],[0,Infinity],[-90.1,0],[0,180.1],['10',0],[0,null]]){
     assert.equal(locationUtils.telegramLocationFields(lat,lon),undefined)
   }
+})
+
+test('location card titles fall back to address, then a location label with coordinates', () => {
+  const addressOnly = locationUtils.telegramLocationFields(0,2,' \t ',' 测试路 12 号 ')
+  const addressCard = parse(addressOnly.source_text)
+  assert.equal(addressOnly.content,'测试路 12 号')
+  assert.equal(addressCard.poiname,'测试路 12 号')
+  assert.equal(addressCard.label,'测试路 12 号')
+  const titleOnly = parse(locationUtils.telegramLocationFields(0,2,' 测试地点 ').source_text)
+  assert.equal(titleOnly.poiname,'测试地点')
+  assert.equal(titleOnly.label,'测试地点')
+  const pin = locationUtils.telegramLocationFields(0,2)
+  const pinCard = parse(pin.source_text)
+  assert.equal(pin.content,'位置')
+  assert.equal(pinCard.poiname,'位置')
+  assert.equal(pinCard.label,'0, 2')
+  assert.equal(pinCard.isFromPoiList,undefined)
 })
 
 test('location uses native WeChat type 48, journals the receipt and does not resend an uncertain result', async t => {
@@ -74,6 +94,10 @@ test('location uses native WeChat type 48, journals the receipt and does not res
   assert.equal(await client.sendMessage(message('4')),false)
   assert.equal(requests.length,3)
   assert.deepEqual(requests[0],{url:'/api/Msg/SendTxt',method:'POST',body:{Wxid:'self',ToWxid:'wx_peer',Type:48,At:'',Content:venue.source_text}})
+  const sentCard = parse(requests[0].body.Content)
+  assert.equal(sentCard.poiname,'地点 <A> & "B"')
+  assert.equal(sentCard.label,'地址 \'C\'')
+  assert.equal(sentCard.isFromPoiList,'true')
 
   const row = await store.byRemoteId('wx_peer',nativeId)
   assert.equal(row.type,'location')

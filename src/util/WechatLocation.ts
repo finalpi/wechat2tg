@@ -7,17 +7,24 @@ export interface WechatLocation {
     address: string
 }
 
-// eslint-disable-next-line no-control-regex -- XML attributes must not carry control characters.
-const escapeAttribute = (value:string) => value.replace(/[\u0000-\u001f\ufffe\uffff]/g, ' ')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+export function locationText(value: unknown): string {
+    // eslint-disable-next-line no-control-regex -- XML attributes must not carry control characters.
+    return typeof value === 'string' ? value.replace(/[\u0000-\u001f\ufffe\uffff]/g, ' ').trim() : ''
+}
+
+const escapeAttribute = (value:string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
 
 export function telegramLocationFields(latitude:unknown,longitude:unknown,title = '',address = '') {
     if(typeof latitude !== 'number' || !Number.isFinite(latitude) || Math.abs(latitude) > 90
         || typeof longitude !== 'number' || !Number.isFinite(longitude) || Math.abs(longitude) > 180)return undefined
-    const location:WechatLocation = {latitude,longitude,title,address}
-    const label = address || title || `${latitude}, ${longitude}`
-    const source_text = `<msg><location x="${latitude}" y="${longitude}" scale="16" label="${escapeAttribute(label)}" poiname="${escapeAttribute(title)}" maptype="roadmap" infourl="" fromusername="" poiid="City" /></msg>`
-    return {type:5 as const,content:title || label,location,source_text}
+    const name = locationText(title), street = locationText(address)
+    const cardTitle = name || street || '位置'
+    const label = street || name || `${latitude}, ${longitude}`
+    const location:WechatLocation = {latitude,longitude,title:cardTitle,address:street}
+    // Use the named-place form when we have place text, but do not invent a WeChat POI ID.
+    const namedPlace = name || street ? ' isFromPoiList="true"' : ''
+    const source_text = `<msg><location x="${latitude}" y="${longitude}" scale="16" label="${escapeAttribute(label)}" poiname="${escapeAttribute(cardTitle)}" maptype="0" infourl="" fromusername="" poiid=""${namedPlace} /></msg>`
+    return {type:5 as const,content:cardTitle,location,source_text}
 }
 
 function messageId(value:unknown) {

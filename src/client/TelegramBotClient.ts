@@ -83,7 +83,7 @@ import {handleTransferCallback} from '../service/TransferTelegram'
 import {installStickerCollection,STICKER_COLLECTION_UPDATES} from '../service/StickerCollectionTelegram'
 import {findHistoricalSticker} from '../service/StickerCollectionHistory'
 import {installMomentsTelegram} from '../service/MomentsTelegram'
-import {telegramLocationFields} from '../util/WechatLocation'
+import {locationText,telegramLocationFields} from '../util/WechatLocation'
 
 interface LargeFileProgressEditor {
     update(text: string, force?: boolean, inlineKeyboard?: Array<{ text: string, callback_data: string }>): Promise<void>
@@ -934,11 +934,11 @@ export class TelegramBotClient extends AbstractClient {
             const msgJson = TelegramBotClient.getSpyClient('wxClient').client.Message.getXmlToJson(message.source_text)
             const {x, y, poiname, label} = msgJson.msg.location
             const latitude = parseFloat(x), longitude = parseFloat(y)
-            const title = poiname || label
+            const address = locationText(label), title = locationText(poiname) || address
             const options = {message_thread_id: message.threadId}
             // Venue metadata survives a native Telegram forward; an inline button's text does not.
             const msgRes = await this.sendTelegramRequest(message.chatId, () => title
-                ? client.telegram.sendVenue(message.chatId, latitude, longitude, title, label || title, options)
+                ? client.telegram.sendVenue(message.chatId, latitude, longitude, title, address || title, options)
                 : client.telegram.sendLocation(message.chatId, latitude, longitude, options))
 
             messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
