@@ -1,3 +1,4 @@
+import {XMLParser,XMLValidator} from 'fast-xml-parser'
 import {axiosInstance} from 'wx2tg-puppet/dist/utils/axiosInstance'
 
 export interface WechatLocation {
@@ -7,16 +8,34 @@ export interface WechatLocation {
     address: string
 }
 
-export function locationText(value: unknown): string {
+function locationText(value: unknown): string {
     // eslint-disable-next-line no-control-regex -- XML attributes must not carry control characters.
     return typeof value === 'string' ? value.replace(/[\u0000-\u001f\ufffe\uffff]/g, ' ').trim() : ''
 }
 
 const escapeAttribute = (value:string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
 
+const validCoordinate = (value:unknown,limit:number):value is number => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= limit
+const locationParser = new XMLParser({ignoreAttributes:false,parseTagValue:false})
+
+export function readWechatLocation(source:unknown):WechatLocation|undefined {
+    if(typeof source !== 'string' || source.length > 65536 || /<!\s*(?:DOCTYPE|ENTITY)\b/i.test(source))return
+    const xml = source.trim().replace(/^[^<>\s:]+:\r?\n(?=\s*<)/,'')
+    if(XMLValidator.validate(xml) !== true)return
+    const node = locationParser.parse(xml).msg?.location
+    const coordinate = (key:string,limit:number)=>{
+        const raw = node?.[key]
+        if(typeof raw !== 'string' || !/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(raw.trim()))return
+        const value = Number(raw)
+        if(validCoordinate(value,limit))return value
+    }
+    const latitude = coordinate('@_x',90), longitude = coordinate('@_y',180)
+    if(latitude === undefined || longitude === undefined)return
+    return {latitude,longitude,title:locationText(node['@_poiname']),address:locationText(node['@_label'])}
+}
+
 export function telegramLocationFields(latitude:unknown,longitude:unknown,title = '',address = '') {
-    if(typeof latitude !== 'number' || !Number.isFinite(latitude) || Math.abs(latitude) > 90
-        || typeof longitude !== 'number' || !Number.isFinite(longitude) || Math.abs(longitude) > 180)return undefined
+    if(!validCoordinate(latitude,90) || !validCoordinate(longitude,180))return undefined
     const name = locationText(title), street = locationText(address)
     const cardTitle = name || street || '位置'
     const label = street || name || `${latitude}, ${longitude}`

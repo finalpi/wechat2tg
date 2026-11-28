@@ -64,6 +64,8 @@ const enUS = {
   'room.no_groups': 'No groups found',
   'room.bind_group': 'Bind WeChat group',
   'room.create_wx_group': 'Create WeChat group',
+  'location.reply_required': 'Reply with /location to a WeChat location card sent by this bot in its original chat or topic.',
+  'location.unavailable': 'Could not restore the location name or address. The record may have expired, the message may be protected, or the original card may contain only coordinates.',
   'revoke.reply_required': 'Please reply to the message you want to revoke',
   'revoke.failed': 'Revoke failed',
   'revoke.cannot_revoke_others': 'Revoke failed, cannot revoke messages sent by others',

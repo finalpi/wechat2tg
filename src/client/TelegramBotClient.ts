@@ -83,7 +83,7 @@ import {handleTransferCallback} from '../service/TransferTelegram'
 import {installStickerCollection,STICKER_COLLECTION_UPDATES} from '../service/StickerCollectionTelegram'
 import {findHistoricalSticker} from '../service/StickerCollectionHistory'
 import {installMomentsTelegram} from '../service/MomentsTelegram'
-import {locationText,telegramLocationFields} from '../util/WechatLocation'
+import {readWechatLocation,telegramLocationFields,type WechatLocation} from '../util/WechatLocation'
 
 interface LargeFileProgressEditor {
     update(text: string, force?: boolean, inlineKeyboard?: Array<{ text: string, callback_data: string }>): Promise<void>
@@ -928,18 +928,22 @@ export class TelegramBotClient extends AbstractClient {
         }
     }
 
+    private sendTelegramLocationCard(telegram: Telegraf['telegram'], chatId: number, threadId: number | undefined, location: WechatLocation) {
+        const {latitude, longitude, address} = location
+        const title = location.title || address
+        const options = {message_thread_id: threadId}
+        // Put the name in the venue itself, not in a keyboard that forwarding drops.
+        return this.sendTelegramRequest(chatId, () => title
+            ? telegram.sendVenue(chatId, latitude, longitude, title, address || title, options)
+            : telegram.sendLocation(chatId, latitude, longitude, options))
+    }
+
     private async sendLocationMessage(message: BaseMessage, messageEntity: Message): Promise<boolean> {
         try {
-            const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
-            const msgJson = TelegramBotClient.getSpyClient('wxClient').client.Message.getXmlToJson(message.source_text)
-            const {x, y, poiname, label} = msgJson.msg.location
-            const latitude = parseFloat(x), longitude = parseFloat(y)
-            const address = locationText(label), title = locationText(poiname) || address
-            const options = {message_thread_id: message.threadId}
-            // Venue metadata survives a native Telegram forward; an inline button's text does not.
-            const msgRes = await this.sendTelegramRequest(message.chatId, () => title
-                ? client.telegram.sendVenue(message.chatId, latitude, longitude, title, address || title, options)
-                : client.telegram.sendLocation(message.chatId, latitude, longitude, options))
+            const telegram = (TelegramBotClient.getSpyClient('botClient').client as Telegraf).telegram
+            const location = readWechatLocation(message.source_text)
+            if(!location)throw new Error('wechatLocationInvalid')
+            const msgRes = await this.sendTelegramLocationCard(telegram,message.chatId,message.threadId,location)
 
             messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
             await this.messageService.createOrUpdate(messageEntity)
@@ -1133,6 +1137,38 @@ export class TelegramBotClient extends AbstractClient {
         if (directoryMarkup) await replyDirectoryText(ctx, text, directoryMarkup)
         else await ctx.reply(text, {message_thread_id: this.currentThread(ctx)})
         return true
+    }
+
+    private async restoreLocationCard(ctx: Context): Promise<void> {
+        const {chatId: owner} = await this.configurationService.getConfig()
+        if(!ctx.from?.id || ctx.from.id !== Number(owner))return
+        const reply = ctx.message?.['reply_to_message']
+        const chatId = ctx.chat.id, threadId = this.currentThread(ctx)
+        const answer = (key:string) => ctx.reply(this.i18n.t(key),{message_thread_id:threadId})
+        if(!reply || reply.from?.id !== ctx.botInfo?.id || reply.chat?.id !== chatId || !('location' in reply || 'venue' in reply)){
+            await answer('location.reply_required')
+            return
+        }
+        if(('has_protected_content' in reply && reply.has_protected_content)
+            || ('has_protected_content' in ctx.message && ctx.message.has_protected_content)
+            || getTelegramThreadId(reply) !== threadId){
+            await answer('location.unavailable')
+            return
+        }
+        try{
+            const stored = await this.messageService.getByBotMsgId(chatId,reply.message_id,threadId)
+            const isLocation = stored?.type === 5 || stored?.source_type === 'location' || stored?.source_type === '48'
+            const point = this.belongsToContext(stored,ctx) && isLocation ? readWechatLocation(stored.source_text) : undefined
+            if(!point || !(point.title || point.address)){
+                await answer('location.unavailable')
+                return
+            }
+            // Repost only here, without replacing the original Telegram receipt used for recall/quotes.
+            await this.sendTelegramLocationCard(ctx.telegram,chatId,threadId,point)
+        }catch(error){
+            this.logger.warn('Telegram location card restore failed',safeErrorDetails(error))
+            await answer('send.failed')
+        }
     }
 
     private async ingressReply(ctx: Context): Promise<{replyMessageId: number} | undefined> {
@@ -1587,14 +1623,14 @@ export class TelegramBotClient extends AbstractClient {
             // 发送消息到微信
             TelegramBotClient.getSpyClient('wxClient').sendMessage(message)
         })
-        // Bot API venue messages also carry the `location` field.
-        bot.on(message('location'), async ctx => {
+        bot.on([message('venue'),message('location')], async ctx => {
             const chatId = ctx.chat.id, threadId = this.currentThread(ctx)
             const binding = await this.bindGroupService.resolveTelegram(chatId, threadId)
             if(!binding)return
-            const {latitude, longitude} = ctx.message.location
             const venue = 'venue' in ctx.message ? ctx.message.venue : undefined
-            const fields = telegramLocationFields(latitude, longitude, venue?.title, venue?.address)
+            const point = venue?.location ?? ('location' in ctx.message ? ctx.message.location : undefined)
+            if(!point)return
+            const fields = telegramLocationFields(point.latitude, point.longitude, venue?.title, venue?.address)
             if(!fields)return
             await TelegramBotClient.getSpyClient('wxClient').sendMessage({
                 id: String(ctx.message.message_id), chatId, threadId, conversationWxId: binding.wxId,
@@ -2567,6 +2603,8 @@ ${this.i18n.t('help.instructions')}`))
                 await replyDirectoryText(ctx, this.i18n.t('pagination.unavailable'))
             }
         })
+
+        bot.command('location',ctx=>this.restoreLocationCard(ctx))
 
         bot.command('revoke', async ctx => {
             const replyMessageId = ctx.update.message['reply_to_message']?.message_id

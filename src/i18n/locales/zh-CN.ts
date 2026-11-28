@@ -64,6 +64,8 @@ const zhCN = {
   'room.no_groups': '未查找到群组',
   'room.bind_group': '绑定微信群',
   'room.create_wx_group': '创建微信群群组',
+  'location.reply_required': '请在原来的聊天或话题中，回复机器人发出的微信位置卡片并发送 /location。',
+  'location.unavailable': '无法恢复这条位置卡片的地名或地址：原记录可能已清理，消息可能受保护，或原卡片只有坐标。',
   'revoke.reply_required': '请回复需要撤回的消息',
   'revoke.failed': '撤回失败',
   'revoke.cannot_revoke_others': '撤回失败,无法撤回其他人发送的消息',

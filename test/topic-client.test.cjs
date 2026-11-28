@@ -141,7 +141,7 @@ function fixture(customEmojiEnabled = false) {
   }
   return {client, bind, messages, sent, saved, forwarded, lookups, commands, ctx, action, mt, Filename, history, formatting,
     text: context => handlers.find(h => h.kind === 'text').fn(context),
-    location: context => handlers.find(h => h.kind === 'location').fn(context),
+    location: context => handlers.find(h => Array.isArray(h.kind) && h.kind.some(field=>field in context.message)).fn(context),
     disable: () => {enabled = false},
   }
 }
@@ -305,7 +305,7 @@ test('WeChat venue metadata survives Telegram forwarding into a different bindin
   assert.deepEqual(venue.args.slice(0,5),[chatId,0,-2.5,'测试地点','测试地址'])
   assert.equal(venue.args[5].message_thread_id,77)
   const location = {latitude:venue.args[1],longitude:venue.args[2]}
-  const incoming = {location,venue:{location,title:venue.args[3],address:venue.args[4]},forward_origin:{type:'user'}}
+  const incoming = {venue:{location,title:venue.args[3],address:venue.args[4]},forward_origin:{type:'user'}}
   await f.location(f.ctx(undefined,{...incoming,message_thread_id:undefined},-55))
   await f.location(f.ctx(77,{location:{latitude:90,longitude:180,live_period:60}}))
   await f.location(f.ctx(88,incoming))
@@ -328,6 +328,32 @@ test('a WeChat location with only an address keeps that text through a Telegram 
   const location = {latitude:1,longitude:2}
   await f.location(f.ctx(77,{location,venue:{location,title:venue.args[3],address:venue.args[4]}}))
   assert.match(f.forwarded[0].source_text,/poiname="测试路 &amp; 12 号"/)
+})
+
+test('/location rebuilds an old card from its exact archived XML without changing its original receipt', async () => {
+  const f = fixture(), owner = 55, botId = 123
+  f.client.configurationService.getConfig = async()=>({chatId:owner})
+  f.messages.stored = {chatId,threadId:77,type:5,tgBotMsgId:10,source_type:'location',
+    source_text:'wxid_original:\n<msg><location x="0" y="2.5" poiname="测试地点" label="测试地址" /></msg>'}
+  const original = {chat:{id:chatId},from:{id:botId},message_id:10,message_thread_id:77,location:{latitude:0,longitude:2.5}}
+  const ctx = (reply = original, from = owner) => Object.assign(f.ctx(77,{reply_to_message:reply}),{from:{id:from},botInfo:{id:botId}})
+  const restore = f.commands.get('location')
+  await restore(ctx(original,99))
+  await restore(ctx({...original,message_thread_id:88}))
+  await restore(ctx({...original,has_protected_content:true}))
+  await restore(ctx({...original,from:{id:99}}))
+  assert.equal(f.lookups.length,0)
+  await restore(ctx())
+  const venue = f.sent.filter(s=>s.method === 'sendVenue')
+  assert.equal(venue.length,1)
+  assert.deepEqual(venue[0].args.slice(0,5),[chatId,0,2.5,'测试地点','测试地址'])
+  assert.equal(venue[0].args[5].message_thread_id,77)
+  assert.equal(f.saved.length,0)
+  assert.equal(f.forwarded.length,0)
+  f.messages.stored = undefined
+  await restore(ctx())
+  assert.deepEqual(f.lookups,[[chatId,10,77],[chatId,10,77]])
+  assert.equal(f.sent.at(-1).args[1],'location.unavailable')
 })
 
 test('manual WeChat download retries normalize static stickers and preserve topic, reply and caption',async()=>{

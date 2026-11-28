@@ -837,8 +837,8 @@ export class WeChatClient extends AbstractClient {
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.Location:
-                // 位置消息处理
                 messageParam.type = 5
+                messageParam.source_text = msg._xml || messageParam.source_text
                 WeChatClient.getSpyClient('botClient').sendMessage(messageParam)
                 break
             case WxMessage.Type.RedPacket:
