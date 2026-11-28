@@ -83,6 +83,7 @@ import {handleTransferCallback} from '../service/TransferTelegram'
 import {installStickerCollection,STICKER_COLLECTION_UPDATES} from '../service/StickerCollectionTelegram'
 import {findHistoricalSticker} from '../service/StickerCollectionHistory'
 import {installMomentsTelegram} from '../service/MomentsTelegram'
+import {telegramLocationFields} from '../util/WechatLocation'
 
 interface LargeFileProgressEditor {
     update(text: string, force?: boolean, inlineKeyboard?: Array<{ text: string, callback_data: string }>): Promise<void>
@@ -931,12 +932,14 @@ export class TelegramBotClient extends AbstractClient {
         try {
             const client = TelegramBotClient.getSpyClient('botClient').client as Telegraf
             const msgJson = TelegramBotClient.getSpyClient('wxClient').client.Message.getXmlToJson(message.source_text)
-            const msgRes = await this.sendTelegramRequest(message.chatId, () => client.telegram.sendLocation(message.chatId, parseFloat(msgJson.msg.location.x), parseFloat(msgJson.msg.location.y), {
-                message_thread_id: message.threadId,
-                reply_markup: {
-                    inline_keyboard: [[Markup.button.callback(msgJson.msg.location.poiname || msgJson.msg.location.label, 'null')]]
-                }
-            }))
+            const {x, y, poiname, label} = msgJson.msg.location
+            const latitude = parseFloat(x), longitude = parseFloat(y)
+            const title = poiname || label
+            const options = {message_thread_id: message.threadId}
+            // Venue metadata survives a native Telegram forward; an inline button's text does not.
+            const msgRes = await this.sendTelegramRequest(message.chatId, () => title
+                ? client.telegram.sendVenue(message.chatId, latitude, longitude, title, label || title, options)
+                : client.telegram.sendLocation(message.chatId, latitude, longitude, options))
 
             messageEntity.tgBotMsgId = parseInt(msgRes.message_id + '')
             await this.messageService.createOrUpdate(messageEntity)
@@ -1584,6 +1587,21 @@ export class TelegramBotClient extends AbstractClient {
             // 发送消息到微信
             TelegramBotClient.getSpyClient('wxClient').sendMessage(message)
         })
+        // Bot API venue messages also carry the `location` field.
+        bot.on(message('location'), async ctx => {
+            const chatId = ctx.chat.id, threadId = this.currentThread(ctx)
+            const binding = await this.bindGroupService.resolveTelegram(chatId, threadId)
+            if(!binding)return
+            const {latitude, longitude} = ctx.message.location
+            const venue = 'venue' in ctx.message ? ctx.message.venue : undefined
+            const fields = telegramLocationFields(latitude, longitude, venue?.title, venue?.address)
+            if(!fields)return
+            await TelegramBotClient.getSpyClient('wxClient').sendMessage({
+                id: String(ctx.message.message_id), chatId, threadId, conversationWxId: binding.wxId,
+                senderId: '', wxId: '', sender: '{me}', ...fields,
+            })
+        })
+
         bot.on(message('voice'), ctx =>
             this.handleFileMessage.call(this, ctx, 'voice'))
 

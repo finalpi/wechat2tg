@@ -1,4 +1,5 @@
 import type {PublicArticle} from '../webui/articles'
+import type {WechatLocation} from '../util/WechatLocation'
 
 export default interface BaseMessage {
     id: string,
@@ -28,6 +29,7 @@ export default interface BaseMessage {
     },
     // 名片微信id
     businessCardId?: string,
+    location?: WechatLocation,
     param?: any,
     source_text?: string,
     source_type?: string,

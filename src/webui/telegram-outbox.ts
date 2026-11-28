@@ -20,6 +20,7 @@ const remoteId = (value:any):string=>{
 const parse = (value:string)=>{try{return JSON.parse(value || '{}')}catch{return {}}}
 const publicText = (value:any)=>String(value ?? '').replace(/<[^>]*>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').slice(0,500)
 const kindFor = (message:BaseMessage)=>{
+    if(message.type === 5)return 'location'
     if(!message.file)return 'text'
     const file = message.file,name = file.fileName
     if(name.endsWith('.mp4'))return 'video'
@@ -28,7 +29,7 @@ const kindFor = (message:BaseMessage)=>{
     if(/\.(png|jpg|jpeg|bmp|webp)$/i.test(name))return 'image'
     return ({photo:'image',animation:'emoji',voice:'voice',audio:'audio',video:'video'}[file.sendType] || 'file')
 }
-const wireFor = (type:string)=>({text:1,quote:49,image:3,emoji:47,voice:34,video:43,audio:49,file:49}[type] || 1)
+const wireFor = (type:string)=>({text:1,quote:49,image:3,emoji:47,voice:34,video:43,audio:49,file:49,location:48}[type] || 1)
 
 /** Journal Telegram-origin sends without participating in the delivery retry loop. */
 export class TelegramOutbox {
@@ -58,7 +59,7 @@ export class TelegramOutbox {
     }
     async begin(message:BaseMessage,context:TelegramOutboxContext):Promise<TelegramOutboxEntry|null>{
         if(process.env.WEBUI_ENABLED === 'false')return null
-        const part = message.file ? 'media' : 'text',requestId = `telegram:${message.chatId}:${message.id}:${part}`
+        const part = message.type === 5 ? 'location' : message.file ? 'media' : 'text',requestId = `telegram:${message.chatId}:${message.id}:${part}`
         const fallback:TelegramOutboxEntry = {requestId,wxId:context.wxId,duplicate:false}
         const accepted = this.accepted.get(requestId)
         if(accepted)return {...accepted,duplicate:true}
@@ -74,8 +75,9 @@ export class TelegramOutbox {
                 const details:any = {origin:'telegram',telegram:{chatId:String(message.chatId),messageId:String(message.id),part,threadId:message.threadId,conversationWxId:context.wxId}}
                 if(context.quote){const reply = await this.replyTo(context.quote,context.wxId);if(reply)details.replyTo = reply}
                 if(file)Object.assign(details,{title:file.fileName,size:file.file.length})
+                if(kind === 'location' && message.location)Object.assign(details,message.location,{title:body})
                 const type = kind === 'text' && details.replyTo ? 'quote' : kind
-                const source = {FromUserName:context.selfId,ToUserName:context.wxId,MsgType:wireFor(type),...(wireFor(type) === 49 ? {AppType:type === 'quote' ? 57 : 6} : {}),Content:body}
+                const source = {FromUserName:context.selfId,ToUserName:context.wxId,MsgType:wireFor(type),...(wireFor(type) === 49 ? {AppType:type === 'quote' ? 57 : 6} : {}),Content:kind === 'location' ? message.source_text : body}
                 const row = await this.store.insert({requestId,wxId:context.wxId,senderId:context.selfId,senderName:context.selfName || context.selfId,body,direction:'outgoing',type,status:'sending',timestamp:Math.floor(Date.now() / 1000),telegramStatus:'synced',telegramTracked:0,details:JSON.stringify(details),source:JSON.stringify(source)})
                 const entry = {...fallback,id:row.id}
                 this.rememberAccepted(requestId,entry)

@@ -22,6 +22,7 @@ import path from 'node:path'
 import {hasWechatPackFallback,inspectTelegramTextForWechat} from '../util/TelegramTextUtils'
 import {getTelegramThreadId} from '../util/TelegramTopicUtils'
 import {TelegramChatFolderService} from '../service/TelegramChatFolderService'
+import {telegramLocationFields} from '../util/WechatLocation'
 
 export class UserMTProtoClient extends AbstractClient {
     async login(authParams: authMethods.UserAuthParams | authMethods.BotAuthParams): Promise<boolean> {
@@ -86,6 +87,17 @@ export class UserMTProtoClient extends AbstractClient {
                 }
                 if (msg.fromId instanceof Api.PeerUser && !msg.fromId.userId.eq(mineId)
                     && !msg.fromId.userId.eq(botId) && exist.isForwardOthers) {
+                    const media = msg.media
+                    if(media instanceof Api.MessageMediaGeo || media instanceof Api.MessageMediaGeoLive || media instanceof Api.MessageMediaVenue){
+                        if(!(media.geo instanceof Api.GeoPoint))return
+                        const venue = media instanceof Api.MessageMediaVenue ? media : undefined
+                        const fields = telegramLocationFields(media.geo.lat,media.geo.long,venue?.title,venue?.address)
+                        if(fields)await UserMTProtoClient.getSpyClient('wxClient').sendMessage({
+                            id: String(msg.id), chatId: msgChatId, threadId, conversationWxId: exist.wxId,
+                            senderId: '', wxId: '', sender: '{me}', ...fields,
+                        })
+                        return
+                    }
                     const doSend = () => {
                         if (msg.message) {
                             if (msg.message.startsWith('/')) {

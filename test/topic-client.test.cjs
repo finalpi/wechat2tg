@@ -11,6 +11,7 @@ const {returnBigInt} = require('telegram/Helpers')
 const {Markup} = require('telegraf')
 const topics = require('../dist/util/TelegramTopicUtils')
 const textUtils = require('../dist/util/TelegramTextUtils')
+const locationUtils = require('../dist/util/WechatLocation')
 const chatId = -10012345
 const noop = () => undefined
 
@@ -67,7 +68,7 @@ function fixture(customEmojiEnabled = false) {
   const wxClient = {hasReady: true, hasLogin: true, wxInfo: {wxid: 'me'},
     sendMessage: async message => {forwarded.push(message); return true},
     revokeMessage: async message => forwarded.push(message),
-    client: {Message: {getXmlToJson: () => ({msg: {location: {x: '1', y: '2'}}})}},
+    client: {Message: require('wx2tg-puppet').Message},
   }
   class Filename {constructor(name) {this.fileName = name}}
   const mt = {hasLogin: true, client: {
@@ -83,6 +84,7 @@ function fixture(customEmojiEnabled = false) {
     '../base/BaseClient': {AbstractClient: class {static getSpyClient(name) {return spy(name)}}},
     '../util/TelegramTopicUtils': topics, '../util/TelegramTextUtils': textUtils,
     '../util/TelegramIngressEmojiHistory': require('../dist/util/TelegramIngressEmojiHistory'),
+    '../util/WechatLocation': locationUtils,
     '../util/WechatFileDownload': require('../dist/util/WechatFileDownload'),
     '../util/WechatFileNotice': require('../dist/util/WechatFileNotice'),
     '../util/SafeError': require('../dist/util/SafeError'),
@@ -139,6 +141,7 @@ function fixture(customEmojiEnabled = false) {
   }
   return {client, bind, messages, sent, saved, forwarded, lookups, commands, ctx, action, mt, Filename, history, formatting,
     text: context => handlers.find(h => h.kind === 'text').fn(context),
+    location: context => handlers.find(h => h.kind === 'location').fn(context),
     disable: () => {enabled = false},
   }
 }
@@ -162,7 +165,8 @@ function userFixture() {
       lookups.push([id, msgId])
       return {chatId: id, threadId: 77, wxSenderId: 'me'}
     }})}},
-    'telegram': {Api: {PeerUser}}, 'telegram/Helpers': {returnBigInt: value => value},
+    'telegram': {Api: {...Api, PeerUser}}, 'telegram/Helpers': {returnBigInt: value => value},
+    '../util/WechatLocation': locationUtils,
     'telegram/events': {NewMessage}, 'telegram/events/DeletedMessage': {DeletedMessage},
   })
   const client = Object.create(UserMTProtoClient.prototype)
@@ -283,7 +287,8 @@ test('text/file persistence, Bot API card/location, retry uploads and notices re
   assert.equal(f.sent.find(s => s.method === 'text').args[2].message_thread_id, 77)
   assert.equal(f.sent.find(s => s.method === 'file').args[2].message_thread_id, 77)
   await f.client.sendBusinessCardMessage(outbound(4), {})
-  await f.client.sendLocationMessage(outbound(5), {})
+  await f.client.sendLocationMessage({...outbound(5),source_text:'<msg><location x="1" y="2" /></msg>'}, {})
+  assert.deepEqual(f.sent.find(s => s.method === 'sendLocation').args.slice(0,3),[chatId,1,2])
   for (const fileType of ['photo', 'video', 'voice', 'animation', 'document']) {
     await f.client.sendWechatRetryFile(chatId, Buffer.from('data'), {fileName: 'retry', fileType, threadId: 77, replyToMessageId: 22})
   }
@@ -291,6 +296,28 @@ test('text/file persistence, Bot API card/location, retry uploads and notices re
   for (const send of f.sent.filter(s => String(s.method).startsWith('send'))) {
     assert.equal(send.args.at(-1).message_thread_id, 77)
   }
+})
+
+test('WeChat venue metadata survives Telegram forwarding into a different binding', async () => {
+  const f = fixture()
+  await f.client.sendLocationMessage({...outbound(5),source_text:'<msg><location x="0" y="-2.5" poiname="测试地点" label="测试地址" /></msg>'}, {})
+  const venue = f.sent.find(s => s.method === 'sendVenue')
+  assert.deepEqual(venue.args.slice(0,5),[chatId,0,-2.5,'测试地点','测试地址'])
+  assert.equal(venue.args[5].message_thread_id,77)
+  const location = {latitude:venue.args[1],longitude:venue.args[2]}
+  const incoming = {location,venue:{location,title:venue.args[3],address:venue.args[4]},forward_origin:{type:'user'}}
+  await f.location(f.ctx(undefined,{...incoming,message_thread_id:undefined},-55))
+  await f.location(f.ctx(77,{location:{latitude:90,longitude:180,live_period:60}}))
+  await f.location(f.ctx(88,incoming))
+  await f.location(f.ctx(77,{location:{latitude:91,longitude:0}}))
+  assert.equal(f.forwarded.length,2)
+  assert.equal(f.forwarded[0].conversationWxId,'wxid_legacy')
+  assert.equal(f.forwarded[0].threadId,undefined)
+  assert.equal(f.forwarded[0].type,5)
+  assert.deepEqual(f.forwarded[0].location,{latitude:0,longitude:-2.5,title:'测试地点',address:'测试地址'})
+  assert.equal(f.forwarded[1].conversationWxId,'gh_news')
+  assert.equal(f.forwarded[1].threadId,77)
+  assert.match(f.forwarded[1].source_text,/x="90" y="180"/)
 })
 
 test('manual WeChat download retries normalize static stickers and preserve topic, reply and caption',async()=>{
@@ -323,8 +350,6 @@ test('large-file upload sends document via MTProto sendFile with pacing and no p
 test('priority uploader yields between chunks while a foreground Telegram send is active', async () => {
   const f = fixture()
   const events = []
-  let releaseForeground
-  const foreground = new Promise(resolve => {releaseForeground = resolve})
   f.client.inFlightForegroundTelegramRequests = 1
   const waitPromise = f.client.waitForForegroundTelegramIdle(5000).then(() => events.push('resumed'))
   await flush()
@@ -333,7 +358,6 @@ test('priority uploader yields between chunks while a foreground Telegram send i
   for (const wake of f.client.foregroundRequestWaiters.splice(0)) wake()
   await waitPromise
   assert.deepEqual(events, ['resumed'])
-  releaseForeground()
 })
 
 test('verifyRecentTelegramTextDelivery distinguishes delivered, missing, and disconnected MTProto', async () => {
@@ -549,6 +573,25 @@ test('UserMTProto forwarding resolves current topic and honors its forward flag 
   f.disableForward()
   await listener({message: message(77)})
   assert.equal(f.forwarded.length, 2)
+})
+
+test('UserMTProto forwards geo media as locations, not downloads, and honors the forward flag', async () => {
+  const f = userFixture()
+  await f.client.listenMessage()
+  await flush()
+  const listener = f.handlers.find(h => h.event instanceof f.NewMessage).fn
+  const geo = new Api.GeoPoint({lat:1,long:2,accessHash:returnBigInt(0)})
+  const venue = new Api.MessageMediaVenue({geo,title:'地点',address:'地址',provider:'',venueId:'',venueType:''})
+  const message = {id:20,chatId:{toJSNumber:()=>chatId},fromId:new f.PeerUser(3),message:'',
+    replyTo:{forumTopic:true,replyToTopId:77},downloadMedia:()=>{throw Error('Geo media are not files')}}
+  await listener({message:{...message,media:venue}})
+  await listener({message:{...message,media:new Api.MessageMediaGeo({geo})}})
+  await listener({message:{...message,media:new Api.MessageMediaGeoLive({geo,period:60})}})
+  await listener({message:{...message,media:new Api.MessageMediaGeo({geo:new Api.GeoPointEmpty()})}})
+  f.disableForward()
+  await listener({message:{...message,media:venue}})
+  assert.deepEqual(f.forwarded.map(m=>[m.type,m.threadId,m.conversationWxId,m.location.title]),
+    [[5,77,'gh_news','地点'],[5,77,'gh_news',''],[5,77,'gh_news','']])
 })
 
 test('UserMTProto deletion skips unscoped IDs and scopes known events by event.chatId', async () => {

@@ -36,6 +36,7 @@ import {decorateTransferMessage,observeTransferReceipt} from '../util/TransferMe
 import {TelegramOutbox,TelegramOutboxEntry} from '../webui/telegram-outbox'
 import {quoteXML,sendQuote} from '../webui/quotes'
 import {withNativeWechatReceipt} from '../webui/wechat-receipt'
+import {sendWechatLocation} from '../util/WechatLocation'
 import {getWechatCallStatus, formatWechatCallStatus} from '../util/WechatCallStatus'
 import {isSameTelegramDestination} from '../util/TelegramTopicUtils'
 import {WechatAccountClassificationService} from '../service/WechatAccountClassificationService'
@@ -120,10 +121,10 @@ export class WeChatClient extends AbstractClient {
         catch{this.logger.warn('WebUI Telegram send journal could not be updated');return fallback}
     }
 
-    private reportWechatSendFailure(message:BaseMessage,error:any){
+    private reportWechatSendFailure(message:BaseMessage,error:any,notice = '消息发送失败！'){
         this.logger.error(error)
         const bot:Telegraf = WeChatClient.getSpyClient('botClient')?.client
-        if(bot?.telegram)void bot.telegram.sendMessage(message.chatId,'消息发送失败！',{message_thread_id:message.threadId,reply_parameters:{message_id:parseInt(message.id)}}).catch(()=>undefined)
+        if(bot?.telegram)void bot.telegram.sendMessage(message.chatId,notice,{message_thread_id:message.threadId,reply_parameters:{message_id:parseInt(message.id)}}).catch(()=>undefined)
     }
 
     private markWechatRejection(error:any){
@@ -291,7 +292,9 @@ export class WeChatClient extends AbstractClient {
             const contexts = this.telegramSendContexts || (this.telegramSendContexts = new WeakMap())
             contexts.set(message,context)
             if(!this.hasReady || !this.hasLogin){
-                if(journal)await this.recordTelegramJournal(()=>journal.fail(entry,new Error('wechatOffline'),{attempted:false}),undefined)
+                const error = new Error('wechatOffline')
+                if(journal)await this.recordTelegramJournal(()=>journal.fail(entry,error,{attempted:false}),undefined)
+                if(message.type === 5)this.reportWechatSendFailure(message,error,'微信未登录，位置未发送。')
                 return false
             }
             try{
@@ -300,6 +303,16 @@ export class WeChatClient extends AbstractClient {
             }catch{this.logger.warn('Telegram send legacy record could not be saved')}
             if(message.type === 0){
                 this.sendQueueHelper.addMessageWithMsgId(parseInt(message.id),message)
+                return true
+            }
+            if(message.type === 5){
+                const source = message.source_text, selfId = this._wxInfo?.wxid
+                if(!message.location || !source || !selfId)throw new Error('wechatLocationMissing')
+                if(journal)release = await this.recordTelegramJournal(()=>journal.attempt(entry,{wireType:48,source}),()=>undefined)
+                attempted = true
+                const result = await sendWechatLocation(binding.wxId,selfId,source,config.SEND_TO_WX_TIMEOUT)
+                if(journal)await this.recordTelegramJournal(()=>journal.complete(entry,result,{wireType:48,source}),undefined)
+                await this.saveTelegramWechatReceipt(context,message,result,'location',source)
                 return true
             }
             if(!message.file)throw new Error('attachmentMissing')
@@ -346,8 +359,14 @@ export class WeChatClient extends AbstractClient {
             await this.saveTelegramWechatReceipt(context,message,result,({3:'image',34:'voice',43:'video',47:'emoji',49:'file'})[wireType])
             return true
         }catch(error){
-            if(context?.journal)await this.recordTelegramJournal(()=>context.journal.fail(context.entry,this.markWechatRejection(error),{attempted}),undefined)
-            this.reportWechatSendFailure(message,error)
+            const rejection = this.markWechatRejection(error)
+            if(context?.journal)await this.recordTelegramJournal(()=>context.journal.fail(context.entry,rejection,{attempted}),undefined)
+            if(message.type === 5){
+                const uncertain = attempted && !rejection?.deliveryRejected
+                // Axios errors can contain the recipient and exact coordinates in the request config.
+                this.reportWechatSendFailure(message,new Error(uncertain ? 'wechatLocationUnconfirmed' : 'wechatLocationSendFailed'),
+                    uncertain ? '位置发送结果未确认，请先在微信中核对，避免重复发送。' : '位置发送失败。')
+            }else this.reportWechatSendFailure(message,error)
             return false
         }finally{try{release()}catch{this.logger.warn('Telegram send echo tracking could not be released')}}
     }
